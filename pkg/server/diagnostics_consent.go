@@ -341,8 +341,16 @@ type diagnosticsReach struct {
 }
 
 func (s *Server) diagnosticsReachability(userID string) diagnosticsReach {
+	// Compared against this gateway's own node id, NOT against "" (#1898).
+	//
+	// A lease is created with NodeID: r.localNodeID(), and localNodeID() answers "control" on
+	// central rather than an empty string -- so `NodeID == ""` matched nothing at all, and every
+	// request reported "no connected tunnel" however many tunnels the user had. Found in
+	// production immediately after v1.48.28, by an owner with an active tunnel being told he
+	// had none.
+	local := s.registry.localNodeID()
 	for _, l := range s.registry.ListLeases() {
-		if l != nil && l.UserID == userID && l.NodeID == "" {
+		if l != nil && l.UserID == userID && l.NodeID == local {
 			return diagnosticsReach{served: true}
 		}
 	}

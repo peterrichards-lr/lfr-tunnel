@@ -899,95 +899,107 @@ export default function AdminUsers() {
                         </td>
                       )}
                       <td className="td-cell text-right whitespace-nowrap">
-                        {!isSelf && (
-                          <div className="flex gap-xs justify-end">
-                            <button
-                              className="btn btn-secondary py-xs px-sm text-xs"
-                              onClick={() => setSelectedUser(u)}
-                            >
-                              Details
-                            </button>
-                            {u.status === 'pending' ||
-                            u.status === 'unverified' ? (
-                              <>
-                                <button
-                                  className="btn btn-primary py-xs px-sm text-xs"
-                                  onClick={() =>
-                                    changeStatus(u.email, 'approved')
-                                  }
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  className="btn btn-danger py-xs px-sm text-xs"
-                                  onClick={() =>
-                                    changeStatus(u.email, 'revoked')
-                                  }
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {u.status === 'approved' ? (
+                        {/* One row of actions. Details is read-only and IS offered for your
+                            own row; every mutating action is not (#1898).
+
+                            The guard used to wrap this whole cell, which also hid Details
+                            from yourself -- and that is the only route to the detail modal,
+                            so an admin could not reach their own tunnels, tokens or
+                            diagnostic logs at all. #1894 made that bite: requesting your own
+                            logs is the natural way to validate the feature and there was no
+                            route to it. What this guard actually protects is self-revocation,
+                            and that is still protected. */}
+                        <div className="flex gap-xs justify-end">
+                          <button
+                            className="btn btn-secondary py-xs px-sm text-xs"
+                            onClick={() => setSelectedUser(u)}
+                          >
+                            Details
+                          </button>
+                          {!isSelf && (
+                            <>
+                              {u.status === 'pending' ||
+                              u.status === 'unverified' ? (
+                                <>
                                   <button
-                                    className="btn py-xs px-sm text-xs"
-                                    onClick={() =>
-                                      changeStatus(u.email, 'revoked')
-                                    }
-                                  >
-                                    Suspend
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="btn py-xs px-sm text-xs"
+                                    className="btn btn-primary py-xs px-sm text-xs"
                                     onClick={() =>
                                       changeStatus(u.email, 'approved')
                                     }
                                   >
-                                    Unsuspend
+                                    Approve
                                   </button>
-                                )}
+                                  <button
+                                    className="btn btn-danger py-xs px-sm text-xs"
+                                    onClick={() =>
+                                      changeStatus(u.email, 'revoked')
+                                    }
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {u.status === 'approved' ? (
+                                    <button
+                                      className="btn py-xs px-sm text-xs"
+                                      onClick={() =>
+                                        changeStatus(u.email, 'revoked')
+                                      }
+                                    >
+                                      Suspend
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="btn py-xs px-sm text-xs"
+                                      onClick={() =>
+                                        changeStatus(u.email, 'approved')
+                                      }
+                                    >
+                                      Unsuspend
+                                    </button>
+                                  )}
 
-                                {(currentUser.role === 'owner' ||
-                                  u.role !== 'owner') && (
-                                  <>
-                                    {u.role === 'admin' ||
-                                    u.role === 'owner' ? (
-                                      <button
-                                        className="btn py-xs px-sm text-xs"
-                                        onClick={() =>
-                                          changeRole(u.email, 'user')
-                                        }
-                                      >
-                                        Demote
-                                      </button>
-                                    ) : (
-                                      <button
-                                        className="btn py-xs px-sm text-xs"
-                                        onClick={() =>
-                                          changeRole(u.email, 'admin')
-                                        }
-                                      >
-                                        Promote
-                                      </button>
-                                    )}
+                                  {(currentUser.role === 'owner' ||
+                                    u.role !== 'owner') && (
+                                    <>
+                                      {u.role === 'admin' ||
+                                      u.role === 'owner' ? (
+                                        <button
+                                          className="btn py-xs px-sm text-xs"
+                                          onClick={() =>
+                                            changeRole(u.email, 'user')
+                                          }
+                                        >
+                                          Demote
+                                        </button>
+                                      ) : (
+                                        <button
+                                          className="btn py-xs px-sm text-xs"
+                                          onClick={() =>
+                                            changeRole(u.email, 'admin')
+                                          }
+                                        >
+                                          Promote
+                                        </button>
+                                      )}
 
-                                    {u.email.toLowerCase() !==
-                                      serverConfig?.owner_email?.toLowerCase() && (
-                                      <button
-                                        className="btn btn-danger py-xs px-sm text-xs"
-                                        onClick={() => deleteUser(u.email)}
-                                      >
-                                        Delete
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
+                                      {u.email.toLowerCase() !==
+                                        serverConfig?.owner_email?.toLowerCase() && (
+                                        <button
+                                          className="btn btn-danger py-xs px-sm text-xs"
+                                          onClick={() => deleteUser(u.email)}
+                                        >
+                                          Delete
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

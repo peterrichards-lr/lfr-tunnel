@@ -368,3 +368,54 @@ func TestTheAdminBundlesRouteIsReachable(t *testing.T) {
 		t.Fatalf("GET /api/admin/diagnostics/bundles returned 404: the handler is not routed")
 	}
 }
+
+// A user WITH a tunnel on this gateway must be reachable (#1898).
+//
+// This is the case that was missing, and its absence let a real bug reach production: the check
+// compared NodeID against "" while Register stamps it with localNodeID(), which answers
+// "control" on central. So it matched nothing, and an owner with an active tunnel was told he
+// had none.
+//
+// The lease here comes from registry.Register rather than a hand-built struct, which is the
+// whole point -- the previous test used TunnelLease{UserID: "..."} with no NodeID, a shape the
+// product never produces, and it passed happily against broken code.
+func TestAUserWithATunnelOnThisGatewayIsReachable(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	user, _ := seedDiagnosticsUser(t, srv, "hastunnel@example.com", "user")
+	registerDiagnosticsTunnel(t, srv, user.ID, "diag-reach")
+
+	reach := srv.diagnosticsReachability(user.ID)
+	if !reach.served {
+		t.Fatalf("a user with a tunnel on this gateway was reported unreachable: %q", reach.reason)
+	}
+}
+
+// And the collect endpoint must then actually queue, rather than answering not_reachable -- which
+// is what the owner saw. Asserting the endpoint, not just the helper, because that is the seam
+// the bug surfaced through.
+func TestCollectQueuesForAUserWithATunnel(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	user, userSession := seedDiagnosticsUser(t, srv, "willing2@example.com", "user")
+	_, adminSession := seedDiagnosticsUser(t, srv, "admin9@example.com", "admin")
+	grantDiagnosticsConsent(t, srv, userSession, true)
+	registerDiagnosticsTunnel(t, srv, user.ID, "diag-queue")
+
+	rec := postAs(t, srv, srv.handleAdminDiagnosticsCollect, "/api/admin/diagnostics/collect",
+		adminSession, map[string]string{"email": user.Email})
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if delivery, _ := body["delivery"].(string); delivery != "queued" {
+		t.Fatalf("delivery = %q, want %q for a consenting user with a live tunnel (detail: %v)",
+			delivery, "queued", body["delivery_detail"])
+	}
+	if id, _ := body["request_id"].(string); id == "" {
+		t.Error("a queued collection returned no request_id")
+	}
+}

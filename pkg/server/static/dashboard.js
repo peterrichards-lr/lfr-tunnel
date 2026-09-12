@@ -3689,7 +3689,14 @@ async function loadUsers() {
                         <td>
                             ${
                               isSelf
-                                ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>'
+                                ? `
+                                <div class="action-menu">
+                                    <button class="action-menu-btn" onclick="toggleActionMenu('menu-user-${u.id}', event)">⋮</button>
+                                    <div id="menu-user-${u.id}" class="action-menu-dropdown">
+                                        <button class="action-menu-item" onclick="openUserDetailsModal('${userJsonStr}')">${escapeHTML(t('view_details'))}</button>
+                                    </div>
+                                </div>
+                                `
                                 : `
                                 <div class="action-menu">
                                     <button class="action-menu-btn" onclick="toggleActionMenu('menu-user-${u.id}', event)">⋮</button>

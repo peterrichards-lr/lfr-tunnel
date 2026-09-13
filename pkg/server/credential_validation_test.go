@@ -39,7 +39,7 @@ func makePAT(t *testing.T, srv *Server, status, role string, revoked bool, expir
 		ID:     fmt.Sprintf("test-user-%d", testUserID),
 		Email:  "pat-" + generateToken(6) + "@example.com",
 		Role:   role,
-		Status: status,
+		Status: db.UserStatus(status),
 	}
 	if err := srv.db.CreateUser(user); err != nil {
 		t.Fatalf("create user: %v", err)

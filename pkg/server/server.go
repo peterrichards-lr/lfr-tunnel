@@ -4846,13 +4846,18 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		if !db.IsValidUserStatus(*req.Status) {
 			http.Error(w, fmt.Sprintf(
 				`{"error":"Invalid status %q. Valid values are: %s"}`,
-				*req.Status, strings.Join(db.UserStatuses, ", "),
+				*req.Status, db.UserStatusList(),
 			), http.StatusBadRequest)
 			return
 		}
+		// Converted ONCE, here, and only after IsValidUserStatus has accepted it. This is the
+		// boundary between an untrusted string off the wire and the typed vocabulary the rest
+		// of the package uses (#1881) -- every other assignment is a constant, so this is the
+		// only place a conversion is needed at all.
+		requested := db.UserStatus(*req.Status)
 		details["status_before"] = user.Status
-		details["status_after"] = *req.Status
-		user.Status = *req.Status
+		details["status_after"] = requested
+		user.Status = requested
 	}
 
 	if req.ResetMFA != nil && *req.ResetMFA {
@@ -4908,7 +4913,7 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 			greetingName = "there"
 		}
 
-		if *req.Status == db.UserStatusRevoked {
+		if db.UserStatus(*req.Status) == db.UserStatusRevoked {
 			body := fmt.Sprintf(`Hi %s,<br/><br/>
 Your access permissions on Liferay Tunnel have been <strong>suspended</strong> by an administrator.<br/><br/>
 All your active tunnel connections have been closed, and you will no longer be able to establish connections or access the portal.<br/><br/>

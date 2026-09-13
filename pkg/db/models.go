@@ -65,7 +65,7 @@ type User struct {
 	LastName          string     `json:"last_name"`
 	PreferredName     string     `json:"preferred_name"`
 	Role              string     `json:"role"`
-	Status            string     `json:"status"`
+	Status            UserStatus `json:"status"`
 	VerificationToken string     `json:"-"`
 	ApprovalToken     string     `json:"-"`
 	ClaimToken        string     `json:"-"`

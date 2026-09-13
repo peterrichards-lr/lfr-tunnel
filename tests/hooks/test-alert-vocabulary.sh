@@ -54,7 +54,8 @@ write_arms() {
 # run_case <label> <expected-exit> <declared csv> <raised csv> <labelled csv> [arms]
 run_case() {
     local label="$1" want="$2" declared="$3" raised="$4" labelled="$5" arms="${6:-ok}"
-    local dir="$WORK/$(printf '%s' "$label" | tr -c 'a-zA-Z0-9' '_')"
+    local dir
+    dir="$WORK/$(printf '%s' "$label" | tr -c 'a-zA-Z0-9' '_')"
     mkdir -p "$dir/pkg/server/i18n" "$dir/scripts"
     cp "$GATE" "$dir/scripts/"
     write_arms "$dir" "$arms"

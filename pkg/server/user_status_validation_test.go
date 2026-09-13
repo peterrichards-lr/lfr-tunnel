@@ -55,7 +55,7 @@ func TestPatchUserRejectsAStatusOutsideTheVocabulary(t *testing.T) {
 			seedPendingRegistration(t, srv, email, fmt.Sprintf("tok-%d", i))
 			before := mustGetUser(t, srv, email).Status
 
-			w := patchStatus(t, srv, email, status)
+			w := patchStatus(t, srv, email, string(status))
 
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("PATCH status=%q returned %d, want 400. approveOnSSOSignIn matches only "+
@@ -80,11 +80,11 @@ func TestPatchUserAcceptsEveryStatusInTheVocabulary(t *testing.T) {
 	srv := setupTestServerForAPI(t)
 
 	for _, status := range db.UserStatuses {
-		t.Run("status="+status, func(t *testing.T) {
-			email := status + "-ok@example.com"
-			seedPendingRegistration(t, srv, email, "tok-ok-"+status)
+		t.Run("status="+string(status), func(t *testing.T) {
+			email := string(status) + "-ok@example.com"
+			seedPendingRegistration(t, srv, email, "tok-ok-"+string(status))
 
-			w := patchStatus(t, srv, email, status)
+			w := patchStatus(t, srv, email, string(status))
 
 			if w.Code != http.StatusOK {
 				t.Fatalf("PATCH status=%q returned %d (%s), want 200 -- this is a valid status and "+

@@ -17,6 +17,13 @@ package server
 // scripts/check-alert-vocabulary.cjs bind the three consumers to it, so an alert with no toggle
 // fails the build rather than shipping invisible.
 
+// The stored form of a toggle. admin_settings holds strings, and these are the only two values
+// the endpoint accepts, so they are named once rather than spelled at each comparison.
+const (
+	alertSettingOn  = "true"
+	alertSettingOff = "false"
+)
+
 // AlertSetting is one admin alert an owner can switch off.
 type AlertSetting struct {
 	// Key is the admin_settings row, and the name the portals POST back.
@@ -70,9 +77,9 @@ func alertSettingDefault(key string) (defaultOn bool, known bool) {
 // special case cannot be forgotten by the next reader.
 func alertSettingEnabled(key, stored string) bool {
 	switch stored {
-	case "false":
+	case alertSettingOff:
 		return false
-	case "true":
+	case alertSettingOn:
 		return true
 	}
 	on, known := alertSettingDefault(key)

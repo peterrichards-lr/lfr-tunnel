@@ -5530,9 +5530,9 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 				stored = ""
 			}
 			if alertSettingEnabled(a.Key, stored) {
-				out[a.Key] = "true"
+				out[a.Key] = alertSettingOn
 			} else {
-				out[a.Key] = "false"
+				out[a.Key] = alertSettingOff
 			}
 		}
 		_ = json.NewEncoder(w).Encode(out) //nolint:errcheck
@@ -5558,7 +5558,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 				http.Error(w, fmt.Sprintf(`{"error":"Unknown setting %q"}`, key), http.StatusBadRequest)
 				return
 			}
-			if v := payload[key]; v != "true" && v != "false" {
+			if v := payload[key]; v != alertSettingOn && v != alertSettingOff {
 				http.Error(w, fmt.Sprintf(`{"error":"Setting %q must be \"true\" or \"false\""}`, key), http.StatusBadRequest)
 				return
 			}

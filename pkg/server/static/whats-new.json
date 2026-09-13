@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.29",
+    "release_date": "2026-09-13",
+    "features": [
+      "fix(diagnostics): collect never found a tunnel, and an admin could not open their own details (#1899, #1898) (#1900)"
+    ]
+  },
+  {
     "version": "v1.48.28",
     "release_date": "2026-09-12",
     "features": [
@@ -104,22 +111,6 @@
       "ci(docs): build the documentation site on PRs that change it (#1725) (#1731)",
       "fix(ops): give a local build the same client defaults CI has (#1723) (#1728)",
       "fix(build): serialise make test so concurrent runs stop deleting each other's binary (#1714) (#1727)"
-    ]
-  },
-  {
-    "version": "v1.48.24",
-    "release_date": "2026-09-03",
-    "features": [
-      "fix(i18n): gate portal keys against Language.properties and backfill all locales (#1701) (#1713)",
-      "docs: document the client configuration file (#1698) (#1712)",
-      "fix(client): invalidate the region cache when the gateway list changes (#1706) (#1711)",
-      "feat(portal): show each edge node's power schedule and next transition (#1700)",
-      "fix(ops): refuse to publish clients with no default gateway (#1692) (#1699)",
-      "fix(routing): stop a sleeping edge from pinning clients for 24h (#1690) (#1702)",
-      "fix(deps): bump x/crypto to v0.56.0 for two reachable ssh advisories (#1703) (#1705)",
-      "feat(client): add -gateway to bootstrap without pinning (#1694) (#1697)",
-      "fix(client): say that naming a gateway disables region selection and failover (#1691) (#1695)",
-      "fix(nginx): serve client downloads from the apex as well as the wildcard (#1687) (#1688)"
     ]
   }
 ]

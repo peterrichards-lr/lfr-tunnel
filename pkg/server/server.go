@@ -5507,34 +5507,35 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 	if r.Method == http.MethodGet {
 		// Fetch settings
-		notifyReg, _err := s.db.GetAdminSetting("alert_notify_registration")
-		_ = _err //nolint:errcheck
-		notifyBan, _err := s.db.GetAdminSetting("alert_notify_blacklist")
-		_ = _err //nolint:errcheck
-		notifyOffline, _err := s.db.GetAdminSetting("alert_notify_tunnel_offline")
-		_ = _err //nolint:errcheck
-
-		// Default values if not set
-		if notifyReg == "" {
-			notifyReg = "true"
+		// Enumerated from AlertSettings rather than named one by one (#1882). Three of the
+		// six keys were missing here, so three alerts could not be switched off at all --
+		// and adding a fourth meant remembering this list existed.
+		out := map[string]interface{}{
+			"owner_email":              s.cfg.Owner.UserID,
+			"allowed_email_domains":    s.cfg.AllowedEmailDomains,
+			"smtp_host":                s.cfg.SMTPServer.Host,
+			"smtp_from":                s.cfg.SMTPServer.FromAddress,
+			"admin_notification_email": s.cfg.AdminNotificationEmail,
+			// The vocabulary itself, so a portal renders whatever this gateway declares
+			// instead of carrying its own copy of the list.
+			"alert_settings": AlertSettings,
 		}
-		if notifyBan == "" {
-			notifyBan = "true"
+		for _, a := range AlertSettings {
+			stored, err := s.db.GetAdminSetting(a.Key)
+			if err != nil {
+				// An unreadable row falls back to the declared default rather than
+				// failing the page: the rest of System Settings is still usable, and a
+				// toggle showing its default is better than a blank form.
+				slog.Warn(fmt.Sprintf("[Settings] Could not read %s: %v", a.Key, err))
+				stored = ""
+			}
+			if alertSettingEnabled(a.Key, stored) {
+				out[a.Key] = alertSettingOn
+			} else {
+				out[a.Key] = alertSettingOff
+			}
 		}
-		if notifyOffline == "" {
-			notifyOffline = "false"
-		}
-
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
-			"alert_notify_registration":   notifyReg,
-			"alert_notify_blacklist":      notifyBan,
-			"alert_notify_tunnel_offline": notifyOffline,
-			"owner_email":                 s.cfg.Owner.UserID,
-			"allowed_email_domains":       s.cfg.AllowedEmailDomains,
-			"smtp_host":                   s.cfg.SMTPServer.Host,
-			"smtp_from":                   s.cfg.SMTPServer.FromAddress,
-			"admin_notification_email":    s.cfg.AdminNotificationEmail,
-		})
+		_ = json.NewEncoder(w).Encode(out) //nolint:errcheck
 		return
 	}
 
@@ -5545,12 +5546,30 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			return
 		}
 
+		// Accept exactly the declared vocabulary (#1882).
+		//
+		// This list used to name the same three keys the GET did, so a portal could render all
+		// six toggles, POST all six, get "Settings updated" back, and have three of them
+		// silently discarded -- the write failing in precisely the way that leaves no trace.
+		// An unknown key is now a 400 rather than a shrug, so a typo is visible at the caller
+		// instead of looking like a setting that will not stick.
+		for key := range payload {
+			if _, known := alertSettingDefault(key); !known {
+				http.Error(w, fmt.Sprintf(`{"error":"Unknown setting %q"}`, key), http.StatusBadRequest)
+				return
+			}
+			if v := payload[key]; v != alertSettingOn && v != alertSettingOff {
+				http.Error(w, fmt.Sprintf(`{"error":"Setting %q must be \"true\" or \"false\""}`, key), http.StatusBadRequest)
+				return
+			}
+		}
 		for key, value := range payload {
-			// Validate keys to prevent spamming db
-			if key == "alert_notify_registration" || key == "alert_notify_blacklist" || key == "alert_notify_tunnel_offline" {
-				if err := s.db.SetAdminSetting(key, value); err != nil {
-					slog.Info(fmt.Sprintf("[Admin] Failed to save setting %s: %v", key, err))
-				}
+			if err := s.db.SetAdminSetting(key, value); err != nil {
+				// Reported, not swallowed: the admin is told the save failed rather than
+				// seeing a success message over an unchanged row.
+				slog.Error(fmt.Sprintf("[Admin] Failed to save setting %s: %v", key, err))
+				http.Error(w, `{"error":"Could not save settings"}`, http.StatusInternalServerError)
+				return
 			}
 		}
 

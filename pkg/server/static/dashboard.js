@@ -7962,9 +7962,86 @@ async function loadSystemSettings() {
       ).style.display = isOwner ? 'none' : 'block';
       toggleVanityHookPathInput();
     }
+
+    await loadAlertSettings();
   } catch (e) {
     console.error('Failed to load system settings', e);
   }
+}
+
+// --- Email alert toggles (#1882) ---------------------------------------------
+// The checkboxes are built from the vocabulary the SERVER declares (AlertSettings,
+// returned as alert_settings), not from a list kept here. Three of the six alerts used
+// to have no control at all because that list lived in the portal and in the endpoint
+// and the two drifted; rendering from the response means they cannot drift again.
+let alertSettingKeys = [];
+
+async function loadAlertSettings() {
+  const container = document.getElementById('alert-settings-container');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/admin/settings');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    renderAlertSettings(container, await res.json());
+  } catch (e) {
+    console.error('Failed to load alert settings', e);
+    // Keys stay empty so a later Save cannot post checkbox states nobody chose --
+    // an unloaded form reads as "everything off", and writing that would silently
+    // disable every alert on the gateway.
+    alertSettingKeys = [];
+    container.textContent = t(
+      'admin_load_failed',
+      'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
+    );
+  }
+}
+
+function renderAlertSettings(container, data) {
+  const settings = Array.isArray(data.alert_settings)
+    ? data.alert_settings
+    : [];
+  alertSettingKeys = settings.map((s) => s.key);
+  container.innerHTML = '';
+  if (!settings.length) {
+    container.textContent = t(
+      'admin_load_failed',
+      'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
+    );
+    return;
+  }
+  settings.forEach((setting) => {
+    const row = document.createElement('label');
+    row.style.cssText =
+      'display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer;';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.id = 'setting-' + setting.key;
+    box.checked = data[setting.key] === 'true';
+    const text = document.createElement('span');
+    // textContent, not innerHTML: the label text is a translation bundle value.
+    text.textContent = t(setting.label_key, setting.key);
+    row.appendChild(box);
+    row.appendChild(text);
+    container.appendChild(row);
+  });
+}
+
+// Returns true when the alert toggles were written, false when they were skipped, so the
+// caller can say which half of the form actually saved instead of reporting a blanket
+// success over settings that never left the browser.
+async function saveAlertSettings() {
+  if (!alertSettingKeys.length) return false;
+  const payload = {};
+  alertSettingKeys.forEach((key) => {
+    const el = document.getElementById('setting-' + key);
+    if (el) payload[key] = el.checked ? 'true' : 'false';
+  });
+  const res = await fetch('/api/admin/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.ok;
 }
 
 function toggleVanityHookPathInput() {
@@ -7997,7 +8074,20 @@ async function saveSystemSettings() {
     });
 
     if (res.ok) {
-      alert(translate('settings_saved', 'System settings saved successfully.'));
+      const alertsSaved = await saveAlertSettings();
+      if (alertsSaved) {
+        alert(t('settings_saved', 'System settings saved successfully.'));
+      } else {
+        // Named rather than folded into the success message: the two halves are
+        // separate endpoints, and one failing while the other succeeded is exactly
+        // the state an admin must not mistake for "saved".
+        alert(
+          t(
+            'alert_settings_not_saved',
+            'System settings were saved, but the email alert toggles were not.',
+          ),
+        );
+      }
     } else {
       const err = await res.json();
       alert('Error: ' + (err.error || 'Failed to save settings'));

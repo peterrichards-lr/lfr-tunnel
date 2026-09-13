@@ -45,7 +45,7 @@ func (repo *SQLiteAcknowledgementRepo) RecordAcknowledgement(a *Acknowledgement)
 	res, err := repo.conn.Exec(`
 		INSERT INTO user_acknowledgements (user_id, document_id, version, accepted_at, ip, user_agent)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, a.UserID, a.DocumentID, a.Version, a.AcceptedAt, a.IP, a.UserAgent)
+	`, a.UserID, a.DocumentID, a.Version, sqliteTime(a.AcceptedAt), a.IP, a.UserAgent)
 	if err != nil {
 		return err
 	}
@@ -53,6 +53,18 @@ func (repo *SQLiteAcknowledgementRepo) RecordAcknowledgement(a *Acknowledgement)
 		a.ID = id
 	}
 	return nil
+}
+
+// sqliteTime renders a time the way SQLite's own date functions can read it (#1897).
+//
+// Passing a time.Time straight to the driver writes Go's String() form --
+// "2026-09-12 05:15:12.509239608 +0000 UTC" -- which SQLite cannot parse, so date(),
+// datetime() and every range comparison over the column return NULL. tunnel_metrics has always
+// formatted; this column did not, and it is the one that records WHEN somebody accepted a
+// privacy policy. Consent itself never depended on it -- HasAcknowledged matches on
+// (user, document, version) -- so the failure was silent and evidential rather than functional.
+func sqliteTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02 15:04:05")
 }
 
 // HasAcknowledged reports whether this exact version has ever been accepted.

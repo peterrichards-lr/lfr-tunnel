@@ -55,7 +55,9 @@ for (const f of [GO_SOURCE, UI_SOURCE, V1_SOURCE]) {
 //    slice is what declares membership, and a constant that is never added to it is precisely the
 //    kind of half-added status this exists to catch.
 const goSrc = fs.readFileSync(GO_SOURCE, 'utf8');
-const sliceMatch = goSrc.match(/var UserStatuses = \[\]string\{([^}]*)\}/);
+const sliceMatch = goSrc.match(
+  /var UserStatuses = \[\](?:string|UserStatus)\{([^}]*)\}/,
+);
 if (!sliceMatch) {
   console.error(
     `check-status-vocabulary: could not find UserStatuses in ${rel(GO_SOURCE)}.`,
@@ -64,7 +66,9 @@ if (!sliceMatch) {
 }
 
 const constValues = new Map();
-for (const m of goSrc.matchAll(/\bUserStatus([A-Za-z]+)\s*=\s*"([a-z_]+)"/g)) {
+for (const m of goSrc.matchAll(
+  /\bUserStatus([A-Za-z]+)(?:\s+UserStatus)?\s*=\s*"([a-z_]+)"/g,
+)) {
   constValues.set(`UserStatus${m[1]}`, m[2]);
 }
 

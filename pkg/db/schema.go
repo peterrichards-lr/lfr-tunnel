@@ -436,4 +436,21 @@ var migrations = []migration{
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	)`},
 	{32, "CREATE INDEX IF NOT EXISTS idx_diagnostics_bundles_user ON diagnostics_bundles(user_id, collected_at)"},
+
+	// Normalise acknowledgement timestamps written before #1897.
+	//
+	// Rows recorded by the old write path hold Go's time.Time.String() form --
+	// "2026-09-12 05:15:12.509239608 +0000 UTC" -- which SQLite cannot parse, so every date
+	// function over the column returned NULL. The first 19 characters are already exactly the
+	// format SQLite wants, so the repair is a truncation rather than a reparse.
+	//
+	// Guarded three ways so it cannot touch a row it should not: only rows longer than 19
+	// characters, only those whose first 19 look like a datetime, and only those carrying the
+	// timezone suffix that identifies the Go format. A correctly-written row is already 19
+	// characters and matches none of them.
+	{33, `UPDATE user_acknowledgements
+	      SET accepted_at = substr(accepted_at, 1, 19)
+	      WHERE length(accepted_at) > 19
+	        AND accepted_at LIKE '____-__-__ __:__:__%'
+	        AND accepted_at LIKE '%UTC%'`},
 }

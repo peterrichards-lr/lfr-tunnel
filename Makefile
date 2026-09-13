@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-load-errors build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-load-errors build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -72,6 +72,7 @@ help:
 	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
+	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
@@ -290,6 +291,7 @@ test-hooks:
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-status-vocabulary.sh
+	@./tests/hooks/test-alert-vocabulary.sh
 	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-outage-visibility.sh
 	@./tests/hooks/test-watchdog-spool.sh
@@ -343,6 +345,9 @@ check-css:
 
 # The user status vocabulary lived in six places and was checked in none, so #1830 added one and
 # the portal did not learn it (#1847, #1851). Compares rather than documents.
+check-alerts:
+	@node scripts/check-alert-vocabulary.cjs
+
 check-status:
 	@node scripts/check-status-vocabulary.cjs
 

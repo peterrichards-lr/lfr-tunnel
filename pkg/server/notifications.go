@@ -50,12 +50,11 @@ func (n *NotificationService) adminAlertRecipient(settingKey string) string {
 		return ""
 	}
 
-	// Default true for "alert_notify_registration" and "alert_notify_blacklist"
-	if val == "false" {
+	// Resolved against the declared default rather than a special case here (#1882). The
+	// tunnel-offline key defaults off and the rest default on; that asymmetry now lives in
+	// AlertSettings beside the key it applies to, where the next reader will see it.
+	if !alertSettingEnabled(settingKey, val) {
 		return ""
-	}
-	if val == "" && settingKey == "alert_notify_tunnel_offline" {
-		return "" // default false
 	}
 
 	// Notification: routine operational news -- a registration happened, an IP was

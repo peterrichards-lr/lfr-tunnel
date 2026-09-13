@@ -1159,6 +1159,22 @@
                     </div>
                 </div>
 
+                <!-- Email Alerts Card (#1882)
+                     The toggles are NOT written out here. The server declares the vocabulary in
+                     AlertSettings and GET /api/admin/settings returns it, so this container is
+                     filled by renderAlertSettings() -- a gateway that adds a seventh alert grows
+                     a seventh checkbox with no portal change. Hardcoding them here is what left
+                     three of the six invisible in the first place. -->
+                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">✉️ <span data-i18n="alert_settings_title">Email Alerts</span></h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;" data-i18n="alert_settings_desc">
+                        Choose which events email the administrator address. Unchecked events still appear in the audit log.
+                    </p>
+                    <div id="alert-settings-container" style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="color: var(--text-muted); font-size: 13px;" data-i18n="loading">Loading...</div>
+                    </div>
+                </div>
+
                 <!-- Test Integrations Card -->
                 <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
                     <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>

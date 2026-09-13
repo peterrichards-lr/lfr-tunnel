@@ -59,6 +59,18 @@ export default function AdminSettings() {
   // read as a second copy of the maintenance state.
   const [maintenance, setMaintenance] = useState<{ test_target?: string }>({});
 
+  // Email alert toggles (#1882). The vocabulary comes from the server -- `alertSettings` is
+  // whatever this gateway declares, not a list maintained here -- so a gateway that adds a
+  // seventh alert grows a seventh checkbox without a portal release. `alertValues` holds the
+  // resolved on/off per key, and `alertsLoaded` gates saving for the same reason
+  // `settingsLoaded` does: an unloaded form reads as "everything off", and posting that would
+  // silently disable every alert on the gateway.
+  const [alertSettings, setAlertSettings] = useState<
+    { key: string; label_key: string; default_on: boolean }[]
+  >([]);
+  const [alertValues, setAlertValues] = useState<Record<string, boolean>>({});
+  const [alertsLoaded, setAlertsLoaded] = useState(false);
+
   // Config view state
   const [serverConfig, setServerConfig] = useState('');
   const [configError, setConfigError] = useState('');
@@ -83,6 +95,23 @@ export default function AdminSettings() {
       setEnableVanityHook(!!sRes.data.enable_vanity_domain_hook);
       // Only now are the four fields the server's rather than React's initial state.
       setSettingsLoaded(true);
+
+      const aRes = await axios.get('/api/admin/settings');
+      const declared = Array.isArray(aRes.data.alert_settings)
+        ? aRes.data.alert_settings
+        : [];
+      setAlertSettings(declared);
+      setAlertValues(
+        Object.fromEntries(
+          declared.map((a: { key: string }) => [
+            a.key,
+            aRes.data[a.key] === 'true',
+          ]),
+        ),
+      );
+      // Only true when the server actually declared a vocabulary: an empty list is a
+      // failure to describe itself, not a gateway with no alerts.
+      setAlertsLoaded(declared.length > 0);
 
       // Fetched for test_target alone; see the state declaration above.
       const mRes = await axios.get('/api/admin/maintenance');
@@ -142,7 +171,26 @@ export default function AdminSettings() {
         vanity_domain_hook_path: vanityHookPath,
         enable_vanity_domain_hook: enableVanityHook,
       });
-      showToast('System settings saved successfully.', 'success');
+      // Two endpoints, so two results. Reported separately rather than under one
+      // success message: one half failing while the other succeeded is exactly the
+      // state an admin must not read as "saved".
+      if (alertsLoaded) {
+        await axios.post(
+          '/api/admin/settings',
+          Object.fromEntries(
+            alertSettings.map((a) => [
+              a.key,
+              alertValues[a.key] ? 'true' : 'false',
+            ]),
+          ),
+        );
+        showToast('System settings saved successfully.', 'success');
+      } else {
+        showToast(
+          'System settings were saved, but the email alert toggles were not.',
+          'error',
+        );
+      }
     } catch (e: any) {
       showToast(e.response?.data?.error || 'Failed to save settings.', 'error');
     }
@@ -350,6 +398,50 @@ export default function AdminSettings() {
         >
           Save Settings
         </button>
+      </div>
+
+      {/* Email Alerts (#1882). Rendered from the server-declared table, never from a
+          copy held here -- the copy is what left three of the six alerts with no control
+          at all, switchable only by writing the admin_settings row by hand. */}
+      <div className="card mb-xl">
+        <h4 className="section-title mb-xs">
+          {t('alert_settings_title', 'Email Alerts')}
+        </h4>
+        <p className="text-sm text-muted mb-lg">
+          {t(
+            'alert_settings_desc',
+            'Choose which events email the administrator address. Unchecked events still appear in the audit log.',
+          )}
+        </p>
+        {alertsLoaded ? (
+          <div className="flex flex-col gap-sm">
+            {alertSettings.map((a) => (
+              <label
+                key={a.key}
+                className="flex items-center gap-sm text-sm cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!alertValues[a.key]}
+                  onChange={(e) =>
+                    setAlertValues((prev) => ({
+                      ...prev,
+                      [a.key]: e.target.checked,
+                    }))
+                  }
+                />
+                <span>{t(a.label_key, a.key)}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-muted">
+            {t(
+              'admin_load_failed',
+              'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card mb-xl">

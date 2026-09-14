@@ -18,12 +18,17 @@ import (
 // SignCommand handles the signing of macOS, Windows, and Linux binaries.
 func SignCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops sign [-allow-stale] [-allow-no-default]")
+		fmt.Println("Usage: lfr-tunnel-ops sign [-allow-stale] [-allow-no-default] [-dry-run]")
 		fmt.Println("\nSigns dist/'s built binaries: macOS via codesign (LFT_MACOS_IDENTITY),")
 		fmt.Println("Windows via osslsigncode (LFT_SIGN_KEY/LFT_SIGN_CRT or LFT_SIGN_P12, plus")
 		fmt.Println("LFT_SIGN_PASS), and Linux via a detached GPG signature (LFT_GPG_KEY,")
-		fmt.Println("LFT_GPG_SECRET, LFT_GPG_PASS). Any step is skipped if its env vars are")
-		fmt.Println("unset. Regenerates dist/checksums.txt and minisign-signs it.")
+		fmt.Println("LFT_GPG_SECRET, LFT_GPG_PASS). Regenerates dist/checksums.txt and")
+		fmt.Println("minisign-signs it.")
+		fmt.Println("\nRefuses to run if a step is neither configured nor explicitly skipped")
+		fmt.Println("(#1906): set the relevant variable to \"skip\", or LFT_SKIP_GPG=true /")
+		fmt.Println("LFT_SKIP_MINISIGN=true, to sign a subset deliberately.")
+		fmt.Println("\nExit codes: 1 setup, 2 missing tool, 3 missing credential, 4 signing")
+		fmt.Println("failed, 5 checksums failed.")
 		fmt.Println("\nRefuses to run unless dist/'s build manifest matches pkg/config/version.go,")
 		fmt.Println("so last release's binaries cannot be signed by accident (#1279).")
 		fmt.Println("-allow-stale overrides that, deliberately.")
@@ -38,6 +43,10 @@ func SignCommand(args []string) {
 	fs.SetOutput(io.Discard)
 	allowStale := fs.Bool("allow-stale", false, "sign dist/ even if it was not built from the current source")
 	allowNoDefault := fs.Bool("allow-no-default", false, "sign clients that have no default gateway compiled in")
+	// Answers "will this run work?" without spending the biometric prompt to find out, and
+	// without touching dist/ -- so an already-published dist/ cannot be re-signed into
+	// different bytes just to test the configuration (#1906).
+	dryRun := fs.Bool("dry-run", false, "report what would be signed and exit; sign nothing")
 	CheckFatal(fs.Parse(args), "Failed to parse arguments")
 
 	fmt.Println("=== Beginning Signing Process ===")
@@ -46,13 +55,20 @@ func SignCommand(args []string) {
 
 	// Before anything is signed. A signature over the wrong bytes is worse than no signature:
 	// it makes stale artefacts look verified all the way to the user (#1279).
-	manifest := RequireCurrentDist(binDir, "sign", *allowStale)
+	// Skipped for a dry run: staleness is about dist/, and a dry run does not read or write it.
+	// Checking it anyway would make the configuration check fail for an unrelated reason.
+	var manifest BuildManifest
+	if !*dryRun {
+		manifest = RequireCurrentDist(binDir, "sign", *allowStale)
+	}
 
 	// Signing is the expensive step -- it raises a biometric prompt and burns a person's
 	// attention -- and it sits between build and publish, so without this the natural sequence
 	// signed binaries deploy-clients would then refuse (#1723). Same condition, checked before
 	// the cost rather than after.
-	RequireDefaultGateway(manifest, "sign", *allowNoDefault)
+	if !*dryRun {
+		RequireDefaultGateway(manifest, "sign", *allowNoDefault)
+	}
 
 	macosIdentity := GetEnvOrDefault("LFT_MACOS_IDENTITY", "")
 	signP12 := GetEnvOrDefault("LFT_SIGN_P12", "")
@@ -70,31 +86,93 @@ func SignCommand(args []string) {
 	gpgSecret := GetEnvOrDefault("LFT_GPG_SECRET", "")
 	skipGPG := GetEnvOrDefault("LFT_SKIP_GPG", "")
 
+	// Decide the whole run before signing anything (#1906).
+	//
+	// Previously each step made its own decision where it stood, printed "Skipping ..." and
+	// carried on, so a release could be half-signed and still exit 0 -- and the operator found
+	// out from a "Skipping" line in the middle of an otherwise successful-looking run, if at
+	// all. Refusing up front means the biometric prompt is never spent on a run that was always
+	// going to produce an incomplete dist/.
+	plan, code, problems := planSigning(signEnv{
+		MacOSIdentity: macosIdentity,
+		SignP12:       signP12,
+		SignKey:       signKey,
+		SignCrt:       signCrt,
+		GPGKey:        gpgKey,
+		GPGSecret:     gpgSecret,
+		SkipGPG:       skipGPG,
+		SkipMinisign:  GetEnvOrDefault("LFT_SKIP_MINISIGN", ""),
+		MinisignKey:   GetEnvOrDefault("MINISIGN_SECRET_KEY", ""),
+	}, lookPathFn)
+	if code != SignExitOK {
+		fmt.Println()
+		fmt.Println("=== Signing REFUSED ===")
+		for _, p := range problems {
+			fmt.Printf("  - %s\n", p)
+		}
+		fmt.Println("Nothing was signed and dist/ is unchanged.")
+		os.Exit(code)
+	}
+	if *dryRun {
+		fmt.Println()
+		fmt.Println("=== Dry run: configuration is complete ===")
+		fmt.Printf("  macOS:    %s\n", wouldSign(plan.MacOS))
+		fmt.Printf("  Windows:  %s\n", wouldSign(plan.Windows))
+		fmt.Printf("  Linux:    %s\n", wouldSign(plan.Linux))
+		fmt.Printf("  minisign: %s\n", wouldSign(plan.Minisign))
+		fmt.Println("Nothing was signed.")
+		return
+	}
+
+	if skipped := describeSkips(plan); len(skipped) > 0 {
+		// Up front, not where each step would have been reached.
+		fmt.Printf("Deliberately NOT signing: %s (explicitly skipped).\n", strings.Join(skipped, ", "))
+	}
+
 	// Steps that were configured, attempted, and failed. A step nobody configured is skipped and
 	// does not belong here -- that is deliberate behaviour. This exists so the two cannot be
 	// confused: `sign` used to exit 0 after producing no signatures at all (#1596).
 	var signingFailures []string
 
 	// 1. macOS Signing
-	if macosIdentity != "" && macosIdentity != "skip" {
+	if plan.MacOS {
 		fmt.Println("Signing macOS binaries...")
 		for _, arch := range []string{"arm64", "amd64"} {
 			target := filepath.Join(binDir, fmt.Sprintf("lfr-tunnel-darwin-%s", arch))
 			err := RunCommand("codesign", "--force", "--options", "runtime", "--sign", macosIdentity, target)
-			CheckFatal(err, "macOS codesign failed for "+arch)
+			if err != nil {
+				// Recorded rather than fatal so the run reports every broken platform at
+				// once. Aborting here meant fixing macOS only to discover Windows was also
+				// misconfigured on the next attempt -- two biometric prompts to learn two
+				// facts that were both true at the start (#1906).
+				fmt.Printf("WARNING: macOS codesign failed for %s: %v\n", arch, err)
+				signingFailures = append(signingFailures, "macOS signature for "+arch)
+			}
 		}
-		fmt.Println("macOS binaries successfully signed!")
+		if len(signingFailures) == 0 {
+			fmt.Println("macOS binaries successfully signed!")
+		}
 	} else {
 		fmt.Println("Skipping macOS codesigning (no identity provided or skipped).")
 	}
 
 	// 2. Windows Signing
-	validP12 := signP12 != "" && signP12 != "skip"
-	validKeyCrt := signKey != "" && signKey != "skip" && signCrt != "" && signCrt != "skip" &&
-		(fileExists(signKey) || strings.Contains(signKey, "-----BEGIN")) &&
-		(fileExists(signCrt) || strings.Contains(signCrt, "-----BEGIN"))
+	validP12 := signP12 != "" && signP12 != skipSentinel
 
-	if validP12 || validKeyCrt {
+	// An op:// reference that never resolved is neither a readable path nor PEM text. It used
+	// to fall through to "Skipping Windows signing", which reads as a choice; now it is the
+	// failure it always was -- the usual cause being a run that was not under `op run --`.
+	keyUsable := fileExists(signKey) || strings.Contains(signKey, "-----BEGIN")
+	crtUsable := fileExists(signCrt) || strings.Contains(signCrt, "-----BEGIN")
+	if plan.Windows && !validP12 && (!keyUsable || !crtUsable) {
+		fmt.Println()
+		fmt.Println("=== Signing REFUSED ===")
+		fmt.Println("  - Windows: LFT_SIGN_KEY/LFT_SIGN_CRT are set but are neither readable files")
+		fmt.Println("    nor inline PEM. If they are op:// references, run under `op run --`.")
+		os.Exit(SignExitCredentials)
+	}
+
+	if plan.Windows {
 		fmt.Println("Signing Windows binary...")
 		in := filepath.Join(binDir, "lfr-tunnel-windows-amd64.exe")
 		out := filepath.Join(binDir, "lfr-tunnel-windows-amd64-signed.exe")
@@ -156,18 +234,23 @@ func SignCommand(args []string) {
 
 		args = append(args, "-n", "Liferay Tunnel", "-i", "https://github.com/peterrichards-lr/lfr-tunnel", "-in", in, "-out", out)
 
-		err := RunCommand("osslsigncode", args...)
-		CheckFatal(err, "Windows binary signing failed")
-
-		err = os.Rename(out, in)
-		CheckFatal(err, "Failed to replace windows binary")
-		fmt.Println("Windows binary successfully signed!")
+		if err := RunCommand("osslsigncode", args...); err != nil {
+			fmt.Printf("WARNING: Windows binary signing failed: %v\n", err)
+			signingFailures = append(signingFailures, "Windows signature")
+		} else if err := os.Rename(out, in); err != nil {
+			// The signed artefact exists but never replaced the unsigned one, so dist/ still
+			// holds an unsigned exe. Counted as a signing failure for exactly that reason.
+			fmt.Printf("WARNING: could not replace the Windows binary with its signed copy: %v\n", err)
+			signingFailures = append(signingFailures, "Windows signature (signed copy not installed)")
+		} else {
+			fmt.Println("Windows binary successfully signed!")
+		}
 	} else {
 		fmt.Println("Skipping Windows signing (no valid certificate file or PEM content provided/found).")
 	}
 
 	// 3. Linux GPG Signing
-	if skipGPG != "true" && gpgKey != "skip" {
+	if plan.Linux {
 		// One passphrase file for the import and both detached signatures, rather than
 		// --passphrase on each invocation, which would put it on argv three times (#1555).
 		gpgPassFile := ""
@@ -258,19 +341,28 @@ func SignCommand(args []string) {
 		fmt.Println("Skipping Linux GPG signing.")
 	}
 
-	// 4. Regenerate Checksums
-	fmt.Println("Updating checksums.txt...")
-	err := generateChecksums(binDir)
-	CheckFatal(err, "Failed to generate checksums")
-
+	// 4. Refuse BEFORE touching checksums.txt (#1906).
+	//
+	// The order used to be the other way round, so a half-signed dist/ got a freshly
+	// regenerated checksums.txt describing it -- internally consistent, and therefore
+	// publishable by anything that only checks the hashes. Leaving the previous file in place
+	// means deploy-clients' own checksum verification fails instead, which is the outcome we
+	// want from a run that did not finish.
 	if len(signingFailures) > 0 {
 		fmt.Println()
 		fmt.Println("=== Signing FAILED ===")
 		for _, f := range signingFailures {
 			fmt.Printf("  - %s\n", f)
 		}
-		fmt.Println("dist/ is NOT ready to publish. Fix the above and re-run.")
-		os.Exit(1)
+		fmt.Println("dist/ is NOT ready to publish, and checksums.txt was left untouched.")
+		os.Exit(SignExitSigning)
+	}
+
+	// 5. Regenerate Checksums
+	fmt.Println("Updating checksums.txt...")
+	if err := generateChecksums(binDir, plan.Minisign); err != nil {
+		fmt.Printf("ERROR: Failed to generate checksums: %v\n", err)
+		os.Exit(SignExitChecksums)
 	}
 
 	fmt.Println("=== Client Signing Complete! ===")
@@ -325,7 +417,7 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-func generateChecksums(dir string) error {
+func generateChecksums(dir string, wantMinisign bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -366,17 +458,24 @@ func generateChecksums(dir string) error {
 	// run directly (`op run -- lfr-tunnel-ops sign`), never through make, so GOTMPDIR was
 	// unset and this linked and ran an unsigned binary out of /var/folders on every signing
 	// run: the exact pattern CLAUDE.md exists to prevent.
+	if !wantMinisign {
+		// Reached only when the operator asked for this explicitly; planSigning refuses an
+		// absent key outright.
+		fmt.Println("Skipping the Minisign signature (explicitly skipped). Upgrading clients " +
+			"will be told the download cannot be verified.")
+		return nil
+	}
+
 	fmt.Println("Generating Minisign signature for checksums.txt...")
 	if err := minisign.SignFileFromEnv(checksumsPath, checksumsPath+".minisig"); err != nil {
-		// Still a warning rather than fatal, as before. No key configured is a legitimate
-		// state, and the platform signatures above are independent of this one -- but say
-		// which of the two it was, since "no key" and "signing broke" want different actions.
+		// Fatal now, where it used to warn (#1906). minisign is what `lfr-tunnel --upgrade`
+		// checks, so a release missing it silently degrades every client upgrade -- and a
+		// warning printed at the very end of a signing run is not read. ErrNoSecretKey is
+		// still named separately because "no key" and "signing broke" want different actions.
 		if errors.Is(err, minisign.ErrNoSecretKey) {
-			fmt.Printf("Skipping Minisign signature: %v. Clients upgrading will be told the "+
-				"download cannot be verified.\n", err)
-		} else {
-			fmt.Printf("WARNING: Minisign signature generation failed: %v\n", err)
+			return fmt.Errorf("minisign key configured but unusable: %w", err)
 		}
+		return fmt.Errorf("minisign signature generation failed: %w", err)
 	}
 
 	return nil

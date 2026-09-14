@@ -140,6 +140,8 @@ Before deploying client binaries or making releases, they must be signed.
   make ops-bin
   op run -- ./bin/lfr-tunnel-ops sign
   ```
+  *Run `sign -dry-run` first if there is any doubt about the environment: it applies the same
+  refusal policy and exits with the same codes, without signing or raising a prompt.*
   *(**CRITICAL**: You MUST use `op run --` so that 1Password prompts the user to extract the keys needed for Windows and Linux signing. And build first — never `go run ./cmd/lfr-tunnel-ops ...`.)*
 
   **An agent should run this itself — do not hand it back to the operator.** The 1Password
@@ -181,8 +183,34 @@ Before deploying client binaries or making releases, they must be signed.
 
 ### Verifying a signature -- and the one result that looks like failure and is not
 
-`sign` exits 0 having skipped whatever it could not do, so exit 0 is not evidence. Check each
-artefact, and know what a pass looks like for each:
+**Since #1906 `sign` fails closed**: a step that is neither configured nor explicitly skipped is
+refused before anything is signed, and the exit code says which kind of problem it was --
+restoring the contract `scripts/sign-client-binaries.sh` had before #612 replaced it:
+
+| exit | meaning |
+| --- | --- |
+| 0 | everything asked for was signed |
+| 1 | general setup error (stale `dist/`, bad flag) |
+| 2 | a required tool is not on PATH |
+| 3 | a step was neither configured nor explicitly skipped |
+| 4 | a signing command was attempted and failed |
+| 5 | checksums or the minisign signature could not be produced |
+
+To sign a subset deliberately, say so: `LFT_MACOS_IDENTITY=skip`, `LFT_SIGN_KEY=skip`,
+`LFT_SKIP_GPG=true`, `LFT_SKIP_MINISIGN=true`. Anything else missing is now an error, not a
+silent skip.
+
+**Check the configuration before spending the biometric prompt:**
+
+```bash
+./bin/lfr-tunnel-ops sign -dry-run     # reports the plan, signs nothing, exits with the code above
+```
+
+On a failed run `checksums.txt` is deliberately left untouched, so a half-signed `dist/` cannot
+be published with a matching checksum file -- `deploy-clients` will refuse it.
+
+Verify each artefact anyway. The exit code now means something, but a signature over the wrong
+bytes still exits 0, and this is the last point before publishing:
 
 ```bash
 codesign --verify --verbose=1 dist/lfr-tunnel-darwin-{arm64,amd64}   # "valid on disk"

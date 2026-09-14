@@ -66,10 +66,13 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
     `scripts/create-release-tag.sh` enforces both.
   - Every PR builds standalone binaries for Linux, macOS and Windows, downloadable from its
     Actions run — useful for reproducing a report without a local build.
-- **Upstream/JIRA bug tracking** — [`.agents/skills/jira-tracker/SKILL.md`](.agents/skills/jira-tracker/SKILL.md)
-  Read when you discover an upstream platform bug or limitation, not a bug in this repo. Covers
-  the `jira/todo` → `jira/open` → `jira/closed` lifecycle, the file naming, and the report
-  template.
+- **Upstream/JIRA bug tracking** — label the GitHub issue `JIRA` and let the
+  [`github-jira-sync`](https://github.com/peterrichards-lr/github-jira-sync) plugin raise and track
+  it. Use it when you discover an upstream platform bug or limitation, not a bug in this repo. The
+  in-repo `jira/todo` → `jira/open` → `jira/closed` lifecycle it replaced was retired because its
+  status step depended on a human remembering to audit; the plugin reads `statusCategory` from Jira
+  directly. The report template survives as that repository's
+  [Recommended Issue Body Format](https://github.com/peterrichards-lr/github-jira-sync/blob/main/commands/github-issues-to-jira.md).
 
 ## Groundedness — verify before asserting
 

@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.31",
+    "release_date": "2026-09-14",
+    "features": [
+      "fix(ops): make sign fail closed and restore its exit-code contract (#1906) (#1907)"
+    ]
+  },
+  {
     "version": "v1.48.30",
     "release_date": "2026-09-13",
     "features": [
@@ -60,28 +67,6 @@
       "fix(server): record magic-link and invite email failures instead of discarding them (#1832) (#1834)",
       "fix(server): complete the SSO auto-approval, and stop losing approval emails silently (#1824) (#1831)",
       "fix(server): resolve every recorded address through the trusted-proxy boundary (#1818) (#1823)"
-    ]
-  },
-  {
-    "version": "v1.48.26",
-    "release_date": "2026-09-08",
-    "features": [
-      "fix(gates): skip nested git worktrees in every repo-tree walk (#1815) (#1821)",
-      "fix(server): refuse an over-wide trusted_proxies entry at startup (#1819)",
-      "fix(portal): resolve print colours and every stylesheet against a real scope (#1802, #1803, #1804) (#1820)",
-      "fix(scripts): fetch before deciding what is stale, and fail when a delete fails (#1814) (#1817)",
-      "chore: git-ignore .agent-state.md instead of committing it (#1812) (#1813)",
-      "fix(portal-v1): restore the dashboard shell's missing tag, and gate HTML tag balance (#1809)",
-      "fix(ops): refuse a trusted-proxy entry that trusts more than one host (#1808)",
-      "fix(gui): stop the tray Settings save erasing the tunnel's passcode (#1793) (#1807)",
-      "fix(config): make LoadClientConfig nil-on-error on every path (#1777) (#1806)",
-      "fix(portal): resolve every page against a definition source, not just the themed ones (#1805)",
-      "test: stop the suite reading the developer's own home directory (#1798) (#1800)",
-      "docs(workflow): record how an assertion gets satisfied by the wrong failure (#1797)",
-      "fix(ops): refuse to provision an edge with no real_ip block (#1781) (#1789)",
-      "chore(ci): make two gates fail closed on a scan of nothing (#1779) (#1788)",
-      "fix(portal): load System Settings' own cards from the System Settings tab (#1794)",
-      "fix(client): never persist a token the config file did not supply (#1772) (#1790)"
     ]
   }
 ]

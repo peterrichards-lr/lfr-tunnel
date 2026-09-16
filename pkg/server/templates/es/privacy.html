@@ -44,6 +44,8 @@
         }
         h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
         h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
+        h3 { color: var(--text-color); font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+        section { margin-bottom: 4px; }
         p, li { font-size: 15px; color: var(--muted-color); }
         ul { padding-left: 20px; }
         a { color: var(--primary-color); text-decoration: none; }
@@ -55,15 +57,63 @@
 <body>
     <div class="container">
         <h1>{{.Title}}</h1>
-        <p>Esta Política de Privacidad describe cómo este gateway autohospedado Liferay Tunnel (lfr-tunneld) procesa sus datos.</p>
+        <p>Esta Política de Privacidad describe cómo este gateway autohospedado Liferay Tunnel (lfr-tunneld) procesa sus datos. Es un resumen de la política completa del proyecto, enlazada al final de esta página; las letras de sección que aparecen abajo son las mismas que utiliza esa política.</p>
         <h2>1. Información que Recopilamos y Procesamos</h2>
-        <ul>
-            <li><strong>Direcciones IP</strong>: Procesadas estrictamente para enrutar paquetes y aplicar protecciones de seguridad contra abusos.</li>
-            <li><strong>Direcciones de Correo</strong>: Procesadas para la verificación de cuentas, notificaciones de aprobación e inicios de sesión por enlace mágico.</li>
-            <li><strong>Registros de Auditoría</strong>: Registra acciones administrativas, creaciones de tokens e infracciones de seguridad localmente en la base de datos.</li>
-        </ul>
+
+        <section data-disclosure="A">
+            <h3>A. Datos de Red y de Túnel</h3>
+            <ul>
+                <li><strong>Direcciones IP</strong>: La dirección IP pública del cliente que se conecta y la de cualquier visitante que solicite un subdominio de túnel. Se procesan para enrutar paquetes, aplicar límites de tasa y protecciones de bloqueo automático, y registrar eventos de seguridad.</li>
+                <li><strong>Ancho de Banda y Métricas</strong>: Bytes entrantes y salientes por túnel activo, para la monitorización de recursos y las analíticas de uso.</li>
+                <li><strong>Asignación de Puertos del Túnel</strong>: Los puertos locales de desarrollo que usted expone, utilizados para multiplexar los handshakes de conexión.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="B">
+            <h3>B. Datos de Autenticación de Usuario</h3>
+            <ul>
+                <li><strong>Direcciones de Correo</strong>: Se procesan para la verificación de cuentas, las notificaciones de aprobación y los inicios de sesión por enlace mágico sin contraseña.</li>
+                <li><strong>Nombres de Perfil</strong>: Nombre, apellidos y nombre preferido, opcionales, utilizados para personalizar el panel de control.</li>
+                <li><strong>Claims de OIDC SSO</strong>: Si este gateway está configurado para inicio de sesión único, se almacenan los datos de perfil estándar (claims) que devuelve su proveedor de identidad (correo, nombre y apellidos) para aprovisionar su perfil.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="C">
+            <h3>C. Registros de Auditoría Administrativa</h3>
+            <ul>
+                <li><strong>Eventos de Seguridad</strong>: Los registros de cuentas, los intentos de inicio de sesión, las creaciones de tokens y los cambios administrativos de estado se registran localmente en la base de datos del gateway para auditoría y revisión de seguridad.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="D">
+            <h3>D. Registros de Diagnóstico del Cliente (Solo con Consentimiento, Desactivado por Defecto)</h3>
+            <ul>
+                <li><strong>Por defecto permanecen en su máquina</strong>: El cliente lfr-tunnel escribe sus propios registros de tráfico, de errores y de consola en <code>~/.lfr-tunnel/logs</code>, en su ordenador. Nunca se suben salvo que usted active personalmente el uso compartido de registros de diagnóstico en la Configuración de la Cuenta. Está desactivado por defecto.</li>
+                <li><strong>La retirada del consentimiento es inmediata</strong>: Su preferencia se comprueba cuando un administrador solicita los registros, de nuevo antes de que la solicitud llegue a su cliente, y una vez más cuando los registros llegan al gateway — de modo que desactivarlo surte efecto al instante, incluso para un cliente que ya se esté ejecutando.</li>
+                <li><strong>Los cuerpos de las peticiones y respuestas nunca se suben</strong>, ni siquiera si ejecuta el cliente con <code>-log-bodies</code>. Los tokens de acceso personal, los valores de <code>Authorization</code> y las credenciales presentes en URLs o cadenas de consulta se eliminan antes de la subida.</li>
+                <li><strong>Conservación</strong>: Los registros subidos se conservan en la base de datos de este gateway durante un máximo de 30 días. Se eliminan de inmediato si usted retira su consentimiento — los ya recopilados se destruyen, no solo se deja de recopilar más — y de inmediato si su cuenta se elimina. Las copias de seguridad rutinarias realizadas antes de una eliminación siguen conteniendo los datos hasta que caducan por su propio ciclo.</li>
+                <li><strong>Auditoría</strong>: Cada solicitud, cada denegación por falta de consentimiento, cada subida y cada vez que un administrador abre un paquete almacenado quedan registrados en el registro de auditoría administrativa.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="E">
+            <h3>E. Distribución Geográfica Anónima (Habilitada por el Operador, Desactivada por Defecto)</h3>
+            <ul>
+                <li><strong>Solo si el operador la ha habilitado</strong>: El gateway no incluye ninguna base de datos geo-IP, por lo que esta función está desactivada salvo que el operador de este gateway haya obtenido y desplegado una deliberadamente. Desactivada es la opción por defecto.</li>
+                <li><strong>Un uso adicional de la dirección IP de la sección A, no una nueva recopilación</strong>: Cuando usted registra un túnel, su dirección IP pública se consulta en el archivo de base de datos local del operador y se reduce a un código de país ISO de dos letras. No se contacta con ningún servicio de terceros. Solo se lee el campo de país — nunca la ciudad, la subdivisión ni las coordenadas.</li>
+                <li><strong>La dirección se descarta</strong>: La consulta ocurre en memoria y la dirección se descarta inmediatamente después. Su dirección y su país nunca se escriben ni se registran juntos, y nada puede devolver ese par.</li>
+                <li><strong>Qué se almacena</strong>: Una fila por país y por semana ISO, con un código de país y un recuento. La tabla no tiene ninguna columna de usuario.</li>
+                <li><strong>Un mínimo de 5 usuarios por país</strong>: Un país solo se registra cuando se han visto al menos 5 usuarios distintos en él durante esa semana; por debajo de esa cifra se agrupa en un único bucket <code>OTHER</code>, que a su vez se omite hasta que también alcanza 5. El umbral se aplica antes de escribir nada. Las direcciones que no pueden situarse — rangos privados, NAT de operador, direcciones ausentes de la base de datos — se descartan en lugar de adivinarse.</li>
+                <li><strong>Quién puede verlo, y durante cuánto tiempo</strong>: Los recuentos resultantes solo son visibles para los administradores del gateway. No contienen identificador alguno, por lo que se conservan como métricas históricas en lugar de eliminarse según un calendario, y eliminar su cuenta ni los borra ni necesita borrarlos.</li>
+            </ul>
+        </section>
+
         <h2>2. Seguridad y Almacenamiento de Datos</h2>
         <p>Los Tokens de Acceso Personal (PAT) se almacenan en el servidor mediante hashes criptográficos seguros SHA-256. Todos los datos se almacenan en una base de datos SQLite local y privada, y nunca se comparten, venden ni transmiten a servidores externos.</p>
+
+        <h2>3. La Política Completa</h2>
+        <p>Las secciones anteriores resumen la Política de Privacidad y Divulgación de Cookies canónica del proyecto, que además cubre los tokens de acceso personal, las cookies y su derecho al olvido según el RGPD: <a href="https://github.com/peterrichards-lr/lfr-tunnel/blob/master/PRIVACY.md">PRIVACY.md</a>. El operador de este gateway puede haber publicado su propia política en lugar de esta.</p>
+
         <p style="margin-top: 32px;"><a href="/">← Volver al Portal</a></p>
     </div>
 </body>

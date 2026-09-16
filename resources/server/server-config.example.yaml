@@ -182,11 +182,19 @@ trusted_proxies: []
 proxy_headers: {}
 
 # --- Anonymous geographic distribution (#1152) ---
-# Path to a MaxMind GeoLite2/GeoIP2 Country or City database. A client IP is resolved to a
+# Absolute path to a geo-IP database in MaxMind's .mmdb format. A client IP is resolved to a
 # country in memory at registration and then discarded; only per-country counts of distinct
 # users are stored, and countries below the k-threshold are folded into an "OTHER" bucket.
 #
+# Three vendors' free COUNTRY editions work (#1921): MaxMind GeoLite2 Country, DB-IP IP to
+# Country Lite, and IP2Location LITE DB1 -- the MMDB edition, not their default .BIN. Prefer a
+# country edition over a city one: only the country is ever decoded, so a city file puts
+# lat/long and subdivisions on disk that this feature can never use.
+#
 # Empty is the default and a supported state: the feature reports itself unavailable, the
-# analytics panel says so, and registration is unaffected. No database ships with the server
-# -- MaxMind's licence terms and the ~60MB artefact are the operator's to take on.
+# analytics panel says so, and registration is unaffected. No database ships with the server --
+# every vendor forbids redistribution, so the licence terms and the artefact are the operator's
+# to take on.
+#
+# Setup, licensing and how to verify it took effect: docs/server/setup_guide.md section 8.11.
 geolite2_db_path: ""

@@ -479,6 +479,39 @@ If you'd rather manage the IAM role yourself, create it with equivalent permissi
 attach it to the central instance before running the script — it detects and reuses an
 already-associated instance profile instead of overwriting it.
 
+#### If the portal says the actions are unavailable
+
+Not running the sidecar is a supported configuration, so the Network Health screen simply
+has no power controls and says nothing — that is the state described above and it is not a
+fault. What used to look identical to it was a sidecar you *had* configured whose token
+`lfr-tunneld` could not load: `edge_provisioner_url` set, the token file mistyped or not yet
+written, and the portal answering "Edge power actions are not configured on this server"
+([#1956](https://github.com/peterrichards-lr/lfr-tunnel/issues/1956)). One INFO line at
+startup was the only place the difference existed.
+
+Admins now see a banner on Network Health naming which of the four states the gateway is in:
+
+| What the banner says | State | What to do |
+|---|---|---|
+| *(nothing)* | No `edge_provisioner_url`. The default, and not an error. | Nothing, unless you want the feature — see above. |
+| …`edge_provisioner_token_file` is not set… | The URL is set and the token setting is missing. | Add `edge_provisioner_token_file` to `server-config.yaml`. |
+| …no file exists at the configured `edge_provisioner_token_file`… *(names the path it tried)* | The path is set and nothing is there. | Compare the path it names against the sidecar's `token_file`, and check the sidecar has started — it is what writes the file. |
+| …the token file could not be read… *(names the path, and the open error)* | The file exists and `lfr-tunneld` cannot open it. | The token file is `0600`, owned by the user the sidecar runs as. `lfr-tunneld` must run as that user or be granted read access. |
+| …the token file is empty… *(names the path)* | The file exists with nothing in it. | Restart the sidecar; it writes the token at startup. |
+
+The banner and the token path are shown to **admins and owners only** — the same screen is
+readable by every signed-in user, and an ordinary user's response carries none of it. The
+token itself is never sent anywhere: the diagnosis says that the load failed and how, never
+what the file contained.
+
+It describes the state the **running process** is in — the token is loaded once at startup —
+so a token file written since then shows as missing until `lfr-tunneld` restarts. The same
+diagnosis is in the journal:
+
+```bash
+sudo journalctl -u lfr-tunneld -b | grep 'edge power actions'
+```
+
 ---
 
 ## 10. Tearing Down / Retesting
@@ -622,4 +655,4 @@ Confirmed live against both hosted zones while writing this:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

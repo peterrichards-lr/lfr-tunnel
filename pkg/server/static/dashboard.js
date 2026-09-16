@@ -5539,37 +5539,109 @@ async function openUserDetailsModal(userJsonEncoded) {
     });
   }
 
+  // Reset first: the panel is reused for whichever user is opened next, and a poll left
+  // running from the previous one would write into this dialog (#1944).
+  resetDiagnosticsPanel(u.email);
   loadDiagnosticsBundles(u.email);
 
   document.getElementById('user-details-modal').style.display = 'flex';
 }
 
-// Collected diagnostic logs for one user (#1894, completing #1763).
-//
-// A failure here is tolerated and leaves the section hidden: a gateway that has never collected
-// anything is the normal case, and it must not make the rest of the panel look broken.
-async function loadDiagnosticsBundles(email) {
+// A queued collection is not synchronous (#1763): the command waits for the client's next
+// tunnel-status heartbeat -- up to 5s -- and only then does the client collect, redact and
+// upload its logs. So the bundle cannot exist when the POST returns, and a single re-fetch
+// would show an admin exactly what the bug in #1944 showed them: nothing.
+const DIAG_POLL_INTERVAL_MS = 3000;
+// A ceiling, not an estimate of how long an upload takes. A client that is asleep, or whose
+// upload never completes, has to end at a message saying so -- a spinner that never resolves is
+// worse than the snapshot it replaced.
+const DIAG_POLL_TIMEOUT_MS = 60000;
+
+// Bumped by every stop, so a tick that resolves after the dialog closed -- or after another user
+// was selected -- finds its token stale and renders nothing. A poll that outlives the thing it
+// updates is a bug, not a slow success.
+let diagPollToken = 0;
+let diagPollTimer = null;
+
+function stopDiagnosticsPoll() {
+  diagPollToken++;
+  if (diagPollTimer) {
+    clearTimeout(diagPollTimer);
+    diagPollTimer = null;
+  }
+}
+
+// "Waiting" and "nothing arrived" are different statements and both have to be visible, so this
+// is a persistent line in the panel rather than a toast that scrolls away (#1944).
+function setDiagnosticsStatus(text, tone) {
+  const el = document.getElementById('detail-diag-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color =
+    tone === 'warning' ? 'var(--status-warning-text)' : 'var(--text-muted)';
+  el.style.display = text ? '' : 'none';
+}
+
+// Disabled while a collection is in flight or being waited for: clicking again would queue a
+// second command, which the consenting user has to be bothered by all over again.
+function setDiagnosticsCollectBusy(busy) {
+  const btn = document.getElementById('detail-diag-collect');
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.textContent = busy ? t('diag_collecting') : t('diag_collect');
+}
+
+// Wire the button and clear whatever the previously selected user left behind. Separate from
+// loadDiagnosticsBundles because the poll re-runs that loader on every tick and must not
+// re-enable the button out from under itself.
+function resetDiagnosticsPanel(email) {
+  stopDiagnosticsPoll();
+  setDiagnosticsStatus('');
   const wrap = document.getElementById('detail-diag-wrap');
+  if (wrap) wrap.style.display = 'none';
   const btn = document.getElementById('detail-diag-collect');
   if (btn) {
     btn.disabled = false;
     btn.textContent = t('diag_collect');
     btn.onclick = () => requestDiagnosticsCollection(email);
   }
-  if (!wrap) return;
-  wrap.style.display = 'none';
+}
+
+// Collected diagnostic logs for one user (#1894, completing #1763).
+//
+// A failure here is tolerated and leaves the section hidden: a gateway that has never collected
+// anything is the normal case, and it must not make the rest of the panel look broken.
+//
+// Returns how many bundles are now listed, which is what the poll compares against. The section
+// is hidden or shown from the answer rather than hidden up front, so a re-render mid-poll does
+// not flicker a table the admin is reading.
+async function loadDiagnosticsBundles(email) {
+  const wrap = document.getElementById('detail-diag-wrap');
+  if (!wrap) return 0;
+  let data;
   try {
     const res = await fetch(
       `/api/admin/diagnostics/bundles?email=${encodeURIComponent(email)}`,
     );
-    if (!res.ok) return;
-    const data = (await res.json()) || {};
-    const bundles = data.bundles || [];
-    if (!bundles.length) return;
-    renderTable(
-      'detail-diag-tbody',
-      bundles,
-      (b) => `
+    if (!res.ok) {
+      wrap.style.display = 'none';
+      return 0;
+    }
+    data = (await res.json()) || {};
+  } catch (e) {
+    console.error('Failed to load diagnostic bundles', e);
+    wrap.style.display = 'none';
+    return 0;
+  }
+  const bundles = data.bundles || [];
+  if (!bundles.length) {
+    wrap.style.display = 'none';
+    return 0;
+  }
+  renderTable(
+    'detail-diag-tbody',
+    bundles,
+    (b) => `
                         <tr>
                             <td style="font-weight: 600;">${escapeHTML(b.kind || '')}</td>
                             <td style="color: var(--text-muted);">${escapeHTML(new Date(b.collected_at).toLocaleString())}</td>
@@ -5577,26 +5649,66 @@ async function loadDiagnosticsBundles(email) {
                             <td><a class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 10px; font-size: 12px;" href="/api/admin/diagnostics/bundles?id=${encodeURIComponent(b.id)}">${escapeHTML(t('diag_download'))}</a></td>
                         </tr>
                     `,
-    );
-    const ret = document.getElementById('detail-diag-retention');
-    if (ret && data.retention_days) {
-      ret.textContent = `${t('diag_retention')} ${data.retention_days} ${t('diag_retention_days')}`;
-    }
-    wrap.style.display = '';
-  } catch (e) {
-    console.error('Failed to load diagnostic bundles', e);
+  );
+  const ret = document.getElementById('detail-diag-retention');
+  if (ret && data.retention_days) {
+    ret.textContent = `${t('diag_retention')} ${data.retention_days} ${t('diag_retention_days')}`;
   }
+  wrap.style.display = '';
+  return bundles.length;
+}
+
+// Wait for a queued collection to turn into a bundle (#1944).
+//
+// Bounded on both axes: DIAG_POLL_INTERVAL_MS between reads, DIAG_POLL_TIMEOUT_MS in total, and
+// a token that any stop invalidates. Every exit writes a status the admin can act on.
+async function pollForDiagnosticsBundle(email) {
+  stopDiagnosticsPoll();
+  const token = diagPollToken;
+  setDiagnosticsStatus(t('diag_waiting'));
+  setDiagnosticsCollectBusy(true);
+
+  const finish = (text, tone) => {
+    stopDiagnosticsPoll();
+    setDiagnosticsStatus(text, tone);
+    setDiagnosticsCollectBusy(false);
+  };
+
+  // The baseline is read NOW rather than remembered from when the dialog opened. That snapshot
+  // can be minutes old -- long enough for another administrator's collection to have landed --
+  // and counting it would end this wait on somebody else's bundle.
+  const baseline = await loadDiagnosticsBundles(email);
+  if (token !== diagPollToken) return;
+  const deadline = Date.now() + DIAG_POLL_TIMEOUT_MS;
+
+  const tick = async () => {
+    if (token !== diagPollToken) return;
+    const count = await loadDiagnosticsBundles(email);
+    // Re-checked after the await as well as before it: the dialog can close while the request
+    // is in flight.
+    if (token !== diagPollToken) return;
+    if (count > baseline) {
+      finish('');
+      return;
+    }
+    // A failed read is not an answer, so it does not end the wait -- only the deadline does.
+    // Otherwise one gateway blip would be reported to the admin as "nothing arrived".
+    if (Date.now() >= deadline) {
+      finish(t('diag_timeout'), 'warning');
+      return;
+    }
+    diagPollTimer = setTimeout(tick, DIAG_POLL_INTERVAL_MS);
+  };
+  diagPollTimer = setTimeout(tick, DIAG_POLL_INTERVAL_MS);
 }
 
 // Ask this user's client for its logs. The endpoint answers on two axes -- whether the request
 // was permitted, and whether it could be delivered -- so a consenting user whose laptop is shut
 // reads as "nobody to ask", not as a refusal.
 async function requestDiagnosticsCollection(email) {
-  const btn = document.getElementById('detail-diag-collect');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = t('diag_collecting');
-  }
+  setDiagnosticsStatus('');
+  setDiagnosticsCollectBusy(true);
+  let queued = false;
   try {
     const res = await fetch('/api/admin/diagnostics/collect', {
       method: 'POST',
@@ -5604,22 +5716,31 @@ async function requestDiagnosticsCollection(email) {
       body: JSON.stringify({ email }),
     });
     const data = (await res.json()) || {};
+    queued = res.ok && data.delivery === 'queued';
     showToast(
       data.delivery_detail || data.error || t('diag_requested'),
-      res.ok && data.delivery === 'queued' ? 'success' : 'info',
+      queued ? 'success' : 'info',
     );
   } catch (e) {
     console.error('Failed to request diagnostics', e);
     showToast(t('diag_refused'), 'error');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = t('diag_collect');
+    // Only a QUEUED command can ever produce a bundle. A request that was authorised but
+    // delivered nowhere -- no client connected, or the client served by another gateway -- never
+    // will, so waiting on one would be a lie dressed as patience. Those cases keep the
+    // delivery_detail the toast just showed and leave the button usable (#1944).
+    if (queued) {
+      pollForDiagnosticsBundle(email);
+    } else {
+      setDiagnosticsCollectBusy(false);
     }
   }
 }
 
 function closeUserDetailsModal() {
+  // A poll that outlives the dialog it updates is a bug, and this is every close path: the
+  // footer button, the row action at the tunnel kick, and the overlay click all land here.
+  stopDiagnosticsPoll();
   document.getElementById('user-details-modal').style.display = 'none';
 }
 

@@ -26,7 +26,14 @@ func TestARealDatabaseResolvesKnownAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}
-	defer func() { _ = r.Close() }()
+	// Handled rather than discarded: Resolver.Close is not on the errcheck exclusion list,
+	// and a close that fails on a database this test just read successfully is worth knowing
+	// about rather than swallowing.
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close %s: %v", path, err)
+		}
+	})
 
 	// Public addresses with long-stable, well-known registrations. Asserting only that a
 	// plausible ISO code comes back, not WHICH one: vendors disagree at the margins and a

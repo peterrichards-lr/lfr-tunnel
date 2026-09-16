@@ -298,8 +298,21 @@ func TestRequireProvisioner_501SaysWhichStateItIsIn(t *testing.T) {
 	if strings.Contains(broken, "not configured on this server") {
 		t.Errorf("a configured sidecar with a bad token file is still reported as not configured: %s", broken)
 	}
-	if !strings.Contains(broken, missing) {
-		t.Errorf("the 501 body does not name the token file it tried (%s): %s", missing, broken)
+	// Compared against the JSON-ENCODED path, not the raw one.
+	//
+	// The body is JSON, so a Windows path's backslashes arrive doubled:
+	// C:\Users\... is written as C:\\Users\\... . The raw path is therefore not a
+	// substring of the body, and this assertion failed on windows-latest while passing on
+	// Linux and macOS, where the separator needs no escaping. Encoding the expectation the
+	// same way the handler encodes the value compares like with like on every platform.
+	encoded, err := json.Marshal(missing)
+	if err != nil {
+		t.Fatalf("encoding the expected path: %v", err)
+	}
+	// Trim the quotes json.Marshal adds around the string.
+	wantPath := string(encoded[1 : len(encoded)-1])
+	if !strings.Contains(broken, wantPath) {
+		t.Errorf("the 501 body does not name the token file it tried (%s): %s", wantPath, broken)
 	}
 	// Still a JSON object with an "error" key: the portals read `data.error` from it, and a
 	// path can contain a quote.
@@ -328,4 +341,52 @@ func decodeEdgeHealth(t *testing.T, w *httptest.ResponseRecorder) edgeHealthBody
 		t.Fatalf("invalid JSON: %v (status %d, body %s)", err, w.Code, w.Body.String())
 	}
 	return out
+}
+
+// TestAWindowsPathInAJSONBodyNeedsEncodingToBeFound reproduces, on ANY platform, the failure
+// that only windows-latest saw.
+//
+// The 501 body is JSON, so a Windows path's separators arrive doubled. An assertion written
+// against the raw path therefore cannot match, while the same assertion passes on Linux and
+// macOS where the separator is "/" and needs no escaping -- so the defect was invisible to
+// every developer machine and to two of the three CI platforms.
+//
+// This pins the property rather than the platform: no Windows runner is needed to know the
+// comparison is being made like with like.
+func TestAWindowsPathInAJSONBodyNeedsEncodingToBeFound(t *testing.T) {
+	const windowsPath = `C:\Users\RUNNER~1\AppData\Local\Temp\edge-provisioner.token`
+
+	body, err := json.Marshal(map[string]string{
+		"error": "no file exists at the edge_provisioner_token_file path " + windowsPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// The old assertion. This is what failed on windows-latest.
+	if strings.Contains(string(body), windowsPath) {
+		t.Error("PREMISE FAILED: the raw Windows path was found in the JSON body, so this test " +
+			"is not reproducing the escaping that caused the failure")
+	}
+
+	// The fixed assertion: encode the expectation the same way the handler encoded the value.
+	encoded, err := json.Marshal(windowsPath)
+	if err != nil {
+		t.Fatalf("marshal path: %v", err)
+	}
+	if !strings.Contains(string(body), string(encoded[1:len(encoded)-1])) {
+		t.Error("the JSON-encoded path was not found in the body, so the fix does not hold")
+	}
+
+	// BOUNDING: a POSIX path needs no escaping, so the fix must be a no-op there rather than
+	// changing behaviour on the platforms that were already passing.
+	const posixPath = "/etc/lfr-tunneld/edge-provisioner.token"
+	enc2, err := json.Marshal(posixPath)
+	if err != nil {
+		t.Fatalf("marshal posix: %v", err)
+	}
+	if string(enc2[1:len(enc2)-1]) != posixPath {
+		t.Errorf("encoding changed a POSIX path (%s -> %s); the fix must not alter behaviour "+
+			"where it was already correct", posixPath, string(enc2[1:len(enc2)-1]))
+	}
 }

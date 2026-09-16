@@ -917,6 +917,35 @@ html[dir='rtl'] th {
     height: auto !important;
   }
 
+  /* ONLY THE REPORT PRINTS (#1916, second pass).
+     
+     The first attempt named each banner to hide -- a deny-list, which missed one the same
+     day: V2's ViewAsBar has two render branches and only one was listed, so an owner's export
+     still carried "View as Owner (you)". V1 has the same exposure through any control added
+     outside #main-content.
+     
+     So the rule is inverted, as the operator asked: everything at layout level is hidden and
+     only the chain down to #main-content is restored. A banner added tomorrow is excluded by
+     default rather than by someone remembering this block.
+     
+     Direct-child combinators throughout: a descendant selector would blank the report's own
+     content. */
+  #dashboard-shell > * {
+    display: none !important;
+  }
+
+  #dashboard-shell > #dashboard-screen {
+    display: block !important;
+  }
+
+  #dashboard-screen > * {
+    display: none !important;
+  }
+
+  #dashboard-screen > #main-content {
+    display: block !important;
+  }
+
   /* The `.app-container` reset that used to sit here is removed (#1916): no V1 document renders
      that class -- the shell is #dashboard-shell / #dashboard-screen -- so the rule has never
      matched anything. It is NOT retargeted at the real wrapper, deliberately: V1 already

@@ -3057,6 +3057,37 @@ function renderGeoAttribution(available, provider) {
     escapeHTML(parts.slice(1).join('{0}'));
 }
 
+// geoOfflineMessage says WHY the geographic panel is off, not merely that it is (#1938).
+//
+// `available: false` used to carry one sentence for three different situations -- no path
+// set, a path with no file at it, and a file that cannot be read -- so an operator who
+// mistyped `geolite2_db_path` was told they had configured nothing, and the server journal
+// was the only place the difference existed. The server now sends which of the three it is
+// and, for the two the operator has to correct, the path it actually tried.
+//
+// `reason` is absent on a gateway older than this change, and absent is precisely the
+// not-configured wording, so that case falls back to the original string rather than to a
+// blank panel. The same function exists in V2's AdminAnalytics.tsx: the two portals are an
+// A/B test (#1866), so a diagnosis in one arm only would itself be a defect.
+//
+// Returns text, never markup -- the caller assigns it to textContent. The path and the
+// open error come from the gateway's own configuration and are admin-only (the route is
+// behind requireAdmin), but they are still unsanitised strings and must not reach innerHTML.
+function geoOfflineMessage(geo) {
+  const path = (geo && geo.configured_path) || '';
+  if (geo && geo.reason === 'path_not_found') {
+    return t('geo_path_not_found').replace('{0}', path);
+  }
+  if (geo && geo.reason === 'unreadable') {
+    const msg = t('geo_unreadable').replace('{0}', path);
+    // The raw open error, untranslated on purpose: for an IP2Location .BIN it names the
+    // wrong DOWNLOAD rather than the wrong path (#1921), which is the one sentence that
+    // resolves this state, and it exists only in the gateway's own words.
+    return geo.detail ? `${msg} (${geo.detail})` : msg;
+  }
+  return t('geo_unavailable');
+}
+
 // The analytics window, in days. '0' is V2's "All Time" value. Mirrors V2's request shape
 // exactly rather than improving on it: the portals are a live A/B test, so a difference in what
 // the two arms fetch would make the comparison measure the fix instead of the presentation.
@@ -3489,6 +3520,9 @@ async function loadAnalytics() {
       // `available` is what separates "no geo-IP database deployed" from "deployed, but
       // nothing has cleared the k-threshold yet". They look identical in the data and mean
       // completely different things to an admin staring at an empty table.
+      //
+      // `reason` then splits the first of those three ways -- unset, mistyped path,
+      // unreadable file (#1938). See geoOfflineMessage.
       try {
         const geoRes = await fetch('/api/admin/analytics/locations');
         const geoHeadline = document.getElementById(
@@ -3499,7 +3533,7 @@ async function loadAnalytics() {
           const buckets = geo.buckets || [];
           if (geoHeadline) {
             if (!geo.available) {
-              geoHeadline.textContent = t('geo_unavailable');
+              geoHeadline.textContent = geoOfflineMessage(geo);
             } else if (!buckets.length) {
               geoHeadline.textContent = t('geo_below_threshold');
             } else {

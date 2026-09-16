@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -295,6 +295,12 @@ func TestLocationAnalyticsHandlerReturnsStoredBuckets(t *testing.T) {
 	if !resp.Available {
 		t.Errorf("available: got false, want true")
 	}
+	// With the feature ON there is nothing to diagnose, and the configured path -- a
+	// filesystem path on the gateway host -- must not be sent at all (#1938).
+	if resp.Reason != "" || resp.ConfiguredPath != "" || resp.Detail != "" {
+		t.Errorf("a working panel carried diagnosis fields: reason=%q path=%q detail=%q",
+			resp.Reason, resp.ConfiguredPath, resp.Detail)
+	}
 	if resp.Period != "2026-W35" {
 		t.Errorf("period: got %q, want the most recent week %q", resp.Period, "2026-W35")
 	}
@@ -358,6 +364,150 @@ func TestObserveGeoLocationIsSafeWhenDisabled(t *testing.T) {
 	srv.observeGeoLocation("someone@example.com", "203.0.113.40")
 }
 
+// geoServerWithPath builds a server whose geolite2_db_path is exactly path, driving the
+// real constructor (NewServer -> newGeoAggregator -> geo.OpenResolver) rather than setting
+// the diagnosis by hand. What the panel reports has to be what that path actually produces
+// in production; a hand-set field would assert against a state the gateway cannot reach.
+func geoServerWithPath(t *testing.T, path string) *Server {
+	t.Helper()
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "geo_diag.db")
+	cfg.DisableBackupScheduler = true
+	cfg.GeoLite2DBPath = path
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("NewServer refused to start with geolite2_db_path=%q: %v", path, err)
+	}
+	t.Cleanup(func() {
+		srv.Stop()
+		time.Sleep(50 * time.Millisecond) // prevent SQLite TempDir cleanup races
+	})
+	return srv
+}
+
+// locationsFor drives the real handler and decodes what an admin's panel receives.
+func locationsFor(t *testing.T, srv *Server) locationAnalyticsResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
+	rec := httptest.NewRecorder()
+	srv.handleGetLocationAnalytics(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp locationAnalyticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	return resp
+}
+
+// TestGeoPanelTellsAMistypedPathFromAnUnsetOne is the assertion #1938 was filed for.
+//
+// Both states leave the feature off and both serialise to available:false, so every
+// pre-existing test in this file passes either way -- the defect was that the panel had no
+// way to say WHICH, and told an operator who had mistyped geolite2_db_path that they had
+// configured nothing. The reason is asserted by value, and the path by being named, because
+// "the response differs" is satisfied by any incidental field.
+func TestGeoPanelTellsAMistypedPathFromAnUnsetOne(t *testing.T) {
+	typo := filepath.Join(t.TempDir(), "geoip", "GeoLite2-Cuntry.mmdb")
+
+	unset := locationsFor(t, geoServerWithPath(t, ""))
+	mistyped := locationsFor(t, geoServerWithPath(t, typo))
+
+	// Unchanged for every existing client: the feature is off in both cases and `available`
+	// still says so on its own.
+	if unset.Available || mistyped.Available {
+		t.Fatalf("available: got unset=%v mistyped=%v, want false for both", unset.Available, mistyped.Available)
+	}
+
+	if unset.Reason != geoReasonNotConfigured {
+		t.Errorf("unset path: reason %q, want %q", unset.Reason, geoReasonNotConfigured)
+	}
+	if mistyped.Reason != geoReasonPathNotFound {
+		t.Errorf("mistyped path: reason %q, want %q", mistyped.Reason, geoReasonPathNotFound)
+	}
+	if mistyped.Reason == unset.Reason {
+		t.Errorf("a mistyped path and an unset one still report the same reason %q", unset.Reason)
+	}
+	// The typo has to be visible in the message, which is the whole point: an operator
+	// comparing what they configured against what the gateway tried is how a wrong path
+	// gets spotted.
+	if mistyped.ConfiguredPath != typo {
+		t.Errorf("configured_path: got %q, want %q", mistyped.ConfiguredPath, typo)
+	}
+	// Nothing was configured, so there is no path to name -- and inventing one would tell
+	// the operator the opposite of the truth.
+	if unset.ConfiguredPath != "" {
+		t.Errorf("an unset path reported configured_path %q", unset.ConfiguredPath)
+	}
+}
+
+// TestGeoPanelReportsAnUnreadableDatabase is the third state: the file is where the
+// operator said and cannot be used. Distinct from the missing-file case because the remedy
+// is different -- a different file, not a different path.
+func TestGeoPanelReportsAnUnreadableDatabase(t *testing.T) {
+	// Named .BIN because that is the real-world instance: IP2Location's default download is
+	// their proprietary format, and geo.OpenResolver names that rather than reporting an
+	// opaque parse error (#1921). Contents are not an mmdb either way.
+	path := filepath.Join(t.TempDir(), "IP2LOCATION-LITE-DB1.BIN")
+	if err := os.WriteFile(path, []byte("not a MaxMind database"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	srv := geoServerWithPath(t, path)
+
+	resp := locationsFor(t, srv)
+	if resp.Available {
+		t.Fatalf("available: got true with an unreadable database")
+	}
+	if resp.Reason != geoReasonUnreadable {
+		t.Errorf("reason: got %q, want %q", resp.Reason, geoReasonUnreadable)
+	}
+	if resp.ConfiguredPath != path {
+		t.Errorf("configured_path: got %q, want %q", resp.ConfiguredPath, path)
+	}
+	// The vendor diagnosis is the one sentence that resolves this state, so it has to
+	// survive the trip to the panel rather than staying in the journal.
+	if !strings.Contains(resp.Detail, "MMDB edition") {
+		t.Errorf("detail %q does not carry the .BIN diagnosis an operator needs", resp.Detail)
+	}
+
+	// An unusable file must not take the rest of the analytics page with it, and must not
+	// have stopped the server starting -- geoServerWithPath would have failed already, so
+	// this asserts the surviving half: the handler answers normally.
+	if resp.Threshold != geo.DefaultThreshold || resp.Buckets == nil {
+		t.Errorf("the panel degraded: threshold=%d buckets=%v", resp.Threshold, resp.Buckets)
+	}
+}
+
+// TestGeoDiagnosisIsNotServedToANonAdmin. The reason names a filesystem path on the gateway
+// host, which is admin-only detail. Driven through handleAdminEndpoints -- the real
+// dispatch, which calls requireAdmin before any route below it -- rather than through the
+// handler directly, because the handler has no gate of its own and testing it would prove
+// nothing about what an anonymous caller can reach.
+func TestGeoDiagnosisIsNotServedToANonAdmin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "geoip", "secret-looking-path.mmdb")
+	srv := geoServerWithPath(t, path)
+
+	// Control: an admin does get it, so a "no path in the body" pass below cannot be the
+	// route being broken for everyone.
+	if admin := locationsFor(t, srv); admin.ConfiguredPath != path {
+		t.Fatalf("test precondition: an admin must see the path, got %q", admin.ConfiguredPath)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/api/admin/analytics/locations", nil)
+	rec := httptest.NewRecorder()
+	srv.handleAdminEndpoints(rec, req)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("an unauthenticated caller reached the locations endpoint: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), path) {
+		t.Errorf("the configured geo-IP path leaked to an unauthenticated caller: %s", rec.Body.String())
+	}
+}
+
 // TestLocationAnalyticsCarriesTheProviderForAttribution (#1921).
 //
 // The panel has to render the credit the supplying vendor's licence requires, and each
@@ -372,15 +522,7 @@ func TestLocationAnalyticsCarriesTheProviderForAttribution(t *testing.T) {
 		geo.Options{},
 	)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
-	rec := httptest.NewRecorder()
-	srv.handleGetLocationAnalytics(rec, req)
-
-	var resp locationAnalyticsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if resp.Provider != string(geo.ProviderDBIP) {
+	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderDBIP) {
 		t.Errorf("provider: got %q, want %q -- the panel cannot render DB-IP's required "+
 			"link back to db-ip.com without it", resp.Provider, geo.ProviderDBIP)
 	}
@@ -397,15 +539,7 @@ func TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase(t *testing.T) {
 		t.Fatalf("premise broken: the test server should have no geo database")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
-	rec := httptest.NewRecorder()
-	srv.handleGetLocationAnalytics(rec, req)
-
-	var resp locationAnalyticsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if resp.Provider != "" {
+	if resp := locationsFor(t, srv); resp.Provider != "" {
 		t.Errorf("provider: got %q with no database configured, want empty", resp.Provider)
 	}
 }
@@ -420,31 +554,21 @@ func TestAnUnrecognisedDatabaseIsNotAttributedToAVendor(t *testing.T) {
 	srv := setupGeoTestServer(t)
 	srv.geo = geo.New(stubResolver{}, geoStore{database: srv.db}, geo.Options{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
-	rec := httptest.NewRecorder()
-	srv.handleGetLocationAnalytics(rec, req)
-
-	var resp locationAnalyticsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if resp.Provider != string(geo.ProviderUnknown) {
+	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderUnknown) {
 		t.Errorf("provider: got %q, want %q", resp.Provider, geo.ProviderUnknown)
 	}
 }
 
 // TestTheServerOpensThePathTheResolvedKeyNames (#1921).
 //
-// pkg/config proves the two spellings resolve to one value; this proves server.go reads that
-// resolved value rather than the field it used to read. Leaving `cfg.GeoLite2DBPath` in
-// server.go still compiles and still passes every test in pkg/config, and ships a gateway
-// that ignores `country_db_path` entirely.
+// pkg/config proves the two spellings of the geo database path resolve to one value; this
+// proves server.go reads that resolved value rather than the field it used to read. Leaving
+// `cfg.GeoLite2DBPath` in server.go still compiles and still passes every test in
+// pkg/config, and ships a gateway that ignores `country_db_path` entirely.
 //
-// The startup log is the assertion surface because it is the only place the chosen path is
-// observable from outside: both spellings here name a missing file, so both correctly end up
-// with geo disabled, and the nil check alone cannot tell which file was tried. That is not a
-// contrivance -- docs/server/setup_guide.md §8.11.7 tells operators to diagnose exactly this
-// from exactly this log line.
+// Asserted through `configured_path` in the admin payload -- the field #1938 added for
+// exactly this question -- rather than through the log, because that is the value an
+// operator is shown and the one that has to name the file the gateway actually tried.
 func TestTheServerOpensThePathTheResolvedKeyNames(t *testing.T) {
 	cases := []struct {
 		name string
@@ -452,37 +576,41 @@ func TestTheServerOpensThePathTheResolvedKeyNames(t *testing.T) {
 	}{
 		{"legacy alias", func(c *config.ServerConfig, p string) { c.GeoLite2DBPath = p }},
 		{"neutral key", func(c *config.ServerConfig, p string) { c.CountryDBPath = p }},
+		// Both set, disagreeing: the neutral key wins. See
+		// config.CountryDatabasePath for why that direction and not the other.
+		{"both, neutral wins", func(c *config.ServerConfig, p string) {
+			c.GeoLite2DBPath = filepath.Join(t.TempDir(), "absent", "ignored-alias.mmdb")
+			c.CountryDBPath = p
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Unique per case so a log line naming it cannot have come from the other one.
+			// Unique per case so a reported path cannot have come from another one.
 			wantPath := filepath.Join(t.TempDir(), "absent", tc.name+"-country.mmdb")
 
-			var buf bytes.Buffer
-			previous := slog.Default()
-			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-			t.Cleanup(func() { slog.SetDefault(previous) })
-
-			cfg := &config.ServerConfig{
-				Domains:                []string{"example.com"},
-				DisableBackupScheduler: true,
-				DBPath:                 filepath.Join(t.TempDir(), "geo_keys.db"),
-			}
+			cfg := config.DefaultServerConfig()
+			cfg.Domains = []string{"example.com"}
+			cfg.DBPath = filepath.Join(t.TempDir(), "geo_keys.db")
+			cfg.DisableBackupScheduler = true
 			tc.set(cfg, wantPath)
 
 			srv, err := NewServer(cfg)
 			if err != nil {
 				t.Fatalf("NewServer: %v", err)
 			}
-			defer srv.Stop()
+			t.Cleanup(func() {
+				srv.Stop()
+				time.Sleep(50 * time.Millisecond) // prevent SQLite TempDir cleanup races
+			})
 
 			// A missing file disables the feature gracefully whichever spelling named it.
 			if srv.geo != nil {
 				t.Errorf("geo is active despite the database being absent")
 			}
-			if !strings.Contains(buf.String(), wantPath) {
-				t.Errorf("the startup log never names %s=%q, so the server is not reading the "+
-					"resolved path. Log was:\n%s", tc.name, wantPath, buf.String())
+			resp := locationsFor(t, srv)
+			if resp.ConfiguredPath != wantPath {
+				t.Errorf("%s: the panel reports configured_path=%q, want %q -- the server is "+
+					"not opening the path the resolved key names", tc.name, resp.ConfiguredPath, wantPath)
 			}
 		})
 	}

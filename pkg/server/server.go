@@ -260,7 +260,11 @@ type Server struct {
 	// geo aggregates registrations into anonymous per-country counts (#1152). nil
 	// whenever no MaxMind database is configured, which is the default; every method on
 	// it is nil-safe so no call site needs to check.
-	geo           *geo.Aggregator
+	geo *geo.Aggregator
+	// geoDiagnosis records WHY geo is nil (#1938). An unset path, a mistyped one and an
+	// unreadable file are all nil here and were all one sentence in the admin panel, which
+	// told an operator who had configured a path that they had not.
+	geoDiagnosis  geoDiagnosis
 	portalService PortalService
 	notifications *NotificationService
 	ctx           context.Context
@@ -558,7 +562,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// licence, and without one this stays nil and every geo call becomes a no-op (#1152).
 	// The path has two accepted spellings, resolved in one place (#1921).
 	geoPath, geoBothPathsSet := cfg.CountryDatabasePath()
-	srv.geo = newGeoAggregator(geoPath, geoBothPathsSet, database)
+	srv.geo, srv.geoDiagnosis = newGeoAggregator(geoPath, geoBothPathsSet, database)
 
 	// Edge power actions (start/stop/restart, schedule editing) are entirely
 	// optional and AWS-specific -- absent unless both the sidecar URL and its

@@ -659,7 +659,21 @@
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="node_placement">Node Placement</h4>
                             <p id="node-placement-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
                             <!-- Hidden until there are rows, like the other two panels on
-                                 this row (#1920). -->
+                                 this row (#1920) -- and everything the panel says ABOUT those
+                                 rows is inside the wrapper with it (#1931), so one toggle
+                                 governs the lot and the two cannot drift apart again.
+
+                                 The caveat below used to sit outside this div. It annotates the
+                                 "Not assessable" column, so in the empty state it explained a
+                                 column that was not on screen, and since #1920 there was no
+                                 table there at all. V2 renders all three paragraphs inside its
+                                 non-empty branch (ui/src/pages/AdminAnalytics.tsx), and per
+                                 #1866 the arms differing is the defect, not a style choice.
+
+                                 The two data-driven paragraphs lose nothing by moving in:
+                                 GetNodePlacement (pkg/db/node_placement.go) creates a node row
+                                 for every session, so "no rows" and "no sessions" are the same
+                                 state -- which is exactly what V2 branches on. -->
                             <div id="node-placement-table-wrap" style="display: none;">
                                 <div class="table-container" style="max-height: 250px; overflow-y: auto;">
                                     <table>
@@ -667,17 +681,17 @@
                                         <tbody id="node-placement-table-body"></tbody>
                                     </table>
                                 </div>
+                                <p id="node-placement-unknown" style="display: none; color: var(--warning); font-size: 12px; margin: 12px 0 0;"></p>
+                                <!-- How clients chose their gateway (#1922). A pinned client runs no
+                                     probe, so it lands in "not assessable" alongside a cached
+                                     election and an old client -- three states that looked identical
+                                     and meant very different things. Only the pinned count is shown:
+                                     it is the one an operator can act on. -->
+                                <p id="node-placement-sources" style="display: none; font-size: 12px; color: var(--text-muted); margin: 8px 0 0;"></p>
+                                <!-- The caveat is rendered, not dropped: the counts must not be
+                                     readable as a score. -->
+                                <p style="color: var(--text-muted); font-size: 11px; margin: 12px 0 0;" data-i18n="node_placement_caveat_unverifiable">Not assessable is not a failure: the client caches its region choice for 24h, and a cached choice runs no probe, so there is nothing that day to compare against.</p>
                             </div>
-                            <p id="node-placement-unknown" style="display: none; color: var(--warning); font-size: 12px; margin: 12px 0 0;"></p>
-                            <!-- How clients chose their gateway (#1922). A pinned client runs no
-                                 probe, so it lands in "not assessable" alongside a cached
-                                 election and an old client -- three states that looked identical
-                                 and meant very different things. Only the pinned count is shown:
-                                 it is the one an operator can act on. -->
-                            <p id="node-placement-sources" style="display: none; font-size: 12px; color: var(--text-muted); margin: 8px 0 0;"></p>
-                            <!-- The caveat is rendered, not dropped: the counts must not be
-                                 readable as a score. -->
-                            <p style="color: var(--text-muted); font-size: 11px; margin: 12px 0 0;" data-i18n="node_placement_caveat_unverifiable">Not assessable is not a failure: the client caches its region choice for 24h, and a cached choice runs no probe, so there is nothing that day to compare against.</p>
                         </div>
                         <!-- Anonymous geographic distribution (#1152). V1 and V2 are an A/B
                              test, so the panel lands in both.

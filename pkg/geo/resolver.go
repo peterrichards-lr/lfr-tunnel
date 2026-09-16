@@ -29,6 +29,16 @@ import (
 // normal state rather than a failure: the deployment simply has no MaxMind file.
 var ErrUnavailable = errors.New("geo: no geo-IP database available")
 
+// ErrNotFound reports that a path WAS configured and nothing exists at it (#1938).
+//
+// It wraps ErrUnavailable deliberately: every caller that treats "no database" as a normal,
+// non-fatal state keeps matching, so the absent-is-a-supported-configuration property this
+// package is built on is untouched. What it adds is the one bit OpenResolver used to throw
+// away -- whether the operator configured a path at all -- which is why a mistyped path and
+// an unset one rendered the same sentence in the admin panel and only the journal could
+// tell them apart.
+var ErrNotFound = fmt.Errorf("geo: configured database file does not exist: %w", ErrUnavailable)
+
 // Resolver maps an IP address to an ISO 3166-1 alpha-2 country code.
 type Resolver interface {
 	// Country returns the country code for ip. The second result is false when the
@@ -49,15 +59,20 @@ type mmdbResolver struct {
 
 // OpenResolver opens the MaxMind database at path.
 //
-// An empty path, or a path that does not exist, returns ErrUnavailable rather than a hard
-// error: not deploying a MaxMind file is a supported configuration.
+// An empty path, or a path that does not exist, returns an error matching ErrUnavailable
+// rather than a hard one: not deploying a MaxMind file is a supported configuration.
+//
+// The two are not the same error, though (#1938). An unset path is bare ErrUnavailable; a
+// configured path with no file at it also matches ErrNotFound and names the path, because
+// the second is an operator mistake and the first is the default. Callers that only care
+// whether the feature is on keep testing ErrUnavailable and see no change.
 func OpenResolver(path string) (Resolver, error) {
 	if path == "" {
 		return nil, ErrUnavailable
 	}
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			return nil, ErrUnavailable
+			return nil, fmt.Errorf("%s: %w", path, ErrNotFound)
 		}
 		return nil, fmt.Errorf("geo: stat %s: %w", path, err)
 	}

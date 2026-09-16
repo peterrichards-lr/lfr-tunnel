@@ -54,6 +54,47 @@ const countryName = (code: string, locale: string) => {
   }
 };
 
+// geoOfflineMessage says WHY the geographic panel is off, not merely that it is (#1938).
+//
+// `available: false` used to carry one sentence for three different situations -- no path
+// set, a path with no file at it, and a file that cannot be read -- so an operator who
+// mistyped `geolite2_db_path` was told they had configured nothing, and the server journal
+// was the only place the difference existed. The server now sends which of the three it is
+// and, for the two the operator has to correct, the path it actually tried.
+//
+// `reason` is absent on a gateway older than this change, and absent is precisely the
+// not-configured wording, so that case falls back to the original string rather than to a
+// blank panel. Shared with Portal V1's copy in dashboard.js -- the two are an A/B test
+// (#1866), so a diagnosis in one arm only would itself be a defect.
+function geoOfflineMessage(
+  locations: { reason?: string; configured_path?: string; detail?: string },
+  t: (key: string, fallback: string) => string,
+): string {
+  const path = locations?.configured_path || '';
+  switch (locations?.reason) {
+    case 'path_not_found':
+      return t(
+        'geo_path_not_found',
+        'No file exists at the geo-IP database path configured in geolite2_db_path, so geographic distribution is off. Check it for a typo: {0}',
+      ).replace('{0}', path);
+    case 'unreadable': {
+      const msg = t(
+        'geo_unreadable',
+        'The geo-IP database configured in geolite2_db_path could not be read, so geographic distribution is off. It must be a MaxMind-format .mmdb file the gateway can open: {0}',
+      ).replace('{0}', path);
+      // The raw open error, untranslated on purpose: for an IP2Location .BIN it names the
+      // wrong DOWNLOAD rather than the wrong path (#1921), which is the one sentence that
+      // resolves this state, and it exists only in the gateway's own words.
+      return locations.detail ? `${msg} (${locations.detail})` : msg;
+    }
+    default:
+      return t(
+        'geo_unavailable',
+        'No geo-IP database is configured, so geographic distribution is off. Set geolite2_db_path to a MaxMind GeoLite2 country file to enable it.',
+      );
+  }
+}
+
 // Palette for per-gateway series. Fixed order rather than random, so a given gateway keeps
 // the same colour between renders and between the two portals.
 const NODE_COLOURS = [
@@ -867,7 +908,9 @@ export default function AdminAnalytics() {
 
                 * available: false -- no MaxMind database is deployed. The normal state,
                   and NOT a fault: the server ships without one, and the feature degrades
-                  to off rather than failing a registration.
+                  to off rather than failing a registration. `reason` splits this further
+                  into unset / mistyped path / unreadable file (#1938) -- see
+                  geoOfflineMessage, which is what stops a typo reading as a decision.
                 * available, no buckets -- the feature is on, but nothing has yet cleared
                   the k-threshold. Small deployments live here permanently.
                 * available with buckets -- real counts.
@@ -880,10 +923,7 @@ export default function AdminAnalytics() {
             </h4>
             {!locations?.available ? (
               <p className="text-muted text-sm m-0">
-                {t(
-                  'geo_unavailable',
-                  'No geo-IP database is configured, so geographic distribution is off. Set geolite2_db_path to a MaxMind GeoLite2 country file to enable it.',
-                )}
+                {geoOfflineMessage(locations || {}, t)}
               </p>
             ) : !locations.buckets?.length ? (
               <p className="text-muted text-sm m-0">

@@ -8,7 +8,7 @@ As an open-source, developer-first tool, Liferay Tunnel is designed with data mi
 
 ## 1. Information Collected & Processed
 
-`lfr-tunneld` (the server gateway) processes three categories of data:
+`lfr-tunneld` (the server gateway) processes the following categories of data:
 
 ### A. Network & Tunnel Data (Data Plane)
 * **IP Addresses**: The server processes the public IP address of the connecting client CLI and any visitor requesting a tunnel subdomain.
@@ -43,6 +43,22 @@ The `lfr-tunnel` client keeps its own logs on **your** machine, in `~/.lfr-tunne
 * **What deletion does not cover**: deleting a bundle removes it from the gateway's live database. The gateway's routine backups, taken before the deletion, still contain it until those backups age out on their own schedule. We are stating this rather than implying deletion is total.
 * **Purpose**: Diagnosing routing, connectivity and proxying problems that cannot be reproduced on the gateway.
 * **Auditing**: every request for a user's diagnostic logs is recorded in the administrative audit log, including who asked, when, about whom, and requests that were **refused** because consent was absent.
+
+### E. Anonymous Geographic Distribution (Operator-Enabled, Off by Default)
+
+A gateway operator may configure a geo-IP database (`geolite2_db_path`) so that administrators can see, on the admin analytics page, **how many distinct users registered from each country during the current ISO week**. No geo-IP database is shipped with the gateway and none can be — every vendor forbids redistribution — so this is **off unless an operator has deliberately obtained and deployed one**, and off is the default and a fully supported state.
+
+Where it is enabled, this is a **further purpose for the IP address already described in §1.A**, not a new collection. What it does and does not do:
+
+* **What is derived**: at the moment you register a tunnel, your public IP address is looked up in the operator's local database and reduced to a **two-letter ISO country code**. Only the country field of the record is read; city, subdivision and latitude/longitude are never decoded, even when the operator's database contains them.
+* **The address is discarded**: the lookup happens in memory and the address is dropped immediately afterwards. Your address and your country are never written together, never logged together, and there is no route, report or export that can return the pair. This feature stores nothing about your address that §1.A does not already describe.
+* **What is stored**: one row per country per ISO week, holding only the country code and a **count**. The table has no user column, and no lookup is performed against a third-party service — the database is a local file.
+* **How "distinct users" is counted without keeping who**: within the current week the gateway keeps, in memory only, a set of digests of the account identifiers already counted for each country, purely so you are not counted twice. That set is never written to disk, never returned by any part of the code, and is discarded when the week rolls over and when the gateway process stops.
+* **A minimum of 5 users per country**: a country is only recorded at all once **at least 5 distinct users** have been seen there in that week. Below that it is folded into a single `OTHER` bucket, and `OTHER` itself is recorded only once it too reaches 5. The threshold is applied **before the count is written**, not when the page is drawn, so a below-threshold country does not exist in the database to be read by anyone holding the file.
+* **Addresses that cannot be placed are dropped, not guessed**: private ranges, carrier-grade NAT and addresses absent from the database are discarded rather than counted under a catch-all, so an unknown location never becomes a geographic claim.
+* **Who can see it**: the resulting counts are visible only to gateway administrators.
+* **Retention**: these weekly counts are aggregate figures that contain no identifier of any kind, so they are kept as historical metrics and are not deleted on a schedule. For the same reason, deleting your account (§4) neither removes nor needs to remove them — there is nothing in a row that refers to you.
+* **Purpose**: helping an administrator understand, in aggregate, where the gateway is being used from — for example when deciding where to place an edge node.
 
 ---
 
@@ -91,4 +107,4 @@ Liferay Tunnel is fully self-hostable. If you run your own private instance of `
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

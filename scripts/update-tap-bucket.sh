@@ -31,8 +31,10 @@ fi
 # This previously exited 0 with a "skipping cleanly" message, so an unset secret would publish
 # release after release that silently never reached Homebrew or Scoop -- the same shape as
 # #1923, #1938 and #1956, where a broken state is indistinguishable from a deliberate one.
-# We were lucky: the real incident had an INVALID pat, which fails loudly at clone. An unset one
-# would have been silent.
+# An INVALID pat was silent too, which is not what this comment used to claim (#1975): both
+# target repositories are PUBLIC, so git reads them anonymously and discards unusable
+# basic-auth credentials. `git clone` with a deliberately bogus token exits 0. The credential
+# is checked properly below instead of being inferred from a clone that cannot fail.
 #
 # ALLOW_MISSING_TAP_PAT=true restores the old behaviour for a fork or a private build that has
 # no tap to update -- deliberate, named, and visible in the log rather than assumed.
@@ -47,6 +49,68 @@ if [ -z "${TAP_BUCKET_PAT}" ]; then
   echo "::error::ALLOW_MISSING_TAP_PAT=true if this build genuinely has no tap to update." >&2
   exit 1
 fi
+
+# Prove the credential can actually WRITE, before rendering anything (#1975).
+#
+# The clone cannot establish this. homebrew-tap and scoop-bucket are both public, so a clone
+# succeeds with any token, a dead one included -- verified with a bogus token, which cloned
+# cleanly and exited 0. That made --dry-run report "the credential is valid" having tested
+# nothing, reintroducing exactly the silent success #1969 was filed to remove.
+#
+# Read access is not the permission that matters either. A token can authenticate and read
+# while lacking contents:write, so even a private repo would not prove the push will land.
+#
+# The API answers the real question: 401 for a token that is not valid (curl -f then exits
+# non-zero), and permissions.push for one that is. Both repositories are checked, because a
+# PAT scoped to one of them would half-fail at the second push with the formula already
+# published -- the tap and bucket out of step, which is worse than neither moving.
+#
+# This runs on the REAL path as well as the dry run: a release should fail before it renders
+# if the credential cannot land the result.
+assert_can_push() {
+  repo="$1"
+  http_code=$(curl -sS -o "${TMP_PERMS}" -w '%{http_code}' \
+    -H "Authorization: Bearer ${TAP_BUCKET_PAT}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/peterrichards-lr/${repo}") || {
+    echo "::error::Could not reach the GitHub API to check TAP_BUCKET_PAT against ${repo}." >&2
+    exit 1
+  }
+
+  if [ "${http_code}" = "401" ]; then
+    echo "::error::TAP_BUCKET_PAT is not a valid credential (GitHub returned 401 for ${repo})." >&2
+    echo "::error::It has most likely expired, as it did after v1.48.31. Replace the secret." >&2
+    exit 1
+  fi
+
+  if [ "${http_code}" != "200" ]; then
+    echo "::error::Checking TAP_BUCKET_PAT against ${repo} returned HTTP ${http_code}." >&2
+    exit 1
+  fi
+
+  # `permissions` is only present on an authenticated read, so its absence means the token was
+  # ignored rather than accepted -- treated as failure, never as permission granted.
+  # `|| true`: under `set -euo pipefail` a grep that matches nothing aborts the script, which
+  # would exit non-zero with none of the diagnosis below ever printed -- a silent failure in
+  # the middle of the check built to end silent failures. Caught by the absent-permissions
+  # case in tests/hooks/test-tap-bucket.sh.
+  can_push=$(grep -o '"push"[[:space:]]*:[[:space:]]*\(true\|false\)' "${TMP_PERMS}" \
+    | head -1 | grep -o '\(true\|false\)$' || true)
+
+  if [ "${can_push}" != "true" ]; then
+    echo "::error::TAP_BUCKET_PAT cannot push to ${repo} (push permission: ${can_push:-absent})." >&2
+    echo "::error::The token authenticates but lacks contents:write, so the update would fail" >&2
+    echo "::error::at the push with the release already published. Re-scope the token." >&2
+    exit 1
+  fi
+
+  echo "TAP_BUCKET_PAT verified: push permission confirmed on ${repo}."
+}
+
+TMP_PERMS="$(mktemp)"
+trap 'rm -f "${TMP_PERMS}"' EXIT
+assert_can_push "homebrew-tap"
+assert_can_push "scoop-bucket"
 
 VERSION_NUM="${VERSION#v}"   # e.g. 1.7.1
 
@@ -190,8 +254,8 @@ fi
 cd ..
 rm -rf _bucket-repo
 if [ "${DRY_RUN}" = "true" ]; then
-  echo "DRY RUN complete: both repositories authenticated and the content was rendered."
-  echo "Nothing was pushed. The credential is valid."
+  echo "DRY RUN complete: push permission was confirmed on both repositories via the API"
+  echo "and the content was rendered. Nothing was pushed."
 else
   echo "Scoop Bucket updated." 
 fi

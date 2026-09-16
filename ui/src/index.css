@@ -845,22 +845,55 @@ html[dir='rtl'] th {
     print-color-adjust: exact !important;
   }
 
-  /* Hide layout wrappers & elements not needed for analytics printout */
+  /* Hide layout wrappers & elements not needed for analytics printout.
+     
+     The banner list is explicit rather than clever: each of these is page chrome that made it
+     into an exported report (#1916) -- the V1/V2 promo with its dismiss button, the view-as
+     bar, the session countdown, the consent gate, and the keyboard skip link. A NEW banner
+     must be added here or given .print-hide; nothing detects one automatically. */
   .sidebar,
   .no-print,
   .content-header,
   .mobile-header,
   .btn,
-  .print-hide {
+  .print-hide,
+  .v1-promo-banner,
+  .view-as-bar,
+  .session-expiry-banner,
+  .policy-consent-banner,
+  .skip-link {
     display: none !important;
   }
 
-  /* Reset layout wrapper limits (remove viewport confinement) to enable natural multi-page flow */
-  .app-container {
-    display: block !important;
+  /* Release the viewport confinement so content can flow across pages (#1916).
+     
+     This previously reset `.app-container`, WHICH DOES NOT EXIST -- grep found it only in this
+     stylesheet, never in the markup. The real shell is Layout.tsx's
+     `flex flex-col h-screen w-full overflow-hidden`, so in print it kept `height: 100vh` and
+     `overflow: hidden`: the printable area stayed exactly one viewport tall and everything past
+     it was clipped. Every V2 export was a single page.
+     
+     The utilities are neutralised rather than a bespoke class being added to the markup. They
+     are what the DOM actually carries, and a class invented to satisfy a stylesheet drifts
+     again the moment someone edits the component. Confining the page to the viewport is never
+     what printing wants, whatever element does it. */
+  .h-screen {
     height: auto !important;
-    min-height: 0 !important;
-    width: 100% !important;
+    max-height: none !important;
+  }
+
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+
+  /* A Chart.js canvas has an intrinsic bitmap size fixed when it renders on screen. The print
+     stylesheet narrows the CONTAINER, but nothing constrained the canvas, so charts were
+     emitted at their on-screen pixel width and clipped by the page edge -- measured in the
+     exported PDF at up to 2737pt wide on a 595pt page, 4.6x the paper (#1916). Constraining the
+     box scales the bitmap into it. */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
   }
 
   .main-content {
@@ -886,8 +919,10 @@ html[dir='rtl'] th {
     grid-template-columns: 1fr !important;
   }
 
-  .analytics-page .card,
-  .analytics-page .glass {
+  /* .glass was listed here too and is dead in V2 -- the class exists only in this stylesheet,
+     never in a component (V1 uses it; this block was copied from there). Removed rather than
+     left as decoration, because a selector matching nothing is what #1916 was. */
+  .analytics-page .card {
     grid-column: span 1 !important;
   }
 
@@ -897,13 +932,17 @@ html[dir='rtl'] th {
     overflow: visible !important;
   }
 
-  /* Print styling rules for analytical sections and panels */
-  .glass {
-    /* Literal, for the reason the body rule above already gives. #1221 fixed that rule
-       and left this one, so V2 has printed black body text on near-black analytics cards
-       ever since -- see the long note on the same rule in pkg/server/static/dashboard.css
-       (#1802). #767676 is 4.54:1 on white, past the 3:1 WCAG 1.4.11 asks of a component
-       boundary. */
+  /* Print styling rules for analytical sections and panels.
+     
+     Targets .card, NOT .glass (#1916). This rule was written as `.glass` -- V1's class -- and
+     V2 renders `.card`, so it has never matched anything here. #1802 recorded that "V2 has
+     printed black body text on near-black analytics cards ever since" and fixed the selector's
+     COLOURS while leaving the selector itself wrong, so the fix never took effect: V2 cards
+     have had no white background, no page-break-inside guard and no margin in print all along.
+     Found by scripts/check-print-selectors.cjs, which exists because of exactly this. */
+  .card {
+    /* Literal, for the reason the body rule above already gives. #767676 is 4.54:1 on white,
+       past the 3:1 WCAG 1.4.11 asks of a component boundary. */
     border: 1px solid #767676 !important;
     box-shadow: none !important;
     background: #ffffff !important;

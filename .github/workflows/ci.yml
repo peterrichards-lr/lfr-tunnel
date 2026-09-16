@@ -167,7 +167,8 @@ jobs:
           # #1775 plus a follow-up to clear (#1773).
           #
           # So the list is now the client's dependency closure, named explicitly:
-          # cmd/lfr-tunnel, pkg/client, pkg/config, pkg/gui, pkg/mcp, pkg/osutil, pkg/proxyutil.
+          # cmd/lfr-tunnel, pkg/client, pkg/config, pkg/gui, pkg/mcp, pkg/osutil, pkg/proxyutil,
+          # pkg/regionvocab (#1922 made it client-side; it was server-only when #1919 added it).
           # tests/hooks/test-ci-platform-matrix.sh re-derives that closure with `go list` and
           # fails if a package joins it without joining this pattern -- the enumeration is
           # checked, rather than trusted to stay accurate by eye a second time.
@@ -190,7 +191,7 @@ jobs:
           #
           # Anything that is not a pull_request -- a master push or a tag -- always gets the
           # full matrix, so a platform regression cannot reach a release unproven.
-          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^cmd/lfr-tunnel/|^pkg/client/|^pkg/config/|^pkg/gui/|^pkg/mcp/|^pkg/osutil/|^pkg/proxyutil/|_(windows|darwin|linux|unix)(_test)?\.go$|dns_hook'; then
+          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^cmd/lfr-tunnel/|^pkg/client/|^pkg/config/|^pkg/gui/|^pkg/mcp/|^pkg/osutil/|^pkg/proxyutil/|^pkg/regionvocab/|_(windows|darwin|linux|unix)(_test)?\.go$|dns_hook'; then
             PLATFORM_SENSITIVE=true
           else
             PLATFORM_SENSITIVE=false

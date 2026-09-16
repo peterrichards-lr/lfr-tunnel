@@ -169,9 +169,34 @@ once for a demo, forget it, and later wonder why a machine that moved continents
 old gateway. Failover still works — a `region:` client is not pinned — but the initial choice is
 yours, not the network's.
 
-Leave `region:` empty to get the election. Its result is cached for 24 hours in
-`~/.lfr-tunnel/region_cache.json`; `-refresh-region` re-probes immediately. If the region you
-name is offline, the client says so and probes for the next best one instead.
+Leave `region:` empty to get the election. Its result is cached in
+`~/.lfr-tunnel/region_cache.json` -- for an hour normally, and for 30 minutes when some region
+was unavailable when the choice was made; `-refresh-region` re-probes immediately. If the region
+you name is offline, the client says so and probes for the next best one instead.
+
+### A running client is told when the gateways change
+
+Edge nodes run to a schedule, so the set of gateways you can elect from changes during the day.
+A client that started before its nearest edge woke up used to stay on whatever it elected until
+it was restarted.
+
+It no longer does. The gateway reports a short fingerprint of its current gateway list on the
+status heartbeat the client already sends every few seconds. When that fingerprint moves, the
+client re-probes and moves **only if another gateway is materially closer** -- at least 40ms and
+at least 30% faster than the one in use. A move costs a reconnect, so a marginal improvement is
+not worth taking, and at most one such move happens every ten minutes however often the gateway
+list changes.
+
+Two exceptions, both deliberate:
+
+- A **pinned** client (`-server`, or the `LFT_SERVER*` variables) never moves. You named a
+  gateway; that is the whole point of naming one.
+- A client with `region:` set moves only to **the region it named**, and only once that region is
+  available again. It is never sent somewhere it did not ask for.
+
+Only the gateway actually serving your tunnel can tell your client this, and today only the
+control plane knows the full list -- a session served by a regional edge is covered by
+[#1960](https://github.com/peterrichards-lr/lfr-tunnel/issues/1960).
 
 `regions:` is a fallback map of `name: url` for a client that cannot reach any gateway to ask.
 The live list is fetched from `<server_url>/api/version` at startup and **replaces** whatever is

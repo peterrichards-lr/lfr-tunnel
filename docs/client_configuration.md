@@ -304,7 +304,7 @@ through. Set only the one you mean.
 | `bandwidth` | string | *empty* — unthrottled | Simulated bandwidth ceiling. Accepts `bps`, `kbps`, `mbps`, `gbps` and byte-per-second forms such as `kb/s`; a bare number is bytes per second. Example: `"512kbps"`. |
 | `theme` | string | *empty* — your portal preference | Theme for the injected tunnel banner: `light`, `dark`, `system` or `time`. Example: `"dark"`. |
 | `log_dir` | string | `~/.lfr-tunnel/logs` | Where the persistent traffic and error logs are written. A leading `~` is expanded. Changing it applies to the next run: the logs already open cannot be moved. Example: `"~/tunnel-logs"`. |
-| `hooks` | map | *empty* — nothing runs | Shell commands run when the tunnel moves between gateways: `warning_received`, `stopping`, `stopped`, `starting`, `started`. Each is passed to `/bin/sh -c` with `LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION` and `LFT_SUBDOMAIN` set, bounded at 15 seconds, and its exit status is logged but cannot veto the move. A pinned (`-server`) client fires none of them, because it never fails over. See [Client Lifecycle Hooks](getting_started.md#client-lifecycle-hooks-failover-automation) for the full contract. |
+| `hooks` | map | *empty* — nothing runs | Shell commands run when the tunnel moves between gateways: `warning_received`, `stopping`, `stopped`, `starting`, `started`. Each is passed to `/bin/sh -c` with `LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION` and `LFT_SUBDOMAIN` set, bounded at 15 seconds, and its exit status is logged but cannot veto the move. A pinned (`-server`) client is never warned off a gateway and never moves, so it fires neither `warning_received` nor `stopping`; since [#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946) it does reconnect to its own gateway after a restart, which fires the other three. See [Client Lifecycle Hooks](getting_started.md#client-lifecycle-hooks-failover-automation) for the full contract. |
 
 ---
 
@@ -488,4 +488,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

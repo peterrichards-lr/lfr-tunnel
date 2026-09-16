@@ -143,6 +143,14 @@ maintenance_trigger_path: ""
 # --- Client distribution ---
 min_client_version: "v1.0.0"
 latest_client_version: ""
+# How often the gateway pings each attached tunnel client over the chisel control channel.
+# Empty/0 uses the built-in 25s. Pairs with nginx's proxy_read_timeout on `location /tunnel`
+# (60s by default), so change both together (#1946).
+tunnel_keepalive: "25s"
+# How long a client keeps trying to reattach to this gateway before handing control back to
+# its own region failover. Advertised on /api/version; empty/0 means the client uses its own
+# default (60s). Clients clamp this to 20s-180s (#1946).
+client_reconnect_window: "60s"
 client_platforms: {}
 docker_image: ""
 docker_bypass_url: "https://example.com"

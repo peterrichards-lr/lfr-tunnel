@@ -237,6 +237,12 @@ func main() {
 	engine.SelectedRegion = cfg.Region
 	engine.SetCentralURL(centralControlPlaneURL(cfg))
 	engine.SetLatestVersion(latestVersion)
+	// How long this gateway wants clients to keep trying to reattach to it before falling back
+	// to region failover (#1946). Advertised so a wrong number is fixable from the server side;
+	// zero, or an unreachable gateway here, leaves the client on its own default.
+	if info != nil {
+		engine.SetReconnectWindow(time.Duration(info.ClientReconnectSeconds) * time.Second)
+	}
 	// User-configured lifecycle hooks. Handed to the engine because both ends of the
 	// contract live there: the shutdown-warning path fires warning_received, and the
 	// session loop below fires the other four (#1708).
@@ -482,6 +488,32 @@ func main() {
 		return !cooling
 	})
 
+	// applySession commits a successful re-registration to every place the
+	// current endpoint is recorded.
+	applySession := func(newResp *client.RegisterResponse, what string) {
+		regResp = newResp
+		rewriteRemotes(regResp, portMap)
+		publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+		engine.SetRegionEndpoint(cfg.Region, cfg.ServerURL, publicURLs)
+		// The region list can change across a failover, so re-derive rather
+		// than keeping whatever central was advertised at startup.
+		engine.SetCentralURL(centralControlPlaneURL(cfg))
+		engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+		state.Region = cfg.Region
+		state.ServerURL = cfg.ServerURL
+		state.PublicURLs = publicURLs
+		if werr := client.WriteState(subHost, state); werr != nil {
+			slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
+		}
+		cooldowns.clear(cfg.ServerURL)
+		// The one place both a failback and a failover land, so `started` fires
+		// once per re-established session however it was reached, and only after
+		// the new endpoint is recorded everywhere (#1708).
+		engine.RunHook(client.HookStarted, map[string]string{
+			"LFT_FAILOVER_REGION": cfg.Region,
+		})
+	}
+
 	for ctx.Err() == nil {
 		clientCtx, cancelClient := context.WithCancel(ctx)
 		healthCheckPorts := make([]int, 0, len(portMappings))
@@ -524,32 +556,6 @@ func main() {
 			// on stopped having completed before starting begins (#1708).
 			engine.RunHook(client.HookStopped, nil)
 			engine.RunHook(client.HookStarting, nil)
-
-			// applySession commits a successful re-registration to every place the
-			// current endpoint is recorded.
-			applySession := func(newResp *client.RegisterResponse, what string) {
-				regResp = newResp
-				rewriteRemotes(regResp, portMap)
-				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
-				engine.SetRegionEndpoint(cfg.Region, cfg.ServerURL, publicURLs)
-				// The region list can change across a failover, so re-derive rather
-				// than keeping whatever central was advertised at startup.
-				engine.SetCentralURL(centralControlPlaneURL(cfg))
-				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
-				state.Region = cfg.Region
-				state.ServerURL = cfg.ServerURL
-				state.PublicURLs = publicURLs
-				if werr := client.WriteState(subHost, state); werr != nil {
-					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
-				}
-				cooldowns.clear(cfg.ServerURL)
-				// The one place both a failback and a failover land, so `started` fires
-				// once per re-established session however it was reached, and only after
-				// the new endpoint is recorded everywhere (#1708).
-				engine.RunHook(client.HookStarted, map[string]string{
-					"LFT_FAILOVER_REGION": cfg.Region,
-				})
-			}
 
 			// Set when a failback attempt failed and put us back on the region we were
 			// already serving from. That region did not fail -- the session was
@@ -708,7 +714,7 @@ func main() {
 					engine.LogEvent("info", "failover", map[string]any{
 						"from":           failedRegion,
 						"to":             cfg.Region,
-						"url":            cfg.ServerURL,
+						logFieldURL:      cfg.ServerURL,
 						"after_failback": failbackReturned,
 						"lease_lost":     leaseLost,
 					})
@@ -724,9 +730,59 @@ func main() {
 			}
 		}
 
+		// A non-nil error here is a local fault -- the chisel client could not be built, or
+		// the log redirection failed -- not a connection that dropped, and re-registering
+		// fixes none of them. Those still end the loop and are reported below. A gateway that
+		// goes away returns nil instead: chisel's connectionLoop returns nil when it gives up
+		// (chisel/client/client_connect.go:50-62), which is exactly why the give-up was so
+		// invisible (#1946).
 		if err != nil {
 			break
 		}
+
+		// Reached only when nothing above could re-establish the session, which means this
+		// client has no failover path at all: it is pinned with -server (#1275), or its
+		// gateway advertised no region list. Until #1946 the loop simply went round again and
+		// restarted chisel with the SAME session token -- which a restarted gateway has
+		// forgotten, since leases and chisel users are in memory (pkg/server/auth.go). The
+		// reconnect could never succeed, and nothing else in the session ran long enough to
+		// notice: the 5s heartbeat is bound to clientCtx, which was cancelled about a second
+		// in, so it never reached its first tick. The client spun silently, sending the
+		// gateway nothing at all, until a human restarted it -- 2h12m and 54m, measured
+		// (#1940).
+		//
+		// So re-register here, with the gateway we already have. Not a failover: cfg.Region
+		// and cfg.ServerURL are untouched, which is what keeps PinnedRoutingNotice's promise
+		// that a pinned client "will not fail over" true.
+		// The session lifecycle hooks, for the pinned case only: a client with regions but
+		// nothing to elect has already had both fired at the top of the branch above, and
+		// firing them twice would be worse than not firing them at all. `stopping` is absent
+		// on purpose -- it means "right before we tear the tunnel down", and nothing
+		// announced this stop in advance (#1708).
+		if isExplicitServer {
+			engine.RunHook(client.HookStopped, nil)
+			engine.RunHook(client.HookStarting, nil)
+		}
+
+		leaseLost := engine.ConsumeLeaseLost()
+		slog.Info(fmt.Sprintf("[Client] Session on '%s' (%s) ended and this client has no other gateway to move to. Re-registering here...",
+			cfg.Region, cfg.ServerURL))
+		engine.LogEvent("warn", "reconnect_started", map[string]any{
+			logFieldRegion: cfg.Region,
+			logFieldURL:    cfg.ServerURL,
+			"lease_lost":   leaseLost,
+			"pinned":       isExplicitServer,
+		})
+		newResp, ok := reregisterSameGateway(ctx, cfg, regPortMappings, sub, engine.AddedHeaders)
+		if !ok {
+			break
+		}
+		applySession(newResp, "reconnect")
+		slog.Info(fmt.Sprintf("[Client] Session re-established on '%s' (%s).", cfg.Region, cfg.ServerURL))
+		engine.LogEvent("info", "reconnected", map[string]any{
+			logFieldRegion: cfg.Region,
+			logFieldURL:    cfg.ServerURL,
+		})
 	}
 
 	if cleanupTUI != nil {
@@ -1082,6 +1138,9 @@ var plannedShutdownCooldown = cooldownFromEnv("LFT_PLANNED_SHUTDOWN_COOLDOWN", t
 // nothing queries.
 const logFieldRegion = "region"
 
+// logFieldURL is the same for the gateway URL.
+const logFieldURL = "url"
+
 func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool, planned bool) {
 	if afterFailback {
 		return
@@ -1158,6 +1217,67 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 		if attempt < maxFailoverAttempts {
 			time.Sleep(backoff)
 			backoff *= 2
+		}
+	}
+	return nil, false
+}
+
+// sameGatewayRetryBackoff is the first pause between same-gateway re-registration attempts,
+// doubled each time and capped at sameGatewayRetryCap. A variable so tests do not have to sit
+// through real backoff, exactly as failoverRetryBackoff is.
+var sameGatewayRetryBackoff = time.Second
+
+// sameGatewayRetryCap bounds that backoff at two attempts a minute per client. A gateway being
+// redeployed is the case this exists for, and it is about to be busy with every other client
+// doing the same thing.
+const sameGatewayRetryCap = 30 * time.Second
+
+// reregisterSameGateway re-registers with the gateway the client is already on, retrying with
+// exponential backoff until it succeeds, until the failure is one no retry can fix, or until
+// the client is stopped.
+//
+// Unbounded attempts, which reregisterAcrossRegions deliberately is not -- and the difference
+// is the whole reason this function exists separately. That one is bounded because giving up
+// there hands control to the next candidate region; this one only ever runs for a client that
+// has no next candidate (pinned with -server, or no region list), so "give up" means "stay
+// offline until a human notices". It cannot starve failover, because it is only reachable on
+// the branch where failover is impossible by construction (#1946).
+//
+// cfg.Region and cfg.ServerURL are never touched. This is a reconnect, not a failover.
+func reregisterSameGateway(ctx context.Context, cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) (*client.RegisterResponse, bool) {
+	backoff := sameGatewayRetryBackoff
+	for attempt := 1; ctx.Err() == nil; attempt++ {
+		regResp, failure := attemptRegistration(cfg, portMappings, sub, addedHeaders)
+		if failure == nil {
+			return regResp, true
+		}
+
+		// Loud for the first few attempts, then every tenth. A gateway that stays down for an
+		// hour should leave evidence in the log without being the only thing in it.
+		if attempt <= 3 || attempt%10 == 0 {
+			slog.Info(fmt.Sprintf("[Warning] Re-registration with '%s' failed (attempt %d): %v",
+				cfg.ServerURL, attempt, failure.err))
+			for _, line := range failure.advice {
+				slog.Info(line)
+			}
+		}
+
+		if failure.terminal {
+			// A reservation, quota or consent problem. Retrying reproduces it forever, and
+			// this client has nowhere else to take it.
+			return nil, false
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, false
+		case <-time.After(backoff):
+		}
+		if backoff < sameGatewayRetryCap {
+			backoff *= 2
+			if backoff > sameGatewayRetryCap {
+				backoff = sameGatewayRetryCap
+			}
 		}
 	}
 	return nil, false

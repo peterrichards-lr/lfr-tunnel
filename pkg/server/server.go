@@ -402,6 +402,41 @@ type Server struct {
 	provisionerClient *provisioner.Client
 }
 
+// defaultChiselKeepAlive is how often the gateway pings each attached client over the
+// tunnel's control channel, when the config file does not say.
+//
+// It was unset until #1946, and chisel's ping loop is gated on `> 0`
+// (chisel/share/tunnel/tunnel.go:93), so as a library neither end ever pinged. Two things
+// follow from the server being silent specifically. The deployed nginx `location /tunnel`
+// sets no proxy_read_timeout (rendered by pkg/ops/nginx.go), so nginx's 60s default applies
+// to reads FROM this upstream -- a tunnel carrying no external traffic had nothing at all
+// refreshing that timer. And a client that has gone away without closing its socket is only
+// noticed by the 10s orphan-lease dial (pkg/server/auth.go), never by the connection itself.
+//
+// 25s matches chisel's own CLI default (chisel/main.go:188,429) and the client's
+// defaultChiselKeepAlive (pkg/client/client.go), and gives two pings per 60s nginx window so
+// a single lost ping cannot close a healthy tunnel. It is a DEFAULT rather than a constant
+// because it is paired with an nginx timeout the owner can change: `tunnel_keepalive` in the
+// server config moves it without a new gateway binary, and both halves of that pairing are
+// then server-side.
+const defaultChiselKeepAlive = 25 * time.Second
+
+// newChiselServerConfig builds the embedded chisel server's configuration.
+//
+// Split out of NewServer so the keepalive is assertable: NewServer needs a whole ServerConfig,
+// a database and a listener before it will hand anything back, and chisel's Server exposes no
+// accessor for the config it was built from.
+func newChiselServerConfig(cfg *config.ServerConfig) *chserver.Config {
+	keepAlive := defaultChiselKeepAlive
+	if cfg != nil && cfg.TunnelKeepAlive > 0 {
+		keepAlive = cfg.TunnelKeepAlive
+	}
+	return &chserver.Config{
+		Reverse:   true,
+		KeepAlive: keepAlive,
+	}
+}
+
 // NewServer initializes and returns a new Server instance.
 func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	validateTunnelDomains(cfg)
@@ -414,9 +449,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	// Initialize Chisel server config
-	chiselCfg := &chserver.Config{
-		Reverse: true,
-	}
+	chiselCfg := newChiselServerConfig(cfg)
 	chiselSrv, err := chserver.NewServer(chiselCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize chisel server: %v", err)
@@ -1099,6 +1132,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"enable_onboarding":        s.cfg.EnableOnboarding,
 				"owner_email":              s.cfg.Owner.UserID,
 				"supported_domains":        s.tunnelDomains(),
+				// How long a client should keep trying to reattach to this gateway before
+				// handing control back to its own region failover (#1946). Advertised so the
+				// number can be corrected without a client release; omitted when unset, in
+				// which case the client keeps its compiled-in default. See
+				// pkg/client/client.go's reconnect window for the bounds a client will accept
+				// -- a client clamps this rather than trusting it, because a mistyped value
+				// here would otherwise either undo the fix or starve failover fleet-wide.
+				"client_reconnect_seconds": int(s.cfg.ClientReconnectWindow.Seconds()),
 			})
 			return
 		}

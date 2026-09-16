@@ -520,6 +520,137 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 	return &regResp, nil
 }
 
+// defaultChiselKeepAlive is how often the client pings the gateway over the tunnel's control
+// channel.
+//
+// Neither end set this at all until #1946, and chisel's ping loop is gated on `> 0`
+// (chisel/share/tunnel/tunnel.go:93), so with the library used as a package neither end ever
+// pinged. A half-open control channel therefore looked identical to an idle healthy one:
+// nothing detected the loss, so a client could sit attached to a socket that would never
+// deliver anything again. It was masked only for tunnels under constant external traffic.
+//
+// 25s is chisel's own CLI default on both ends (chisel/main.go:188,429) and matches the
+// gateway's defaultChiselKeepAlive (pkg/server/server.go). Halving it would double the ping
+// rate for no extra detection worth having; doubling it would leave a dead link unnoticed for
+// the better part of two minutes, which is longer than the reconnect window below.
+//
+// Deliberately NOT server-tunable, unlike the gateway's. The knob nginx's proxy_read_timeout
+// actually interacts with is the gateway's ping -- nginx times reads FROM its upstream -- and
+// that one is in the server config. This one only decides how fast the client notices a dead
+// link, and a second remote dial for the same physical constraint would be two ways to say
+// one thing.
+const defaultChiselKeepAlive = 25 * time.Second
+
+// The reconnect window: how long the client keeps trying to reattach to the SAME gateway
+// before handing control back to the session loop, which is what performs region failover
+// (cmd/lfr-tunnel/main.go).
+//
+// What was here before was `MaxRetryInterval: 3s, MaxRetryCount: 3`, which is not "three
+// seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel
+// builds `&backoff.Backoff{Max: MaxRetryInterval}` and leaves Min and Factor at the library
+// defaults of 100ms and 2, then tests the attempt count before sleeping
+// (chisel/client/client_connect.go:22,48). The real budget was four connection attempts and
+// 700ms of backoff -- the 3s cap was never reached -- so every gateway deploy ended every
+// tunnel attached to it. Measured in production: two deploys, the same user's client absent
+// for 2h12m and 54m, recovered only by a human restarting it (#1946, found in #1940).
+//
+// defaultReconnectWindow is sized against the restart it has to survive rather than guessed.
+// `systemctl restart lfr-tunneld` sits inside a maintenance window the deploy itself allows
+// 90s for the node to come back from (pkg/ops/deploy.go), and the window has to outlast the
+// restart PLUS one 5s heartbeat: a restarted gateway has forgotten the session (leases are in
+// memory, pkg/server/auth.go) so the reconnect itself can never succeed, and what actually
+// recovers the tunnel is the heartbeat seeing no lease and re-registering
+// (pkg/client/interceptor.go). A minute covers an ordinary restart with room to spare.
+//
+// Bounded rather than infinite, deliberately. A gateway that is genuinely gone must still
+// hand control back so region failover can run, and this window is the upper bound on how
+// long that takes for a loss nothing signalled. Every signalled reason to move -- lease
+// eviction, a drain/shutdown warning, a failback -- cancels the session context, which
+// chisel's retry loop selects on (client_connect.go:56-59), so those paths preempt this
+// window immediately and are not delayed by it at all.
+//
+// minReconnectWindow and maxReconnectWindow bound what a gateway is allowed to talk this
+// client into. The gateway advertises client_reconnect_seconds on /api/version so a wrong
+// number can be corrected without a client release, but an advertised value is clamped, not
+// trusted: below the minimum the fix is undone (the client gives up inside a routine
+// restart), above the maximum an unsignalled outage starves failover for minutes.
+const (
+	defaultReconnectWindow = 60 * time.Second
+	minReconnectWindow     = 20 * time.Second
+	maxReconnectWindow     = 180 * time.Second
+)
+
+// chiselMaxRetryInterval caps chisel's exponential backoff between reconnect attempts.
+//
+// 10s rather than something tighter because chisel constructs the Backoff itself and gives us
+// no way to enable its jitter, so this cap is the only stampede control there is: every client
+// dropped by the same gateway restart retries in lockstep at this interval. It also bounds how
+// long a client waits after the gateway is back before noticing -- which is why it is not
+// larger.
+const chiselMaxRetryInterval = 10 * time.Second
+
+// chiselBackoffMin is the first backoff step, i.e. github.com/jpillora/backoff's default Min,
+// which chisel relies on by leaving the field zero. Restated here because deriving an attempt
+// count from a duration means reproducing chisel's backoff schedule, and that schedule is only
+// correct if this matches. TestReconnectWindowMatchesChiselBackoff cross-checks it against the
+// real library rather than against this comment.
+const chiselBackoffMin = 100 * time.Millisecond
+
+// clampReconnectWindow returns the window the client will actually honour for an advertised
+// value. Zero (nothing advertised) yields the default.
+func clampReconnectWindow(advertised time.Duration) time.Duration {
+	if advertised <= 0 {
+		return defaultReconnectWindow
+	}
+	if advertised < minReconnectWindow {
+		return minReconnectWindow
+	}
+	if advertised > maxReconnectWindow {
+		return maxReconnectWindow
+	}
+	return advertised
+}
+
+// retryCountForWindow returns the MaxRetryCount whose cumulative backoff first covers window,
+// following chisel's schedule: start at chiselBackoffMin, double each attempt, cap at
+// chiselMaxRetryInterval.
+//
+// For the 60s default this is 12 attempts, i.e. 0.1+0.2+0.4+0.8+1.6+3.2+6.4+10+10+10+10+10 =
+// 62.7s of backoff over 13 connection attempts.
+func retryCountForWindow(window time.Duration) int {
+	var total time.Duration
+	step := chiselBackoffMin
+	count := 0
+	for total < window {
+		total += step
+		count++
+		if step < chiselMaxRetryInterval {
+			step *= 2
+			if step > chiselMaxRetryInterval {
+				step = chiselMaxRetryInterval
+			}
+		}
+	}
+	return count
+}
+
+// newChiselClientConfig builds the chisel client configuration for one tunnel session.
+//
+// Split out of RunClient so the retry budget and keepalive are assertable without standing up
+// a real tunnel -- they are the whole of #1946's client-side fix, and an unasserted constant
+// is how they came to be wrong in the first place.
+func newChiselClientConfig(serverURL, token string, remotes []string, advertisedWindow time.Duration) *chclient.Config {
+	window := clampReconnectWindow(advertisedWindow)
+	return &chclient.Config{
+		Server:           serverURL + "/tunnel",
+		Auth:             fmt.Sprintf("%s:%s", token, token),
+		Remotes:          remotes,
+		KeepAlive:        defaultChiselKeepAlive,
+		MaxRetryInterval: chiselMaxRetryInterval,
+		MaxRetryCount:    retryCountForWindow(window),
+	}
+}
+
 // RunClient runs the embedded Chisel client.
 func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string, engine *InterceptorEngine) error {
 	// Intercept logger to monitor connection state
@@ -535,13 +666,7 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}
 
 	// 2. Setup Chisel client config
-	chiselCfg := &chclient.Config{
-		Server:           serverURL + "/tunnel",
-		Auth:             fmt.Sprintf("%s:%s", token, token),
-		Remotes:          remotes,
-		MaxRetryInterval: 3 * time.Second,
-		MaxRetryCount:    3, // Allow client to return control on edge shutdown for dynamic region failover
-	}
+	chiselCfg := newChiselClientConfig(serverURL, token, remotes, engine.ReconnectWindow())
 
 	// 3. Initialize Chisel client
 	c, err := chclient.NewClient(chiselCfg)

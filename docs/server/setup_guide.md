@@ -1416,6 +1416,30 @@ peer is one of the named addresses, so a visitor arriving directly is never rewr
 they forge the header. Every entry must be an exact address, never a range.
 
 
+### 8.11. Tunnel Keepalive and the Client Reconnect Window
+
+Two settings decide how a tunnel behaves when this gateway is restarted. Both exist because
+neither number was configurable when it mattered: a deploy used to take every attached client
+offline until somebody restarted it by hand ([#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946)).
+
+```yaml
+tunnel_keepalive: "25s"        # how often the gateway pings each attached tunnel client
+client_reconnect_window: "60s" # how long a client should keep trying to reattach to this gateway
+```
+
+* `tunnel_keepalive` is the ping on the chisel control channel. Its counterpart is nginx's
+  `proxy_read_timeout` on `location /tunnel`, which defaults to 60s: the ping is what stops an
+  idle tunnel looking silent to nginx, so if you change that timeout, change this too. Leave it
+  empty for the built-in 25s, which gives two pings per 60s window.
+* `client_reconnect_window` is advertised to clients on `/api/version`. It is how long a client
+  keeps trying to reattach here before falling back to its own region failover, and it is the
+  one knob in this pair you can move **without a client release**. Two caveats, both structural:
+  it only steers clients new enough to read it, and a client clamps it to 20s-180s rather than
+  trusting it -- too short undoes the fix, too long starves failover. Leave it empty and clients
+  use their own default of 60s.
+
+---
+
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
 
 If your VPS hosting provider allocates multiple public IPv4/IPv6 addresses to a single virtual instance (for example, a primary IP and a secondary IP), you may encounter outbound routing issues.
@@ -1466,4 +1490,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

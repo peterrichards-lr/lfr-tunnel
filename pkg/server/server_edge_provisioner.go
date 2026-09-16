@@ -3,11 +3,109 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/provisioner"
 )
+
+// edgePowerReason names why edge power actions are off (#1956).
+//
+// They used to be one state: provisionerClient == nil, reported to the admin as "not
+// configured on this server". A deployment that has no sidecar and one whose
+// edge_provisioner_token_file is mistyped produced the same nil, the same 501 and the same
+// sentence, so an operator error was presented to them as a decision they had made. The
+// only discriminator was one INFO line at startup, which scrolls away.
+//
+// This is the same class as #1938 (a mistyped geolite2_db_path indistinguishable from an
+// unset one), and it is fixed the same way: keep the reason beside the nil client, and say
+// it on the surface that already reports the feature as absent.
+type edgePowerReason string
+
+const (
+	// edgePowerNotConfigured is edge_provisioner_url unset. The default, the state every
+	// non-AWS deployment is in, and not a fault.
+	edgePowerNotConfigured edgePowerReason = "not_configured"
+	// edgePowerTokenPathUnset is a URL with no edge_provisioner_token_file beside it.
+	edgePowerTokenPathUnset edgePowerReason = "token_path_unset"
+	// edgePowerTokenNotFound is a configured token path with no file at it.
+	edgePowerTokenNotFound edgePowerReason = "token_not_found"
+	// edgePowerTokenUnreadable is a token file that exists and cannot be read.
+	edgePowerTokenUnreadable edgePowerReason = "token_unreadable"
+	// edgePowerTokenEmpty is a readable token file with nothing in it.
+	edgePowerTokenEmpty edgePowerReason = "token_empty"
+)
+
+// edgePowerDiagnosis is why the feature is off, kept for the admin surfaces.
+//
+// TokenFile and Detail are ADMIN-ONLY: they name a filesystem path on the gateway host and
+// quote the filesystem's complaint about it. They leave the process through the 501 body on
+// /api/admin/edge/* (behind requireAdmin) and through handleEdgeHealth, which emits them
+// only for an admin or owner session -- see the role check there.
+//
+// Neither field ever holds the token, its length or a prefix of it. The whole point of the
+// token file is that its contents stay unread by anything but the client that presents
+// them, and a diagnosis that narrowed the secret would trade one bug for a worse one. What
+// is reported is that the load failed and which way: missing setting, missing file,
+// unreadable file, empty file.
+type edgePowerDiagnosis struct {
+	Reason    edgePowerReason
+	TokenFile string
+	Detail    string
+}
+
+// faulty reports whether this diagnosis is an operator error rather than the default.
+//
+// The portals render a warning for exactly these: a gateway with no sidecar configured must
+// look precisely as it does today, or every non-AWS deployment grows a banner about a
+// feature it never asked for.
+func (d edgePowerDiagnosis) faulty() bool {
+	return d.Reason != "" && d.Reason != edgePowerNotConfigured
+}
+
+// newProvisionerClient builds the edge-provisioner client, or returns nil plus the reason
+// (#888, #1250, #1956).
+//
+// nil stays a working no-op exactly as before: the sidecar is optional and AWS-specific,
+// and a token that cannot be loaded must disable edge power actions rather than stop the
+// gateway starting -- the sidecar owns the token file and may simply not have written it
+// yet. What changes is that the reason survives the constructor.
+func newProvisionerClient(cfg *config.ServerConfig) (*provisioner.Client, edgePowerDiagnosis) {
+	if cfg.EdgeProvisionerURL == "" {
+		return nil, edgePowerDiagnosis{Reason: edgePowerNotConfigured}
+	}
+
+	token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile)
+	if err == nil {
+		return provisioner.NewClient(cfg.EdgeProvisionerURL, token), edgePowerDiagnosis{}
+	}
+
+	// Warn, not Info (#1956). This line is an operator error every time it is emitted --
+	// edge_provisioner_url is set, so this deployment wants the feature -- and it used to
+	// sit at INFO among the startup chatter, quieter than the geo case it duplicates.
+	slog.Warn("[Server] edge_provisioner_url is set but its token could not be loaded; edge power actions disabled",
+		"token_file", cfg.EdgeProvisionerTokenFile, "error", err)
+
+	d := edgePowerDiagnosis{TokenFile: cfg.EdgeProvisionerTokenFile}
+	switch {
+	case errors.Is(err, provisioner.ErrTokenPathUnset):
+		// No path to report: the setting itself is missing, so naming "" would be noise.
+		d.Reason, d.TokenFile = edgePowerTokenPathUnset, ""
+	case errors.Is(err, provisioner.ErrTokenNotFound):
+		d.Reason = edgePowerTokenNotFound
+	case errors.Is(err, provisioner.ErrTokenEmpty):
+		d.Reason = edgePowerTokenEmpty
+	default:
+		// Includes ErrTokenUnreadable. Detail carries the filesystem's own words --
+		// "permission denied" is the sentence that resolves this state and it exists
+		// nowhere else -- and never the file's contents, which were never read.
+		d.Reason, d.Detail = edgePowerTokenUnreadable, err.Error()
+	}
+	return nil, d
+}
 
 // edgeProvisionerNodeID extracts the node ID from a path shaped
 // "/api/admin/edge/{id}/<suffix>", mirroring the TrimPrefix/TrimSuffix style
@@ -23,12 +121,51 @@ func edgeProvisionerNodeID(path, suffix string) string {
 // out. This is the server-side half of "absent, not erroring" -- the portal
 // is expected to hide these actions entirely when unconfigured, but a stray
 // call must still fail cleanly rather than panic on a nil client.
+//
+// The status is unchanged for every state, and so is the sentence for the one state that
+// sentence was ever true of (#1956). What is no longer said is that a sidecar this
+// deployment HAS configured is not configured: when the URL is set and only the token
+// failed to load, the body says so and names the token file, so an admin who reaches this
+// through a stale tab or a script sees the same diagnosis the panel shows. Admin-only:
+// every route that calls this is dispatched from handleAdminEndpoints, behind requireAdmin.
 func (s *Server) requireProvisioner(w http.ResponseWriter) (*provisioner.Client, bool) {
 	if s.provisionerClient == nil {
-		http.Error(w, `{"error":"Edge power actions are not configured on this server"}`, http.StatusNotImplemented)
+		http.Error(w, `{"error":`+jsonQuoteString(s.edgePowerUnavailableMessage())+`}`, http.StatusNotImplemented)
 		return nil, false
 	}
 	return s.provisionerClient, true
+}
+
+// edgePowerUnavailableMessage is the 501 body's sentence for the state this gateway is
+// actually in (#1956). English only and deliberately so: it is an API error body, not a
+// portal string -- the portals render the translated version from the reason code.
+func (s *Server) edgePowerUnavailableMessage() string {
+	d := s.edgePowerDiagnosis
+	switch d.Reason {
+	case edgePowerTokenPathUnset:
+		return "Edge power actions are configured (edge_provisioner_url) but edge_provisioner_token_file is not set, so they are disabled"
+	case edgePowerTokenNotFound:
+		return fmt.Sprintf("Edge power actions are configured (edge_provisioner_url) but no file exists at the edge_provisioner_token_file path %s, so they are disabled", d.TokenFile)
+	case edgePowerTokenEmpty:
+		return fmt.Sprintf("Edge power actions are configured (edge_provisioner_url) but the token file %s is empty, so they are disabled", d.TokenFile)
+	case edgePowerTokenUnreadable:
+		return fmt.Sprintf("Edge power actions are configured (edge_provisioner_url) but its token file could not be read, so they are disabled: %s", d.Detail)
+	default:
+		// Unchanged wording for the unchanged state: no sidecar is configured here.
+		return "Edge power actions are not configured on this server"
+	}
+}
+
+// jsonQuoteString JSON-quotes a message built above. The messages are assembled from the
+// gateway's own configuration, which can contain a quote or a backslash in a path, and this
+// body is hand-written JSON rather than an encoder -- so escape rather than trusting the
+// input to be tame.
+func jsonQuoteString(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `"Edge power actions are not configured on this server"`
+	}
+	return string(b)
 }
 
 func (s *Server) handleAdminEdgeStart(w http.ResponseWriter, r *http.Request, actor string) {

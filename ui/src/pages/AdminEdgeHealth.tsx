@@ -173,10 +173,73 @@ function formatNodeLocalTime(tz?: string): string {
   }
 }
 
+// edgePowerOfflineMessage says WHY edge power actions are off, when the reason is an
+// operator error rather than the default (#1956).
+//
+// `edge_power_actions_enabled: false` used to carry four situations at once: no sidecar
+// configured, and a configured sidecar whose token file is unset, missing, unreadable or
+// empty. All four hid the power controls identically and said, on the only surface that
+// said anything, that the feature was "not configured on this server" -- so an operator who
+// mistyped `edge_provisioner_token_file` was told they had never set one, and one INFO line
+// at startup was the only place the difference existed.
+//
+// Returns null for the default: a deployment with no sidecar must look exactly as it did,
+// or every non-AWS gateway grows a banner about a feature it never asked for. Null is also
+// what an older gateway produces, since it sends no reason at all.
+//
+// The token PATH is named because that is what makes a typo self-evident; the token itself
+// is never sent by the server and must never be rendered here. The same function exists in
+// Portal V1's dashboard.js -- the two arms are an A/B test (#1866), so a diagnosis in one
+// of them only would itself be a defect.
+function edgePowerOfflineMessage(
+  reason: string | undefined,
+  tokenFile: string,
+  detail: string,
+  t: (key: string, fallback: string) => string,
+): string | null {
+  switch (reason) {
+    case 'token_path_unset':
+      return t(
+        'edge_power_token_path_unset',
+        'Edge power actions are configured (edge_provisioner_url), but edge_provisioner_token_file is not set, so they are disabled. Point it at the token file the edge-provisioner sidecar writes.',
+      );
+    case 'token_not_found':
+      return t(
+        'edge_power_token_not_found',
+        'Edge power actions are configured (edge_provisioner_url), but no file exists at the configured edge_provisioner_token_file, so they are disabled. Check it for a typo, and check the edge-provisioner sidecar has started: {0}',
+      ).replace('{0}', tokenFile);
+    case 'token_empty':
+      return t(
+        'edge_power_token_empty',
+        'Edge power actions are configured (edge_provisioner_url), but the token file is empty, so they are disabled. The edge-provisioner sidecar writes it when it starts: {0}',
+      ).replace('{0}', tokenFile);
+    case 'token_unreadable': {
+      const msg = t(
+        'edge_power_token_unreadable',
+        'Edge power actions are configured (edge_provisioner_url), but the token file could not be read, so they are disabled. It must be readable by the user the gateway runs as: {0}',
+      ).replace('{0}', tokenFile);
+      // The filesystem's own words, untranslated on purpose: "permission denied" is the
+      // sentence that resolves this state and it exists nowhere else. It describes opening
+      // the file and never its contents -- the server reads none before failing.
+      return detail ? `${msg} (${detail})` : msg;
+    }
+    default:
+      // 'not_configured', and anything an older or newer gateway sends that this portal
+      // does not know: say nothing rather than guess.
+      return null;
+  }
+}
+
 export default function AdminEdgeHealth() {
   const [nodes, setNodes] = useState<Record<string, EdgeNode>>({});
   const [outboundOk, setOutboundOk] = useState<boolean>(true);
   const [powerActionsEnabled, setPowerActionsEnabled] = useState(false);
+  // Admin-only, and absent whenever the feature is on or simply not configured (#1956).
+  const [powerActionsOffReason, setPowerActionsOffReason] = useState<
+    string | undefined
+  >(undefined);
+  const [powerActionsTokenFile, setPowerActionsTokenFile] = useState('');
+  const [powerActionsDetail, setPowerActionsDetail] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -194,6 +257,9 @@ export default function AdminEdgeHealth() {
       setNodes(res.data.nodes || res.data || {});
       setOutboundOk(res.data.outbound_ok !== false);
       setPowerActionsEnabled(!!res.data.edge_power_actions_enabled);
+      setPowerActionsOffReason(res.data.edge_power_actions_reason);
+      setPowerActionsTokenFile(res.data.edge_power_actions_token_file || '');
+      setPowerActionsDetail(res.data.edge_power_actions_detail || '');
       setError('');
     } catch (e: any) {
       setError(
@@ -456,6 +522,16 @@ export default function AdminEdgeHealth() {
     'all',
   );
 
+  // Null unless the gateway reported an operator error, and only admins are sent one, so a
+  // non-admin and an unconfigured deployment both render exactly what they rendered before
+  // (#1956).
+  const powerActionsOffMessage = edgePowerOfflineMessage(
+    powerActionsOffReason,
+    powerActionsTokenFile,
+    powerActionsDetail,
+    t,
+  );
+
   if (loading) {
     return (
       <div className="animate-fade-in">
@@ -537,6 +613,12 @@ export default function AdminEdgeHealth() {
             'outbound_network_degraded',
             'Outbound network connectivity is degraded.',
           )}
+        </div>
+      )}
+
+      {powerActionsOffMessage && (
+        <div className="alert-banner alert-banner--warning mb-xl">
+          ⚠️ {powerActionsOffMessage}
         </div>
       )}
 

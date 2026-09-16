@@ -3365,6 +3365,25 @@ async function loadAnalytics() {
                   : 'var(--text-muted)';
             }
           }
+          const npSources = document.getElementById('node-placement-sources');
+          if (npSources) {
+            // Only the pinned count is surfaced. The other sources are diagnostic detail; a
+            // pinned client is the one an operator can do something about, because it cannot
+            // move between gateways at all (#1691, #1922).
+            const pinned = (np.region_sources || []).filter(
+              (x) => x.pinned && x.users > 0,
+            );
+            const total = pinned.reduce((sum, x) => sum + x.users, 0);
+            if (total > 0) {
+              npSources.textContent = t('node_placement_pinned').replace(
+                '{0}',
+                String(total),
+              );
+              npSources.style.display = '';
+            } else {
+              npSources.style.display = 'none';
+            }
+          }
           if (npUnknown) {
             if (np.unknown_nodes && np.unknown_nodes.length) {
               npUnknown.textContent = `${t('node_placement_unknown_nodes')}: ${np.unknown_nodes.join(', ')}`;

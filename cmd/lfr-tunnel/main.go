@@ -27,6 +27,7 @@ import (
 	"lfr-tunnel/pkg/gui"
 	"lfr-tunnel/pkg/mcp"
 	"lfr-tunnel/pkg/osutil"
+	"lfr-tunnel/pkg/regionvocab"
 
 	"github.com/mattn/go-isatty"
 )
@@ -158,6 +159,17 @@ func main() {
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
 	facts.pinnedBy = pinnedBy(*serverURL)
+
+	// Recorded BEFORE resolveServerURL so the pinned case is reported at all (#1922): a pinned
+	// client returns early from the election and reaches none of the sites that set a source,
+	// which is precisely why it was invisible. Any election that does run overwrites this.
+	if isExplicitServer {
+		client.RecordRegionSource(regionvocab.SourceExplicitServer)
+	} else {
+		// No election and not pinned means the client learned no region list -- a
+		// gateway-side problem rather than anything the user chose.
+		client.RecordRegionSource(regionvocab.SourceGiven)
+	}
 	resolveServerURL(cfg, isExplicitServer)
 
 	// A build that bakes in no DefaultServerURL (#1188) reaches here with nothing to
@@ -1891,6 +1903,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 						}
 						slog.Info(fmt.Sprintf("[Client] Using cached best region: '%s' -> %s (cached for %s, use -refresh-region to re-probe)", cfg.Region, cfg.ServerURL, ttl))
 						facts.regionSource = fmt.Sprintf("cached election (valid for %s, -refresh-region re-probes)", ttl)
+						client.RecordRegionSource(regionvocab.SourceCache)
 						return
 					}
 				}
@@ -1905,6 +1918,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				absent := append(append([]string{}, unreachable...), missing...)
 				sort.Strings(absent)
 				facts.regionSource = "fresh latency probe"
+				client.RecordRegionSource(regionvocab.SourceProbe)
 				facts.advertised = len(cfg.Regions)
 				facts.unavailable = absent
 				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(absent) > 0, candidateHosts(cfg.Regions))
@@ -1923,6 +1937,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if url, ok := cfg.Regions[regionLower]; ok {
 		cfg.ServerURL = url
 		facts.regionSource = "named explicitly (-region), no latency probe"
+		client.RecordRegionSource(regionvocab.SourceExplicitRegion)
 		facts.advertised = len(cfg.Regions)
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))
 	} else {
@@ -1937,6 +1952,8 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				// this election is provisional for the same reason (#1690) -- without it, asking
 				// for a sleeping edge by name pinned the client to the fallback for 24h.
 				facts.regionSource = fmt.Sprintf("requested region %q unavailable, re-probed", regionLower)
+				// A probe DID run here, whatever was asked for first.
+				client.RecordRegionSource(regionvocab.SourceProbe)
 				facts.advertised = len(cfg.Regions)
 				facts.unavailable = append(append([]string{}, unreachable...), missing...)
 				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0 || len(missing) > 0, candidateHosts(cfg.Regions))

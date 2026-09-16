@@ -161,6 +161,23 @@ func (db *DB) initSchema() error {
 		node_id TEXT DEFAULT 'control'
 	);
 
+	-- How each user's client chose its gateway, one row per user per day (#1922).
+	--
+	-- Per DAY, not per session, for the same reason region_probes is: this answers "who is
+	-- pinned", a question about people, and a user who reconnects fifty times must not
+	-- outweigh one who connects once.
+	--
+	-- A pinned client runs no latency probe, so it already sends an empty probe set --
+	-- indistinguishable from a client with reporting off or one too old to send any. This
+	-- table is what tells those apart.
+	CREATE TABLE IF NOT EXISTS client_region_source (
+		user_id TEXT NOT NULL,
+		day TEXT NOT NULL,
+		source TEXT NOT NULL,
+		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, day)
+	);
+
 	-- One row per user per region per day (#1151). The day is part of the key on purpose: a
 	-- user who reconnects fifty times overwrites the same row rather than adding fifty samples,
 	-- so the distribution counts PEOPLE rather than sessions. Counting sessions is the trap the
@@ -453,4 +470,11 @@ var migrations = []migration{
 	      WHERE length(accepted_at) > 19
 	        AND accepted_at LIKE '____-__-__ __:__:__%'
 	        AND accepted_at LIKE '%UTC%'`},
+	{34, `CREATE TABLE IF NOT EXISTS client_region_source (
+		user_id TEXT NOT NULL,
+		day TEXT NOT NULL,
+		source TEXT NOT NULL,
+		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, day)
+	)`},
 }

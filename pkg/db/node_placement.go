@@ -39,7 +39,7 @@ const (
 	// PlacementSuboptimal means the user had measured something faster.
 	PlacementSuboptimal = "suboptimal"
 	// PlacementUnverifiable means there is nothing to compare against. The commonest cause is
-	// the client's 24h region cache: a cached choice runs no probe, so no row exists for that
+	// the client's region cache: a cached choice runs no probe, so no row exists for that
 	// day. It is NOT evidence of a bad placement, and is counted separately for that reason.
 	PlacementUnverifiable = "unverifiable"
 )
@@ -68,6 +68,11 @@ type NodePlacementReport struct {
 	// than folded into the counts: this is the shape of a rename or a new edge, and it makes
 	// the report wrong in a way nothing else would reveal.
 	UnknownNodes []string `json:"unknown_nodes,omitempty"`
+	// RegionSources is how clients chose their gateway (#1922). Carried on this report rather
+	// than a separate endpoint: "0% started on the closest node" and "N users cannot move"
+	// are halves of one answer, and an operator shown only the first goes looking for a
+	// routing fault that does not exist.
+	RegionSources []RegionSourceCount `json:"region_sources,omitempty"`
 	// Caveats states in the payload what the numbers cannot mean, so a consumer rendering
 	// this cannot present it as more certain than it is.
 	Caveats []string `json:"caveats"`
@@ -150,7 +155,7 @@ func (repo *SQLiteRegionProbeRepo) loadMeasurements(since string) (map[measureme
 // faster the region the user should have landed on was.
 func scoreSession(rtts map[string]int, nodeID string) (verdict string, missMs int) {
 	if len(rtts) == 0 {
-		// No probe that day -- almost always the 24h region cache. Not a bad placement.
+		// No probe that day -- a cached election, or a pinned client. Not a bad placement.
 		return PlacementUnverifiable, 0
 	}
 	servedRTT, known := rtts[normaliseNodeID(nodeID)]
@@ -251,7 +256,7 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 func placementCaveats(r *NodePlacementReport) []string {
 	c := []string{
 		"A session is compared against what that user measured on the day it started, not against a fleet average.",
-		"Unverifiable is not a failure. The client caches its region choice for 24h, and a cached choice runs no probe, so there is nothing that day to compare against.",
+		"Unverifiable is not a failure. A client that reused its cached election, or that was pinned with -server or -region, runs no probe, so there is nothing that day to compare against.",
 		"region_probes holds one row per user per region per DAY, so a user who changed network mid-day has one blended measurement.",
 		"An explicitly pinned region (-region or -server) is indistinguishable here from an unprobed choice.",
 	}

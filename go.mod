@@ -3,19 +3,19 @@ module lfr-tunnel
 go 1.26.0
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.46.0
+	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.1
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.325.1
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.69.0
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.24.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.49.0
-	github.com/coreos/go-oidc/v3 v3.20.0
-	github.com/gogpu/systray v0.2.8
+	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/gogpu/systray v0.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jedisct1/go-minisign v0.0.0-20260527172527-a09352b57a22
 	github.com/jpillora/chisel v1.11.8
 	github.com/mattn/go-isatty v0.0.24
-	github.com/oschwald/maxminddb-golang/v2 v2.5.0
+	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/time v0.15.0

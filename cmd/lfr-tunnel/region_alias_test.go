@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"lfr-tunnel/pkg/regionvocab"
@@ -148,5 +150,53 @@ func TestTheAnalyticsMatchesTheNameThisClientKeeps(t *testing.T) {
 		t.Errorf("this client records central as %q, but the node placement report matches it "+
 			"against %q -- every central-served session will count as unverifiable and the "+
 			"report will read 0%% closest (#1919)", survivor, regionvocab.CentralRegion())
+	}
+}
+
+// TestEverySourceDecisionAlsoRecordsATokenGuards #1922 against the obvious drift.
+//
+// The client sets facts.regionSource -- English prose, printed locally -- at each point where it
+// decides how to reach a gateway. Each of those points must ALSO record the machine token the
+// gateway stores, or a future decision path will report to the operator on screen and be
+// invisible in the analytics: precisely the gap #1922 exists to close.
+//
+// Reads main.go's own source rather than exercising the paths, because several of them need a
+// live gateway to reach and the property being checked is textual: "these two calls travel
+// together". A test that cannot see the code cannot see one of them go missing.
+func TestEverySourceDecisionAlsoRecordsAToken(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	lines := strings.Split(string(src), "\n")
+
+	proseAt := []int{}
+	for i, l := range lines {
+		if strings.Contains(l, "facts.regionSource = ") {
+			proseAt = append(proseAt, i)
+		}
+	}
+	if len(proseAt) == 0 {
+		t.Fatal("found no facts.regionSource assignments -- refusing to pass vacuously; " +
+			"if they moved, move this guard with them")
+	}
+
+	for _, i := range proseAt {
+		// The token is recorded within a few lines of the prose, before or after: some sites
+		// set the prose first, some compute a value in between.
+		found := false
+		for j := i - 4; j <= i+4 && !found; j++ {
+			if j < 0 || j >= len(lines) {
+				continue
+			}
+			if strings.Contains(lines[j], "client.RecordRegionSource(") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("main.go:%d sets facts.regionSource but records no regionvocab token nearby:\n    %s\n"+
+				"    Without it this path is visible in the startup block and invisible in the "+
+				"analytics (#1922).", i+1, strings.TrimSpace(lines[i]))
+		}
 	}
 }

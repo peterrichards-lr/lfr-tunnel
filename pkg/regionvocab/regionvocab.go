@@ -65,3 +65,55 @@ func SortedCentralAliases() []string {
 	sort.Strings(out)
 	return out
 }
+
+// How a client chose its gateway (#1922).
+//
+// A PINNED client runs no latency probe at all, so it already sends an empty probe set -- which
+// is indistinguishable from a client with reporting switched off, or one too old to send any.
+// All three looked the same to the analytics, so "my US colleagues are on the Irish node" could
+// not be answered from data and had to be asked person by person.
+//
+// Sent as a stable token rather than the English sentence the client prints locally: the portal
+// has to translate and group these, and prose cannot be either.
+const (
+	// SourceProbe -- a fresh latency probe elected the gateway. The intended path.
+	SourceProbe = "probe"
+	// SourceCache -- a previous election was reused from the local cache, so no probe ran
+	// this start. Not a problem: the cache is one hour (#1706) and a changed candidate set
+	// invalidates it immediately.
+	SourceCache = "cache"
+	// SourceExplicitRegion -- the user named a region with -region. No probe, but failover
+	// still works, so this is a preference rather than a pin.
+	SourceExplicitRegion = "explicit_region"
+	// SourceExplicitServer -- the user named a gateway with -server or one of the
+	// LFT_SERVER* variables. Region election AND failover are off (#1691): this client
+	// cannot move, whatever happens to the gateway it is on. The case worth acting on.
+	SourceExplicitServer = "explicit_server"
+	// SourceGiven -- the gateway was used as configured with no election, because the
+	// client learned no region list at all. A gateway-side problem, not a user choice.
+	SourceGiven = "given"
+)
+
+// Sources is the complete vocabulary, in the order a report should present it.
+var Sources = []string{SourceProbe, SourceCache, SourceExplicitRegion, SourceExplicitServer, SourceGiven}
+
+// ValidSource reports whether a token is one this gateway understands.
+//
+// An unknown token is stored as-is but must not be counted as anything: a client newer than the
+// gateway could send a source this build has never heard of, and silently folding it into an
+// existing bucket would misreport it.
+func ValidSource(s string) bool {
+	for _, v := range Sources {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPinned reports whether a source means the client cannot move between gateways.
+//
+// ONLY SourceExplicitServer. -region skips the probe but keeps failover -- PinnedRoutingNotice
+// actively recommends `server_url:` in the config file over `-server` for that reason, and
+// treating the two alike would send someone to fix a client that is behaving correctly.
+func IsPinned(source string) bool { return source == SourceExplicitServer }

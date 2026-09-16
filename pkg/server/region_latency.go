@@ -33,6 +33,30 @@ const maxRegionProbesPerRegistration = 32
 // Never fatal to a registration. This is telemetry attached to the request that sets up a
 // developer's tunnel, and failing that because an analytics write failed would trade something
 // that matters for something that does not.
+// recordRegionSource stores how one client chose this gateway (#1922).
+//
+// Separate from recordRegionProbes and NOT gated on the probe set being non-empty, which is the
+// whole point: a pinned client sends no probes at all, so anything that keys off the probe set
+// misses exactly the clients this is meant to surface.
+func (s *Server) recordRegionSource(user *db.User, source string) {
+	if user == nil || source == "" || s.db == nil {
+		return
+	}
+	// Length-capped before it reaches the database. The value is attacker-controlled in the
+	// sense that any client can send anything; it is stored verbatim so an unrecognised token
+	// can be reported rather than silently reclassified, which makes bounding it here the
+	// only thing standing between a hostile client and an unbounded row.
+	const maxSourceLen = 64
+	if len(source) > maxSourceLen {
+		source = source[:maxSourceLen]
+	}
+	if err := s.db.RecordRegionSource(user.ID, source, time.Now()); err != nil {
+		// Never fails a registration: this is telemetry about how the client chose a
+		// gateway, and losing it must not stop someone connecting.
+		slog.Warn(fmt.Sprintf("[Analytics] Could not record region source for %s: %v", user.ID, err))
+	}
+}
+
 func (s *Server) recordRegionProbes(user *db.User, probes []RegionProbe) {
 	if user == nil || len(probes) == 0 || s.db == nil {
 		return
@@ -96,12 +120,24 @@ func (s *Server) handleNodePlacement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Attached to the placement report rather than given its own endpoint: "0% started on the
+	// closest node" and "N users cannot move" are halves of one answer, and an operator who
+	// sees only the first goes looking for a routing fault (#1922).
+	sources, srcErr := s.db.GetRegionSources(days)
+	if srcErr != nil {
+		// Reported, not fatal: the placement numbers are still worth serving without it.
+		slog.Warn(fmt.Sprintf("[Analytics] Region sources unavailable: %v", srcErr))
+		sources = nil
+	}
+
 	report, err := s.db.GetNodePlacement(days)
 	if err != nil {
 		slog.Error(fmt.Sprintf("[Analytics] Node placement report failed: %v", err))
 		http.Error(w, `{"error":"Failed to build the node placement report"}`, http.StatusInternalServerError)
 		return
 	}
+
+	report.RegionSources = sources
 
 	respondJSON(w, http.StatusOK, report)
 }

@@ -1,5 +1,18 @@
 [
   {
+    "version": "v1.48.32",
+    "release_date": "2026-09-16",
+    "features": [
+      "fix(analytics): match central's sessions against the region clients actually record (#1919) (#1924)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#1915)",
+      "chore(deps): bump github.com/coreos/go-oidc/v3 from 3.20.0 to 3.21.0 (#1914)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2 from 1.46.0 to 1.47.0 (#1913)",
+      "chore(deps): bump github.com/oschwald/maxminddb-golang/v2 (#1912)",
+      "chore(deps): bump github.com/gogpu/systray from 0.2.8 to 0.3.0 (#1911)",
+      "chore(agents): retire the jira-tracker skill in favour of github-jira-sync (#1909)"
+    ]
+  },
+  {
     "version": "v1.48.31",
     "release_date": "2026-09-14",
     "features": [
@@ -47,26 +60,6 @@
       "fix(edr): make GOTMPDIR travel with the repo, not with the invocation (#1859) (#1862)",
       "fix(edr): ship the go PATH shim that keeps the toolchain inside the whitelist (#1860) (#1861)",
       "docs(ops): record what a release actually needs a human for, and why an edge is dark (#1857)"
-    ]
-  },
-  {
-    "version": "v1.48.27",
-    "release_date": "2026-09-11",
-    "features": [
-      "fix(server): stop handler goroutines outliving the database they write to (#1852)",
-      "test(gates): assert what each quality gate does not look at (#1779) (#1855)",
-      "fix(portal): teach the admin status vocabulary about 'rejected' (#1847) (#1850)",
-      "feat(server): let an admin reject a registration, and tell the person (#1830) (#1848)",
-      "refactor(gates): one V1 collection pass for the class and token gates (#1841) (#1846)",
-      "docs: add an addendum on exposing any local HTTP service (#1844) (#1845)",
-      "fix(server): send every notification through one funnel that records its failures (#1732) (#1843)",
-      "test(gates): assert anti-vacuity and \"it fires\" on four unproven gates (#1842)",
-      "fix(test): stop the Playwright cleanup taking a magic link it has already used (#1838)",
-      "docs(contributing): drop the CHANGELOG.md requirement, which pointed at nothing (#1811) (#1836)",
-      "fix(hooks): decide the pre-push range against the target, and refuse when it cannot (#1816) (#1835)",
-      "fix(server): record magic-link and invite email failures instead of discarding them (#1832) (#1834)",
-      "fix(server): complete the SSO auto-approval, and stop losing approval emails silently (#1824) (#1831)",
-      "fix(server): resolve every recorded address through the trusted-proxy boundary (#1818) (#1823)"
     ]
   }
 ]

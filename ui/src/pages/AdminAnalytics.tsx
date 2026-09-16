@@ -821,6 +821,32 @@ export default function AdminAnalytics() {
                     : {nodePlacement.unknown_nodes.join(', ')}
                   </p>
                 )}
+                {/* How clients chose their gateway (#1922). A pinned client runs no probe,
+                    so it falls into "not assessable" beside a cached election and a client
+                    too old to report -- three states that looked identical and mean very
+                    different things. Only the pinned count is surfaced: it is the one an
+                    operator can act on, because such a client cannot move between gateways
+                    at all (#1691). */}
+                {(() => {
+                  const pinned = (nodePlacement.region_sources || []).filter(
+                    (x: { pinned?: boolean; users?: number }) =>
+                      x.pinned && (x.users ?? 0) > 0,
+                  );
+                  const total = pinned.reduce(
+                    (sum: number, x: { users?: number }) =>
+                      sum + (x.users ?? 0),
+                    0,
+                  );
+                  if (total === 0) return null;
+                  return (
+                    <p className="text-muted text-sm mt-md mb-0">
+                      {t(
+                        'node_placement_pinned',
+                        '{0} user(s) pinned their client with -server, so it cannot move between gateways and never probes.',
+                      ).replace('{0}', String(total))}
+                    </p>
+                  );
+                })()}
                 {/* The caveats travel in the payload precisely so the counts cannot be
                     read as a score. Rendering the numbers and dropping these would defeat
                     the reason they are there. */}

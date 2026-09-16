@@ -77,6 +77,11 @@ type RegisterRequest struct {
 	// RegionProbes are the latency measurements the client took to choose a gateway (#1151).
 	// Optional: an older client sends none, and a client with reporting turned off sends none.
 	RegionProbes []RegionProbe `json:"region_probes,omitempty"`
+	// RegionSource is how the client chose this gateway, as a regionvocab token (#1922). A
+	// pinned client runs no probe, so it already sends an empty RegionProbes -- identical to
+	// a client with reporting off or one too old to send any. This field is what separates
+	// them. Optional; absent means unknown and must not be counted as anything.
+	RegionSource string `json:"region_source,omitempty"`
 }
 
 // RegionProbe is one client's measurement of one advertised region (#1151).
@@ -1946,6 +1951,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.recordRegionProbes(userRec, req.RegionProbes)
+	s.recordRegionSource(userRec, req.RegionSource)
 
 	// Resolve the country in memory and drop the address (#1152). Nothing downstream of
 	// this sees the pair, and a failure here cannot fail the registration.

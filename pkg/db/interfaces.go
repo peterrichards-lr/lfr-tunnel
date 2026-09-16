@@ -116,6 +116,13 @@ type DiagnosticsRepository interface {
 // (#1151).
 type RegionProbeRepository interface {
 	RecordRegionProbes(userID string, samples []RegionProbeSample, at time.Time) error
+	// RecordRegionSource stores how a client chose its gateway (#1922). Separate from the
+	// probe set because a pinned client sends no probes -- which is exactly the state this
+	// distinguishes from "reporting off" and "client too old".
+	RecordRegionSource(userID, source string, at time.Time) error
+	// GetRegionSources counts distinct users per source, so a report can say how many
+	// clients cannot move rather than leaving it to be inferred from an absence.
+	GetRegionSources(days int) ([]RegionSourceCount, error)
 	GetRegionLatency(days int) (*RegionLatencyReport, error)
 	// GetNodePlacement answers whether tunnels started on the closest node the user could
 	// reach, by joining these probes against tunnel_metrics.node_id (#1888). It lives on this

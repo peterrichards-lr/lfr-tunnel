@@ -63,6 +63,35 @@ func RecordRegionProbes(probes []RegionProbe) {
 	regionProbes = probes
 }
 
+// regionSource is how this client chose its gateway, as a regionvocab token (#1922).
+//
+// Stored the same way as the probe set above and for the same reason: the choice is made during
+// startup, long before the first registration, and threading it through every call site that
+// might register would mean every future one has to remember.
+var (
+	regionSourceMu sync.Mutex
+	regionSource   string
+)
+
+// RecordRegionSource stores how the gateway was chosen, for the next registration to report.
+func RecordRegionSource(source string) {
+	regionSourceMu.Lock()
+	defer regionSourceMu.Unlock()
+	regionSource = source
+}
+
+// reportableRegionSource returns the source to attach to a registration.
+//
+// Deliberately NOT gated on the latency-reporting opt-out. That opt-out is about publishing RTT
+// measurements; this is a single token saying which code path ran, carries no timing and no
+// network information, and is the only thing that can distinguish a pinned client from one that
+// measured. Suppressing it would leave the question this exists to answer unanswerable.
+func reportableRegionSource() string {
+	regionSourceMu.Lock()
+	defer regionSourceMu.Unlock()
+	return regionSource
+}
+
 // reportableRegionProbes returns the probes to attach to a registration.
 func reportableRegionProbes() []RegionProbe {
 	regionProbesMu.Lock()
@@ -84,6 +113,10 @@ type RegisterRequest struct {
 	Passcode        string            `json:"passcode,omitempty"`
 	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
 	RegionProbes    []RegionProbe     `json:"region_probes,omitempty"`
+	// RegionSource is how the gateway was chosen, as a regionvocab token (#1922). Optional:
+	// an older client sends none, and absent must be read as UNKNOWN rather than folded into
+	// any bucket -- treating it as "elected" would replace one silent wrong answer with another.
+	RegionSource string `json:"region_source,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -441,6 +474,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 		Passcode:        passcode,
 		WhitelistIPs:    whitelistIPs,
 		RegionProbes:    reportableRegionProbes(),
+		RegionSource:    reportableRegionSource(),
 	})
 	if err != nil {
 		return nil, err

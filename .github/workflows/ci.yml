@@ -453,6 +453,26 @@ jobs:
       - name: HTML documents must have balanced tags
         run: node scripts/check-html-balance.mjs
 
+      # The four gates below existed, had hook tests, and ran NOWHERE (#1929): not in any CI
+      # job and not in either git hook, so they fired only when someone typed the make target
+      # by hand. A gate nobody runs is documentation with a shebang -- and two of these were
+      # written the same week to stop a defect recurring, which they could not have done.
+      #
+      # scripts/check-ci-runs-every-gate.sh now asserts this list stays complete, because the
+      # failure mode is silence: a new gate that is never wired in looks exactly like one that
+      # passes every time.
+      - name: Portal user statuses must match the server vocabulary
+        run: node scripts/check-status-vocabulary.cjs
+
+      - name: Every admin alert must have a toggle in both portal arms
+        run: node scripts/check-alert-vocabulary.cjs
+
+      - name: Print stylesheets must only target markup that exists
+        run: node scripts/check-print-selectors.cjs
+
+      - name: A failed data load must be surfaced, not shown as empty
+        run: node scripts/check-load-failure-surfaced.cjs
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

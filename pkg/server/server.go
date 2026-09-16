@@ -403,6 +403,11 @@ type Server struct {
 	// cfg.EdgeProvisionerURL is set -- every handler that uses it must treat
 	// nil as "feature not configured," not an error.
 	provisionerClient *provisioner.Client
+	// edgePowerDiagnosis records WHY provisionerClient is nil (#1956). No sidecar
+	// configured, and a configured sidecar whose token file is missing, unreadable or
+	// empty, were all one nil and one sentence -- so an operator's typo was reported to
+	// them as a decision they had made.
+	edgePowerDiagnosis edgePowerDiagnosis
 }
 
 // defaultChiselKeepAlive is how often the gateway pings each attached client over the
@@ -563,11 +568,6 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	geoPath, geoBothPathsSet := cfg.CountryDatabasePath()
 	srv.geo, srv.geoDiagnosis = newGeoAggregator(geoPath, geoBothPathsSet, database)
 
-	// Edge power actions (start/stop/restart, schedule editing) are entirely
-	// optional and AWS-specific -- absent unless both the sidecar URL and its
-	// token file are configured. A missing/unreadable token file is treated
-	// as "feature not configured" here, not a fatal startup error, since the
-	// sidecar (which owns the token) may simply not have started yet.
 	// Reject an unusable statically-declared schedule once, at startup, rather than acting on
 	// it every health cycle (#1282). Dropped rather than fatal: a bad schedule should stop
 	// the node being treated as scheduled, not stop the gateway serving traffic.
@@ -578,13 +578,14 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	normaliseEdgeSchedules(cfg.EdgeNodes)
 	srv.edgeNodesCurrent = cfg.EdgeNodes
 
-	if cfg.EdgeProvisionerURL != "" {
-		if token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile); err != nil {
-			slog.Info(fmt.Sprintf("[Server] edge_provisioner_url is set but its token could not be loaded, edge power actions disabled: %v", err))
-		} else {
-			srv.provisionerClient = provisioner.NewClient(cfg.EdgeProvisionerURL, token)
-		}
-	}
+	// Edge power actions (start/stop/restart, schedule editing) are entirely
+	// optional and AWS-specific -- absent unless both the sidecar URL and its
+	// token file are configured. A missing/unreadable token file still disables
+	// the feature rather than failing startup, since the sidecar (which owns the
+	// token) may simply not have started yet -- but it is no longer the SAME
+	// state as having no sidecar at all: newProvisionerClient returns why, and
+	// the admin surfaces say which (#1956).
+	srv.provisionerClient, srv.edgePowerDiagnosis = newProvisionerClient(cfg)
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {
@@ -6974,6 +6975,34 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		"outbound_ok":                outboundOk,
 		"nodes":                      nodes,
 		"edge_power_actions_enabled": s.provisionerClient != nil,
+	}
+	// Why the feature is off, not merely that it is (#1956) -- and only for an admin.
+	//
+	// This route is the portal's Network Health page, which every signed-in user can load;
+	// edge_power_actions_enabled is what both portal arms hide the power controls on. The
+	// reason, the configured token path and the filesystem's complaint about it are gateway
+	// internals an ordinary user has no business seeing, so a non-admin response is
+	// byte-for-byte what it was before this change. getCurrentUser (not Raw) on purpose:
+	// an owner previewing as a user should see the page that user sees (#1225).
+	//
+	// Read from what the constructor recorded at startup rather than re-stat'ing the file
+	// here: this describes the state the RUNNING process is in, and a token file written
+	// since startup is not loaded -- claiming otherwise would send an admin looking for a
+	// problem that a restart, and only a restart, will clear.
+	if s.provisionerClient == nil {
+		if u, err := s.getCurrentUser(r); err == nil && u != nil && (u.Role == roleAdmin || u.Role == roleOwner) {
+			reason := s.edgePowerDiagnosis.Reason
+			if reason == "" {
+				reason = edgePowerNotConfigured
+			}
+			response["edge_power_actions_reason"] = reason
+			if s.edgePowerDiagnosis.TokenFile != "" {
+				response["edge_power_actions_token_file"] = s.edgePowerDiagnosis.TokenFile
+			}
+			if s.edgePowerDiagnosis.Detail != "" {
+				response["edge_power_actions_detail"] = s.edgePowerDiagnosis.Detail
+			}
+		}
 	}
 	respondJSON(w, http.StatusOK, response)
 }

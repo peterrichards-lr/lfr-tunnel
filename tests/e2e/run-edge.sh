@@ -398,6 +398,104 @@ if ! docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.lfr-demo.local
 fi
 echo "✅ Explicit regional edge tunnel routing verified successfully, on a region-agnostic host!"
 
+# Bandwidth for an edge-served session has to reach the control plane's tunnel_metrics table,
+# against the EDGE's node id (#1958). Asserted here because this is the one point in the suite
+# where a tunnel is provably held by the edge and by nothing else: the request above went
+# straight to the edge on :8090, central holds no lease for peter-dev, and its own collector
+# only ever reads its own registry. So any figure central reports for this host arrived over
+# the edge control channel.
+#
+# Before this, an edge contributed nothing measurable at all -- and #1947 has just made
+# edge-served the common case, so the charts were about to read as collapsing usage rather
+# than as stopped measurement.
+echo "=== Driving traffic through the edge-held tunnel so there are bytes to account for ==="
+for i in {1..20}; do
+    curl -s -o /dev/null -H "Host: peter-dev.lfr-demo.local" http://localhost:8090/ || true
+done
+
+# The per-node breakdown is admin-only, so this needs the owner rather than the developer
+# account every other step uses.
+echo "=== Signing in as the owner to read the per-node analytics ==="
+curl -s -X POST -H "Content-Type: application/json" \
+     -d '{"email": "admin@lfr-demo.local"}' \
+     "http://localhost:8000/api/auth/magic-link" > /dev/null
+sleep 2
+
+# Filtered by recipient and taken newest-first: several magic links exist in this mailbox by
+# now, and picking the first token in the mailbox would sign in as whoever happened to be at
+# the top.
+ADMIN_ML_TOKEN=$(python3 -c '
+import urllib.request, json, re
+try:
+    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages?limit=200").read())
+    for m in data.get("messages", []):
+        to = [a.get("Address", "").lower() for a in (m.get("To") or [])]
+        if "admin@lfr-demo.local" not in to:
+            continue
+        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + m["ID"]).read())
+        body = (msg.get("Text") or "") + "\n" + (msg.get("HTML") or "")
+        match = re.search(r"token=([a-f0-9]+)", body, re.IGNORECASE)
+        if match:
+            print(match.group(1))
+            exit(0)
+except Exception as e:
+    import sys; print(f"Error: {e}", file=sys.stderr)
+')
+
+if [ -z "$ADMIN_ML_TOKEN" ]; then
+    echo "❌ Could not obtain an owner magic-link token, so the edge bandwidth assertion cannot run."
+    exit 1
+fi
+
+curl -s -c /tmp/admin-session.txt -X POST -H "Content-Type: application/json" \
+     -d "{\"token\": \"$ADMIN_ML_TOKEN\"}" \
+     "http://localhost:8000/api/auth/verify" > /dev/null
+
+# Fail here rather than letting the poll below time out: a missing admin session and a
+# genuinely unrecorded byte would otherwise look identical.
+ADMIN_CHECK=$(curl -s -b /tmp/admin-session.txt "http://localhost:8000/api/analytics?days=1")
+if ! echo "$ADMIN_CHECK" | grep -q '"global"'; then
+    echo "❌ The owner session is not admin, so this assertion would be measuring the wrong thing."
+    echo "    Response: $ADMIN_CHECK"
+    exit 1
+fi
+
+echo "=== Verifying the edge's bandwidth reached the control plane's analytics ==="
+EDGE_BYTES_RECORDED=false
+for i in {1..40}; do
+    ANALYTICS=$(curl -s -b /tmp/admin-session.txt "http://localhost:8000/api/analytics?days=1")
+    if echo "$ANALYTICS" | python3 -c '
+import sys, json
+data = json.load(sys.stdin)
+g = data.get("global") or {}
+# node_daily is padded with every configured node so the chart has no gaps, so presence
+# proves nothing -- a session count above zero is what requires a tunnel_metrics row
+# carrying node_id "edge-us", and a row is only written when bytes moved.
+edge_sessions = sum(n.get("sessions", 0) for n in g.get("node_daily") or [] if n.get("node_id") == "edge-us")
+# And the bytes themselves, for the host the edge is serving.
+edge_bytes = 0
+for t in g.get("top_tunnels") or []:
+    if t.get("full_host") == "peter-dev.lfr-demo.local":
+        edge_bytes = t.get("bytes_out", 0) + t.get("bytes_in", 0)
+sys.exit(0 if edge_sessions > 0 and edge_bytes > 0 else 1)
+'; then
+        EDGE_BYTES_RECORDED=true
+        break
+    fi
+    sleep 1
+done
+
+if [ "$EDGE_BYTES_RECORDED" = false ]; then
+    echo "❌ An edge-served session recorded no bandwidth against node_id edge-us."
+    echo "    Last analytics response: $ANALYTICS"
+    echo "=== Edge logs ==="
+    docker-compose -f docker-compose-edge.yml logs --tail=60 lfr-tunneld-edge
+    echo "=== Control Plane logs ==="
+    docker-compose -f docker-compose-edge.yml logs --tail=60 lfr-tunneld-control
+    exit 1
+fi
+echo "✅ Edge-served bandwidth is recorded on the control plane against node_id edge-us"
+
 # The record has to point at the node actually holding the tunnel. Without it an apex-issued
 # host resolves to the control plane via the wildcard, and the control plane holds no lease for
 # it -- the tunnel is up and every visitor gets an offline page (#1247).

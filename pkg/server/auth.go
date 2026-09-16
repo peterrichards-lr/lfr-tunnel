@@ -43,10 +43,15 @@ type TunnelLease struct {
 	passcode     string
 	whitelistIPs string
 	accessMode   string
-	AddedHeaders map[string]string    `json:"added_headers"`
-	Status       string               `json:"status"` // e.g., "up", "maintenance", "down"
-	BytesIn      uint64               `json:"bytes_in"`
-	BytesOut     uint64               `json:"bytes_out"`
+	AddedHeaders map[string]string `json:"added_headers"`
+	Status       string            `json:"status"` // e.g., "up", "maintenance", "down"
+	BytesIn      uint64            `json:"bytes_in"`
+	BytesOut     uint64            `json:"bytes_out"`
+	// LastBytesIn/LastBytesOut are the watermark of what has already been reported, and are
+	// read and written ONLY under the registry lock -- by TakeByteDeltas and by the
+	// OnLeaseCleanup callback, which CleanLease invokes with that lock held. They are
+	// absent from ListLeases' snapshot on purpose: a copy cannot carry a watermark
+	// forward, and writing one back onto a copy is precisely the defect #1958 fixes.
 	LastBytesIn  uint64               `json:"-"`
 	LastBytesOut uint64               `json:"-"`
 	CreatedAt    time.Time            `json:"created_at"`
@@ -678,6 +683,66 @@ func (r *Registry) cleanupOrphanLeases() {
 			conn.Close() //nolint:errcheck
 		}
 	}
+}
+
+// ByteDelta is the traffic one lease has carried since the previous measurement.
+//
+// Deliberately not db.TunnelMetric: this is a registry-level fact about a lease, and the
+// registry has no business knowing about the database or the wire format the control
+// channel uses to carry it (#1958).
+type ByteDelta struct {
+	UserID          string
+	SubdomainPrefix string
+	FullHost        string
+	BytesIn         int64
+	BytesOut        int64
+	ConnectedAt     time.Time
+}
+
+// TakeByteDeltas reports what every live lease has carried since the previous call, and
+// advances each lease's watermark in the same critical section, so a byte is handed out
+// exactly once.
+//
+// The advance has to happen on the real lease, which is the whole point of this existing
+// (#1958). The periodic collector used to read ListLeases() and then write the watermark
+// back onto the *copy* that returns -- LastBytesIn/LastBytesOut are deliberately absent
+// from that snapshot, so the assignment went nowhere and the watermark on the real lease
+// stayed at zero for the life of the tunnel. Every tick therefore re-reported the lease's
+// cumulative total rather than the interval's delta: measured on a lease carrying 1000
+// bytes, two ticks recorded 1000 and then 1000 again instead of 1000 and nothing.
+//
+// Taking and advancing together also makes a caller that loses the result under-report
+// rather than double-report, which is the right way round for telemetry that a usage
+// quota is meant to be built on.
+func (r *Registry) TakeByteDeltas() []ByteDelta {
+	// Write lock, not RLock: the watermarks are plain fields on the lease and this is the
+	// only writer of them outside OnLeaseCleanup, which CleanLease already calls under the
+	// same lock.
+	r.Lock()
+	defer r.Unlock()
+
+	var deltas []ByteDelta
+	for _, lease := range r.leases {
+		bytesIn := atomic.LoadUint64(&lease.BytesIn)
+		bytesOut := atomic.LoadUint64(&lease.BytesOut)
+		diffIn := int64(bytesIn - lease.LastBytesIn)
+		diffOut := int64(bytesOut - lease.LastBytesOut)
+		lease.LastBytesIn = bytesIn
+		lease.LastBytesOut = bytesOut
+
+		if diffIn <= 0 && diffOut <= 0 {
+			continue
+		}
+		deltas = append(deltas, ByteDelta{
+			UserID:          lease.UserID,
+			SubdomainPrefix: lease.SubdomainPrefix,
+			FullHost:        lease.FullHost,
+			BytesIn:         diffIn,
+			BytesOut:        diffOut,
+			ConnectedAt:     lease.CreatedAt,
+		})
+	}
+	return deltas
 }
 
 // ListLeases returns a snapshot of all active leases.

@@ -1,20 +1,24 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"sync/atomic"
 	"time"
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 )
 
+// metricsCollectorInterval is how often the control plane sweeps its live leases for
+// bytes to record.
+const metricsCollectorInterval = 5 * time.Minute
+
 // MetricsCollector handles background metric collection and forwarding.
+//
+// Control plane only, as of #1958. An edge has no database and reports its byte deltas over
+// the edge control channel instead (edge_metrics.go); this used to buffer them here and POST
+// them to /api/internal/edge-metrics, and keeping both would double-count every byte.
 type MetricsCollector struct {
 	queue    chan *db.TunnelMetric
 	db       *db.DB
@@ -43,88 +47,50 @@ func (c *MetricsCollector) Queue(m *db.TunnelMetric) {
 
 // Start begins the background processing loop for metrics.
 func (c *MetricsCollector) Start(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(metricsCollectorInterval)
 	defer ticker.Stop()
-
-	var localBuffer []*db.TunnelMetric
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case m := <-c.queue:
-			if c.db != nil {
-				if err := c.db.RecordTunnelMetric(m); err != nil {
-					slog.Info(fmt.Sprintf("[MetricsCollector] Failed to record tunnel metrics for %s: %v", m.FullHost, err))
-				}
-			} else if c.cfg.ControlPlaneURL != "" && c.cfg.EdgeToken != "" {
-				localBuffer = append(localBuffer, m)
+			if c.db == nil {
+				// Said out loud rather than dropped in silence. A node with no database
+				// should not be queueing here at all -- an edge's deltas go to
+				// edgeMetricsReporter (#1958) -- so reaching this is a wiring mistake, and
+				// the symptom it produces is measurement that reads as no traffic.
+				slog.Warn(fmt.Sprintf("[MetricsCollector] No database on this node; discarding a metric for %s", m.FullHost))
+				continue
+			}
+			if err := c.db.RecordTunnelMetric(m); err != nil {
+				slog.Info(fmt.Sprintf("[MetricsCollector] Failed to record tunnel metrics for %s: %v", m.FullHost, err))
 			}
 		case <-ticker.C:
-			leases := c.registry.ListLeases()
-			for _, lease := range leases {
-				bytesIn := atomic.LoadUint64(&lease.BytesIn)
-				bytesOut := atomic.LoadUint64(&lease.BytesOut)
-				diffIn := int64(bytesIn - lease.LastBytesIn)
-				diffOut := int64(bytesOut - lease.LastBytesOut)
-
-				if diffIn > 0 || diffOut > 0 {
-					m := &db.TunnelMetric{
-						UserID:          lease.UserID,
-						SubdomainPrefix: lease.SubdomainPrefix,
-						FullHost:        lease.FullHost,
-						BytesIn:         diffIn,
-						BytesOut:        diffOut,
-						ConnectedAt:     lease.CreatedAt,
-						RecordedAt:      time.Now().UTC(),
-					}
-					if c.db != nil {
-						if err := c.db.RecordTunnelMetric(m); err != nil {
-							slog.Info(fmt.Sprintf("[MetricsCollector] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err))
-						} else {
-							lease.LastBytesIn = bytesIn
-							lease.LastBytesOut = bytesOut
-						}
-					} else if c.cfg.ControlPlaneURL != "" && c.cfg.EdgeToken != "" {
-						localBuffer = append(localBuffer, m)
-						lease.LastBytesIn = bytesIn
-						lease.LastBytesOut = bytesOut
-					}
+			if c.db == nil {
+				// Deliberately does NOT call TakeByteDeltas: taking a delta consumes it, and
+				// on an edge the reporter that can actually deliver it is the one entitled
+				// to take it.
+				continue
+			}
+			// TakeByteDeltas advances each lease's watermark as it reads it, so a tick
+			// records the interval rather than the running total. The previous loop wrote
+			// the watermark back onto ListLeases' copy, which is not the lease, so every
+			// tick re-recorded the whole session from the beginning (#1958).
+			for _, d := range c.registry.TakeByteDeltas() {
+				m := &db.TunnelMetric{
+					UserID:          d.UserID,
+					SubdomainPrefix: d.SubdomainPrefix,
+					FullHost:        d.FullHost,
+					BytesIn:         d.BytesIn,
+					BytesOut:        d.BytesOut,
+					ConnectedAt:     d.ConnectedAt,
+					RecordedAt:      time.Now().UTC(),
+				}
+				if err := c.db.RecordTunnelMetric(m); err != nil {
+					slog.Info(fmt.Sprintf("[MetricsCollector] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err))
 				}
 			}
-
-			if len(localBuffer) > 0 && c.db == nil && c.cfg.ControlPlaneURL != "" && c.cfg.EdgeToken != "" {
-				c.forwardToControlPlane(localBuffer)
-				localBuffer = nil
-			}
 		}
-	}
-}
-
-func (c *MetricsCollector) forwardToControlPlane(metrics []*db.TunnelMetric) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	payloadBytes, err := json.Marshal(metrics)
-	if err != nil {
-		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to marshal metrics: %v", err))
-		return
-	}
-
-	req, err := http.NewRequest("POST", c.cfg.ControlPlaneURL+"/api/internal/edge-metrics", bytes.NewReader(payloadBytes))
-	if err != nil {
-		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to create metrics request: %v", err))
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Edge-Token", c.cfg.EdgeToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to forward metrics to control plane: %v", err))
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		slog.Info(fmt.Sprintf("[MetricsCollector] Control plane metrics returned status: %d", resp.StatusCode))
 	}
 }

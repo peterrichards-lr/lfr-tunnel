@@ -515,6 +515,14 @@ func main() {
 	}
 
 	for ctx.Err() == nil {
+		// Which of the two reconnect windows this session gets (#1946). Re-evaluated every
+		// iteration rather than once, because the region list is refreshed from the gateway
+		// and a client can acquire or lose alternatives while it runs. This must agree with
+		// the two guards below that decide whether failover is attempted at all -- if it ever
+		// drifts, the cost is a session that waits the wrong length of time before recovering
+		// by the other route, not a session that fails to recover.
+		engine.SetFailoverAvailable(!isExplicitServer && len(cfg.Regions) > 0)
+
 		clientCtx, cancelClient := context.WithCancel(ctx)
 		healthCheckPorts := make([]int, 0, len(portMappings))
 		for _, pm := range portMappings {

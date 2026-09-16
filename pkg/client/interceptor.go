@@ -102,6 +102,16 @@ type InterceptorEngine struct {
 	// client's own default applies. Read once per session, when the chisel config is built.
 	reconnectWindow time.Duration
 
+	// failoverAvailable records whether this client has anywhere to fail over TO -- it is not
+	// pinned with -server, and its gateway advertised a region list. It decides which of the
+	// two reconnect windows a session gets (pkg/client/client.go), and is re-read per session
+	// because the region list can change across a failover.
+	//
+	// Default false, i.e. "no alternative known", which is the safe direction: it buys a
+	// tunnel more patience rather than less, and a client that really can move is told so by
+	// the session loop before its first session starts.
+	failoverAvailable bool
+
 	// LeaseLost records that the connected gateway stopped holding a lease for this
 	// session while the tunnel itself was healthy. Distinct from an eviction: nothing
 	// is wrong with the region, so the recovery is to re-register, preferentially
@@ -934,6 +944,24 @@ func (e *InterceptorEngine) ReconnectWindow() time.Duration {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.reconnectWindow
+}
+
+// SetFailoverAvailable records whether the client currently has an alternative gateway to
+// fail over to (#1946).
+func (e *InterceptorEngine) SetFailoverAvailable(available bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failoverAvailable = available
+}
+
+// FailoverAvailable reports whether region failover is an option for this client.
+func (e *InterceptorEngine) FailoverAvailable() bool {
+	if e == nil {
+		return false
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.failoverAvailable
 }
 
 // SetSessionLogger attaches the persistent traffic/diagnostic logs to the engine.

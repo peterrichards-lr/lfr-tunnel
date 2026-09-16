@@ -23,6 +23,11 @@ import (
 // The assertion is deliberately two-part. "Still running at 4s" alone would also be satisfied by
 // a connection that hung, which is a different bug wearing the same result; the attempt count
 // says it is genuinely still retrying, and that it has already exceeded the entire old budget.
+//
+// This is the population the defect was measured on: an engine that has not been told it can
+// fail over, i.e. a client pinned with -server or offered no region list. The client that CAN
+// fail over is covered by TestRunClientHandsBackPromptlyWhenFailoverIsAvailable below, and the
+// two together are the whole policy.
 func TestRunClientRidesOutAGatewayRestart(t *testing.T) {
 	// How long a client must keep trying before this test is satisfied. Far short of the real
 	// 60s window -- the point is to be past the old 0.7s budget by a margin no scheduling
@@ -75,7 +80,7 @@ func TestRunClientRidesOutAGatewayRestart(t *testing.T) {
 // TestChiselClientConfigCarriesReconnectPolicy pins the values RunClient actually builds,
 // rather than the constants they are made of.
 func TestChiselClientConfigCarriesReconnectPolicy(t *testing.T) {
-	cfg := newChiselClientConfig("https://tunnel.example", "tok", []string{"R:1:2"}, 0)
+	cfg := newChiselClientConfig("https://tunnel.example", "tok", []string{"R:1:2"}, 0, false)
 
 	if cfg.KeepAlive != defaultChiselKeepAlive {
 		t.Errorf("KeepAlive = %s, want %s -- unset means chisel never pings and a dead control channel is never noticed (#1946)", cfg.KeepAlive, defaultChiselKeepAlive)
@@ -111,7 +116,7 @@ func TestChiselClientConfigHonoursAndClampsTheAdvertisedWindow(t *testing.T) {
 			if got := clampReconnectWindow(tc.advertised); got != tc.want {
 				t.Errorf("clampReconnectWindow(%s) = %s, want %s", tc.advertised, got, tc.want)
 			}
-			cfg := newChiselClientConfig("https://x", "t", nil, tc.advertised)
+			cfg := newChiselClientConfig("https://x", "t", nil, tc.advertised, false)
 			if want := retryCountForWindow(tc.want); cfg.MaxRetryCount != want {
 				t.Errorf("MaxRetryCount = %d, want %d", cfg.MaxRetryCount, want)
 			}
@@ -129,7 +134,7 @@ func TestChiselClientConfigHonoursAndClampsTheAdvertisedWindow(t *testing.T) {
 // dependency bump that changes those defaults turns this red instead of silently shortening
 // every client's reconnect window.
 func TestRetryCountForWindowMatchesChiselBackoff(t *testing.T) {
-	for _, window := range []time.Duration{minReconnectWindow, defaultReconnectWindow, maxReconnectWindow} {
+	for _, window := range []time.Duration{failoverHandbackWindow, minReconnectWindow, defaultReconnectWindow, maxReconnectWindow} {
 		count := retryCountForWindow(window)
 
 		b := &backoff.Backoff{Max: chiselMaxRetryInterval}
@@ -165,8 +170,55 @@ func TestEngineReconnectWindowRoundTrips(t *testing.T) {
 		t.Errorf("ReconnectWindow() = %s, want 90s", got)
 	}
 
-	cfg := newChiselClientConfig("https://x", "t", nil, engine.ReconnectWindow())
+	cfg := newChiselClientConfig("https://x", "t", nil, engine.ReconnectWindow(), engine.FailoverAvailable())
 	if want := retryCountForWindow(90 * time.Second); cfg.MaxRetryCount != want {
 		t.Errorf("the advertised window did not reach the chisel config: MaxRetryCount = %d, want %d", cfg.MaxRetryCount, want)
+	}
+}
+
+// The other half of the split policy (#1946): a client that has somewhere to go must hand
+// control back to region failover promptly, or a gateway that is genuinely gone leaves the
+// tunnel down while the client retries a corpse.
+//
+// Asserted as an upper bound on the window rather than on wall-clock recovery, because what
+// this file owns is the handback, not what the session loop does next.
+func TestRunClientHandsBackPromptlyWhenFailoverIsAvailable(t *testing.T) {
+	if got := reconnectWindowFor(0, true); got != failoverHandbackWindow {
+		t.Fatalf("a client that can fail over got a %s window, want %s", got, failoverHandbackWindow)
+	}
+	// A gateway must not be able to extend this one: it is the bound on how long failover can
+	// be delayed, and one server config should not be able to starve it fleet-wide.
+	if got := reconnectWindowFor(maxReconnectWindow, true); got != failoverHandbackWindow {
+		t.Errorf("an advertised %s overrode the handback window (got %s); failover would be delayed by server config", maxReconnectWindow, got)
+	}
+
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	engine.SetFailoverAvailable(true)
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		done <- RunClient(ctx, srv.URL, "dummy-token", []string{"R:127.0.0.1:60001:localhost:8080"}, nil, engine)
+	}()
+
+	// 12.7s of backoff plus the dial attempts themselves; 30s is generous headroom for a busy
+	// CI box without being so loose that a regression to the 60s window would still pass.
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("RunClient was still retrying after 30s with failover available; region failover is starved (%d attempts)", atomic.LoadInt32(&attempts))
+	}
+	if elapsed := time.Since(start); elapsed < 5*time.Second {
+		t.Errorf("handed back after only %s -- that is a blip away from an unnecessary region move, which is what the window exists to absorb", elapsed.Round(time.Millisecond))
 	}
 }

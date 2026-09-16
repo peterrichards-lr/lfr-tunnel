@@ -545,6 +545,26 @@ const defaultChiselKeepAlive = 25 * time.Second
 // before handing control back to the session loop, which is what performs region failover
 // (cmd/lfr-tunnel/main.go).
 //
+// There are TWO windows, because there are two populations with opposite needs, and one number
+// cannot serve both (#1946):
+//
+//   - A client that CAN fail over must hand back promptly, or a gateway that is genuinely gone
+//     leaves the tunnel down while the client patiently retries a corpse. It also loses nothing
+//     by handing back early: it has somewhere to go, and on a planned restart it has usually
+//     already been moved by the drain announcement, which cancels the session outright.
+//   - A client that CANNOT fail over -- pinned with -server (#1275), or offered no region list
+//     -- has nowhere to hand back TO. For it, "hand back promptly" means "end the tunnel",
+//     which is the whole defect: measured at 2h12m and 54m offline for one real user across
+//     two deploys. It must ride the restart out.
+//
+// Worth stating what does NOT distinguish them, since it is the obvious idea: the transport.
+// A gateway being restarted and a gateway that has been killed look identical from the client,
+// because in both cases nginx stays up and answers the /tunnel upgrade with a 502. Measured,
+// in the edge E2E: the client logs `websocket: bad handshake` -- an HTTP response -- not a
+// refused dial. Refused/timeout only distinguishes a dead HOST, which is a third case and not
+// the one the deploy produces. So the split is on what the client can DO, which it knows for
+// certain, rather than on what the failure looks like, which it cannot tell apart.
+//
 // What was here before was `MaxRetryInterval: 3s, MaxRetryCount: 3`, which is not "three
 // seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel
 // builds `&backoff.Backoff{Max: MaxRetryInterval}` and leaves Min and Factor at the library
@@ -579,6 +599,21 @@ const (
 	minReconnectWindow     = 20 * time.Second
 	maxReconnectWindow     = 180 * time.Second
 )
+
+// failoverHandbackWindow is the window for a client that has somewhere else to go.
+//
+// Long enough to absorb a blip -- an nginx reload, a momentary network fault -- which is a
+// real improvement on the 700ms it replaces, since a region move costs a re-registration and a
+// reconnect and should not be triggered by a hiccup (the reasoning #1310 applied to failback).
+// Short enough that an unsignalled gateway loss still fails over inside a predictable window:
+// chisel realises it as 7 attempts over 12.7s of backoff.
+//
+// NOT server-tunable, deliberately, unlike defaultReconnectWindow. This number is what bounds
+// how long failover can be delayed, so letting a gateway raise it would let one server config
+// starve failover across the fleet -- the exact outcome clampReconnectWindow exists to prevent.
+// A gateway that wants its clients to wait longer for it can only say so to clients that have
+// no alternative anyway.
+const failoverHandbackWindow = 10 * time.Second
 
 // chiselMaxRetryInterval caps chisel's exponential backoff between reconnect attempts.
 //
@@ -634,13 +669,24 @@ func retryCountForWindow(window time.Duration) int {
 	return count
 }
 
+// reconnectWindowFor resolves the two windows above for one session.
+//
+// The advertised value is consulted only for a client with no failover path -- see
+// failoverHandbackWindow for why a gateway is not allowed to extend the other one.
+func reconnectWindowFor(advertisedWindow time.Duration, failoverAvailable bool) time.Duration {
+	if failoverAvailable {
+		return failoverHandbackWindow
+	}
+	return clampReconnectWindow(advertisedWindow)
+}
+
 // newChiselClientConfig builds the chisel client configuration for one tunnel session.
 //
 // Split out of RunClient so the retry budget and keepalive are assertable without standing up
 // a real tunnel -- they are the whole of #1946's client-side fix, and an unasserted constant
 // is how they came to be wrong in the first place.
-func newChiselClientConfig(serverURL, token string, remotes []string, advertisedWindow time.Duration) *chclient.Config {
-	window := clampReconnectWindow(advertisedWindow)
+func newChiselClientConfig(serverURL, token string, remotes []string, advertisedWindow time.Duration, failoverAvailable bool) *chclient.Config {
+	window := reconnectWindowFor(advertisedWindow, failoverAvailable)
 	return &chclient.Config{
 		Server:           serverURL + "/tunnel",
 		Auth:             fmt.Sprintf("%s:%s", token, token),
@@ -666,7 +712,7 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}
 
 	// 2. Setup Chisel client config
-	chiselCfg := newChiselClientConfig(serverURL, token, remotes, engine.ReconnectWindow())
+	chiselCfg := newChiselClientConfig(serverURL, token, remotes, engine.ReconnectWindow(), engine.FailoverAvailable())
 
 	// 3. Initialize Chisel client
 	c, err := chclient.NewClient(chiselCfg)

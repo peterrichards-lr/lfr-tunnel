@@ -13,6 +13,20 @@ theme:
 plugins:
   - search
 
+# The navigation below is hand-maintained -- `plugins:` is only `search`, so nothing derives it
+# from the docs/ tree. A page added under docs/ and left out of nav: still builds and deploys; it
+# is simply unreachable except by direct URL or site search, and `mkdocs --strict` reports that as
+# INFO rather than a warning, so the build stays green either way (#1918).
+#
+# `make check-docs-nav` (scripts/check-mkdocs-nav.cjs, also run by CI's Documentation Build) fails
+# on any docs/**/*.md that is in neither nav: below nor the nav-exclude list here -- so a page
+# deliberately kept off the site can be told apart from one that was forgotten.
+#
+# Pages deliberately not on the site. One per line, reason required:
+#
+#   # nav-exclude: <path relative to docs/> -- <why it is not on the site>
+#
+# nav-exclude: docker_hub_readme.md -- the Docker Hub repository description, pasted by hand into hub.docker.com. It is written for that listing (Docker Hub pull badge, absolute raw.githubusercontent.com image URLs) and restates the Home page, so publishing it here too would put a second, drifting front page on the site.
 nav:
   - Home: README.md
   - Client Guides:

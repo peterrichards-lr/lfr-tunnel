@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-load-errors build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-load-errors check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -75,6 +75,7 @@ help:
 	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
+	@echo "  make check-docs-nav    - Every docs page is in mkdocs nav or explicitly excluded"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
 	@echo "  make check-branches    - Report stale remote branches"
@@ -298,6 +299,7 @@ test-hooks:
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh
+	@./tests/hooks/test-mkdocs-nav.sh
 	@./tests/hooks/test-ci-platform-matrix.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
@@ -374,4 +376,12 @@ check-html:
 # reads as "no results", or a settings form showing React's initial state (#1868).
 check-load-errors:
 	@node scripts/check-load-failure-surfaced.cjs
+
+# A page under docs/ that is in no nav: entry still builds and deploys -- it is just unreachable
+# except by direct URL or site search, and mkdocs reports that as INFO, so --strict passes
+# (#1918). docker_hub_readme.md had been in that state since #94. The exclusion list lives in
+# mkdocs.yml as `# nav-exclude: <path> -- <reason>` comments, so a page deliberately off the site
+# can be told apart from one that was forgotten.
+check-docs-nav:
+	@node scripts/check-mkdocs-nav.cjs
 

@@ -101,7 +101,14 @@ In accordance with General Data Protection Regulation (GDPR) standards, Liferay 
 
 Liferay Tunnel is fully self-hostable. If you run your own private instance of `lfr-tunneld`:
 * You are the sole Data Controller of your database. No data is ever transmitted to Liferay, Peter Richards, or any external third-party server.
-* The gateway's default built-in web portal serves these standardized, generic disclosures at `/privacy` and `/cookies` automatically.
+* The gateway's default built-in web portal serves disclosure pages at `/privacy` and `/cookies`
+  automatically, in the visitor's language. `/cookies` states §3 in full. `/privacy` is a **summary**
+  of §1's categories — it carries a counterpart for every subsection of §1 and links back to this
+  document for the full text, rather than reproducing it. This is stated rather than implied because
+  the served page had twice fallen behind this document without anyone noticing (#1954);
+  `scripts/check-privacy-disclosures.cjs` now fails the build when a §1 subsection has no counterpart
+  on the served page, but it compares structure, not wording — the prose itself still has to be
+  reviewed by a human when §1 changes.
 * You can easily override these legal footers to point to your company's own custom disclosures using the `privacy_policy_url` and `cookie_policy_url` fields inside your `/etc/lfr-tunneld/server-config.yaml`.
 
 

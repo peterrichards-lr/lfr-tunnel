@@ -329,6 +329,17 @@ jobs:
         # link among them -- to a non-zero exit. `_site` is gitignored.
         run: mkdocs build --site-dir _site --strict
 
+      # The build above cannot catch this one. A page under docs/ that no nav: entry names is
+      # built and deployed exactly like any other -- it is simply unreachable except by direct
+      # URL or site search -- and mkdocs reports it at INFO, below the level --strict promotes.
+      # So the whole publish pipeline stays green while the page is invisible, which is how
+      # docker_hub_readme.md sat outside the nav from #94 until #1918.
+      #
+      # After the build, not before: a config this cannot parse should surface as the mkdocs
+      # error it really is, rather than as this gate's parse failure.
+      - name: Every docs page must be in the nav or explicitly excluded
+        run: node scripts/check-mkdocs-nav.cjs
+
   lint-and-format:
     name: Lint & Format Check
     runs-on: ubuntu-latest

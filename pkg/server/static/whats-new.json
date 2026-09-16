@@ -1,5 +1,19 @@
 [
   {
+    "version": "v1.48.34",
+    "release_date": "2026-09-16",
+    "features": [
+      "fix(client): stop the incumbent gateway winning its own latency election (#1947) (#1952)",
+      "fix(client): survive a gateway restart instead of ending every tunnel (#1951)",
+      "fix(portal): wait for a requested diagnostic bundle instead of nothing (#1944) (#1950)",
+      "fix(client): refuse an unknown bare argument instead of silently ignoring it (#1949)",
+      "fix(portal-v1): keep the Node Placement caveat with the table it annotates (#1931) (#1942)",
+      "fix(geo): decode both known country schemas, not just MaxMind's (#1943) (#1935)",
+      "docs(server): document geolite2_db_path setup, providers and licensing (#1917) (#1941)",
+      "fix(portal): print only the report, not everything around it (#1916) (#1936)"
+    ]
+  },
+  {
     "version": "v1.48.33",
     "release_date": "2026-09-16",
     "features": [
@@ -38,13 +52,6 @@
       "feat(portal): give every admin alert a toggle, in both arms (#1882) (#1904)",
       "refactor(db): make db.User.Status a distinct type (#1881) (#1903)",
       "fix(db): store acknowledgement timestamps where SQLite can read them (#1897) (#1902)"
-    ]
-  },
-  {
-    "version": "v1.48.29",
-    "release_date": "2026-09-13",
-    "features": [
-      "fix(diagnostics): collect never found a tunnel, and an admin could not open their own details (#1899, #1898) (#1900)"
     ]
   }
 ]

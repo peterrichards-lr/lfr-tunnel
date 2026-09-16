@@ -832,9 +832,25 @@ docker-compose -f docker-compose-edge.yml kill lfr-tunneld-edge > /dev/null 2>&1
 # so it passed on margin alone (43s and 53s in two runs) and failed whenever the kill landed
 # early in a ping interval, on PRs that had changed nothing near it (#1444).
 #
-# One second per iteration, so this is a budget in seconds: the 60s deadline, plus 60s of
-# headroom for the client's own failover cooldown, its re-registration, and CI scheduling noise.
-FAILOVER_RECOVERY_BUDGET="${FAILOVER_RECOVERY_BUDGET:-120}"
+# One second per iteration, so this is a budget in seconds, and it has THREE components now:
+#   - the 60s edgeControlReadDeadline residual, as above;
+#   - the client's 60s reconnect window (#1946), which it spends retrying the dead gateway
+#     before handing control back to failover;
+#   - 60s of headroom for the client's own failover cooldown, its re-registration, and CI
+#     scheduling noise.
+#
+# The middle one is new and is a deliberate cost, not a regression to be tuned away. A gateway
+# that is being restarted and a gateway that has been killed look identical from the client --
+# in this very test the edge's nginx stays up and answers the same 502 in both cases -- so the
+# only thing that distinguishes them is waiting. Before #1946 the client waited 700ms, which is
+# why an unannounced restart ended the tunnel permanently: measured at 2h12m offline for a real
+# user. Recovering from an abrupt kill roughly a minute later is the price of that, and it is
+# paid ONLY when the gateway really is gone: a gateway that comes back inside the window is
+# picked up by the 5s heartbeat and the client leaves the window early.
+#
+# This run failed at exactly 120s with the client on "Attempt: 11/12", which is the budget
+# expiring mid-window rather than anything being broken.
+FAILOVER_RECOVERY_BUDGET="${FAILOVER_RECOVERY_BUDGET:-180}"
 RECOVERED=false
 RECOVERY_SECONDS=0
 for i in $(seq 1 "$FAILOVER_RECOVERY_BUDGET"); do

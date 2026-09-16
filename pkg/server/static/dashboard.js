@@ -470,6 +470,31 @@ function renderTable(tbodyId, data, renderRowFn) {
   updateTableView(tbodyId);
 }
 
+// Render a table, or hide it entirely when there is nothing to put in it (#1920).
+//
+// The three analytics panels that carry a state headline -- region latency, node
+// placement, geographic distribution -- used to set that headline and then call
+// renderTable() unconditionally. So "no geo-IP database is configured, the feature is
+// off" arrived above a search box, two column headers and "No results found.", which
+// says we looked and there was nobody. Nothing had been looked at. V2 renders the
+// message INSTEAD of the table in all three panels (ui/src/pages/AdminAnalytics.tsx),
+// and per #1866 a panel that behaves differently in the two arms of the A/B test is a
+// defect rather than a style choice.
+//
+// `wrapId` is a wrapper around the .table-container rather than the container itself
+// because renderTable() injects the search input and the pagination row as *siblings*
+// of the container -- hide the container alone and a search control is left sitting
+// over a table that is not there.
+function renderTableOrHide(tbodyId, wrapId, rows, renderRowFn) {
+  const wrap = document.getElementById(wrapId);
+  if (wrap) {
+    wrap.style.display = rows.length ? '' : 'none';
+  }
+  if (rows.length) {
+    renderTable(tbodyId, rows, renderRowFn);
+  }
+}
+
 function updateTableView(tbodyId) {
   if (window.closeAllActionMenus) {
     window.closeAllActionMenus();
@@ -3281,8 +3306,9 @@ async function loadAnalytics() {
                   : 'var(--text-muted)';
             }
           }
-          renderTable(
+          renderTableOrHide(
             'region-latency-table-body',
+            'region-latency-table-wrap',
             regions,
             (r) => `
                                 <tr>
@@ -3344,8 +3370,9 @@ async function loadAnalytics() {
               npUnknown.style.display = 'none';
             }
           }
-          renderTable(
+          renderTableOrHide(
             'node-placement-table-body',
+            'node-placement-table-wrap',
             nodes,
             (n) => `
                                 <tr>
@@ -3388,9 +3415,19 @@ async function loadAnalytics() {
               )}`;
             }
           }
-          renderTable(
+          // No database means no table at all, not an empty one (#1920) -- see
+          // renderTableOrHide(). `available: false` is passed as zero rows because the
+          // two states must look the same here: the headline above is the only thing
+          // that can tell them apart, and it already does.
+          //
+          // Below-threshold is hidden for the same reason rather than the weaker one. An
+          // empty table there is defensible -- the rows do exist -- but "No results
+          // found." is the wrong words for "showing them would identify someone", and
+          // that is the sentence the headline is carrying.
+          renderTableOrHide(
             'geo-distribution-table-body',
-            buckets,
+            'geo-distribution-table-wrap',
+            geo.available ? buckets : [],
             (b) => `
                                 <tr>
                                     <td style="font-weight: 600;">${escapeHTML(geoBucketLabel(b.bucket))}</td>

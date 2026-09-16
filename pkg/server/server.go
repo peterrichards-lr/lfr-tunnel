@@ -42,6 +42,7 @@ import (
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
 	"lfr-tunnel/pkg/provisioner"
+	"lfr-tunnel/pkg/regionvocab"
 	"lfr-tunnel/pkg/webhook"
 
 	"github.com/gorilla/websocket"
@@ -1037,8 +1038,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if centralURL == "" {
 					centralURL = "https://tunnel." + s.cfg.Domains[0]
 				}
-				regions["eu"] = centralURL
-				regions["central"] = centralURL
+				// Derived from the declared vocabulary, not written out here (#1919).
+				// These two names and the survivor of them have to agree with what the
+				// analytics matches central's sessions against; when they were written
+				// by hand in three places, one of them picked the wrong survivor.
+				for _, alias := range regionvocab.SortedCentralAliases() {
+					regions[alias] = centralURL
+				}
 			}
 			// An edge that is configured but currently down is reported separately rather
 			// than simply left out (#1690). Omitting it left the client unable to tell "every

@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"lfr-tunnel/pkg/regionvocab"
+)
 
 // TestGatewayHostKeyCollapsesAliases is the regression test for #1166. The gateway
 // advertises each region under two names, so anything keyed on the name treats one
@@ -103,5 +107,46 @@ func TestDedupePassesThroughSmallMaps(t *testing.T) {
 	}
 	if got := dedupeRegionsByHost(nil); got != nil {
 		t.Errorf("nil must pass through, got %v", got)
+	}
+}
+
+// TestTheAnalyticsMatchesTheNameThisClientKeeps is the test whose absence let #1919 ship.
+//
+// The client's dedupe rule decides which region name is written to region_probes. The node
+// placement report has to match sessions against that same name. Both sides were tested --
+// TestDedupeRegionsByHostPrefersTheFamiliarName above pins "eu" over "central", and pkg/db had
+// its own tests for normaliseNodeID -- but NOTHING compared the two, so pkg/db was free to
+// assume "central" and be consistently, silently wrong.
+//
+// This is the only place both are reachable: dedupeRegionsByHost lives in this main package and
+// cannot be imported, so the comparison has to happen here.
+func TestTheAnalyticsMatchesTheNameThisClientKeeps(t *testing.T) {
+	// Central advertised under every name the gateway publishes for it.
+	regions := map[string]string{}
+	for _, alias := range regionvocab.SortedCentralAliases() {
+		regions[alias] = "https://tunnel.lfr-demo.se"
+	}
+	// A second host, so dedupe does real work rather than taking its len < 2 early return.
+	regions["in"] = "https://in.lfr-demo.se"
+	regions["edge-in"] = "https://in.lfr-demo.se"
+
+	kept := dedupeRegionsByHost(regions)
+
+	survivor := ""
+	for name, u := range kept {
+		if u == "https://tunnel.lfr-demo.se" {
+			survivor = name
+		}
+	}
+	if survivor == "" {
+		t.Fatal("central did not survive deduplication at all")
+	}
+
+	// The assertion that matters: what this client writes to region_probes for central is
+	// exactly what the analytics matches central's sessions against.
+	if survivor != regionvocab.CentralRegion() {
+		t.Errorf("this client records central as %q, but the node placement report matches it "+
+			"against %q -- every central-served session will count as unverifiable and the "+
+			"report will read 0%% closest (#1919)", survivor, regionvocab.CentralRegion())
 	}
 }

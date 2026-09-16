@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"lfr-tunnel/pkg/regionvocab"
 )
 
 // Did tunnels start on the closest node? (#1888)
@@ -73,15 +75,31 @@ type NodePlacementReport struct {
 
 // normaliseNodeID maps a tunnel_metrics node_id onto the region vocabulary region_probes uses.
 //
-// "edge-in" -> "in" because the client keeps the shorter of the two advertised names.
-// "control" -> "central" because that is what central advertises itself as.
+// "edge-in" -> "in", because the client keeps the shorter of the two advertised names.
+// "control" -> whatever central's own aliases reduce to under that same rule.
+//
+// That last one was "central" and was WRONG (#1919). Central advertises itself as both "eu" and
+// "central", the client keeps the SHORTER name, and so region_probes holds "eu" -- "central" is
+// the alias the client discards. Every session central served therefore matched no probed
+// region: they were counted unverifiable, "control" was reported as a node matching no region,
+// and the whole report read 0% closest while looking entirely plausible.
+//
+// It is derived rather than written out here so it cannot drift from what the gateway
+// advertises again. The comment on the client's dedupeRegionsByHost claimed the rule "keeps the
+// familiar 'in' and 'central'" -- half right, and that half is very likely where "central" came
+// from.
+//
 // Anything else is returned unchanged and will simply fail to match, which is deliberate: an
 // unrecognised node should surface as unknown, not be guessed at.
 func normaliseNodeID(nodeID string) string {
 	n := strings.ToLower(strings.TrimSpace(nodeID))
-	if n == "control" {
-		return "central"
+	if n == regionvocab.CentralNodeID {
+		return regionvocab.CentralRegion()
 	}
+	// "aws-" as well as "edge-": addEdgeRegionNames strips both when it builds the region
+	// names, so a node whose id carries the provisioner prefix has to be stripped the same
+	// way or it lands in UnknownNodes for a reason that has nothing to do with placement.
+	n = strings.TrimPrefix(n, "aws-")
 	return strings.TrimPrefix(n, "edge-")
 }
 

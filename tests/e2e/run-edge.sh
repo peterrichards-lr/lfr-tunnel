@@ -496,6 +496,46 @@ if [ "$EDGE_BYTES_RECORDED" = false ]; then
 fi
 echo "✅ Edge-served bandwidth is recorded on the control plane against node_id edge-us"
 
+# Deltas, not totals. The periodic sweep used to write each lease's watermark onto
+# ListLeases' COPY of it, so the real lease's watermark never moved and every pass
+# re-reported the session's cumulative total -- inflating whichever node was reporting. With
+# no traffic sent in between, several reporting intervals must add exactly nothing.
+#
+# Deliberately measured over several of the EDGE's intervals (edge_metrics_interval_seconds
+# is 2s here), which is what makes this cheap; catching the same regression on the control
+# plane's own five-minute sweep would need a five-minute wait, so that half is covered by
+# TestTakeByteDeltasReportsEachByteExactlyOnce instead.
+BYTES_BEFORE=$(curl -s -b /tmp/admin-session.txt "http://localhost:8000/api/analytics?days=1" | python3 -c '
+import sys, json
+g = (json.load(sys.stdin).get("global") or {})
+for t in g.get("top_tunnels") or []:
+    if t.get("full_host") == "peter-dev.lfr-demo.local":
+        print(t.get("bytes_in", 0) + t.get("bytes_out", 0)); break
+else:
+    print(0)
+')
+sleep 8
+BYTES_AFTER=$(curl -s -b /tmp/admin-session.txt "http://localhost:8000/api/analytics?days=1" | python3 -c '
+import sys, json
+g = (json.load(sys.stdin).get("global") or {})
+for t in g.get("top_tunnels") or []:
+    if t.get("full_host") == "peter-dev.lfr-demo.local":
+        print(t.get("bytes_in", 0) + t.get("bytes_out", 0)); break
+else:
+    print(0)
+')
+
+if [ "$BYTES_BEFORE" = "0" ]; then
+    echo "❌ Read back zero bytes for the edge-held tunnel, so the no-double-count check has no baseline."
+    exit 1
+fi
+if [ "$BYTES_BEFORE" != "$BYTES_AFTER" ]; then
+    echo "❌ Idle reporting intervals changed the recorded total for an edge-held tunnel:"
+    echo "    before=$BYTES_BEFORE after=$BYTES_AFTER -- the edge is reporting totals, not deltas."
+    exit 1
+fi
+echo "✅ Idle intervals add nothing: the edge reports deltas, not cumulative totals ($BYTES_BEFORE bytes)"
+
 # The record has to point at the node actually holding the tunnel. Without it an apex-issued
 # host resolves to the control plane via the wildcard, and the control plane holds no lease for
 # it -- the tunnel is up and every visitor gets an offline page (#1247).

@@ -44,6 +44,8 @@
         }
         h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
         h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
+        h3 { color: var(--text-color); font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+        section { margin-bottom: 4px; }
         p, li { font-size: 15px; color: var(--muted-color); }
         ul { padding-left: 20px; }
         a { color: var(--primary-color); text-decoration: none; }
@@ -55,15 +57,63 @@
 <body>
     <div class="container">
         <h1>{{.Title}}</h1>
-        <p>This Privacy Policy describes how this self-hosted Liferay Tunnel (lfr-tunneld) gateway processes your data.</p>
-        <h2>1. Information We Collect & Process</h2>
-        <ul>
-            <li><strong>IP Addresses</strong>: Processed strictly to route packets and enforce auto-ban security protections.</li>
-            <li><strong>Email Addresses</strong>: Processed for account verification, approval notifications, and passwordless magic link logins.</li>
-            <li><strong>Audit Logs</strong>: Records administrative actions, token creations, and security violations locally in the gateway database.</li>
-        </ul>
-        <h2>2. Data Security & Storage</h2>
+        <p>This Privacy Policy describes how this self-hosted Liferay Tunnel (lfr-tunneld) gateway processes your data. It is a summary of the project's full policy, which is linked at the bottom of this page; the section letters below are the same ones that policy uses.</p>
+        <h2>1. Information We Collect &amp; Process</h2>
+
+        <section data-disclosure="A">
+            <h3>A. Network &amp; Tunnel Data</h3>
+            <ul>
+                <li><strong>IP Addresses</strong>: The public IP address of the connecting client and of any visitor requesting a tunnel subdomain. Processed to route packets, enforce rate limiting and auto-ban protections, and log security events.</li>
+                <li><strong>Bandwidth &amp; Metrics</strong>: Bytes in and bytes out per active tunnel, for resource monitoring and usage analytics.</li>
+                <li><strong>Tunnel Port Mappings</strong>: The local development ports you expose, used to multiplex connection handshakes.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="B">
+            <h3>B. User Authentication Data</h3>
+            <ul>
+                <li><strong>Email Addresses</strong>: Processed for account verification, approval notifications, and passwordless magic link logins.</li>
+                <li><strong>Profile Names</strong>: Optional first, last and preferred name, used to personalise the dashboard.</li>
+                <li><strong>OIDC SSO Claims</strong>: If this gateway is configured for Single Sign-On, the standard profile claims your identity provider returns (email, given name, family name) are stored to provision your profile.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="C">
+            <h3>C. Administrative Audit Logs</h3>
+            <ul>
+                <li><strong>Security Events</strong>: Registrations, login attempts, token creations and administrative status changes are recorded locally in the gateway database for auditing and security review.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="D">
+            <h3>D. Client Diagnostic Logs (Opt-In Only, Off by Default)</h3>
+            <ul>
+                <li><strong>They stay on your machine by default</strong>: The lfr-tunnel client writes its own traffic, error and console logs to <code>~/.lfr-tunnel/logs</code> on your computer. They are never uploaded unless you turn diagnostic log sharing on yourself, in Account Settings. It is off by default.</li>
+                <li><strong>Withdrawal is immediate</strong>: Your setting is read when an administrator asks for logs, again before the request reaches your client, and once more when logs arrive — so turning it off applies at once, including to a client that is already running.</li>
+                <li><strong>Request and response bodies are never uploaded</strong>, even if you run the client with <code>-log-bodies</code>. Personal access tokens, <code>Authorization</code> values and credentials in URLs or query strings are removed before upload.</li>
+                <li><strong>Retention</strong>: Uploaded logs are kept in this gateway's database for at most 30 days. They are deleted immediately if you withdraw consent — the ones already collected are destroyed, not merely stopped — and immediately if your account is deleted. Routine backups taken before a deletion still contain the data until those backups age out.</li>
+                <li><strong>Auditing</strong>: Every request, every refusal for lack of consent, every upload and every time an administrator opens a stored bundle is recorded in the administrative audit log.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="E">
+            <h3>E. Anonymous Geographic Distribution (Operator-Enabled, Off by Default)</h3>
+            <ul>
+                <li><strong>Only if this operator enabled it</strong>: No geo-IP database ships with the gateway, so this is off unless the operator of this gateway deliberately obtained and deployed one. Off is the default.</li>
+                <li><strong>A further use of the IP address in section A, not a new collection</strong>: When you register a tunnel, your public IP address is looked up in the operator's local database file and reduced to a two-letter ISO country code. No third-party service is contacted. Only the country field is read — never city, subdivision or coordinates.</li>
+                <li><strong>The address is discarded</strong>: The lookup happens in memory and the address is dropped straight afterwards. Your address and your country are never written or logged together, and nothing can return the pair.</li>
+                <li><strong>What is stored</strong>: One row per country per ISO week, holding a country code and a count. The table has no user column.</li>
+                <li><strong>A minimum of 5 users per country</strong>: A country is recorded only once at least 5 distinct users have been seen there that week; below that it is folded into a single <code>OTHER</code> bucket, which is itself withheld until it too reaches 5. The threshold is applied before anything is written. Addresses that cannot be placed — private ranges, carrier-grade NAT, addresses absent from the database — are dropped rather than guessed.</li>
+                <li><strong>Who can see it, and for how long</strong>: The resulting counts are visible only to gateway administrators. They contain no identifier of any kind, so they are kept as historical metrics rather than deleted on a schedule, and deleting your account neither removes nor needs to remove them.</li>
+            </ul>
+        </section>
+
+        <h2>2. Data Security &amp; Storage</h2>
         <p>Personal Access Tokens (PATs) are stored on the server using secure SHA-256 cryptographic hashes. All data is stored in a local, private SQLite database and is never shared, sold, or transmitted to external servers.</p>
+
+        <h2>3. The Full Policy</h2>
+        <p>The sections above summarise the project's canonical Privacy Policy &amp; Cookie Disclosure, which also covers personal access tokens, cookies, and your GDPR right to be forgotten: <a href="https://github.com/peterrichards-lr/lfr-tunnel/blob/master/PRIVACY.md">PRIVACY.md</a>. The operator of this gateway may have published their own policy in place of it.</p>
+
         <p style="margin-top: 32px;"><a href="/">← Return to Portal</a></p>
     </div>
 </body>

@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-load-errors check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-load-errors check-privacy check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -76,6 +76,7 @@ help:
 	@echo "  make check-print       - Print stylesheets only target markup that exists"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
+	@echo "  make check-privacy     - Served /privacy covers every PRIVACY.md category"
 	@echo "  make check-docs-nav    - Every docs page is in mkdocs nav or explicitly excluded"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
@@ -288,6 +289,7 @@ test-hooks:
 	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-make-help-covers-targets.sh
 	@./tests/hooks/test-gate-anti-vacuity.sh
+	@./tests/hooks/test-privacy-disclosures.sh
 	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
@@ -383,6 +385,14 @@ check-html:
 # reads as "no results", or a settings form showing React's initial state (#1868).
 check-load-errors:
 	@node scripts/check-load-failure-surfaced.cjs
+
+# The served /privacy page is a SECOND privacy text -- hand-written prose in five languages, no
+# i18n keys, so check-i18n cannot see it. It fell behind PRIVACY.md twice (#1894's §1.D and
+# #1955's §1.E) and the second time users had already re-consented to a disclosure absent from the
+# page they would open to read it (#1954). Compares §1's subsections against the templates'
+# data-disclosure markers; structure only, not prose.
+check-privacy:
+	@node scripts/check-privacy-disclosures.cjs
 
 # A page under docs/ that is in no nav: entry still builds and deploys -- it is just unreachable
 # except by direct URL or site search, and mkdocs reports that as INFO, so --strict passes

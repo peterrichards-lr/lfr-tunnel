@@ -44,6 +44,8 @@
         }
         h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
         h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
+        h3 { color: var(--text-color); font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+        section { margin-bottom: 4px; }
         p, li { font-size: 15px; color: var(--muted-color); }
         ul { padding-left: 20px; }
         a { color: var(--primary-color); text-decoration: none; }
@@ -55,15 +57,63 @@
 <body>
     <div class="container">
         <h1>{{.Title}}</h1>
-        <p>Această Politică de Confidențialitate descrie modul în care acest gateway autogăzduit Liferay Tunnel (lfr-tunneld) îți procesează datele.</p>
+        <p>Această Politică de Confidențialitate descrie modul în care acest gateway autogăzduit Liferay Tunnel (lfr-tunneld) îți procesează datele. Este un rezumat al politicii complete a proiectului, al cărei link se află la finalul acestei pagini; literele secțiunilor de mai jos sunt aceleași folosite de acea politică.</p>
         <h2>1. Informații pe care le Colectăm și Procesăm</h2>
-        <ul>
-            <li><strong>Adrese IP</strong>: Procesate strict pentru a ruta pachete de rețea și pentru a aplica protecții de securitate împotriva abuzului.</li>
-            <li><strong>Adrese de E-mail</strong>: Procesate pentru verificarea contului, notificări de aprobare și conectări securizate prin Link Magic.</li>
-            <li><strong>Jurnale de Audit</strong>: Înregistrează acțiunile administrative, creările de token-uri și încălcările de securitate local în baza de date.</li>
-        </ul>
+
+        <section data-disclosure="A">
+            <h3>A. Date de Rețea și de Tunel</h3>
+            <ul>
+                <li><strong>Adrese IP</strong>: Adresa IP publică a clientului care se conectează și a oricărui vizitator care solicită un subdomeniu de tunel. Sunt procesate pentru a ruta pachete, pentru a aplica limitarea ratei și protecțiile de blocare automată și pentru a înregistra evenimente de securitate.</li>
+                <li><strong>Lățime de Bandă și Metrici</strong>: Octeții primiți și trimiși per tunel activ, pentru monitorizarea resurselor și analiza utilizării.</li>
+                <li><strong>Maparea Porturilor Tunelului</strong>: Porturile locale de dezvoltare pe care le expui, folosite pentru multiplexarea handshake-urilor de conexiune.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="B">
+            <h3>B. Date de Autentificare a Utilizatorului</h3>
+            <ul>
+                <li><strong>Adrese de E-mail</strong>: Procesate pentru verificarea contului, notificări de aprobare și conectări fără parolă prin Link Magic.</li>
+                <li><strong>Nume de Profil</strong>: Prenumele, numele și numele preferat, opționale, folosite pentru personalizarea panoului de control.</li>
+                <li><strong>Claims OIDC SSO</strong>: Dacă acest gateway este configurat pentru autentificare unică, datele standard de profil (claims) returnate de furnizorul tău de identitate (e-mail, prenume, nume) sunt stocate pentru a-ți crea profilul.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="C">
+            <h3>C. Jurnale de Audit Administrativ</h3>
+            <ul>
+                <li><strong>Evenimente de Securitate</strong>: Înregistrările de conturi, încercările de conectare, crearea de token-uri și schimbările administrative de stare sunt înregistrate local în baza de date a gateway-ului, pentru audit și analiză de securitate.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="D">
+            <h3>D. Jurnale de Diagnosticare ale Clientului (Doar cu Acord, Dezactivat Implicit)</h3>
+            <ul>
+                <li><strong>Implicit rămân pe calculatorul tău</strong>: Clientul lfr-tunnel își scrie propriile jurnale de trafic, de erori și de consolă în <code>~/.lfr-tunnel/logs</code>, pe calculatorul tău. Nu sunt niciodată încărcate decât dacă activezi tu însuți partajarea jurnalelor de diagnosticare din Setările Contului. Este dezactivată implicit.</li>
+                <li><strong>Retragerea acordului este imediată</strong>: Preferința ta este verificată atunci când un administrator solicită jurnalele, din nou înainte ca solicitarea să ajungă la clientul tău și încă o dată la sosirea jurnalelor — astfel, dezactivarea are efect imediat, inclusiv pentru un client care rulează deja.</li>
+                <li><strong>Corpurile cererilor și ale răspunsurilor nu sunt încărcate niciodată</strong>, nici măcar dacă rulezi clientul cu <code>-log-bodies</code>. Token-urile de acces personal, valorile <code>Authorization</code> și credențialele din URL-uri sau din șirurile de interogare sunt eliminate înainte de încărcare.</li>
+                <li><strong>Păstrare</strong>: Jurnalele încărcate sunt păstrate în baza de date a acestui gateway cel mult 30 de zile. Sunt șterse imediat dacă îți retragi acordul — cele deja colectate sunt distruse, nu doar oprite din colectare — și imediat dacă îți ștergi contul. Copiile de siguranță de rutină realizate înaintea unei ștergeri conțin în continuare datele până când expiră conform propriului lor ciclu.</li>
+                <li><strong>Audit</strong>: Fiecare solicitare, fiecare refuz din lipsă de acord, fiecare încărcare și fiecare deschidere a unui pachet stocat de către un administrator sunt consemnate în jurnalul de audit administrativ.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="E">
+            <h3>E. Distribuție Geografică Anonimă (Activată de Operator, Dezactivată Implicit)</h3>
+            <ul>
+                <li><strong>Doar dacă operatorul a activat-o</strong>: Gateway-ul nu include nicio bază de date geo-IP, așa că această funcție este dezactivată dacă operatorul acestui gateway nu a obținut și implementat una în mod deliberat. Valoarea implicită este dezactivat.</li>
+                <li><strong>O utilizare suplimentară a adresei IP din secțiunea A, nu o colectare nouă</strong>: Când înregistrezi un tunel, adresa ta IP publică este căutată în fișierul local de bază de date al operatorului și redusă la un cod de țară ISO din două litere. Nu este contactat niciun serviciu terț. Se citește doar câmpul de țară — niciodată orașul, subdiviziunea sau coordonatele.</li>
+                <li><strong>Adresa este eliminată</strong>: Căutarea are loc în memorie, iar adresa este abandonată imediat după aceea. Adresa ta și țara ta nu sunt niciodată scrise sau înregistrate împreună și nimic nu poate returna această pereche.</li>
+                <li><strong>Ce se stochează</strong>: Un rând per țară și per săptămână ISO, conținând un cod de țară și un număr. Tabelul nu are nicio coloană de utilizator.</li>
+                <li><strong>Minimum 5 utilizatori per țară</strong>: O țară este înregistrată abia după ce au fost observați acolo cel puțin 5 utilizatori distincți în acea săptămână; sub acest prag este grupată într-o singură categorie <code>OTHER</code>, care la rândul ei este omisă până când ajunge și ea la 5. Pragul se aplică înainte de a se scrie ceva. Adresele care nu pot fi localizate — intervale private, NAT de operator, adrese absente din baza de date — sunt eliminate, nu ghicite.</li>
+                <li><strong>Cine le poate vedea și pentru cât timp</strong>: Numărătorile rezultate sunt vizibile doar administratorilor gateway-ului. Ele nu conțin niciun identificator, așa că sunt păstrate ca metrici istorice în loc să fie șterse după un calendar, iar ștergerea contului tău nici nu le elimină, nici nu are nevoie să le elimine.</li>
+            </ul>
+        </section>
+
         <h2>2. Securitatea și Stocarea Datelor</h2>
         <p>Token-urile de Acces Personal (PAT) sunt stocate pe server folosind hash-uri criptografice securizate SHA-256. Toate datele sunt stocate într-o bază de date SQLite locală, privată și nu sunt niciodată partajate, vândute sau transmise către servere externe.</p>
+
+        <h2>3. Politica Completă</h2>
+        <p>Secțiunile de mai sus rezumă Politica de Confidențialitate și Divulgarea privind Cookie-urile canonică a proiectului, care acoperă suplimentar token-urile de acces personal, cookie-urile și dreptul tău de a fi uitat conform GDPR: <a href="https://github.com/peterrichards-lr/lfr-tunnel/blob/master/PRIVACY.md">PRIVACY.md</a>. Este posibil ca operatorul acestui gateway să fi publicat propria politică în locul acesteia.</p>
+
         <p style="margin-top: 32px;"><a href="/">← Înapoi la Portal</a></p>
     </div>
 </body>

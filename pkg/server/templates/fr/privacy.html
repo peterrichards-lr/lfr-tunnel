@@ -44,6 +44,8 @@
         }
         h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
         h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
+        h3 { color: var(--text-color); font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+        section { margin-bottom: 4px; }
         p, li { font-size: 15px; color: var(--muted-color); }
         ul { padding-left: 20px; }
         a { color: var(--primary-color); text-decoration: none; }
@@ -55,15 +57,63 @@
 <body>
     <div class="container">
         <h1>{{.Title}}</h1>
-        <p>Cette politique de confidentialité décrit comment cette passerelle Liferay Tunnel (lfr-tunneld) autohébergée traite vos données.</p>
+        <p>Cette politique de confidentialité décrit comment cette passerelle Liferay Tunnel (lfr-tunneld) autohébergée traite vos données. Il s'agit d'un résumé de la politique complète du projet, dont le lien figure en bas de cette page ; les lettres de section ci-dessous sont celles utilisées par cette politique.</p>
         <h2>1. Informations que nous collectons et traitons</h2>
-        <ul>
-            <li><strong>Adresses IP</strong> : Traitées strictement pour acheminer les paquets et appliquer les protections de sécurité anti-bannissement.</li>
-            <li><strong>Adresses e-mail</strong> : Traitées pour la vérification des comptes, les notifications d'approbation et les connexions par lien magique.</li>
-            <li><strong>Jurnaux d'audit</strong> : Enregistre les actions administratives, les créations de jetons et les violations de sécurité localement dans la base de données.</li>
-        </ul>
+
+        <section data-disclosure="A">
+            <h3>A. Données de réseau et de tunnel</h3>
+            <ul>
+                <li><strong>Adresses IP</strong> : L'adresse IP publique du client qui se connecte et celle de tout visiteur demandant un sous-domaine de tunnel. Traitées pour acheminer les paquets, appliquer la limitation de débit et les protections de bannissement automatique, et journaliser les événements de sécurité.</li>
+                <li><strong>Bande passante et métriques</strong> : Les octets entrants et sortants par tunnel actif, pour la supervision des ressources et l'analyse d'utilisation.</li>
+                <li><strong>Correspondance des ports du tunnel</strong> : Les ports de développement locaux que vous exposez, utilisés pour multiplexer les poignées de main de connexion.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="B">
+            <h3>B. Données d'authentification de l'utilisateur</h3>
+            <ul>
+                <li><strong>Adresses e-mail</strong> : Traitées pour la vérification des comptes, les notifications d'approbation et les connexions par lien magique sans mot de passe.</li>
+                <li><strong>Noms de profil</strong> : Prénom, nom et nom d'usage, facultatifs, utilisés pour personnaliser le tableau de bord.</li>
+                <li><strong>Revendications OIDC SSO</strong> : Si cette passerelle est configurée pour l'authentification unique, les revendications de profil standard renvoyées par votre fournisseur d'identité (e-mail, prénom, nom) sont stockées afin de provisionner votre profil.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="C">
+            <h3>C. Journaux d'audit administratifs</h3>
+            <ul>
+                <li><strong>Événements de sécurité</strong> : Les inscriptions, les tentatives de connexion, les créations de jetons et les changements de statut administratifs sont enregistrés localement dans la base de données de la passerelle à des fins d'audit et de revue de sécurité.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="D">
+            <h3>D. Journaux de diagnostic du client (sur consentement uniquement, désactivé par défaut)</h3>
+            <ul>
+                <li><strong>Ils restent sur votre machine par défaut</strong> : Le client lfr-tunnel écrit ses propres journaux de trafic, d'erreurs et de console dans <code>~/.lfr-tunnel/logs</code>, sur votre ordinateur. Ils ne sont jamais téléversés à moins que vous n'activiez vous-même le partage des journaux de diagnostic dans les Paramètres du compte. Cette option est désactivée par défaut.</li>
+                <li><strong>Le retrait du consentement est immédiat</strong> : Votre préférence est vérifiée lorsqu'un administrateur demande les journaux, de nouveau avant que la demande n'atteigne votre client, et une fois encore à l'arrivée des journaux — désactiver l'option prend donc effet aussitôt, y compris pour un client déjà en cours d'exécution.</li>
+                <li><strong>Les corps des requêtes et des réponses ne sont jamais téléversés</strong>, même si vous lancez le client avec <code>-log-bodies</code>. Les jetons d'accès personnels, les valeurs <code>Authorization</code> et les identifiants présents dans les URL ou les chaînes de requête sont supprimés avant le téléversement.</li>
+                <li><strong>Conservation</strong> : Les journaux téléversés sont conservés dans la base de données de cette passerelle pendant 30 jours au maximum. Ils sont supprimés immédiatement si vous retirez votre consentement — ceux déjà collectés sont détruits, et pas seulement la collecte arrêtée — et immédiatement si votre compte est supprimé. Les sauvegardes de routine effectuées avant une suppression en contiennent encore les données jusqu'à leur propre expiration.</li>
+                <li><strong>Audit</strong> : Chaque demande, chaque refus faute de consentement, chaque téléversement et chaque ouverture d'un ensemble stocké par un administrateur sont consignés dans le journal d'audit administratif.</li>
+            </ul>
+        </section>
+
+        <section data-disclosure="E">
+            <h3>E. Répartition géographique anonyme (activée par l'opérateur, désactivée par défaut)</h3>
+            <ul>
+                <li><strong>Uniquement si l'opérateur l'a activée</strong> : Aucune base de données géo-IP n'est fournie avec la passerelle ; cette fonction est donc désactivée à moins que l'opérateur de cette passerelle n'en ait délibérément obtenu et déployé une. La valeur par défaut est désactivée.</li>
+                <li><strong>Un usage supplémentaire de l'adresse IP de la section A, et non une nouvelle collecte</strong> : Lorsque vous enregistrez un tunnel, votre adresse IP publique est recherchée dans le fichier de base de données local de l'opérateur et réduite à un code pays ISO à deux lettres. Aucun service tiers n'est contacté. Seul le champ pays est lu — jamais la ville, la subdivision ni les coordonnées.</li>
+                <li><strong>L'adresse est écartée</strong> : La recherche a lieu en mémoire et l'adresse est abandonnée immédiatement après. Votre adresse et votre pays ne sont jamais écrits ni journalisés ensemble, et rien ne permet de restituer ce couple.</li>
+                <li><strong>Ce qui est stocké</strong> : Une ligne par pays et par semaine ISO, contenant un code pays et un décompte. La table ne comporte aucune colonne utilisateur.</li>
+                <li><strong>Un minimum de 5 utilisateurs par pays</strong> : Un pays n'est enregistré qu'à partir du moment où au moins 5 utilisateurs distincts y ont été observés durant la semaine ; en deçà, il est regroupé dans un unique compartiment <code>OTHER</code>, lui-même omis tant qu'il n'atteint pas 5 à son tour. Le seuil est appliqué avant toute écriture. Les adresses qui ne peuvent pas être situées — plages privées, NAT d'opérateur, adresses absentes de la base — sont écartées plutôt que devinées.</li>
+                <li><strong>Qui peut les voir, et pendant combien de temps</strong> : Les décomptes obtenus ne sont visibles que par les administrateurs de la passerelle. Ils ne contiennent aucun identifiant, ils sont donc conservés comme métriques historiques plutôt que supprimés selon un calendrier, et la suppression de votre compte ne les efface pas et n'a pas besoin de les effacer.</li>
+            </ul>
+        </section>
+
         <h2>2. Sécurité et stockage des données</h2>
-        <p>Les jetons d'accès personnels (PAT) sont stockés sur le serveur à l'aide de hachages cryptographiques sécurisés SHA-256. Toutes les données sont stockées dans une base de date SQLite locale et privée, et ne sont jamais partagées, vendues ou transmises à des serveurs externes.</p>
+        <p>Les jetons d'accès personnels (PAT) sont stockés sur le serveur à l'aide de hachages cryptographiques sécurisés SHA-256. Toutes les données sont stockées dans une base de données SQLite locale et privée, et ne sont jamais partagées, vendues ou transmises à des serveurs externes.</p>
+
+        <h2>3. La politique complète</h2>
+        <p>Les sections ci-dessus résument la Politique de confidentialité et de divulgation des cookies canonique du projet, qui couvre également les jetons d'accès personnels, les cookies et votre droit à l'oubli au titre du RGPD : <a href="https://github.com/peterrichards-lr/lfr-tunnel/blob/master/PRIVACY.md">PRIVACY.md</a>. L'opérateur de cette passerelle a peut-être publié sa propre politique à la place.</p>
+
         <p style="margin-top: 32px;"><a href="/">← Retour au Portail</a></p>
     </div>
 </body>

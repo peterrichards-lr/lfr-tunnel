@@ -485,6 +485,15 @@ jobs:
       - name: A failed data load must be surfaced, not shown as empty
         run: node scripts/check-load-failure-surfaced.cjs
 
+      # The page users actually read at /privacy is a SECOND privacy text: hand-written prose in
+      # five languages under pkg/server/templates/*/privacy.html, with no i18n keys, so the gate
+      # above cannot see it. It fell behind PRIVACY.md twice -- #1894's §1.D and #1955's §1.E --
+      # and the first time policy_version was bumped, so every user was put into a 14-day
+      # re-consent window over a disclosure absent from the page they would open to read it
+      # (#1954). Compares §1's subsections against the templates' data-disclosure markers.
+      - name: The served /privacy page must cover every PRIVACY.md category
+        run: node scripts/check-privacy-disclosures.cjs
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

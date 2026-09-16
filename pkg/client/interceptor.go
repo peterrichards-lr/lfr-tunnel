@@ -95,6 +95,23 @@ type InterceptorEngine struct {
 	IsFailback            bool
 	FailbackProbeInterval time.Duration
 
+	// reconnectWindow is how long this client should keep trying to reattach to its gateway
+	// before handing control back to the session loop for region failover (#1946). Set from
+	// the gateway's advertised client_reconnect_seconds on /api/version, so a wrong value can
+	// be corrected without a client release; zero means nothing was advertised and the
+	// client's own default applies. Read once per session, when the chisel config is built.
+	reconnectWindow time.Duration
+
+	// failoverAvailable records whether this client has anywhere to fail over TO -- it is not
+	// pinned with -server, and its gateway advertised a region list. It decides which of the
+	// two reconnect windows a session gets (pkg/client/client.go), and is re-read per session
+	// because the region list can change across a failover.
+	//
+	// Default false, i.e. "no alternative known", which is the safe direction: it buys a
+	// tunnel more patience rather than less, and a client that really can move is told so by
+	// the session loop before its first session starts.
+	failoverAvailable bool
+
 	// LeaseLost records that the connected gateway stopped holding a lease for this
 	// session while the tunnel itself was healthy. Distinct from an eviction: nothing
 	// is wrong with the region, so the recovery is to re-register, preferentially
@@ -898,10 +915,53 @@ func (e *InterceptorEngine) StartVersionWatcher(ctx context.Context, serverURL s
 			case <-ticker.C:
 				if info, err := CheckServerCompatibility(serverURL); err == nil && info != nil {
 					e.SetLatestVersion(info.LatestVersion)
+					// The same round trip carries the reconnect window (#1946). Picked up
+					// here rather than on its own timer because it is the gateway's answer
+					// to "what should clients do", and it takes effect on the next session
+					// the client starts -- there is nothing to interrupt a working tunnel for.
+					e.SetReconnectWindow(time.Duration(info.ClientReconnectSeconds) * time.Second)
 				}
 			}
 		}
 	}()
+}
+
+// SetReconnectWindow records the reconnect window the gateway advertises. Zero, or anything
+// the client will not honour, is dealt with where the window is used -- this only stores what
+// was said (#1946).
+func (e *InterceptorEngine) SetReconnectWindow(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.reconnectWindow = d
+}
+
+// ReconnectWindow returns the advertised reconnect window, or zero if the gateway has not
+// advertised one -- in which case the client's compiled-in default is used.
+func (e *InterceptorEngine) ReconnectWindow() time.Duration {
+	if e == nil {
+		return 0
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.reconnectWindow
+}
+
+// SetFailoverAvailable records whether the client currently has an alternative gateway to
+// fail over to (#1946).
+func (e *InterceptorEngine) SetFailoverAvailable(available bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failoverAvailable = available
+}
+
+// FailoverAvailable reports whether region failover is an option for this client.
+func (e *InterceptorEngine) FailoverAvailable() bool {
+	if e == nil {
+		return false
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.failoverAvailable
 }
 
 // SetSessionLogger attaches the persistent traffic/diagnostic logs to the engine.

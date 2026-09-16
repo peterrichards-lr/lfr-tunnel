@@ -26,7 +26,8 @@ import (
 )
 
 // ErrUnavailable reports that no geo-IP database is configured or readable, which is a
-// normal state rather than a failure: the deployment simply has no MaxMind file.
+// normal state rather than a failure: the deployment simply has no database file. No vendor
+// permits one to ship with the server, so absence is the default (#1921).
 var ErrUnavailable = errors.New("geo: no geo-IP database available")
 
 // ErrNotFound reports that a path WAS configured and nothing exists at it (#1938).
@@ -45,22 +46,36 @@ type Resolver interface {
 	// address is not in the database at all -- private ranges, CGNAT and unallocated
 	// space all land here.
 	Country(ip netip.Addr) (string, bool)
+	// Provider names the vendor whose data this resolver is serving, so the panel can
+	// render the credit that vendor's licence requires (#1921).
+	//
+	// On the interface rather than on the concrete type: every supported vendor obliges a
+	// visible attribution, so a Resolver that cannot say whose data it is serving is a
+	// Resolver whose data cannot lawfully be displayed. A future implementation has to
+	// answer this, and the compiler is the only thing that reliably asks.
+	Provider() Provider
 	Close() error
 }
 
-// mmdbResolver reads a MaxMind GeoLite2/GeoIP2 database.
+// mmdbResolver reads any database in MaxMind's .mmdb FORMAT -- MaxMind's own GeoLite2 and
+// GeoIP2, DB-IP's Lite files, and IP2Location's MMDB editions all qualify (#1921). The
+// format is one thing; the record schema inside it is another, which is what countryPaths
+// below is for.
 //
-// MaxMind rather than a lookup API because the whole premise of this feature is that the
-// IP is resolved in memory and discarded; posting every user's IP to a third party to
+// A local file rather than a lookup API because the whole premise of this feature is that
+// the IP is resolved in memory and discarded; posting every user's IP to a third party to
 // arrive at an anonymous aggregate would invert that.
 type mmdbResolver struct {
 	db *maxminddb.Reader
+	// provider is resolved once at open time from the file's own metadata. Read-only
+	// afterwards, so Provider() needs no lock alongside the concurrent Lookup path.
+	provider Provider
 }
 
-// OpenResolver opens the MaxMind database at path.
+// OpenResolver opens the .mmdb country database at path, whichever vendor published it.
 //
 // An empty path, or a path that does not exist, returns an error matching ErrUnavailable
-// rather than a hard one: not deploying a MaxMind file is a supported configuration.
+// rather than a hard one: not deploying a database file is a supported configuration.
 //
 // The two are not the same error, though (#1938). An unset path is bare ErrUnavailable; a
 // configured path with no file at it also matches ErrNotFound and names the path, because
@@ -89,7 +104,7 @@ func OpenResolver(path string) (Resolver, error) {
 		}
 		return nil, fmt.Errorf("geo: open %s: %w", path, err)
 	}
-	return &mmdbResolver{db: db}, nil
+	return &mmdbResolver{db: db, provider: ProviderFromDatabaseType(db.Metadata.DatabaseType)}, nil
 }
 
 // Country decodes only the country ISO code. Decoding the whole record would pull city,
@@ -135,6 +150,17 @@ func (r *mmdbResolver) Country(ip netip.Addr) (string, bool) {
 var countryPaths = [][]any{
 	{"country", "iso_code"},
 	{"country_code"},
+}
+
+// Provider reports the vendor derived from the database's own metadata.
+//
+// A nil receiver or a closed database yields ProviderUnknown rather than a named vendor:
+// "we do not know" must never round to somebody's trademark.
+func (r *mmdbResolver) Provider() Provider {
+	if r == nil || r.provider == "" {
+		return ProviderUnknown
+	}
+	return r.provider
 }
 
 func (r *mmdbResolver) Close() error {

@@ -23,11 +23,22 @@ import (
 // artefact. geo.Resolver is an interface for exactly this reason.
 type stubResolver struct {
 	countries map[string]string
+	// provider is what the panel would attribute the data to. Zero value is the empty
+	// string rather than a vendor, so a test that does not care cannot accidentally assert
+	// somebody's credit line (#1921).
+	provider geo.Provider
 }
 
 func (s stubResolver) Country(ip netip.Addr) (string, bool) {
 	c, ok := s.countries[ip.String()]
 	return c, ok
+}
+
+func (s stubResolver) Provider() geo.Provider {
+	if s.provider == "" {
+		return geo.ProviderUnknown
+	}
+	return s.provider
 }
 
 func (s stubResolver) Close() error { return nil }
@@ -494,5 +505,113 @@ func TestGeoDiagnosisIsNotServedToANonAdmin(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), path) {
 		t.Errorf("the configured geo-IP path leaked to an unauthenticated caller: %s", rec.Body.String())
+	}
+}
+
+// TestLocationAnalyticsCarriesTheProviderForAttribution (#1921).
+//
+// The panel has to render the credit the supplying vendor's licence requires, and each
+// vendor requires a different one -- so "which vendor" has to reach the browser. It is
+// derived from the database file's own metadata rather than configured, and this is the test
+// that the derived value actually travels to the client.
+func TestLocationAnalyticsCarriesTheProviderForAttribution(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	srv.geo = geo.New(
+		stubResolver{provider: geo.ProviderDBIP},
+		geoStore{database: srv.db},
+		geo.Options{},
+	)
+
+	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderDBIP) {
+		t.Errorf("provider: got %q, want %q -- the panel cannot render DB-IP's required "+
+			"link back to db-ip.com without it", resp.Provider, geo.ProviderDBIP)
+	}
+}
+
+// TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase.
+//
+// With nothing open there is no data on screen, so there is nothing to attribute -- and
+// naming a vendor here would put a credit line under a panel that is switched off. This is
+// the state most deployments are in permanently, so it is the one most likely to be seen.
+func TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	if srv.geo != nil {
+		t.Fatalf("premise broken: the test server should have no geo database")
+	}
+
+	if resp := locationsFor(t, srv); resp.Provider != "" {
+		t.Errorf("provider: got %q with no database configured, want empty", resp.Provider)
+	}
+}
+
+// TestAnUnrecognisedDatabaseIsNotAttributedToAVendor.
+//
+// The failure this guards is silent by construction: a plausible, complete credit line
+// naming a company that did not supply the data, with the actual supplier's licence still
+// unmet and nothing on the page to contradict it. "unknown" has to survive the whole way to
+// the client for the panel to be able to say so.
+func TestAnUnrecognisedDatabaseIsNotAttributedToAVendor(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	srv.geo = geo.New(stubResolver{}, geoStore{database: srv.db}, geo.Options{})
+
+	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderUnknown) {
+		t.Errorf("provider: got %q, want %q", resp.Provider, geo.ProviderUnknown)
+	}
+}
+
+// TestTheServerOpensThePathTheResolvedKeyNames (#1921).
+//
+// pkg/config proves the two spellings of the geo database path resolve to one value; this
+// proves server.go reads that resolved value rather than the field it used to read. Leaving
+// `cfg.GeoLite2DBPath` in server.go still compiles and still passes every test in
+// pkg/config, and ships a gateway that ignores `country_db_path` entirely.
+//
+// Asserted through `configured_path` in the admin payload -- the field #1938 added for
+// exactly this question -- rather than through the log, because that is the value an
+// operator is shown and the one that has to name the file the gateway actually tried.
+func TestTheServerOpensThePathTheResolvedKeyNames(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*config.ServerConfig, string)
+	}{
+		{"legacy alias", func(c *config.ServerConfig, p string) { c.GeoLite2DBPath = p }},
+		{"neutral key", func(c *config.ServerConfig, p string) { c.CountryDBPath = p }},
+		// Both set, disagreeing: the neutral key wins. See
+		// config.CountryDatabasePath for why that direction and not the other.
+		{"both, neutral wins", func(c *config.ServerConfig, p string) {
+			c.GeoLite2DBPath = filepath.Join(t.TempDir(), "absent", "ignored-alias.mmdb")
+			c.CountryDBPath = p
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Unique per case so a reported path cannot have come from another one.
+			wantPath := filepath.Join(t.TempDir(), "absent", tc.name+"-country.mmdb")
+
+			cfg := config.DefaultServerConfig()
+			cfg.Domains = []string{"example.com"}
+			cfg.DBPath = filepath.Join(t.TempDir(), "geo_keys.db")
+			cfg.DisableBackupScheduler = true
+			tc.set(cfg, wantPath)
+
+			srv, err := NewServer(cfg)
+			if err != nil {
+				t.Fatalf("NewServer: %v", err)
+			}
+			t.Cleanup(func() {
+				srv.Stop()
+				time.Sleep(50 * time.Millisecond) // prevent SQLite TempDir cleanup races
+			})
+
+			// A missing file disables the feature gracefully whichever spelling named it.
+			if srv.geo != nil {
+				t.Errorf("geo is active despite the database being absent")
+			}
+			resp := locationsFor(t, srv)
+			if resp.ConfiguredPath != wantPath {
+				t.Errorf("%s: the panel reports configured_path=%q, want %q -- the server is "+
+					"not opening the path the resolved key names", tc.name, resp.ConfiguredPath, wantPath)
+			}
+		})
 	}
 }

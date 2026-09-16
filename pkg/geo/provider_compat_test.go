@@ -4,6 +4,8 @@ import (
 	"net/netip"
 	"os"
 	"testing"
+
+	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 )
 
 // Does a real database from a given vendor actually resolve? (#1921)
@@ -61,5 +63,61 @@ func TestARealDatabaseResolvesKnownAddresses(t *testing.T) {
 	priv := netip.MustParseAddr("192.168.1.1")
 	if code, ok := r.Country(priv); ok {
 		t.Errorf("a private address resolved to %q; it must not appear in the distribution", code)
+	}
+}
+
+// Does the vendor derivation work on a real file? (#1921)
+//
+// Everything else about attribution is a table of strings checked against another table of
+// strings. This is the only test that reads `database_type` out of a database somebody
+// actually downloaded, which is where the value comes from in production.
+//
+// Skipped without LFT_GEO_TEST_DB, same as above and for the same reason: no database ships
+// with this repo and none ever can.
+//
+//	LFT_GEO_TEST_DB=/path/to/provider.mmdb make test PKG=./pkg/geo/
+func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
+	path := os.Getenv("LFT_GEO_TEST_DB")
+	if path == "" {
+		t.Skip("set LFT_GEO_TEST_DB to a .mmdb file to check the vendor is derived from a real file")
+	}
+
+	db, err := maxminddb.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close %s: %v", path, err)
+		}
+	})
+	dbType := db.Metadata.DatabaseType
+	provider := ProviderFromDatabaseType(dbType)
+	t.Logf("  database_type=%q -> provider=%q", dbType, provider)
+
+	// Asserting only that SOMETHING was recognised, not which vendor: this runs against
+	// whatever file the person running it has, and pinning a vendor would fail on a
+	// different (perfectly valid) download rather than on a defect. ProviderUnknown is the
+	// failure worth catching -- it means the panel would render no vendor's credit for a
+	// file that certainly has one.
+	if provider == ProviderUnknown {
+		t.Errorf("a real database reported database_type=%q and was not recognised -- the panel "+
+			"would show no attribution for data whose licence requires one", dbType)
+	}
+
+	// The same value must reach callers through the Resolver, which is the path the server
+	// actually uses. A derivation that works in isolation and is not wired up looks
+	// identical from here otherwise.
+	r, err := OpenResolver(path)
+	if err != nil {
+		t.Fatalf("OpenResolver(%s): %v", path, err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close resolver %s: %v", path, err)
+		}
+	})
+	if got := r.Provider(); got != provider {
+		t.Errorf("Resolver.Provider() = %q, but the file's metadata says %q", got, provider)
 	}
 }

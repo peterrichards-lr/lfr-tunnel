@@ -19,6 +19,10 @@ func (f *fakeResolver) Country(ip netip.Addr) (string, bool) {
 	return c, ok
 }
 
+// Provider satisfies the Resolver interface (#1921). A fake has no vendor, and saying so
+// is the honest answer -- ProviderUnknown is a real state, not a placeholder.
+func (f *fakeResolver) Provider() Provider { return ProviderUnknown }
+
 func (f *fakeResolver) Close() error {
 	f.closed = true
 	return nil

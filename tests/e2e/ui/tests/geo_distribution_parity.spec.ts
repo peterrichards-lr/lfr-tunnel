@@ -56,9 +56,7 @@ test.describe('Geographic distribution — Portal V2', () => {
 });
 
 test.describe('Geographic distribution — Portal V1', () => {
-  test('the panel is present and explains that it is switched off', async ({
-    page,
-  }) => {
+  test.beforeEach(async ({ page }) => {
     await clearMailpit();
     await page.goto('/admin');
     await page.click('#btn-show-email');
@@ -72,6 +70,11 @@ test.describe('Geographic distribution — Portal V1', () => {
     ).toBeVisible();
 
     await page.click('#nav-analytics');
+  });
+
+  test('the panel is present and explains that it is switched off', async ({
+    page,
+  }) => {
     const headline = page.locator('#geo-distribution-headline');
     await expect(headline).toBeVisible();
     await expect(headline).toContainText('geolite2_db_path');
@@ -79,6 +82,40 @@ test.describe('Geographic distribution — Portal V1', () => {
     // The raw key, which is what t() falls back to when a translation is missing. V1 calls
     // t() with no default here, so an unadded key renders as "geo_unavailable" to the user.
     await expect(headline).not.toContainText('geo_unavailable');
+  });
+
+  // #1920. V1 set the headline through three branches and then rendered the table
+  // regardless, so the sentence above said the feature was off while the table below said
+  // "No results found." -- we looked, and there was nobody. Nothing had been looked at.
+  // V2 renders the message instead of the table and always has; under #1866 the two arms
+  // of the A/B test differing is the defect.
+  test('switched off means no table, no column headers and no search box', async ({
+    page,
+  }) => {
+    // Positive anchor first. Every assertion below is an absence, and absences pass just
+    // as well on a page that rendered nothing at all (e2e-testing skill §3).
+    await expect(page.locator('#geo-distribution-headline')).toContainText(
+      'geolite2_db_path',
+    );
+
+    // The tbody is asserted rather than the wrapper: the wrapper did not exist before the
+    // fix, and toBeHidden() is satisfied by an element that is simply not there -- so it
+    // would have passed against the defect it is here to catch.
+    await expect(page.locator('#geo-distribution-table-body')).toBeHidden();
+    await expect(
+      page.locator('#geo-distribution-table-body'),
+    ).not.toContainText('No results found.');
+    // Hidden, not absent: the header cell is in the markup either way, so toHaveCount(0)
+    // would be testing whether the panel exists rather than whether it renders a table.
+    // "Country" appears as a column header exactly once in dashboard.html, so this is
+    // unambiguous without scoping.
+    await expect(page.locator('th:has-text("Country")')).toBeHidden();
+
+    // renderTable() creates this input on its first call and names it after the tbody, so
+    // a search control existing at all means the table was rendered.
+    await expect(
+      page.locator('#geo-distribution-table-body-search'),
+    ).toHaveCount(0);
   });
 });
 

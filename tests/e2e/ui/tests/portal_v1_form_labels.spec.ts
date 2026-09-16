@@ -96,22 +96,48 @@ test.describe('Portal V1 form labels', () => {
     ).toEqual([]);
   });
 
+  // Analytics carries four tables. A generic "Search" on each would satisfy the sweep above
+  // while leaving them indistinguishable to anyone navigating by form control.
+  //
+  // Asked of the name generator rather than counted off the rendered inputs, since #1920:
+  // three of those four panels now render no table at all when they have nothing to show,
+  // and that is this stack's permanent state -- no MaxMind database, no region probes. So
+  // counting visible search boxes measured the fixture's data, not the naming, and the
+  // count fell to one. searchLabelFor() is production code, and renderTable() labels every
+  // box it creates with exactly this call, so asking it directly covers all four panels
+  // instead of whichever happened to have rows today.
   test('search boxes on one page are named distinctly', async ({ page }) => {
-    // Analytics carries three. A generic "Search" on each would satisfy the sweep above while
-    // leaving them indistinguishable to anyone navigating by form control.
     await page.goto('/admin/analytics');
     await page.waitForTimeout(800);
 
-    const names = await page.evaluate(() =>
+    const names = await page.evaluate(() => {
+      const labelFor = (window as unknown as Record<string, unknown>)
+        .searchLabelFor;
+      if (typeof labelFor !== 'function') return null;
+      return Array.from(
+        document.querySelectorAll('#tab-analytics tbody[id$="-table-body"]'),
+      ).map((el) => String((labelFor as (id: string) => string)(el.id)));
+    });
+
+    // Anchor: a null, or a list shorter than the panels actually on the page, means the
+    // selector or the generator moved and every assertion below would pass on nothing.
+    expect(names, 'searchLabelFor() was not found on the page').not.toBeNull();
+    expect(names!.length).toBeGreaterThan(2);
+    expect(names!.every((n) => n.trim().length > 0)).toBe(true);
+    expect(new Set(names!).size, `names were: ${names!.join(', ')}`).toBe(
+      names!.length,
+    );
+
+    // And the boxes that do render carry those names, so the generator is not being checked
+    // in isolation from its only caller.
+    const rendered = await page.evaluate(() =>
       Array.from(document.querySelectorAll('input[id$="-search"]'))
         .filter((el) => (el as HTMLElement).offsetParent !== null)
         .map((el) => el.getAttribute('aria-label') || ''),
     );
-
-    expect(names.length).toBeGreaterThan(1);
-    expect(names.every((n) => n.trim().length > 0)).toBe(true);
-    expect(new Set(names).size, `names were: ${names.join(', ')}`).toBe(
-      names.length,
-    );
+    expect(rendered.length).toBeGreaterThan(0);
+    for (const name of rendered) {
+      expect(names!).toContain(name);
+    }
   });
 });

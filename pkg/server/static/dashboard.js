@@ -389,7 +389,10 @@ function renderTable(tbodyId, data, renderRowFn) {
     const filterInput = document.createElement('input');
     filterInput.id = tbodyId + '-search';
     filterInput.type = 'text';
-    filterInput.className = 'input-field';
+    // print-hide because an interactive filter is meaningless on paper: every one of the 13
+    // tables printed a "Search..." box into the exported report (#1916). Set here rather than
+    // in the print stylesheet so a table added later is covered by the same generator.
+    filterInput.className = 'input-field print-hide';
     filterInput.placeholder = 'Search...';
     // A placeholder is not an accessible name: screen readers do not announce it as a label,
     // and it disappears the moment someone types -- so the field was nameless exactly while in

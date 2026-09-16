@@ -256,6 +256,16 @@ type ServerConfig struct {
 	EdgeProvisionerURL         string `yaml:"edge_provisioner_url"`
 	EdgeProvisionerTokenFile   string `yaml:"edge_provisioner_token_file"`
 	EdgeShutdownWarningMinutes int    `yaml:"edge_shutdown_warning_minutes" json:"edge_shutdown_warning_minutes"`
+	// EdgeMetricsIntervalSeconds is how often an edge reports the bytes its leases have
+	// carried, up the edge control channel to the control plane (#1958). An edge has no
+	// database, so this is the only route its traffic has into tunnel_metrics.
+	//
+	// 0 means the 30s default. This interval IS the worst case an UNGRACEFUL stop loses:
+	// every edge is powered off nightly and has no database to spool to, so a graceful stop,
+	// a drain announcement and a scheduled-shutdown warning all flush first -- see
+	// defaultEdgeMetricsInterval for the full reasoning. Set only on an edge; ignored on the
+	// control plane.
+	EdgeMetricsIntervalSeconds int    `yaml:"edge_metrics_interval_seconds"`
 	VanityDomainHook           string `yaml:"vanity_domain_hook"`
 	// DNSHook is an operator-supplied executable that publishes and withdraws the DNS record
 	// for a tunnel, so a visitor reaches the gateway actually serving it rather than whichever
@@ -777,6 +787,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_EDGE_SHUTDOWN_WARNING_MINUTES"); val != "" {
 		if m, err := strconv.Atoi(val); err == nil {
 			cfg.EdgeShutdownWarningMinutes = m
+		}
+	}
+	if val := os.Getenv("LFT_EDGE_METRICS_INTERVAL_SECONDS"); val != "" {
+		if secs, err := strconv.Atoi(val); err == nil {
+			cfg.EdgeMetricsIntervalSeconds = secs
 		}
 	}
 	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {

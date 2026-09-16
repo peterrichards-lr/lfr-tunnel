@@ -133,6 +133,13 @@ edge_nodes:
 edge_provisioner_url: "https://example.com"
 edge_provisioner_token_file: ""
 edge_shutdown_warning_minutes: 0
+# How often an EDGE reports the bytes its leases have carried, up the edge control channel to
+# the control plane (#1958). An edge has no database, so this is the only route its traffic has
+# into tunnel_metrics -- and the only bandwidth an edge-served session ever contributes.
+# 0 means the 30s default, which is also the most an ungraceful stop can lose: a graceful
+# stop, a drain and a scheduled-shutdown warning all flush first. Set it on an edge; it is
+# ignored on the control plane.
+edge_metrics_interval_seconds: 0
 
 # --- Hooks ---
 dns_hook: ""

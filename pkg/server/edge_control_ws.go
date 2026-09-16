@@ -128,6 +128,11 @@ type ControlMessage struct {
 	ScheduleStopTime  string `json:"schedule_stop_time,omitempty"`
 	ScheduleStartTime string `json:"schedule_start_time,omitempty"`
 	Timezone          string `json:"timezone,omitempty"`
+	// Metrics carries byte deltas UPWARDS, from an edge to the control plane (#1958) --
+	// the first field on this message that travels in that direction. An edge has no
+	// database, so this is the only way traffic it served reaches tunnel_metrics. See
+	// edge_metrics.go for why it rides this channel rather than a connection of its own.
+	Metrics []EdgeByteDelta `json:"metrics,omitempty"`
 }
 
 // handleEdgeControlWS handles control plane WebSocket connections from Edge nodes.
@@ -334,8 +339,13 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			slog.Info(fmt.Sprintf("[Edge WS] Edge node %s disconnected.", nodeID))
 		}()
 
-		// Set read limit and pong handler
-		conn.SetReadLimit(512)
+		// Set read limit and pong handler. 512 bytes was ample while the only thing an edge
+		// ever sent was its auth response; it now also reports byte deltas up this channel
+		// (#1958), and a frame over the limit makes gorilla close the connection -- which
+		// would let telemetry take down kicks, schedules and blacklist pushes with it. The
+		// edge chunks its reports far below this bound; the bound stays finite so a
+		// misbehaving node still cannot make us buffer without limit.
+		conn.SetReadLimit(edgeControlReadLimit)
 		_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
 			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
@@ -377,11 +387,27 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		})
 
 		for {
-			_, _, err := conn.ReadMessage()
+			_, data, err := conn.ReadMessage()
 			if err != nil {
 				break
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
+
+			// Inbound frames used to be discarded unread -- this channel only ever carried
+			// traffic downwards. An edge now reports the bytes its leases carried up it
+			// (#1958). Parsed best-effort on purpose: an unparseable or unknown frame is
+			// ignored and the connection kept, because a telemetry problem must never cost
+			// this node its kicks, schedules or blacklist updates.
+			var inbound ControlMessage
+			if err := json.Unmarshal(data, &inbound); err != nil {
+				slog.Info(fmt.Sprintf("[Edge WS] Ignoring an unparseable frame from %s: %v", nodeID, err))
+				continue
+			}
+			if inbound.Type == "edge_metrics" {
+				// nodeID is this connection's authenticated identity, not anything the
+				// payload claims, so an edge cannot file its traffic under another node.
+				s.queueEdgeMetrics(nodeID, inbound.Metrics)
+			}
 		}
 	}()
 
@@ -946,13 +972,23 @@ func (s *Server) runEdgeControlChannel() {
 		// reconnecting on the 75s deadline leaked one per cycle (issue #1131).
 		connDone := make(chan struct{})
 
+		// This node's own writer for the connection, so the keepalive above and the metrics
+		// reporter below cannot interleave two frames on the same socket (#1958). The same
+		// reason handleEdgeControlWS wraps its side in one (#1125). Published on the server
+		// so Stop can make a final byte report over it before the process goes.
+		uplink := &safeConn{conn: conn}
+		s.setEdgeUplink(uplink)
+
 		go func() {
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ticker.C:
-					_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					// WriteControl rather than SetWriteDeadline+WriteMessage: identical frame
+					// and identical 5s deadline, but gorilla exempts WriteControl from its
+					// single-writer restriction, so the keepalive no longer has to take turns
+					// with the metrics report. The control plane's own RTT ping does the same.
+					if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
 						pingErrChan <- err
 						return
 					}
@@ -963,6 +999,29 @@ func (s *Server) runEdgeControlChannel() {
 				}
 			}
 		}()
+
+		// Report the bytes this edge's leases have carried, for as long as this connection
+		// lives (#1958). Scoped to the connection rather than to the process because a
+		// report is only meaningful while there is somewhere to send it -- and because
+		// nothing is taken off the leases while the channel is down, so an outage costs
+		// resolution, not totals: the first report after it covers the whole gap.
+		if s.edgeMetrics != nil {
+			go func() {
+				metricsTicker := time.NewTicker(s.edgeMetricsInterval())
+				defer metricsTicker.Stop()
+				for {
+					select {
+					case <-metricsTicker.C:
+						s.edgeMetrics.Collect(s.registry)
+						s.edgeMetrics.Flush(uplink)
+					case <-connDone:
+						return
+					case <-s.ctx.Done():
+						return
+					}
+				}
+			}()
+		}
 
 		// One reader for the connection's lifetime. Spawning one per loop iteration
 		// orphaned a goroutine still blocked in ReadJSON whenever pingErrChan won the
@@ -1066,6 +1125,12 @@ func (s *Server) runEdgeControlChannel() {
 				s.pendingShutdownReason = msg.Reason
 				s.maintMutex.Unlock()
 				slog.Info(fmt.Sprintf("[Edge Control] Node shutdown warning: %ds remaining (%s)", msg.SecondsRemaining, msg.Reason))
+				// Report now rather than waiting for the interval (#1958). This node is about
+				// to be powered off -- every edge is, nightly -- and it has no database to
+				// leave anything in. The graceful stop flushes too, but an EC2 stop is not
+				// always graceful, and flushing at the announcement bounds what a hard stop
+				// inside the warning window can take with it.
+				s.flushEdgeMetrics()
 			case "node_schedule":
 				// Central telling this node its own stop/start window (#1276). Held in
 				// memory only -- the next handshake re-sends it, so there is nothing to
@@ -1112,6 +1177,10 @@ func (s *Server) runEdgeControlChannel() {
 		}
 
 		s.edgeControlConnected.Store(false)
+		// Withdrawn before the close, so a Stop racing this reconnect cannot try to report
+		// over a connection that is about to go (#1958). Nothing is lost by that: whatever
+		// was pending stays pending for the next connection.
+		s.setEdgeUplink(nil)
 		// Release both goroutines, then close: the reader may be parked in ReadJSON,
 		// which only Close unblocks.
 		close(connDone)

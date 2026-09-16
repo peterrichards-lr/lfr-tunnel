@@ -95,6 +95,7 @@ func (s *Server) handleLocalDrain(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		draining := false
 		s.maintMutex.Lock()
 		if req.Seconds <= 0 {
 			// Cancelling matters as much as announcing: a deploy that fails partway through
@@ -111,8 +112,18 @@ func (s *Server) handleLocalDrain(w http.ResponseWriter, r *http.Request) {
 			}
 			slog.Info(fmt.Sprintf("[Drain] Announced shutdown in %ds (%s); connected clients will move to another gateway",
 				req.Seconds, s.pendingShutdownReason))
+			draining = true
 		}
 		s.maintMutex.Unlock()
+
+		// An edge holds its byte deltas in memory and has no database to spool them to, so a
+		// node that has just announced it is going away should report what it has rather than
+		// wait for its interval (#1958). A no-op on the control plane and on a cancelled
+		// drain. deploy's teardown calls this endpoint (scripts/common/drain-and-wait.sh),
+		// which is the path every edge restart and every scheduled power-off goes through.
+		if draining {
+			s.flushEdgeMetrics()
+		}
 	}
 
 	respondJSON(w, http.StatusOK, s.currentDrainStatus())

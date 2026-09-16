@@ -4,20 +4,48 @@
 # Called by .github/workflows/release.yml after a new tag is published.
 # Pushes updated Formula and Scoop manifest to the companion tap/bucket repos.
 #
-# Usage: ./scripts/update-tap-bucket.sh <version-tag> <pat> <checksums-file>
+# Usage: ./scripts/update-tap-bucket.sh <version-tag> <pat> <checksums-file> [--dry-run]
 #   version-tag    e.g. v1.7.1
 #   pat            GitHub PAT with contents:write on homebrew-tap and scoop-bucket
 #   checksums-file path to the checksums.txt produced by the release build
+#   --dry-run      authenticate and report what WOULD be written, push nothing (#1969)
+#
+# --dry-run exists so a credential can be tested in seconds instead of by cutting a release.
+# TAP_BUCKET_PAT expired after v1.48.31 and this step failed on three consecutive releases
+# (v1.48.32/33/34) before anyone noticed, because it runs AFTER the release is published: the
+# tag, the release and the assets all exist, so every outward sign of success is already true.
+# The tag cannot be re-pushed, so there was no way to retry without burning another version.
 
 set -euo pipefail
 
 VERSION="${1:?Version tag is required (e.g. v1.7.1)}"
 TAP_BUCKET_PAT="${2:-}"
 CHECKSUMS_FILE="${3:?Path to checksums.txt is required}"
+DRY_RUN="false"
+if [ "${4:-}" = "--dry-run" ]; then
+  DRY_RUN="true"
+fi
 
+# An absent credential is a FAILURE, not a clean skip (#1969).
+#
+# This previously exited 0 with a "skipping cleanly" message, so an unset secret would publish
+# release after release that silently never reached Homebrew or Scoop -- the same shape as
+# #1923, #1938 and #1956, where a broken state is indistinguishable from a deliberate one.
+# We were lucky: the real incident had an INVALID pat, which fails loudly at clone. An unset one
+# would have been silent.
+#
+# ALLOW_MISSING_TAP_PAT=true restores the old behaviour for a fork or a private build that has
+# no tap to update -- deliberate, named, and visible in the log rather than assumed.
 if [ -z "${TAP_BUCKET_PAT}" ]; then
-  echo "TAP_BUCKET_PAT is empty or missing. Skipping Homebrew Tap and Scoop Bucket updates cleanly."
-  exit 0
+  if [ "${ALLOW_MISSING_TAP_PAT:-false}" = "true" ]; then
+    echo "TAP_BUCKET_PAT is empty and ALLOW_MISSING_TAP_PAT=true. Skipping deliberately."
+    exit 0
+  fi
+  echo "::error::TAP_BUCKET_PAT is empty or missing, so the Homebrew tap and Scoop bucket" >&2
+  echo "::error::cannot be updated. Users installing by those routes will stay on the previous" >&2
+  echo "::error::version with no indication anything is wrong. Set the secret, or set" >&2
+  echo "::error::ALLOW_MISSING_TAP_PAT=true if this build genuinely has no tap to update." >&2
+  exit 1
 fi
 
 VERSION_NUM="${VERSION#v}"   # e.g. 1.7.1
@@ -98,7 +126,12 @@ FORMULA
 git add Formula/lfr-tunnel.rb
 # Commit only if there are staged changes (idempotent on re-runs)
 git diff --cached --quiet || git commit -m "chore: bump lfr-tunnel to ${VERSION}"
-git push
+if [ "${DRY_RUN}" = "true" ]; then
+  echo "DRY RUN: would push the Homebrew formula for ${VERSION}. Nothing was pushed."
+  git --no-pager diff --stat HEAD~1 HEAD 2>/dev/null || echo "  (no change: the tap already has ${VERSION})"
+else
+  git push
+fi
 cd ..
 rm -rf _tap-repo
 echo "Homebrew Tap updated."
@@ -148,7 +181,17 @@ jq -n \
 
 git add bucket/lfr-tunnel.json
 git diff --cached --quiet || git commit -m "chore: bump lfr-tunnel to ${VERSION}"
-git push
+if [ "${DRY_RUN}" = "true" ]; then
+  echo "DRY RUN: would push the Scoop manifest for ${VERSION}. Nothing was pushed."
+  git --no-pager diff --stat HEAD~1 HEAD 2>/dev/null || echo "  (no change: the bucket already has ${VERSION})"
+else
+  git push
+fi
 cd ..
 rm -rf _bucket-repo
-echo "Scoop Bucket updated."
+if [ "${DRY_RUN}" = "true" ]; then
+  echo "DRY RUN complete: both repositories authenticated and the content was rendered."
+  echo "Nothing was pushed. The credential is valid."
+else
+  echo "Scoop Bucket updated." 
+fi

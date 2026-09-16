@@ -2009,8 +2009,16 @@ func missingRegionNames(available, unavailable map[string]string) []string {
 //
 // Which name survives is user-visible -- it becomes the region shown in the TUI and written
 // to the state file -- so the choice is deliberate rather than map-order luck: prefer the
-// shorter name, and the alphabetically earlier one to break ties. That keeps the familiar
-// 'in' and 'central' rather than 'edge-in' and 'eu'.
+// shorter name, and the alphabetically earlier one to break ties.
+//
+// That keeps 'in' over 'edge-in', and 'eu' over 'central'. This comment previously claimed the
+// rule "keeps the familiar 'in' and 'central'", which is wrong in its second half -- 'central'
+// is SEVEN characters and 'eu' is two, so the rule discards 'central'. That mistake was not
+// only in the prose: pkg/db then mapped central's node_id to "central", matched no probed
+// region, and the node placement report read 0% closest (#1919).
+//
+// The rule lives in pkg/regionvocab now so the analytics can apply the same one without
+// importing this main package.
 func dedupeRegionsByHost(regions map[string]string) map[string]string {
 	if len(regions) < 2 {
 		return regions

@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"lfr-tunnel/pkg/regionvocab"
 	"strings"
 	"testing"
 	"time"
@@ -59,19 +60,33 @@ func TestEdgePrefixedNodeIDMatchesTheProbedRegion(t *testing.T) {
 	}
 }
 
-func TestControlMapsToCentral(t *testing.T) {
+// Renamed from TestControlMapsToCentral, which asserted the #1919 bug and is why it shipped.
+//
+// That test seeded a probe for the region "central" -- a value NO client ever writes. The
+// gateway advertises central as both "eu" and "central", and the client keeps the shorter, so
+// region_probes holds "eu". The fixture described a state production cannot reach, the code
+// agreed with the fixture, and both disagreed with reality.
+//
+// Seeding the region a real client records is what makes this a test of the join rather than a
+// test of itself.
+func TestControlIsMatchedAgainstTheRegionClientsRecord(t *testing.T) {
 	d := setupTestDB(t)
 	day := today()
-	seedProbe(t, d, "u1", day, "central", ms(15))
+	seedProbe(t, d, "u1", day, regionvocab.CentralRegion(), ms(15))
 	seedProbe(t, d, "u1", day, "in", ms(120))
-	seedSession(t, d, "u1", "control", day+" 10:00:00")
+	seedSession(t, d, "u1", regionvocab.CentralNodeID, day+" 10:00:00")
 
 	rep, err := d.GetNodePlacement(30)
 	if err != nil {
 		t.Fatalf("report: %v", err)
 	}
 	if rep.Optimal != 1 {
-		t.Fatalf("control was not matched to \"central\": %+v", rep)
+		t.Fatalf("a session central served, on the fastest region that user measured, was not "+
+			"counted optimal: %+v", rep)
+	}
+	if len(rep.UnknownNodes) != 0 {
+		t.Errorf("control was reported as matching no probed region: %v -- this is the 0%%"+
+			" report (#1919)", rep.UnknownNodes)
 	}
 }
 
@@ -196,5 +211,41 @@ func TestOneUsersProbesDoNotJudgeAnothersSession(t *testing.T) {
 	}
 	if rep.Unverifiable != 1 {
 		t.Fatalf("u2's session should be unverifiable: %+v", rep)
+	}
+}
+
+// #1919: normaliseNodeID mapped central's node id to "central", a name the client discards in
+// favour of "eu". Every central-served session therefore matched no probed region, was counted
+// unverifiable, and the report read 0% closest while naming "control" as an unknown node.
+func TestCentralsNodeIDMapsToTheRegionClientsActuallyRecord(t *testing.T) {
+	got := normaliseNodeID(regionvocab.CentralNodeID)
+	if got != regionvocab.CentralRegion() {
+		t.Fatalf("normaliseNodeID(%q) = %q, want %q -- the region name clients write to "+
+			"region_probes", regionvocab.CentralNodeID, got, regionvocab.CentralRegion())
+	}
+	if got == "central" {
+		t.Error(`"central" is the alias the client DISCARDS (it is longer than "eu"), so ` +
+			"matching against it can never succeed")
+	}
+}
+
+func TestNodeIDPrefixesAreStripped(t *testing.T) {
+	cases := map[string]string{
+		"edge-in":     "in",
+		"EDGE-US":     "us",
+		"  edge-sa  ": "sa",
+		// addEdgeRegionNames strips "aws-" as well when it builds region names, so a node
+		// carrying the provisioner prefix has to be stripped the same way or it lands in
+		// UnknownNodes for a reason unrelated to placement.
+		"aws-edge-apac": "apac",
+		"aws-in":        "in",
+		// Deliberately unchanged: an unrecognised node surfaces as unknown rather than
+		// being guessed at.
+		"something-else": "something-else",
+	}
+	for in, want := range cases {
+		if got := normaliseNodeID(in); got != want {
+			t.Errorf("normaliseNodeID(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

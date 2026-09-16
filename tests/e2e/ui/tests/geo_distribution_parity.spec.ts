@@ -132,6 +132,10 @@ test.describe('Geographic distribution — Portal V1', () => {
  * Each absence is anchored on a positive assertion first, because an absence passes just as
  * well on a page that rendered nothing at all (e2e-testing skill §3).
  *
+ * "No credit" is asserted against the credit ELEMENT and the vendor links, never against the
+ * vendor names as free text -- the off-state copy lists the databases that would work, which
+ * is guidance rather than attribution.
+ *
  * The populated side -- which vendor gets which credit -- is covered by Go tests against a
  * real database (pkg/geo/provider_compat_test.go) rather than here, because proving it in a
  * browser would mean shipping a licensed artefact into the E2E image, which no vendor allows.
@@ -157,10 +161,25 @@ test.describe('Geographic distribution attribution — Portal V2', () => {
       .filter({ hasText: 'Geographic Distribution' });
     await expect(panel).toContainText('country_db_path');
 
-    await expect(panel).not.toContainText('DB-IP');
-    await expect(panel).not.toContainText('MaxMind');
-    await expect(panel).not.toContainText('IP2Location');
-    await expect(panel.locator('a[href*="db-ip.com"]')).toHaveCount(0);
+    // The credit line itself, not the vendor's NAME. The switched-off panel names all three
+    // supported databases on purpose -- an operator reading "set country_db_path" needs to
+    // know which files satisfy it -- so banning the strings "DB-IP"/"MaxMind"/"IP2Location"
+    // outright would forbid that guidance and did: this assertion failed the first time the
+    // #1938 wording landed, against a panel that was crediting nobody.
+    //
+    // Naming a database as a suggestion is not using its data; the obligation DB-IP's CC BY
+    // 4.0 and MaxMind's licence create is a credit shown where their results are displayed.
+    // So the property is that no CREDIT and no vendor LINK is rendered while the feature is
+    // off, which is what the two assertions below check -- V1 proves the same thing through
+    // #geo-distribution-attribution.
+    await expect(panel.locator('[data-testid="geo-attribution"]')).toHaveCount(
+      0,
+    );
+    await expect(
+      panel.locator(
+        'a[href*="db-ip.com"], a[href*="maxmind.com"], a[href*="ip2location.com"]',
+      ),
+    ).toHaveCount(0);
   });
 });
 

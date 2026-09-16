@@ -998,7 +998,10 @@ export default function AdminAnalytics() {
                 the row count is the reading that cannot be wrong. Absent only when no
                 database is open, where there is nothing to attribute. */}
             {locations?.available && (
-              <p className="text-muted text-xs mt-lg mb-0">
+              <p
+                data-testid="geo-attribution"
+                className="text-muted text-xs mt-lg mb-0"
+              >
                 {(() => {
                   // Literal keys, one branch each, rather than t(map[provider].key):
                   // scripts/check-i18n-keys.cjs can only see a string literal, and a key it

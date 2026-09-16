@@ -90,14 +90,81 @@ func init() {
 		fmt.Fprintf(os.Stderr, "  uninstall-service      Uninstall background CLI autostart service\n")
 		fmt.Fprintf(os.Stderr, "  install-gui-service    Install background GUI tray autostart service\n")
 		fmt.Fprintf(os.Stderr, "  uninstall-gui-service  Uninstall background GUI tray autostart service\n")
-		fmt.Fprintf(os.Stderr, "  login                  Authenticate via browser handoff / OIDC\n\n")
+		fmt.Fprintf(os.Stderr, "  login                  Authenticate via browser handoff / OIDC\n")
+		fmt.Fprintf(os.Stderr, "  mcp                    Run the Model Context Protocol server on stdio\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		oldUsage()
 	}
 }
 
+// knownSubcommands is every bare word the client accepts as its first argument, and the
+// allowlist checkBareArgs refuses against. It must stay equal to the set executeSubcommands
+// dispatches on and to the set the usage text advertises -- TestBareArgs_AllowlistMatchesDispatchAndUsage
+// asserts all three, because the drift is not theoretical: `uninstall-service` was advertised in
+// the usage text with no dispatch branch behind it, so typing the documented command opened a
+// tunnel (#1945).
+var knownSubcommands = []string{
+	"install-service",
+	"uninstall-service",
+	"install-gui-service",
+	"uninstall-gui-service",
+	"login",
+	"mcp",
+}
+
+// checkBareArgs refuses an argument that is neither a flag nor a dispatched subcommand.
+//
+// Go's flag package stops parsing at the first non-flag argument and leaves the rest in
+// flag.Args(); nothing here read that, so a bare word was silently discarded. A user meaning
+// `-upgrade` typed `upgrade`, got a normal tunnel with an auto-assigned subdomain, and then a
+// 403 about subdomain reservation -- a confident, wrong, unrelated error for a missing hyphen
+// (#1945).
+//
+// osArgs is the raw command line and rest is flag.Args(). Both are needed: executeSubcommands
+// dispatches on osArgs[1] specifically, so a known subcommand anywhere else is NOT run today
+// and must not be waved through -- `lfr-tunnel -config foo.yaml login` starts a tunnel instead
+// of logging in, which is the same defect wearing a valid word.
+func checkBareArgs(osArgs []string, rest []string) error {
+	if len(rest) == 0 {
+		return nil
+	}
+	word := rest[0]
+
+	if isKnownSubcommand(word) {
+		// The dispatched form: the subcommand is the very first argument.
+		if len(osArgs) > 1 && osArgs[1] == word {
+			return nil
+		}
+		return fmt.Errorf("the %q subcommand must be the first argument -- run `lfr-tunnel %s`; "+
+			"flags given before a subcommand are not applied to it", word, word)
+	}
+
+	// Exact match against a registered flag only. Nothing fuzzy, so this cannot invent a
+	// suggestion for a word that merely looks like a flag -- `flag.Lookup` either knows the
+	// name or it does not.
+	if flag.Lookup(word) != nil {
+		return fmt.Errorf("unknown argument %q. Did you mean -%s?", word, word)
+	}
+
+	return fmt.Errorf("unknown argument %q -- run `lfr-tunnel -h` for the available flags and subcommands", word)
+}
+
+func isKnownSubcommand(word string) bool {
+	for _, s := range knownSubcommands {
+		if s == word {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	flag.Parse()
+
+	// Before anything else: a typo must not open a tunnel the user never asked for (#1945).
+	if err := checkBareArgs(os.Args, flag.Args()); err != nil {
+		log.Fatalf("[Error] %v", err)
+	}
 
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
@@ -857,6 +924,15 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	if len(os.Args) > 1 && os.Args[1] == "install-service" {
 		if err := client.InstallService(); err != nil {
 			log.Fatalf("[Error] Failed to install service: %v", err)
+		}
+		return true
+	}
+
+	// Advertised in the usage text since it was written, with no branch behind it until
+	// #1945 -- so `lfr-tunnel uninstall-service` opened a tunnel instead.
+	if len(os.Args) > 1 && os.Args[1] == "uninstall-service" {
+		if err := client.UninstallService(); err != nil {
+			log.Fatalf("[Error] Failed to uninstall service: %v", err)
 		}
 		return true
 	}

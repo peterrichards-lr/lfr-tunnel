@@ -1651,6 +1651,12 @@
             <div style="margin-bottom: 12px;">
                 <button id="detail-diag-collect" class="btn btn-secondary" style="width: auto; margin: 0;" data-i18n="diag_collect">Request logs from this client</button>
                 <p style="color: var(--text-muted); font-size: 11px; margin: 8px 0 0;" data-i18n="diag_consent_note">Only collected if this user has turned diagnostic log sharing on. Every request, and every download below, is recorded in the audit log.</p>
+                <!-- Where the wait for a queued collection is reported (#1944). Empty and hidden
+                     until something is actually queued; the text and its colour are set by
+                     setDiagnosticsStatus() in dashboard.js, because "still waiting" and "nothing
+                     arrived" are different statements and an admin has to be able to tell them
+                     apart without closing and reopening the dialog. -->
+                <p id="detail-diag-status" style="color: var(--text-muted); font-size: 11px; margin: 8px 0 0; display: none;"></p>
             </div>
             <div class="table-container" id="detail-diag-wrap" style="display: none; max-height: 200px; overflow-y: auto;">
                 <table>

@@ -718,6 +718,13 @@
                                     </table>
                                 </div>
                             </div>
+                            <!-- Per-provider attribution (#1921). Every supported vendor's
+                                 licence obliges a visible credit and each obliges a different
+                                 one, so the text is filled in from the provider the gateway
+                                 derived from the database file itself -- it is not markup here,
+                                 and it is deliberately empty until a database is actually open.
+                                 Same panel, same rule, in Portal V2 (#1866). -->
+                            <p id="geo-distribution-attribution" style="font-size: 11px; margin: 12px 0 0; color: var(--text-muted);"></p>
                         </div>
                         <div class="glass" style="padding: 16px; grid-column: span 3;">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>

@@ -5,8 +5,8 @@ import { createApprovedUser, deleteUser } from './utils/nonadmin';
 /**
  * Anonymous geographic distribution, both portals (#1152).
  *
- * The E2E stack ships no MaxMind database, and never will -- it is a ~60MB licensed
- * artefact. So what runs here is the `available: false` path, which is not a degraded
+ * The E2E stack ships no geo-IP database, and never will -- every vendor forbids
+ * redistribution (#1921). So what runs here is the `available: false` path, which is not a degraded
  * case to be tolerated but the state most deployments are in permanently, and the one an
  * admin is most likely to see.
  *
@@ -40,8 +40,9 @@ test.describe('Geographic distribution — Portal V2', () => {
     // Names the setting, so an operator who wants it knows what to set. If the field is
     // ever renamed, this fails rather than leaving the UI pointing at a dead setting --
     // which it did: the first version of this panel said `geoip_database_path`, which
-    // has never existed.
-    await expect(panel).toContainText('geolite2_db_path');
+    // has never existed. `country_db_path` since #1921; `geolite2_db_path` still works as
+    // an alias but is not what a new deployment should be told to write.
+    await expect(panel).toContainText('country_db_path');
   });
 
   test('it does not claim there are no users when it simply is not running', async ({
@@ -77,7 +78,7 @@ test.describe('Geographic distribution — Portal V1', () => {
   }) => {
     const headline = page.locator('#geo-distribution-headline');
     await expect(headline).toBeVisible();
-    await expect(headline).toContainText('geolite2_db_path');
+    await expect(headline).toContainText('country_db_path');
 
     // The raw key, which is what t() falls back to when a translation is missing. V1 calls
     // t() with no default here, so an unadded key renders as "geo_unavailable" to the user.
@@ -95,7 +96,7 @@ test.describe('Geographic distribution — Portal V1', () => {
     // Positive anchor first. Every assertion below is an absence, and absences pass just
     // as well on a page that rendered nothing at all (e2e-testing skill §3).
     await expect(page.locator('#geo-distribution-headline')).toContainText(
-      'geolite2_db_path',
+      'country_db_path',
     );
 
     // The tbody is asserted rather than the wrapper: the wrapper did not exist before the
@@ -116,6 +117,83 @@ test.describe('Geographic distribution — Portal V1', () => {
     await expect(
       page.locator('#geo-distribution-table-body-search'),
     ).toHaveCount(0);
+  });
+});
+
+/**
+ * Per-provider attribution (#1921).
+ *
+ * The E2E stack ships no geo-IP database, so what is exercised here is the switched-off
+ * state -- and the assertion that matters in that state is an ABSENCE: no vendor's credit
+ * line may appear under a panel that is not using anyone's data. Getting this wrong would
+ * publish, say, DB-IP's CC BY 4.0 acknowledgment on every deployment that never deployed a
+ * DB-IP file.
+ *
+ * Each absence is anchored on a positive assertion first, because an absence passes just as
+ * well on a page that rendered nothing at all (e2e-testing skill §3).
+ *
+ * The populated side -- which vendor gets which credit -- is covered by Go tests against a
+ * real database (pkg/geo/provider_compat_test.go) rather than here, because proving it in a
+ * browser would mean shipping a licensed artefact into the E2E image, which no vendor allows.
+ */
+test.describe('Geographic distribution attribution — Portal V2', () => {
+  test.beforeEach(async ({ page }) => {
+    await clearMailpit();
+    await page.goto('/portalv2/');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+    await expect(page.locator('text=Magic link sent')).toBeVisible();
+    const token = await getMagicLinkToken(adminEmail);
+    await page.goto(`/portalv2/login?token=${token}`);
+    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto('/portalv2/admin/analytics');
+  });
+
+  test('no vendor is credited while the feature is switched off', async ({
+    page,
+  }) => {
+    const panel = page
+      .locator('.card')
+      .filter({ hasText: 'Geographic Distribution' });
+    await expect(panel).toContainText('country_db_path');
+
+    await expect(panel).not.toContainText('DB-IP');
+    await expect(panel).not.toContainText('MaxMind');
+    await expect(panel).not.toContainText('IP2Location');
+    await expect(panel.locator('a[href*="db-ip.com"]')).toHaveCount(0);
+  });
+});
+
+test.describe('Geographic distribution attribution — Portal V1', () => {
+  test.beforeEach(async ({ page }) => {
+    await clearMailpit();
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+    await expect(page.locator('text=Magic Link Sent')).toBeVisible();
+    const token = await getMagicLinkToken(adminEmail);
+    await page.goto(`/admin?token=${token}`);
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
+    await page.click('#nav-analytics');
+  });
+
+  test('the credit line exists in the markup and is empty when off', async ({
+    page,
+  }) => {
+    // Positive anchor: the panel loaded and reported itself off.
+    await expect(page.locator('#geo-distribution-headline')).toContainText(
+      'country_db_path',
+    );
+
+    // Present in the DOM rather than absent -- dashboard.js fills this element, so a
+    // missing element would mean the credit can never render in ANY state, which the
+    // absence assertions below would happily pass over.
+    const attribution = page.locator('#geo-distribution-attribution');
+    await expect(attribution).toHaveCount(1);
+    await expect(attribution).toHaveText('');
   });
 });
 

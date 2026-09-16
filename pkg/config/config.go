@@ -88,12 +88,23 @@ type ServerConfig struct {
 	ForceIPWhitelist           bool   `yaml:"force_ip_whitelist"`
 	ForceMFA                   bool   `yaml:"force_mfa"`
 	DBPath                     string `yaml:"db_path"`
-	// GeoLite2DBPath points at a MaxMind GeoLite2/GeoIP2 Country or City database, used
-	// to resolve a client IP to a country in memory at registration (#1152). Empty --
-	// the default -- disables the anonymous geographic distribution entirely; the panel
+	// CountryDBPath points at a country database in MaxMind's .mmdb format, used to
+	// resolve a client IP to a country in memory at registration (#1152). Empty -- the
+	// default -- disables the anonymous geographic distribution entirely; the panel
 	// reports itself unavailable and registration is unaffected. No database file ships
-	// with the server: MaxMind's licence terms and the ~60MB artefact are the operator's
-	// to take on, and the feature is designed to be absent.
+	// with the server: every vendor forbids redistribution, so obtaining the ~15-120MB
+	// artefact is the operator's job, and the feature is designed to be absent.
+	//
+	// Provider-neutral because the feature is (#1921): MaxMind GeoLite2/GeoIP2, DB-IP Lite
+	// and IP2Location's MMDB editions all work, and the old spelling below named one of
+	// the three in a setting that is really just "where the country database lives".
+	CountryDBPath string `yaml:"country_db_path"`
+	// GeoLite2DBPath is the original, MaxMind-named spelling of CountryDBPath, kept
+	// working as an alias (#1921).
+	//
+	// Not a deprecation that removes anything: a live gateway is configured with this key,
+	// and a rename that breaks a running deployment is not an improvement. See
+	// CountryDatabasePath for which one wins when both are set.
 	GeoLite2DBPath         string           `yaml:"geolite2_db_path"`
 	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
 	Webhooks               WebhookConfig    `yaml:"webhooks"`
@@ -287,6 +298,30 @@ type ServerConfig struct {
 	// Entries not present in Domains are dropped at startup -- a gateway cannot issue a host
 	// it does not serve.
 	TunnelDomains []string `yaml:"tunnel_domains"`
+}
+
+// CountryDatabasePath resolves the two spellings of the geo-IP database setting to the one
+// path the gateway actually opens (#1921).
+//
+// **The neutral key wins when both are set**, and the direction is not arbitrary. The alias
+// is what an OLD config file carries; the neutral key is what someone has just typed. If the
+// alias won, adding `country_db_path` to a config that still has `geolite2_db_path` would do
+// nothing at all -- silently, with the log line naming the old path and looking entirely
+// healthy. That is the one outcome an operator cannot debug from the outside. The reverse
+// mistake (the new key taking effect) is visible the moment they read the startup log.
+//
+// bothSet is reported so the caller can warn rather than choose in silence; two paths in one
+// file is a config the operator should be told about either way.
+func (c *ServerConfig) CountryDatabasePath() (path string, bothSet bool) {
+	if c == nil {
+		return "", false
+	}
+	neutral := strings.TrimSpace(c.CountryDBPath)
+	alias := strings.TrimSpace(c.GeoLite2DBPath)
+	if neutral != "" {
+		return neutral, alias != "" && alias != neutral
+	}
+	return alias, false
 }
 
 type RoleSetting struct {
@@ -668,6 +703,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_GEOLITE2_DB_PATH"); val != "" {
 		cfg.GeoLite2DBPath = val
+	}
+	if val := os.Getenv("LFT_COUNTRY_DB_PATH"); val != "" {
+		cfg.CountryDBPath = val
 	}
 	if val := os.Getenv("LFT_SMTP_HOST"); val != "" {
 		cfg.SMTPServer.Host = val

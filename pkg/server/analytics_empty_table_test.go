@@ -122,6 +122,27 @@ func stateHeadlinePanels(t *testing.T, markup string) ([]string, map[string]bool
 	return panels, ids
 }
 
+// stripElement removes the single element carrying `id`, opening tag through closing tag, from
+// `fragment`. Used to except one deliberately-uncontained paragraph from the containment rule
+// above without excepting the panel it lives in.
+//
+// Deliberately narrow: it matches one non-nesting element by id and removes nothing else, so an
+// exemption cannot quietly grow to cover a sibling added next to it.
+func stripElement(fragment, id string) string {
+	open := regexp.MustCompile(`<([a-zA-Z]+)[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*>`)
+	loc := open.FindStringSubmatchIndex(fragment)
+	if loc == nil {
+		return fragment
+	}
+	tag := fragment[loc[2]:loc[3]]
+	closing := "</" + tag + ">"
+	end := strings.Index(fragment[loc[1]:], closing)
+	if end < 0 {
+		return fragment
+	}
+	return fragment[:loc[0]] + fragment[loc[1]+end+len(closing):]
+}
+
 // matchingDivEnd returns the offset of the `</div>` that closes the `<div>` opening at `start`.
 //
 // HTML comments MUST already be stripped from `markup`: this file's markup is heavily commented,
@@ -201,12 +222,55 @@ func TestStateHeadlinePanelAnnotationsLiveWithTheirTable(t *testing.T) {
 		}
 
 		trailing := strings.TrimSpace(markup[wrapEnd+len("</div>") : panelEnd])
+		// One bounded exception, and it is not an annotation of the table (#1921). The geo
+		// panel's attribution is the credit every geo-IP vendor's licence requires wherever
+		// their data is displayed OR USED -- DB-IP's CC BY 4.0 wording is exactly that pair
+		// -- so it has to survive the below-threshold state, where rows exist and are
+		// suppressed. Containing it in the wrapper would hide the credit in precisely the
+		// state where data was used and nothing was shown.
+		//
+		// It is exempt from containment, not from state: it is driven by `available`
+		// instead, and that is asserted below rather than assumed, so this cannot become a
+		// hole a later unconditional paragraph slips through.
+		trailing = strings.TrimSpace(stripElement(trailing, prefix+"-attribution"))
 		if trailing != "" {
 			if len(trailing) > 160 {
 				trailing = trailing[:160] + "..."
 			}
 			t.Errorf("the %s panel renders this after #%s closes, so it survives into the empty state where the table and its columns are gone (#1931):\n\t%s\nMove it inside #%s, so the one toggle that hides the table hides it too.", prefix, wrap, trailing, wrap)
 		}
+	}
+
+	// The geo attribution's exemption above is only sound if something else switches it off
+	// when no database is open. Nothing on the server renders it -- dashboard.js does -- so
+	// this is where that half is held (#1921).
+	js, err := os.ReadFile(filepath.Join("static", "dashboard.js"))
+	if err != nil {
+		t.Fatalf("read dashboard.js: %v", err)
+	}
+	source := string(js)
+	if !strings.Contains(source, `getElementById('geo-distribution-attribution')`) {
+		t.Errorf("dashboard.js never reaches #geo-distribution-attribution, so the paragraph exempted " +
+			"from table containment above is rendered by nothing and cleared by nothing (#1921)")
+	}
+	// The clearing branch. Without it the credit line would persist from a previous render
+	// into the "no database configured" state -- a licence acknowledgment under a panel that
+	// is switched off, naming a vendor whose data is not in use.
+	if !regexp.MustCompile(`if\s*\(!available\)\s*\{\s*el\.textContent\s*=\s*''`).MatchString(source) {
+		t.Errorf("dashboard.js does not clear the geo attribution when the feature is unavailable; " +
+			"the credit would survive into the switched-off state (#1921)")
+	}
+	// Parity (#1866): V2 must key the same paragraph off the same condition. A credit
+	// rendered in one arm of a live A/B test and not the other is the defect, not a style
+	// difference -- and V2's own panel already branches on bucket count for everything else,
+	// which is exactly the mistake this guards.
+	v2, err := os.ReadFile(filepath.Join("..", "..", "ui", "src", "pages", "AdminAnalytics.tsx"))
+	if err != nil {
+		t.Fatalf("read AdminAnalytics.tsx: %v", err)
+	}
+	if !strings.Contains(string(v2), "locations?.available && (") {
+		t.Errorf("Portal V2 does not render the geo attribution on `locations?.available`, so the " +
+			"two arms disagree about when a required credit line appears (#1866, #1921)")
 	}
 
 	// The caveat must still RENDER -- just not early. Dropping it would be the worse defect:

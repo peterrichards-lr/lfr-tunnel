@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,11 +23,22 @@ import (
 // artefact. geo.Resolver is an interface for exactly this reason.
 type stubResolver struct {
 	countries map[string]string
+	// provider is what the panel would attribute the data to. Zero value is the empty
+	// string rather than a vendor, so a test that does not care cannot accidentally assert
+	// somebody's credit line (#1921).
+	provider geo.Provider
 }
 
 func (s stubResolver) Country(ip netip.Addr) (string, bool) {
 	c, ok := s.countries[ip.String()]
 	return c, ok
+}
+
+func (s stubResolver) Provider() geo.Provider {
+	if s.provider == "" {
+		return geo.ProviderUnknown
+	}
+	return s.provider
 }
 
 func (s stubResolver) Close() error { return nil }
@@ -343,4 +356,134 @@ func TestObserveGeoLocationIsSafeWhenDisabled(t *testing.T) {
 
 	srv.geo = nil
 	srv.observeGeoLocation("someone@example.com", "203.0.113.40")
+}
+
+// TestLocationAnalyticsCarriesTheProviderForAttribution (#1921).
+//
+// The panel has to render the credit the supplying vendor's licence requires, and each
+// vendor requires a different one -- so "which vendor" has to reach the browser. It is
+// derived from the database file's own metadata rather than configured, and this is the test
+// that the derived value actually travels to the client.
+func TestLocationAnalyticsCarriesTheProviderForAttribution(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	srv.geo = geo.New(
+		stubResolver{provider: geo.ProviderDBIP},
+		geoStore{database: srv.db},
+		geo.Options{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
+	rec := httptest.NewRecorder()
+	srv.handleGetLocationAnalytics(rec, req)
+
+	var resp locationAnalyticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Provider != string(geo.ProviderDBIP) {
+		t.Errorf("provider: got %q, want %q -- the panel cannot render DB-IP's required "+
+			"link back to db-ip.com without it", resp.Provider, geo.ProviderDBIP)
+	}
+}
+
+// TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase.
+//
+// With nothing open there is no data on screen, so there is nothing to attribute -- and
+// naming a vendor here would put a credit line under a panel that is switched off. This is
+// the state most deployments are in permanently, so it is the one most likely to be seen.
+func TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	if srv.geo != nil {
+		t.Fatalf("premise broken: the test server should have no geo database")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
+	rec := httptest.NewRecorder()
+	srv.handleGetLocationAnalytics(rec, req)
+
+	var resp locationAnalyticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Provider != "" {
+		t.Errorf("provider: got %q with no database configured, want empty", resp.Provider)
+	}
+}
+
+// TestAnUnrecognisedDatabaseIsNotAttributedToAVendor.
+//
+// The failure this guards is silent by construction: a plausible, complete credit line
+// naming a company that did not supply the data, with the actual supplier's licence still
+// unmet and nothing on the page to contradict it. "unknown" has to survive the whole way to
+// the client for the panel to be able to say so.
+func TestAnUnrecognisedDatabaseIsNotAttributedToAVendor(t *testing.T) {
+	srv := setupGeoTestServer(t)
+	srv.geo = geo.New(stubResolver{}, geoStore{database: srv.db}, geo.Options{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/locations", nil)
+	rec := httptest.NewRecorder()
+	srv.handleGetLocationAnalytics(rec, req)
+
+	var resp locationAnalyticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Provider != string(geo.ProviderUnknown) {
+		t.Errorf("provider: got %q, want %q", resp.Provider, geo.ProviderUnknown)
+	}
+}
+
+// TestTheServerOpensThePathTheResolvedKeyNames (#1921).
+//
+// pkg/config proves the two spellings resolve to one value; this proves server.go reads that
+// resolved value rather than the field it used to read. Leaving `cfg.GeoLite2DBPath` in
+// server.go still compiles and still passes every test in pkg/config, and ships a gateway
+// that ignores `country_db_path` entirely.
+//
+// The startup log is the assertion surface because it is the only place the chosen path is
+// observable from outside: both spellings here name a missing file, so both correctly end up
+// with geo disabled, and the nil check alone cannot tell which file was tried. That is not a
+// contrivance -- docs/server/setup_guide.md §8.11.7 tells operators to diagnose exactly this
+// from exactly this log line.
+func TestTheServerOpensThePathTheResolvedKeyNames(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*config.ServerConfig, string)
+	}{
+		{"legacy alias", func(c *config.ServerConfig, p string) { c.GeoLite2DBPath = p }},
+		{"neutral key", func(c *config.ServerConfig, p string) { c.CountryDBPath = p }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Unique per case so a log line naming it cannot have come from the other one.
+			wantPath := filepath.Join(t.TempDir(), "absent", tc.name+"-country.mmdb")
+
+			var buf bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+
+			cfg := &config.ServerConfig{
+				Domains:                []string{"example.com"},
+				DisableBackupScheduler: true,
+				DBPath:                 filepath.Join(t.TempDir(), "geo_keys.db"),
+			}
+			tc.set(cfg, wantPath)
+
+			srv, err := NewServer(cfg)
+			if err != nil {
+				t.Fatalf("NewServer: %v", err)
+			}
+			defer srv.Stop()
+
+			// A missing file disables the feature gracefully whichever spelling named it.
+			if srv.geo != nil {
+				t.Errorf("geo is active despite the database being absent")
+			}
+			if !strings.Contains(buf.String(), wantPath) {
+				t.Errorf("the startup log never names %s=%q, so the server is not reading the "+
+					"resolved path. Log was:\n%s", tc.name, wantPath, buf.String())
+			}
+		})
+	}
 }

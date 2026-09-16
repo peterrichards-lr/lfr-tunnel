@@ -554,9 +554,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
-	// Optional and absent by default: no MaxMind database is shipped, and without one
-	// this stays nil and every geo call becomes a no-op (#1152).
-	srv.geo = newGeoAggregator(cfg.GeoLite2DBPath, database)
+	// Optional and absent by default: no geo-IP database is shipped by any vendor's
+	// licence, and without one this stays nil and every geo call becomes a no-op (#1152).
+	// The path has two accepted spellings, resolved in one place (#1921).
+	geoPath, geoBothPathsSet := cfg.CountryDatabasePath()
+	srv.geo = newGeoAggregator(geoPath, geoBothPathsSet, database)
 
 	// Edge power actions (start/stop/restart, schedule editing) are entirely
 	// optional and AWS-specific -- absent unless both the sidecar URL and its

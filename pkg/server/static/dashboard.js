@@ -2986,6 +2986,77 @@ function geoBucketLabel(bucket) {
   }
 }
 
+/**
+ * Per-provider attribution for the geographic distribution panel (#1921).
+ *
+ * Every supported vendor's licence obliges a visible credit, and each obliges a DIFFERENT
+ * one, so this is a lookup rather than one hardcoded sentence: MaxMind's GeoLite EULA §3
+ * ("You must provide attribution of your use to MaxMind"), DB-IP's CC BY 4.0 ("you must
+ * include a link back to DB-IP.com on pages that display or use results from the database"),
+ * and IP2Location LITE's LICENSE_LITE.TXT, which prescribes its acknowledgment word for word.
+ *
+ * The href and link text live HERE rather than in the properties bundle. DB-IP's obligation
+ * is specifically a link, so a locale file that lost the anchor would quietly breach the
+ * licence; the bundle holds only the sentence around it, with {0} marking where the link goes.
+ *
+ * `unknown` is absent on purpose: there is nobody to link to, and naming a vendor anyway
+ * would be a false provenance claim AND would leave the real supplier's licence unmet.
+ */
+const GEO_ATTRIBUTION_LINK = {
+  maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
+  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  ip2location: {
+    href: 'https://lite.ip2location.com',
+    text: 'IP geolocation',
+  },
+};
+
+/**
+ * geoAttributionText resolves the credit for one provider.
+ *
+ * A switch of literal t() keys rather than t(map[provider]): scripts/check-i18n-keys.cjs can
+ * only see a string literal, and a key it cannot see is a key it cannot hold in the locale
+ * bundles -- which is exactly how 477 keys drifted out before #1701.
+ */
+function geoAttributionText(provider) {
+  if (provider === 'maxmind') return t('geo_attribution_maxmind');
+  if (provider === 'dbip') return t('geo_attribution_dbip');
+  if (provider === 'ip2location') return t('geo_attribution_ip2location');
+  return t('geo_attribution_unknown');
+}
+
+/**
+ * renderGeoAttribution fills the credit line under the panel, or clears it when no database
+ * is open.
+ *
+ * `available` rather than the row count decides: the below-threshold state is a state where
+ * results WERE used, just not shown, and DB-IP's wording covers pages that "display or use"
+ * them. Keying off availability is the reading that cannot be wrong.
+ *
+ * Kept in step with Portal V2's copy of this in ui/src/pages/AdminAnalytics.tsx -- the two
+ * arms are an A/B test, so a credit rendered in one and not the other is a defect (#1866).
+ */
+function renderGeoAttribution(available, provider) {
+  const el = document.getElementById('geo-distribution-attribution');
+  if (!el) return;
+  if (!available) {
+    el.textContent = '';
+    return;
+  }
+  const key = provider || 'unknown';
+  const text = geoAttributionText(key);
+  const link = GEO_ATTRIBUTION_LINK[key];
+  const parts = text.split('{0}');
+  if (parts.length < 2 || !link) {
+    el.textContent = text;
+    return;
+  }
+  el.innerHTML =
+    escapeHTML(parts[0]) +
+    `<a href="${escapeHTML(link.href)}" target="_blank" rel="noreferrer">${escapeHTML(link.text)}</a>` +
+    escapeHTML(parts.slice(1).join('{0}'));
+}
+
 // The analytics window, in days. '0' is V2's "All Time" value. Mirrors V2's request shape
 // exactly rather than improving on it: the portals are a live A/B test, so a difference in what
 // the two arms fetch would make the comparison measure the fix instead of the presentation.
@@ -3415,7 +3486,7 @@ async function loadAnalytics() {
       // Anonymous geographic distribution (#1152). Same panel as Portal V2 -- the two are
       // an A/B test, so a reader in one and not the other is a parity defect.
       //
-      // `available` is what separates "no MaxMind database deployed" from "deployed, but
+      // `available` is what separates "no geo-IP database deployed" from "deployed, but
       // nothing has cleared the k-threshold yet". They look identical in the data and mean
       // completely different things to an admin staring at an empty table.
       try {
@@ -3437,6 +3508,10 @@ async function loadAnalytics() {
               )}`;
             }
           }
+          // The credit each vendor's licence requires, keyed off the provider the gateway
+          // derived from the database file itself (#1921). Outside the headline branches
+          // above because it applies to both available states, not just the one with rows.
+          renderGeoAttribution(!!geo.available, geo.provider);
           // No database means no table at all, not an empty one (#1920) -- see
           // renderTableOrHide(). `available: false` is passed as zero rows because the
           // two states must look the same here: the headline above is the only thing

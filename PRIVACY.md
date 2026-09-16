@@ -46,7 +46,7 @@ The `lfr-tunnel` client keeps its own logs on **your** machine, in `~/.lfr-tunne
 
 ### E. Anonymous Geographic Distribution (Operator-Enabled, Off by Default)
 
-A gateway operator may configure a geo-IP database (`geolite2_db_path`) so that administrators can see, on the admin analytics page, **how many distinct users registered from each country during the current ISO week**. No geo-IP database is shipped with the gateway and none can be — every vendor forbids redistribution — so this is **off unless an operator has deliberately obtained and deployed one**, and off is the default and a fully supported state.
+A gateway operator may configure a geo-IP database (`country_db_path`, previously spelled `geolite2_db_path`) so that administrators can see, on the admin analytics page, **how many distinct users registered from each country during the current ISO week**. No geo-IP database is shipped with the gateway and none can be — every vendor forbids redistribution — so this is **off unless an operator has deliberately obtained and deployed one**, and off is the default and a fully supported state.
 
 Where it is enabled, this is a **further purpose for the IP address already described in §1.A**, not a new collection. What it does and does not do:
 

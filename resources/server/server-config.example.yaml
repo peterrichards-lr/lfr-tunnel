@@ -205,4 +205,10 @@ proxy_headers: {}
 # to take on.
 #
 # Setup, licensing and how to verify it took effect: docs/server/setup_guide.md section 8.11.
+country_db_path: ""
+
+# Deprecated spelling of country_db_path, still honoured so no running deployment breaks
+# (#1921). It named MaxMind in a setting that is really just "where the country database
+# lives", and three vendors now work. If both are set, country_db_path wins and the gateway
+# warns at startup -- so migrate the line rather than duplicating it.
 geolite2_db_path: ""

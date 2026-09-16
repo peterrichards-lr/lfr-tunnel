@@ -238,6 +238,12 @@ func main() {
 		// gateway-side problem rather than anything the user chose.
 		client.RecordRegionSource(regionvocab.SourceGiven)
 	}
+	// Captured before resolution, which overwrites cfg.Region whenever the named region is
+	// unavailable and a probe has to stand in for it (#1690). Without it there is no later way
+	// to tell "the user asked for us-east" from "a probe chose us-east", which is the difference
+	// between honouring a request and overriding one when the roster changes (#1937).
+	requestedRegion := strings.ToLower(strings.TrimSpace(cfg.Region))
+
 	resolveServerURL(cfg, isExplicitServer)
 
 	// A build that bakes in no DefaultServerURL (#1188) reaches here with nothing to
@@ -605,6 +611,12 @@ func main() {
 		// with nowhere to go -- strictly worse than letting it run until the gateway stops.
 		if !isExplicitServer {
 			engine.StartShutdownMigrator(clientCtx, cancelClient)
+			// Same gate, same reason: a pinned client must not be moved, and
+			// regionvocab.IsPinned draws that line at -server alone (#1937). Started after
+			// StartHealthChecks, which resets the fingerprint baseline for this session.
+			if len(cfg.Regions) > 0 {
+				startNodeSetWatcher(clientCtx, cancelClient, engine, cfg.ServerURL, requestedRegion)
+			}
 		}
 
 		err = client.RunClient(clientCtx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
@@ -714,8 +726,8 @@ func main() {
 					lastFailbackAt = time.Now()
 					slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
 					engine.LogEvent("info", "failback", map[string]any{
-						"from": fallbackRegion,
-						"to":   cfg.Region,
+						logFieldFrom: fallbackRegion,
+						"to":         cfg.Region,
 					})
 					continue
 				}
@@ -735,6 +747,74 @@ func main() {
 				}
 				slog.Info(fmt.Sprintf("[Client] Staying on region '%s'; will retry the primary later.", fallbackRegion))
 				cooldowns.exclude(primaryServerURL, regionFailoverCooldown)
+				cfg.Region, cfg.ServerURL = fallbackRegion, fallbackServerURL
+				failbackReturned = true
+			}
+
+			// A move decided by the node-set watcher (#1937). Placed before the failover
+			// branch and shaped like the failback one above, because it is the same kind of
+			// event: a deliberate move to a gateway already known to be reachable, not a
+			// recovery from a fault. The destination was chosen while the old session was
+			// still up, so nothing here re-elects.
+			if target := reelection.consume(); target != nil {
+				fallbackRegion, fallbackServerURL := cfg.Region, cfg.ServerURL
+
+				cfg.Region, cfg.ServerURL = target.Region, target.URL
+				if len(target.Regions) > 0 {
+					// The roster the decision was made against, which is the point: the
+					// startup list is the one missing the node we are moving to.
+					cfg.Regions = target.Regions
+				}
+
+				newResp, failure := attemptRegistration(cfg, regPortMappings, sub, engine.AddedHeaders)
+				if failure == nil {
+					// The gateway we just left must not pull us straight back. Two separate
+					// mechanisms would: the failback prober, which polls the region elected
+					// at startup, and a subsequent failover, which would find that gateway
+					// electable again. So the newly elected gateway becomes the primary --
+					// it IS the best one now -- and the old one takes a cooldown, which is
+					// #1374's rule that a client must not fail back immediately after a
+					// planned move.
+					cooldowns.exclude(fallbackServerURL, regionFailoverCooldown)
+					primaryRegion, primaryServerURL = cfg.Region, cfg.ServerURL
+					engine.PrimaryRegion, engine.PrimaryServerURL = cfg.Region, cfg.ServerURL
+					primaryRegionsMap = make(map[string]string, len(cfg.Regions))
+					for k, v := range cfg.Regions {
+						primaryRegionsMap[k] = v
+					}
+					// The cached election was made against the old roster and would undo
+					// this on the next start; dropped so the next start re-probes. The
+					// failure is reported rather than suppressed: a cache that could not be
+					// cleared is the one way this move silently does not survive a restart.
+					if cerr := client.ClearRegionCacheFile(); cerr != nil {
+						slog.Info(fmt.Sprintf("[Warning] Could not clear the cached region election after moving: %v", cerr))
+					}
+					applySession(newResp, "node set change")
+					slog.Info(fmt.Sprintf("[Client] Moved to region '%s' (%s) after the available gateways changed.", cfg.Region, cfg.ServerURL))
+					engine.LogEvent("info", "node_set_move", map[string]any{
+						logFieldFrom:   fallbackRegion,
+						"to":           cfg.Region,
+						logFieldURL:    cfg.ServerURL,
+						fieldMoveCause: target.Reason,
+					})
+					continue
+				}
+
+				// The move failed, so it must not be worse than not having attempted it:
+				// put the client back where it was and let the branch below re-establish
+				// the session there. keepRegion is what stops that branch treating the
+				// gateway we never left as the casualty (the #1137 reasoning).
+				slog.Info(fmt.Sprintf("[Warning] Moving to region '%s' failed: %v", target.Region, failure.err))
+				engine.LogEvent("warn", "node_set_move_failed", map[string]any{
+					"to":         target.Region,
+					logFieldURL:  target.URL,
+					"staying_on": fallbackRegion,
+					"error":      failure.err.Error(),
+				})
+				for _, line := range failure.advice {
+					slog.Info(line)
+				}
+				cooldowns.exclude(target.URL, regionFailoverCooldown)
 				cfg.Region, cfg.ServerURL = fallbackRegion, fallbackServerURL
 				failbackReturned = true
 			}
@@ -788,7 +868,7 @@ func main() {
 						slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
 					}
 					engine.LogEvent("info", "failover", map[string]any{
-						"from":           failedRegion,
+						logFieldFrom:     failedRegion,
 						"to":             cfg.Region,
 						logFieldURL:      cfg.ServerURL,
 						"after_failback": failbackReturned,
@@ -1225,6 +1305,11 @@ const logFieldRegion = "region"
 
 // logFieldURL is the same for the gateway URL.
 const logFieldURL = "url"
+
+// logFieldFrom is the same for the region a move started from. Three events record one now --
+// failback, failover and the node-set move (#1937) -- and a typo in any of them writes an event
+// under a key nothing queries.
+const logFieldFrom = "from"
 
 func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool, planned bool) {
 	if afterFailback {
@@ -1822,6 +1907,14 @@ const regionCacheTTL = time.Hour
 // provisionalRegionCacheTTL is how long an election made with regions missing is trusted.
 // Short enough that a client started while an edge sat in its power-off window re-probes
 // within the working day instead of staying on a distant region until tomorrow.
+//
+// It is consulted in resolveServerURL and nowhere else, so it has only ever applied to a client
+// that STARTS inside the window -- a client already running when the edge wakes never re-reads it
+// and was never helped by it, which is the case the comment above describes (#1937). Left as a
+// startup backstop deliberately rather than turned into a running timer: the node-set signal now
+// covers the running client, and it fires on the edge actually returning rather than 30 minutes
+// later whether anything changed or not. A timer that re-probes on a schedule would re-elect
+// clients for no reason on every tick where nothing had moved.
 const provisionalRegionCacheTTL = 30 * time.Minute
 
 func getRegionCachePath() (string, error) {
@@ -2298,6 +2391,19 @@ func newProbeTransport() *http.Transport {
 }
 
 func probeFastestRegion(regions map[string]string) (string, []string) {
+	rtts, unreachable := probeRegionLatencies(regions)
+	reportProbeResults(rtts, unreachable)
+	return fastestRegion(rtts), unreachable
+}
+
+// probeRegionLatencies measures every advertised gateway and returns the round trips it got,
+// keyed by region name, plus the names that did not answer.
+//
+// Split out of probeFastestRegion so the mid-session re-election (#1937) measures with exactly
+// this code rather than a second copy of it. A copy would have to be told about #1947's
+// dedicated transport, #1166's per-host dedupe and #1165's carry-a-session check separately,
+// and each of those was a real defect found in production.
+func probeRegionLatencies(regions map[string]string) (map[string]time.Duration, []string) {
 	// One probe per gateway, not per name. The gateway advertises each region twice
 	// ('in' and 'edge-in' are the same host), so probing by name doubled the health
 	// requests and ranked a host against itself on RTT noise (issue #1166).
@@ -2305,7 +2411,6 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 
 	type probeResult struct {
 		region string
-		url    string
 		rtt    time.Duration
 	}
 	ch := make(chan probeResult, len(regions))
@@ -2352,8 +2457,7 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 				// on the status code is how a client ends up on an edge that throws it
 				// off five seconds later (issue #1165).
 				if client.GatewayCanCarrySession(resp.StatusCode, body) {
-					rtt := time.Since(start)
-					ch <- probeResult{region: r, url: targetURL, rtt: rtt}
+					ch <- probeResult{region: r, rtt: time.Since(start)}
 				}
 			}
 		}(reg, u)
@@ -2362,51 +2466,75 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 	wg.Wait()
 	close(ch)
 
-	var results []probeResult
+	rtts := make(map[string]time.Duration, len(regions))
 	for res := range ch {
-		results = append(results, res)
+		rtts[res.region] = res.rtt
 	}
 
-	answered := make(map[string]bool, len(results))
-	for _, r := range results {
-		answered[r.region] = true
-	}
 	var unreachable []string
 	for reg := range regions {
-		if !answered[reg] {
+		if _, answered := rtts[reg]; !answered {
 			unreachable = append(unreachable, reg)
 		}
 	}
 	sort.Strings(unreachable)
 
-	if len(results) == 0 {
-		return "", unreachable
+	return rtts, unreachable
+}
+
+// reportProbeResults prints the measurement and hands it to the registration path.
+//
+// Keep the whole measurement, not just the winner (#1151). Every one of these numbers was
+// paid for and thrown away, and together they are the best evidence there is for whether a
+// region needs an edge -- better than geography, which cannot see a VPN or a tethered
+// phone.
+func reportProbeResults(rtts map[string]time.Duration, unreachable []string) {
+	if len(rtts) == 0 && len(unreachable) == 0 {
+		return
 	}
 
-	best := results[0]
-	fmt.Println("[Client] Region latency probe results:")
-	// Keep the whole measurement, not just the winner (#1151). Every one of these numbers was
-	// paid for and thrown away, and together they are the best evidence there is for whether a
-	// region needs an edge -- better than geography, which cannot see a VPN or a tethered
-	// phone.
-	probes := make([]client.RegionProbe, 0, len(results)+len(unreachable))
-	for _, r := range results {
-		fmt.Printf("  - %s: %v\n", r.region, r.rtt)
-		probes = append(probes, client.RegionProbe{
-			Region: r.region,
-			RTTMs:  int(r.rtt.Milliseconds()),
-		})
-		if r.rtt < best.rtt {
-			best = r
+	// Fastest first, and by name where two are identical: map order is random, so without
+	// this the same measurement prints in a different order every run and no two log lines
+	// from two clients can be compared.
+	ranked := make([]string, 0, len(rtts))
+	for reg := range rtts {
+		ranked = append(ranked, reg)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if rtts[ranked[i]] != rtts[ranked[j]] {
+			return rtts[ranked[i]] < rtts[ranked[j]]
 		}
+		return ranked[i] < ranked[j]
+	})
+
+	fmt.Println("[Client] Region latency probe results:")
+	probes := make([]client.RegionProbe, 0, len(ranked)+len(unreachable))
+	for _, reg := range ranked {
+		fmt.Printf("  - %s: %v\n", reg, rtts[reg])
+		probes = append(probes, client.RegionProbe{
+			Region: reg,
+			RTTMs:  int(rtts[reg].Milliseconds()),
+		})
 	}
 	for _, reg := range unreachable {
 		fmt.Printf("  - %s: no response\n", reg)
 		probes = append(probes, client.RegionProbe{Region: reg, Unreachable: true})
 	}
 	reportRegionProbes(probes)
+}
 
-	return best.region, unreachable
+// fastestRegion returns the name with the lowest round trip, or "" when nothing answered.
+//
+// Ties break on the name so the result is a function of the measurement alone. It used to
+// depend on which goroutine finished first, which made a tie unreproducible.
+func fastestRegion(rtts map[string]time.Duration) string {
+	best := ""
+	for reg, rtt := range rtts {
+		if best == "" || rtt < rtts[best] || (rtt == rtts[best] && reg < best) {
+			best = reg
+		}
+	}
+	return best
 }
 
 // reportRegionProbes hands the measurement to the registration path, unless the user has turned

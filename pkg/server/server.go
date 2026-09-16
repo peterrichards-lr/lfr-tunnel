@@ -42,7 +42,6 @@ import (
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
 	"lfr-tunnel/pkg/provisioner"
-	"lfr-tunnel/pkg/regionvocab"
 	"lfr-tunnel/pkg/webhook"
 
 	"github.com/gorilla/websocket"
@@ -1071,43 +1070,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				latestClientVer = config.Version
 			}
 
-			regions := make(map[string]string)
-			if len(s.cfg.Domains) > 0 {
-				// Configured verbatim where set, because the construction below assumes both
-				// the scheme and the hostname prefix. A deployment that is neither https nor
-				// tunnel.<domain> was handed a URL that does not answer, and clients failing
-				// over to it retried every attempt against the same dead address (#1286).
-				centralURL := s.cfg.CentralURL
-				if centralURL == "" {
-					centralURL = "https://tunnel." + s.cfg.Domains[0]
-				}
-				// Derived from the declared vocabulary, not written out here (#1919).
-				// These two names and the survivor of them have to agree with what the
-				// analytics matches central's sessions against; when they were written
-				// by hand in three places, one of them picked the wrong survivor.
-				for _, alias := range regionvocab.SortedCentralAliases() {
-					regions[alias] = centralURL
-				}
-			}
-			// An edge that is configured but currently down is reported separately rather
-			// than simply left out (#1690). Omitting it left the client unable to tell "every
-			// region answered" from "a region exists but is asleep": the absent edge was not
-			// unreachable, it was invisible, so an election made inside an edge's scheduled
-			// power-off window looked complete and was cached for the full 24h -- stranding
-			// the client on a distant gateway long after the edge came back.
-			regionsUnavailable := make(map[string]string)
-			s.edgeClientsMu.RLock()
-			for _, edge := range s.edgeNodes() {
-				if edge.URL == "" {
-					continue
-				}
-				target := regionsUnavailable
-				if _, isUp := s.edgeClients[edge.ID]; isUp {
-					target = regions
-				}
-				addEdgeRegionNames(target, edge.ID, edge.URL)
-			}
-			s.edgeClientsMu.RUnlock()
+			// Built in one place so the node-set fingerprint on the heartbeat (#1937) is a
+			// hash of exactly what is advertised here, and the two cannot drift.
+			regions, regionsUnavailable := s.advertisedRegions()
 
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":           latestClientVer,
@@ -2240,6 +2205,17 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 				body = map[string]interface{}{}
 			}
 			body["commands"] = cmds
+		}
+		// The roster fingerprint rides the same body, under its own key, for the same reason
+		// the two above do: it is state the client already listens for, on the only channel a
+		// NATed client can be reached on (#1937). Declarative -- it says what this gateway's
+		// node set hashes to and nothing about what to do with that. Empty on a gateway with no
+		// roster, which is every edge, so this adds nothing to those bodies.
+		if fp := s.nodeSetFingerprint(); fp != "" {
+			if body == nil {
+				body = map[string]interface{}{}
+			}
+			body[nodeSetFingerprintField] = fp
 		}
 		if body != nil {
 			respondJSON(w, http.StatusOK, body)

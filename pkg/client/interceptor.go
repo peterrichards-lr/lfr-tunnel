@@ -163,6 +163,13 @@ type InterceptorEngine struct {
 	migrateOnShutdownAt     int64
 	migrateOnShutdownReason string
 
+	// nodeSetFingerprint is what the serving gateway last said its roster of available
+	// gateways hashes to, and nodeSetChanged is raised when that value moves (#1937). The
+	// baseline is per-session -- see ResetNodeSet in node_set.go for why -- and the change
+	// is read-and-cleared exactly once, by the watcher that decides whether to re-elect.
+	nodeSetFingerprint string
+	nodeSetChanged     bool
+
 	// latestVersion is the newest client version the gateway advertises. Refreshed while
 	// running, not just at startup: a client left up for days would otherwise never learn
 	// about a release, and those are exactly the users who do not revisit the portal
@@ -560,6 +567,11 @@ func (e *InterceptorEngine) localTargetStatus(targetPorts []int) string {
 // each overwrote the engine's single Status field with its own port's result
 // (issue #1123).
 func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, region, sessionToken string, targetPorts []int) {
+	// A new session means a new publisher of the node-set fingerprint, so the baseline starts
+	// empty and is established by this session's first heartbeat (#1937). Done here rather than
+	// inside the goroutine so it has happened before the caller starts the watcher that reads
+	// the signal.
+	e.ResetNodeSet()
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -654,6 +666,19 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 								if warning, ok := ParseNodeShutdownWarning(body); ok {
 									e.noteShutdownWarning(warning)
 								}
+								// Only the serving gateway's roster is believed, for the
+								// same reason as everything else read out of this body
+								// (#1238): central answers the no-lease branch for every
+								// edge-hosted session, so its reply describes central and
+								// not this tunnel.
+								if fingerprint, ok := ParseNodeSetFingerprint(body); ok {
+									e.NoteNodeSetFingerprint(fingerprint)
+								}
+								// Only the serving gateway's roster is believed, for the
+								// same reason as everything else read out of this body
+								// (#1238): central answers the no-lease branch for every
+								// edge-hosted session, so its reply describes central and
+								// not this tunnel.
 								// Only the serving gateway's body is read at all, which is
 								// also why only the serving gateway can deliver one of
 								// these (#1763).

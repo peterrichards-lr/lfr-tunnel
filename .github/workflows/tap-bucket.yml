@@ -1,0 +1,102 @@
+# Update (or verify) the Homebrew tap and Scoop bucket for an already-published release.
+#
+# Why this exists separately from release.yml (#1969):
+#
+# The tap update runs as the LAST step of the release job, after the tag, the release and the
+# assets all exist. So when TAP_BUCKET_PAT expired after v1.48.31, three consecutive releases
+# (v1.48.32/33/34) published successfully and silently left Homebrew and Scoop users behind --
+# every outward sign of success was already true before the step that failed.
+#
+# Recovery was impossible without cutting another version: release.yml triggers only on a tag
+# push, tags cannot be re-pushed (the Protect Version Tags ruleset forbids deletion and update),
+# and it has no workflow_dispatch. Testing a replacement credential therefore cost a release,
+# and if that one failed too, another.
+#
+# This workflow makes the step re-runnable and, with dry_run, testable in seconds. It reads
+# checksums.txt from the PUBLISHED RELEASE rather than from a build workspace, which is what
+# lets it run long after the release job has gone.
+name: Update Tap and Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish to the tap/bucket, e.g. v1.48.34"
+        required: true
+        type: string
+      dry_run:
+        description: "Authenticate and render, but push nothing. Use this to test a credential."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Update Tap and Bucket
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate the tag looks like a release
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Rejected here rather than after cloning: a typo should not reach a push, and a
+          # malformed value must not be interpolated into a URL or a formula.
+          if ! printf '%s' "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a release tag of the form vX.Y.Z"
+            exit 1
+          fi
+
+      - name: Fetch checksums.txt from the published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          # From the release, not from a build. That is what makes this runnable after the fact.
+          # A missing asset fails here with a clear reason rather than producing empty hashes
+          # that would render a formula pointing at nothing.
+          mkdir -p dist
+          if ! gh release download "$VERSION" --repo "$GITHUB_REPOSITORY" \
+                 --pattern checksums.txt --dir dist; then
+            echo "::error::Could not download checksums.txt from release $VERSION."
+            echo "::error::Check the release exists and still has its assets attached."
+            exit 1
+          fi
+          test -s dist/checksums.txt || { echo "::error::checksums.txt is empty"; exit 1; }
+          echo "Fetched $(wc -l < dist/checksums.txt) checksum line(s) for $VERSION"
+
+      - name: Update the tap and bucket
+        env:
+          TAP_BUCKET_PAT: ${{ secrets.TAP_BUCKET_PAT }}
+          VERSION: ${{ inputs.version }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          chmod +x scripts/update-tap-bucket.sh
+          if [ "$DRY" = "true" ]; then
+            ./scripts/update-tap-bucket.sh "$VERSION" "$TAP_BUCKET_PAT" dist/checksums.txt --dry-run
+          else
+            ./scripts/update-tap-bucket.sh "$VERSION" "$TAP_BUCKET_PAT" dist/checksums.txt
+          fi
+
+      - name: Confirm the tap now advertises this version
+        if: ${{ inputs.dry_run == false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          # The step that failed for three releases reported nothing an outside observer could
+          # check. This reads the tap back and fails if it does not carry the version just
+          # pushed -- so a silent no-op cannot pass for success (#1969).
+          want="${VERSION#v}"
+          got=$(gh api repos/${GITHUB_REPOSITORY_OWNER}/homebrew-tap/contents/Formula/lfr-tunnel.rb \
+                  --jq .content | base64 -d | grep -oE 'version "[0-9.]+"' | head -1 | tr -d 'version "')
+          echo "tap advertises: ${got:-<none>}   expected: $want"
+          if [ "$got" != "$want" ]; then
+            echo "::error::The tap still does not advertise $want after a push that reported success."
+            exit 1
+          fi
+          echo "Confirmed: the tap advertises $want"

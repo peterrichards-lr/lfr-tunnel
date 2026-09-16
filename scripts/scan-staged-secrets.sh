@@ -21,6 +21,13 @@
 # Fixing only (1) would leave the silent-pass mode intact for the next unforeseen cause, so the
 # result is also checked for evidence that a scan actually happened. This check has to fail
 # closed: the hook's whole justification is that a secret reaching a commit is in history.
+#
+# A third defect (#1923) was about what it SAYS rather than whether it blocks. `docker run` also
+# exits non-zero when the daemon is down, so with colima stopped every commit was refused with
+# "a secret or private token was detected" and told to add the value to .gitleaksignore -- for a
+# scan that had never run, over a secret that did not exist. Blocking was right; the sentence was
+# not, and following its advice would have meant inventing an ignore entry. See the
+# classification below.
 
 set -uo pipefail
 
@@ -28,6 +35,9 @@ set -uo pipefail
 # every commit, and so a gitleaks release cannot change what this hook accepts (#1343).
 GITLEAKS_IMAGE="${GITLEAKS_IMAGE:-zricethezav/gitleaks:v8.30.1}"
 
+# Only catches a missing CLI. It does NOT catch a stopped daemon: with colima installed the
+# docker binary is on PATH and only the socket is dead, so this passes and the `docker run` below
+# is what fails (#1923). The classification after the scan is what covers that case.
 if ! command -v docker >/dev/null 2>&1; then
     echo "❌ Error: docker was not found, so gitleaks could not run."
     echo "   Refusing to certify this commit as scanned. Install Docker, or use --no-verify"
@@ -60,10 +70,59 @@ SCAN_RC=$?
 
 printf '%s\n' "$SCAN_OUT"
 
+# A non-zero exit means "blocked" either way, and that does not change (#1343: this hook's whole
+# point is that it cannot be silently weakened). What changes is WHICH of two very different
+# states is reported, because they were previously indistinguishable to the person reading it.
+#
+# gitleaks exits 1 for a finding -- and so does `docker run` when it never reached gitleaks at
+# all. Measured on this machine, same CLI:
+#
+#   DOCKER_HOST=unix:///tmp/no-such.sock docker run ...  -> exit 1
+#     "failed to connect to the docker API at unix:///...; check if the path is correct and if
+#      the daemon is running"
+#   docker run <unpullable image> ...                    -> exit 125
+#   gitleaks with a staged ghp_ token                    -> exit 1, "leaks found: 1"
+#
+# So the exit STATUS cannot tell them apart -- 1 is both. The evidence that gitleaks itself
+# reached a verdict is in its output: a `protect --verbose` run always prints "scanned ~N bytes",
+# and a finding also prints "leaks found: N". Docker's own failures print neither.
+scan_reached_gitleaks() {
+    printf '%s' "$SCAN_OUT" | grep -qE 'scanned ~|leaks found'
+}
+
+# Best-effort naming of the cause, from docker's own wording. Only ever reached when gitleaks
+# produced no verdict, so a successful pull's "Unable to find image" line cannot land here.
+docker_failure_cause() {
+    case "$SCAN_OUT" in
+        *"annot connect to the Docker daemon"*|*"ailed to connect to the docker API"*|*"s the docker daemon running"*)
+            echo "the Docker daemon is unreachable" ;;
+        *"pull access denied"*|*"failed to resolve reference"*|*"manifest unknown"*|*"Unable to find image"*)
+            echo "the $GITLEAKS_IMAGE image could not be pulled" ;;
+        *"invalid mount"*|*"mount denied"*|*"bind source path does not exist"*|*"error while creating mount source"*)
+            echo "a bind mount was refused" ;;
+        *)
+            echo "docker exited $SCAN_RC without producing a gitleaks result" ;;
+    esac
+}
+
 if [ "$SCAN_RC" -ne 0 ]; then
+    if scan_reached_gitleaks; then
+        echo ""
+        echo "❌ Error: Git commit blocked because a secret or private token was detected."
+        echo "If this is a false positive, add the secret value to '.gitleaksignore' to allow it."
+        echo ""
+        exit 1
+    fi
+
+    # Deliberately says nothing about allowing a value: there is no finding, so that advice would
+    # send someone hunting for a credential that does not exist and inventing an entry to silence
+    # a scan that never ran (#1923).
     echo ""
-    echo "❌ Error: Git commit blocked because a secret or private token was detected."
-    echo "If this is a false positive, add the secret value to '.gitleaksignore' to allow it."
+    echo "❌ Error: gitleaks never ran, so NOTHING was scanned -- commit blocked."
+    echo "   Cause: $(docker_failure_cause)."
+    echo "   This is not a finding. No secret was detected, because nothing was examined."
+    echo "   Start Docker (e.g. 'colima start') and commit again, or use --no-verify"
+    echo "   deliberately if you have checked the diff yourself."
     echo ""
     exit 1
 fi

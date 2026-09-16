@@ -310,9 +310,20 @@ type Server struct {
 	portalMap      sync.Map // memory cache for portal magic links and sessions
 	// sessions persists portal logins so a restart does not sign everyone out (#1304).
 	// Reached through sessionStore(), which builds it on first use.
-	sessions         *portalSessionStore
-	sessionsOnce     sync.Once
-	metrics          *MetricsCollector
+	sessions     *portalSessionStore
+	sessionsOnce sync.Once
+	metrics      *MetricsCollector
+	// edgeUplink is this edge's own live control connection to the control plane, kept so a
+	// graceful stop can make one last byte report before the channel goes (#1958). Nil on
+	// the control plane and while an edge is disconnected.
+	edgeUplinkMu sync.RWMutex
+	edgeUplink   *safeConn
+	// edgeMetrics is non-nil only on an edge node, and is what makes an edge-served
+	// session appear in tunnel_metrics at all (#1958). An edge has no database, so its
+	// byte deltas are queued here and reported to the control plane over the existing
+	// edge control channel. Nil on the control plane, where metrics go straight to the
+	// database.
+	edgeMetrics      *edgeMetricsReporter
 	nginxManager     *nginx.MaintenanceManager
 	caCert           *x509.Certificate
 	caKey            *rsa.PrivateKey
@@ -538,6 +549,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		trustedProxies:     parseTrustedProxies(cfg.TrustedProxies),
 		violations:         make(map[string]*ipViolations),
 		metrics:            NewMetricsCollector(database, cfg, registry),
+		edgeMetrics:        newEdgeMetricsReporterFor(cfg),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
@@ -591,22 +603,45 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	srv.registry.OnLeaseCleanup = func(lease *TunnelLease) {
+		// CleanLease holds the registry write lock across this callback, which is what makes
+		// touching the watermarks here safe -- and TakeByteDeltas unsafe to call from it.
 		bytesIn := atomic.LoadUint64(&lease.BytesIn)
 		bytesOut := atomic.LoadUint64(&lease.BytesOut)
 		diffIn := int64(bytesIn - lease.LastBytesIn)
 		diffOut := int64(bytesOut - lease.LastBytesOut)
+		// Advance the watermark even though the lease is going away (#1958). A lease can
+		// outlive this callback -- CleanLease keeps a host whose newer lease belongs to a
+		// re-registered session (#1147) -- and a watermark left behind would re-report the
+		// same bytes on the next periodic collection.
+		lease.LastBytesIn = bytesIn
+		lease.LastBytesOut = bytesOut
 
 		if diffIn > 0 || diffOut > 0 {
-			m := &db.TunnelMetric{
-				UserID:          lease.UserID,
-				SubdomainPrefix: lease.SubdomainPrefix,
-				FullHost:        lease.FullHost,
-				BytesIn:         diffIn,
-				BytesOut:        diffOut,
-				ConnectedAt:     lease.CreatedAt,
-				RecordedAt:      time.Now().UTC(),
+			if srv.edgeMetrics != nil {
+				// On an edge there is no database to queue into. The final delta of a
+				// session goes to the control-channel reporter, which is the only route
+				// an edge's bytes have to tunnel_metrics (#1958).
+				srv.edgeMetrics.Add(EdgeByteDelta{
+					UserID:      lease.UserID,
+					Subdomain:   lease.SubdomainPrefix,
+					FullHost:    lease.FullHost,
+					BytesIn:     diffIn,
+					BytesOut:    diffOut,
+					ConnectedAt: lease.CreatedAt,
+					RecordedAt:  time.Now().UTC(),
+				})
+			} else {
+				m := &db.TunnelMetric{
+					UserID:          lease.UserID,
+					SubdomainPrefix: lease.SubdomainPrefix,
+					FullHost:        lease.FullHost,
+					BytesIn:         diffIn,
+					BytesOut:        diffOut,
+					ConnectedAt:     lease.CreatedAt,
+					RecordedAt:      time.Now().UTC(),
+				}
+				srv.metrics.Queue(m)
 			}
-			srv.metrics.Queue(m)
 		}
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
@@ -3213,6 +3248,13 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) stop() {
+	// Before the context is cancelled, because cancelling it is what stops the reporter
+	// that would otherwise send this (#1958). An edge has no database to spool unreported
+	// bytes into, so anything still queued when the process exits is gone -- and edge-us
+	// and edge-apac stop on a schedule every night, which would make that a daily loss
+	// that reads as reduced usage rather than as lost measurement.
+	s.flushEdgeMetrics()
+
 	s.cancel()
 	// Before anything else: no new tracked background work from here on, so bgWG's counter
 	// can only fall and the Wait below cannot race an Add (see goTracked).
@@ -6841,28 +6883,24 @@ func (s *Server) handleEdgeMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.db != nil {
-		for _, m := range edgeMetrics {
-			m.NodeID = edgeNodeID
-			if err := s.db.RecordTunnelMetric(&m); err != nil {
-				slog.Info(fmt.Sprintf("[Server Control] Failed to write forwarded metric: %v", err))
-			}
-		}
-	}
-
-	// Update the in-memory edgeLeases statistics on the Control Plane so the dashboard gets the latest bytes transferred on-the-fly!
-	s.edgeLeasesMu.Lock()
+	// Kept for edges still running a build from before #1958, which POST here rather than
+	// reporting over the control channel. Nothing in this repo calls it any more, so it is a
+	// compatibility surface for a rolling upgrade, not the current mechanism -- and it shares
+	// edgeMetricRows and applyEdgeLeaseBytes with the control-channel path, so the two cannot
+	// disagree about what gets written or which node it is attributed to.
+	deltas := make([]EdgeByteDelta, 0, len(edgeMetrics))
 	for _, m := range edgeMetrics {
-		if leases, ok := s.edgeLeases[m.UserID]; ok {
-			for idx, el := range leases {
-				if el.Subdomain == m.SubdomainPrefix && el.NodeID == edgeNodeID {
-					leases[idx].BytesIn += uint64(m.BytesIn)
-					leases[idx].BytesOut += uint64(m.BytesOut)
-				}
-			}
-		}
+		deltas = append(deltas, EdgeByteDelta{
+			UserID:      m.UserID,
+			Subdomain:   m.SubdomainPrefix,
+			FullHost:    m.FullHost,
+			BytesIn:     m.BytesIn,
+			BytesOut:    m.BytesOut,
+			ConnectedAt: m.ConnectedAt,
+			RecordedAt:  m.RecordedAt,
+		})
 	}
-	s.edgeLeasesMu.Unlock()
+	s.recordEdgeMetrics(edgeNodeID, deltas)
 
 	w.WriteHeader(http.StatusOK)
 }

@@ -401,6 +401,31 @@ sequenceDiagram
     end
 ```
 
+### 12.1 Bandwidth reporting: the same channel, upwards
+
+The channel is not one-directional. An edge holds no database, so the bytes a tunnel carries
+while an edge is serving it exist only in that edge's memory — and until #1958 they stayed
+there. An edge-served session therefore contributed essentially nothing to `tunnel_metrics`,
+which was tolerable only while almost every session ran on central; #1947 made edge-served the
+common case.
+
+Edges now report byte **deltas** for the leases they hold on the same `edge_control_ws.go`
+connection, as an `edge_metrics` frame. The control plane stamps each row with the node the
+connection **authenticated as**, never with anything the payload claims, and hands the rows to
+`MetricsCollector` so the write lands on a goroutine `Stop` waits for.
+
+Properties worth knowing when reading these figures:
+
+- **Deltas, taken once.** `Registry.TakeByteDeltas` advances each lease's watermark in the same
+  critical section it reads it, so a reconnecting edge cannot replay what it already sent.
+- **An outage costs resolution, not totals.** Nothing is taken off the leases while the channel
+  is down; the first report afterwards covers the whole gap.
+- **Nightly power-offs flush first.** Every edge stops daily (00:00–08:00 local). A graceful
+  stop, a drain announcement and a scheduled-shutdown warning each report before the process
+  ends.
+- **Worst case, stated:** an *ungraceful* stop loses at most one reporting interval of that one
+  node's traffic — 30 seconds by default (`edge_metrics_interval_seconds`).
+
 ---
 
 ## 13. Transparent Multi-Region Failover & Zero-Session-Loss Resilience
@@ -429,4 +454,4 @@ sequenceDiagram
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-09* | *Last Reviewed: 2026-09-09*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

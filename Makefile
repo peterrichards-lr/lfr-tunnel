@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-load-errors check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-load-errors check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -73,6 +73,7 @@ help:
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
+	@echo "  make check-print       - Print stylesheets only target markup that exists"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
 	@echo "  make check-docs-nav    - Every docs page is in mkdocs nav or explicitly excluded"
@@ -293,6 +294,7 @@ test-hooks:
 	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-status-vocabulary.sh
 	@./tests/hooks/test-alert-vocabulary.sh
+	@./tests/hooks/test-print-selectors.sh
 	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-outage-visibility.sh
 	@./tests/hooks/test-watchdog-spool.sh
@@ -352,6 +354,9 @@ check-alerts:
 
 check-status:
 	@node scripts/check-status-vocabulary.cjs
+
+check-print:
+	@node scripts/check-print-selectors.cjs
 
 # Checks every theme's danger colours against WCAG AA (#1458). Discovers theme files
 # rather than listing them, so a theme added later is covered without touching this.

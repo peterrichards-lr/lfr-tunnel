@@ -40,39 +40,7 @@ func TestStateHeadlinePanelsHideTheirEmptyTable(t *testing.T) {
 	source := string(js)
 	markup := string(html)
 
-	ids := map[string]bool{}
-	for _, m := range regexp.MustCompile(`id="([^"]+)"`).FindAllStringSubmatch(markup, -1) {
-		ids[m[1]] = true
-	}
-
-	// The panels in scope are derived, never listed: every table body whose panel also has a
-	// state headline, matched by the shared id prefix the markup already uses.
-	var panels []string
-	for id := range ids {
-		prefix, ok := strings.CutSuffix(id, "-headline")
-		if !ok {
-			continue
-		}
-		if ids[prefix+"-table-body"] {
-			panels = append(panels, prefix)
-		}
-	}
-	sort.Strings(panels)
-
-	// An empty or shrunken derivation would make every assertion below vacuously true and
-	// report a clean pass over nothing -- the failure mode this file exists to catch.
-	for _, want := range []string{"geo-distribution", "node-placement", "region-latency"} {
-		found := false
-		for _, got := range panels {
-			if got == want {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("panel derivation is broken: %q has a headline and a table body in dashboard.html but was not derived; got %v", want, panels)
-		}
-	}
+	panels, ids := stateHeadlinePanels(t, markup)
 
 	for _, prefix := range panels {
 		body := prefix + "-table-body"
@@ -107,5 +75,152 @@ func TestStateHeadlinePanelsHideTheirEmptyTable(t *testing.T) {
 		if !wired.MatchString(source) {
 			t.Errorf("dashboard.js does not render #%s through renderTableOrHide('%s', '%s', ...) (#1920)", body, body, wrap)
 		}
+	}
+}
+
+// stateHeadlinePanels derives the analytics panels that carry a state headline, and returns them
+// alongside every id in the markup. Shared by the two guards in this file so they can never
+// disagree about which panels are in scope.
+//
+// The panels are derived, never listed: every table body whose panel also has a state headline,
+// matched by the shared id prefix the markup already uses. An empty or shrunken derivation would
+// make every assertion built on it vacuously true and report a clean pass over nothing -- the
+// failure mode this file exists to catch -- so the three known panels are asserted to survive it.
+func stateHeadlinePanels(t *testing.T, markup string) ([]string, map[string]bool) {
+	t.Helper()
+
+	ids := map[string]bool{}
+	for _, m := range regexp.MustCompile(`id="([^"]+)"`).FindAllStringSubmatch(markup, -1) {
+		ids[m[1]] = true
+	}
+
+	var panels []string
+	for id := range ids {
+		prefix, ok := strings.CutSuffix(id, "-headline")
+		if !ok {
+			continue
+		}
+		if ids[prefix+"-table-body"] {
+			panels = append(panels, prefix)
+		}
+	}
+	sort.Strings(panels)
+
+	for _, want := range []string{"geo-distribution", "node-placement", "region-latency"} {
+		found := false
+		for _, got := range panels {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("panel derivation is broken: %q has a headline and a table body in dashboard.html but was not derived; got %v", want, panels)
+		}
+	}
+
+	return panels, ids
+}
+
+// matchingDivEnd returns the offset of the `</div>` that closes the `<div>` opening at `start`.
+//
+// HTML comments MUST already be stripped from `markup`: this file's markup is heavily commented,
+// and that prose talks about `<div>`s, which would throw the depth count off.
+func matchingDivEnd(markup string, start int) (int, bool) {
+	depth := 0
+	for _, loc := range regexp.MustCompile(`<div\b|</div>`).FindAllStringIndex(markup[start:], -1) {
+		at := start + loc[0]
+		if strings.HasPrefix(markup[at:], "</div>") {
+			depth--
+			if depth == 0 {
+				return at, true
+			}
+			continue
+		}
+		depth++
+	}
+	return 0, false
+}
+
+// The paragraphs beneath a panel's table belong to the table, and have to disappear with it
+// (#1931).
+//
+// V1 rendered the Node Placement caveat -- "Not assessable is not a failure: the client caches
+// its region choice for 24h ..." -- unconditionally. It is a footnote to the "Not assessable"
+// column, so in the empty state it explained a column that was not on screen, and after #1920
+// hid the table it annotated nothing at all. V2 renders every paragraph of that panel inside its
+// non-empty branch (ui/src/pages/AdminAnalytics.tsx), so per #1866 V1 differing is the defect.
+//
+// The fix is containment rather than a second toggle: the paragraphs live INSIDE
+// `#<prefix>-table-wrap`, so whatever hides the table hides them and no later edit can move one
+// without the other. That is what this asserts -- nothing renders after the wrapper closes --
+// and it asserts it for every state-headline panel, not only the one that was reported.
+//
+// Containment costs nothing in reachability for the two data-driven paragraphs that moved in
+// with it: GetNodePlacement (pkg/db/node_placement.go) creates a node row for every session and
+// only ever names an unknown node it has already counted, so "no rows" and "no sessions" are the
+// same state -- which is exactly the condition V2 branches on.
+func TestStateHeadlinePanelAnnotationsLiveWithTheirTable(t *testing.T) {
+	raw, err := os.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatalf("read dashboard.html: %v", err)
+	}
+	markup := regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(string(raw), "")
+
+	panels, _ := stateHeadlinePanels(t, markup)
+
+	for _, prefix := range panels {
+		wrap := prefix + "-table-wrap"
+
+		wrapStart := strings.Index(markup, `<div id="`+wrap+`"`)
+		if wrapStart < 0 {
+			// Absence is TestStateHeadlinePanelsHideTheirEmptyTable's finding, not this
+			// one; reporting it twice would make one fix look like two.
+			continue
+		}
+		wrapEnd, ok := matchingDivEnd(markup, wrapStart)
+		if !ok {
+			t.Errorf("#%s never closes in dashboard.html; its contents cannot be bounded", wrap)
+			continue
+		}
+
+		headline := strings.Index(markup, `id="`+prefix+`-headline"`)
+		if headline < 0 {
+			t.Errorf("#%s-headline was derived but cannot be found in dashboard.html", prefix)
+			continue
+		}
+		panelStart := strings.LastIndex(markup[:headline], "<div")
+		if panelStart < 0 {
+			t.Errorf("the %s headline is not inside a <div>; this check cannot see where its panel ends", prefix)
+			continue
+		}
+		panelEnd, ok := matchingDivEnd(markup, panelStart)
+		if !ok || panelEnd < wrapEnd {
+			t.Errorf("the %s panel does not enclose #%s; this check cannot bound it", prefix, wrap)
+			continue
+		}
+
+		trailing := strings.TrimSpace(markup[wrapEnd+len("</div>") : panelEnd])
+		if trailing != "" {
+			if len(trailing) > 160 {
+				trailing = trailing[:160] + "..."
+			}
+			t.Errorf("the %s panel renders this after #%s closes, so it survives into the empty state where the table and its columns are gone (#1931):\n\t%s\nMove it inside #%s, so the one toggle that hides the table hides it too.", prefix, wrap, trailing, wrap)
+		}
+	}
+
+	// The caveat must still RENDER -- just not early. Dropping it would be the worse defect:
+	// it exists so the counts cannot be read as a score (placementCaveats,
+	// pkg/db/node_placement.go), and V2 renders it beneath the table it annotates.
+	caveat := strings.Index(markup, `data-i18n="node_placement_caveat_unverifiable"`)
+	npStart := strings.Index(markup, `<div id="node-placement-table-wrap"`)
+	npEnd, ok := matchingDivEnd(markup, npStart)
+	switch {
+	case caveat < 0:
+		t.Errorf(`dashboard.html no longer renders data-i18n="node_placement_caveat_unverifiable"; V2 renders it (ui/src/pages/AdminAnalytics.tsx) and it is what stops the counts being read as a score (#1931)`)
+	case npStart < 0 || !ok:
+		t.Errorf("#node-placement-table-wrap is missing or never closes, so the caveat's position cannot be checked")
+	case caveat < npStart || caveat > npEnd:
+		t.Errorf("the node placement caveat is outside #node-placement-table-wrap, so it renders in the empty state where the 'Not assessable' column it explains is not on screen (#1931)")
 	}
 }

@@ -1416,7 +1416,284 @@ peer is one of the named addresses, so a visitor arriving directly is never rewr
 they forge the header. Every entry must be an exact address, never a range.
 
 
-### 8.11. Tunnel Keepalive and the Client Reconnect Window
+### 8.11. Anonymous Geographic Distribution (`geolite2_db_path`)
+
+The admin analytics page can show a **geographic distribution** panel: how many *distinct* users
+registered from each country during the current ISO week. It is off unless you supply a geo-IP
+database, and off is a fully supported state — the panel says so, registration is unaffected, and
+nothing else in the gateway changes.
+
+**No database file ships with the gateway, and none ever can.** Every vendor below forbids
+redistribution, which is why obtaining the file is an operator step rather than a build step. That
+is also the only reason the setting exists: `pkg/geo`'s package comment records the rest of the
+design, and the parts that shape this section are that the client IP is resolved to a country
+**in memory and then discarded**, that only per-country cardinalities are persisted, and that a
+country must reach at least **5 distinct users** (`geo.DefaultThreshold`) before it is shown at
+all — below that it is folded into an `OTHER` bucket.
+
+#### 8.11.1. Which databases work
+
+The file must be in **MaxMind's `.mmdb` binary format**. Within that format vendors disagree about
+where in the record the country code lives, and the gateway tries both known paths (#1921), so
+three vendors' free country databases all work:
+
+| Vendor / edition | Record path | Account needed | Cost | Licence as published by the vendor |
+|---|---|---|---|---|
+| **MaxMind** GeoLite2 Country (and the paid GeoIP2 Country/City) | `country.iso_code` | Yes — an account **and** a generated licence key | GeoLite2 free; GeoIP2 is the paid product | GeoLite End User Licence Agreement |
+| **DB-IP** IP to Country Lite | `country.iso_code` | No | Free | Creative Commons Attribution 4.0 International |
+| **IP2Location** LITE DB1, **MMDB edition** | `country_code` | Yes — a free account | Free | IP2Location LITE "Terms of Use" |
+
+> [!NOTE]
+> Support for the `country_code` schema — the IP2Location half of that table — arrives with
+> [#1935](https://github.com/peterrichards-lr/lfr-tunnel/pull/1935). On a gateway built before
+> that change, only the `country.iso_code` vendors resolve; an IP2Location MMDB opens cleanly and
+> then resolves **every** address to nothing, which the panel reports as "no country yet has
+> enough distinct users" rather than as a problem with the file. The `.BIN` diagnostic quoted in
+> §8.11.2 arrives with the same change; before it, a `.BIN` reports only an opaque parse error.
+
+**DB-IP needs no MaxMind account and no code specific to it.** It mirrors MaxMind's record schema,
+and this was measured rather than assumed: `dbip-city-lite-2026-09.mmdb` resolved `8.8.8.8` → `US`
+and `1.1.1.1` → `AU` against the unmodified resolver. If you want the panel working in the next
+ten minutes with no signup, that is the file to fetch.
+
+#### 8.11.2. It must be `.mmdb` — IP2Location's default download is not
+
+IP2Location's **default** download for every LITE edition is a `.BIN`, which is their own
+proprietary format and not an mmdb. The gateway cannot read it, and no configuration makes it
+readable: you need the **MMDB** download of the same database, offered further down the same
+download page.
+
+The remedy is a different *download*, not a different path or permission, so the gateway names it
+rather than reporting the opaque parse error the `.BIN` would otherwise produce:
+
+```text
+geo: /etc/lfr-tunneld/geoip/IP2LOCATION-LITE-DB1.BIN is a .BIN file, which is IP2Location's
+proprietary format and not MaxMind's .mmdb -- download the MMDB edition of the same database
+instead: ...
+```
+
+That wording is bounded to files actually named `.BIN`; a genuinely corrupt MaxMind file still
+reports a plain open error, so it does not send you downloading a format you already have.
+
+#### 8.11.3. Prefer a country-level edition
+
+Pick the **country** edition — GeoLite2 Country, DB-IP IP to Country Lite, IP2Location LITE
+**DB1**. Not GeoLite2 City, not DB-IP City Lite, not DB11.
+
+This is a privacy choice, not only a disk-space one. The gateway decodes the country and nothing
+else, and `pkg/geo/resolver.go` records why: decoding the whole record "would pull city,
+subdivision and lat/long into memory, which this feature has no use for and which are far more
+identifying than a country". A city edition puts that data on the gateway's disk where the
+country-level feature can never use it. Inspecting `dbip-city-lite-2026-09.mmdb` directly, it
+carries `subdivisions`, `latitude` and `longitude` keys alongside `iso_code` — present in the
+file, never read by this code path. A country edition cannot over-collect even by accident, and it
+is far smaller: that DB-IP city file is 121 MB uncompressed and IP2Location's DB11 `.BIN` 93 MB,
+against the ~15 MB IP2Location publish for DB1's MMDB.
+
+#### 8.11.4. Licensing — what you are agreeing to
+
+Read the vendor's current terms before deploying. They have changed before, and the summary below
+is a starting point for that decision rather than a substitute for it. Where a licence file ships
+inside the download, that file is quoted directly and is the authoritative statement of what you
+received; where the claim comes from a vendor web page instead, it is labelled as such.
+
+**All three forbid or restrict redistribution. None of them can ship with this server, and in
+every case you download the file yourself.**
+
+**MaxMind GeoLite2** — free of charge, but not an anonymous fetch: MaxMind's developer site
+states you must sign up for an account and then generate one or more licence keys to download the
+databases. Distribution is under the **GeoLite End User Licence Agreement**, not a permissive
+licence. Two clauses matter operationally: §6.1 requires MaxMind's prior written consent before
+disclosing the databases to a third party, and **§6.3 requires you to cease use of and destroy old
+versions within thirty (30) days of a new GeoLite release**, with written confirmation on request.
+That second clause turns "keep it current" from good practice into a licence obligation — see
+§8.11.9. These quotes are from MaxMind's published EULA as read on 2026-09-16; check the current
+text, as this is exactly the kind of term an organisation may want its own sign-off on even though
+no money changes hands. **GeoIP2** is the paid product; "a commercial licence is required" usually
+refers to GeoIP2, or to a use of GeoLite2 the EULA does not permit.
+
+**DB-IP IP to Country Lite** — the lightest obligations of the three. DB-IP's download page states
+the Lite databases are distributed under the **Creative Commons Attribution 4.0 International
+License**, that no account is needed, and that the file is refreshed monthly in both MMDB and CSV.
+The attribution requirement, as worded on that page: "In the case of a web application, you must
+include a link back to DB-IP.com on pages that display or use results from the database." This is
+from the vendor's page, not from a licence file inside the download — the `.mmdb` carries data and
+metadata only.
+
+**IP2Location LITE** — free of charge and attribution-bearing, and the one where the shipped
+licence file is worth reading in full. `LICENSE_LITE.TXT`, inside the download itself, states:
+
+> 1. You must agree to our "Terms of Use", which are published online at
+>    <https://lite.ip2location.com/terms-of-use> at all times.
+>
+> 2. You are not permitted to redistribute or resell this product.
+
+and requires a specific acknowledgment wherever the database is used:
+
+> "[Your site name or product name] uses the IP2Location LITE database for
+> `<a href="https://lite.ip2location.com">`IP geolocation`</a>`."
+
+Clause 1 is the one to notice: it binds you to online terms that can change without the file you
+hold changing. `README_LITE.TXT` in the same archive also notes LITE accuracy is "up to Class C
+only", with the commercial editions sold as more accurate. The LITE download page additionally
+displays a CC BY-SA badge, which does not sit obviously alongside clause 2's flat prohibition on
+redistribution — if you need to redistribute, resolve that with IP2Location rather than relying on
+either statement.
+
+> [!IMPORTANT]
+> **Attribution is not rendered by the portal yet.** DB-IP and IP2Location both require a visible
+> credit wherever their data is used; the gateway does not display one today. If you deploy either
+> of those files, add the credit yourself — the translation and template override mechanisms in
+> §8.6 are the place to do it — until the built-in attribution tracked on
+> [#1921](https://github.com/peterrichards-lr/lfr-tunnel/issues/1921) lands. GeoLite2 needs no
+> such credit line; its EULA restricts disclosure rather than requiring public acknowledgment.
+
+#### 8.11.5. File placement and permissions
+
+Put the database inside the configuration directory the daemon already owns:
+
+```bash
+sudo mkdir -p /etc/lfr-tunneld/geoip
+# Fetch the file on your workstation, verify it against the vendor's checksum, then copy it up.
+sudo cp dbip-country-lite-2026-09.mmdb /etc/lfr-tunneld/geoip/country.mmdb
+sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld/geoip
+sudo chmod 750 /etc/lfr-tunneld/geoip
+sudo chmod 640 /etc/lfr-tunneld/geoip/country.mmdb
+```
+
+The daemon only ever reads the file, so read access for `lfr-tunnel` is all it needs.
+
+**The systemd sandbox in §4.5 rules out some otherwise obvious locations.** `ProtectHome=true`
+makes `/home` and `/root` inaccessible to the service, and `PrivateTmp=true` gives it a private
+`/tmp` — so a database left in a login user's home directory or in `/tmp` is invisible to the
+daemon and reports as missing, however correct the path looks from your shell. `/etc/lfr-tunneld`
+is already `ReadWritePaths=`, and `ProtectSystem=strict` leaves the rest of the filesystem readable
+even though it is read-only, so `/var/lib/lfr-tunneld/` or `/usr/share/GeoIP/` work equally well if
+you prefer to keep a ~15 MB artefact out of `/etc`. If you do use a directory the unit has not been
+told about, confirm the service can read it before assuming the path is wrong.
+
+Note the recursive `chown` above is scoped to `geoip/`, deliberately: re-running §4.3's recursive
+`chown` across the whole of `/etc/lfr-tunneld` would flip `secrets.env` back off `root:root`.
+
+#### 8.11.6. Setting the path, and what resolves it
+
+```yaml
+# /etc/lfr-tunneld/server-config.yaml
+geolite2_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
+```
+
+**Use an absolute path.** The value is passed to the filesystem verbatim, so a relative path
+resolves against the daemon's working directory — which the unit file in §4.5 sets to
+`/etc/lfr-tunneld`, not to wherever you happened to be standing when you edited the config. No
+expansion of any kind happens: `~`, `$HOME` and shell globs are not interpreted.
+
+The key is also settable as the environment variable **`LFT_GEOLITE2_DB_PATH`**, which overrides
+the YAML value. That is useful in a container image where the database is mounted at a path the
+baked-in config does not know, but there is no secret here, so `secrets.env` is not the natural
+home for it.
+
+The setting keeps its MaxMind-era name even though three vendors now work; renaming a live config
+key is tracked separately on
+[#1921](https://github.com/peterrichards-lr/lfr-tunnel/issues/1921).
+
+#### 8.11.7. Applying it, and confirming it took effect
+
+**Restart the daemon. Nothing lighter applies this setting.**
+
+```bash
+sudo systemctl restart lfr-tunneld
+```
+
+Three things that look like they might apply it, and do not:
+
+- **`SIGHUP`** re-reads `edge_nodes` and nothing else (#1309). A reload will not pick this up, and
+  will not complain that it did not.
+- **`lfr-tunnel-ops reconcile-server-config`** manages exactly three keys — `session_duration`,
+  `session_max_lifetime` and `policy_version` — and leaves every other key on the live box alone.
+  It will neither push nor report drift in `geolite2_db_path`.
+- **A binary redeploy** is not needed. This is a configuration change; the gateway you are running
+  already reads the key.
+
+**Then read the journal.** The startup log is the only place the gateway states its geo status
+unambiguously, and it emits exactly one of these:
+
+```bash
+sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
+```
+
+| Log line | Meaning |
+|---|---|
+| `[Geo] Anonymous geographic distribution enabled` — with `path` and `threshold` | Working. The file opened and the panel is live. |
+| `[Geo] Geo-IP database not found; geographic distribution disabled` — with `path` | The path is set and there is no file there. Typo, wrong directory, or a location the sandbox hides (§8.11.5). |
+| `[Geo] Failed to open geo-IP database; geographic distribution disabled` — with `path` and `error` | The file exists and could not be read: wrong format (a `.BIN` names itself here), truncated download, or permissions. |
+| *nothing at all* | `geolite2_db_path` is empty. This is the default and is not an error. |
+
+Once enabled, the panel still needs data before it shows rows, and three entirely normal
+conditions delay that:
+
+- Countries are counted at **registration**, so nothing accumulates until users connect.
+- A country needs **5 distinct users in the current ISO week** to be shown at all; below that it is
+  folded into `OTHER`. On a small deployment the honest outcome is a panel that stays on "no
+  country yet has enough distinct users" — that is the k-anonymity threshold doing its job, not a
+  broken database.
+- Counts are written out by the hourly prune timer (`prune_interval`, default `1h`), so allow up to
+  an hour after the first registrations before expecting rows.
+
+The country is derived from the **resolved** client IP, so §8.10 applies directly: a `trusted_proxies`
+list that does not match your real topology attributes visitors to the proxy, and the geographic
+panel will faithfully report the country your load balancer sits in.
+
+#### 8.11.8. A wrong path and an unset path look identical in the panel
+
+They should not, and today they do. Both render the same sentence:
+
+> No geo-IP database is configured, so geographic distribution is off. Set `geolite2_db_path` to a
+> MaxMind GeoLite2 country file to enable it.
+
+An operator who set the path and mistyped it is told they never set it. The API reports
+`available: false` for both, so both portal arms show the same string, and **the startup log lines
+in §8.11.7 are currently the only way to tell the two apart.** Check the journal before concluding
+the setting was not applied. This is tracked as a defect on
+[#1938](https://github.com/peterrichards-lr/lfr-tunnel/issues/1938).
+
+#### 8.11.9. Keeping it current
+
+**There is no auto-update mechanism in this repo.** No timer fetches a new database, nothing warns
+that the file is old, and a stale database degrades silently — addresses reassigned since the file
+was built resolve to the previous holder's country or to nothing at all, and the panel looks
+exactly as healthy either way.
+
+Refreshing is therefore an operator job, and for MaxMind it is a **licence obligation**: the
+GeoLite EULA's §6.3 destruction-within-30-days clause (§8.11.4) is not satisfied by leaving last
+year's file in place. All three vendors publish roughly monthly.
+
+The gateway **memory-maps** the database at startup and holds that mapping for the life of the
+process, which dictates how a refresh has to be done:
+
+```bash
+# 1. Download and verify the new file, then stage it alongside the live one.
+sudo install -o lfr-tunnel -g lfr-tunnel -m 640 country-new.mmdb /etc/lfr-tunneld/geoip/country.mmdb.new
+
+# 2. Atomic rename. The running daemon keeps its mapping of the OLD inode, which stays valid.
+sudo mv /etc/lfr-tunneld/geoip/country.mmdb.new /etc/lfr-tunneld/geoip/country.mmdb
+
+# 3. Restart to pick up the new file, and confirm it opened.
+sudo systemctl restart lfr-tunneld
+sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
+```
+
+**Never overwrite the file in place** (`cp` onto the live path, or a downloader writing straight to
+it) while the daemon is running: the mapping is of the file's contents, so rewriting those bytes
+underneath a live process changes what lookups read mid-flight. Write-then-rename, as above.
+
+If you automate this on a timer, keep the download, the verification and the restart in one script
+so a failed fetch cannot leave a half-written file in the live path. MaxMind publish `geoipupdate`
+for their own databases; DB-IP and IP2Location are plain HTTPS downloads. Either way, step 3 and
+its log check are what turns the automation from "it ran" into "it worked" — a refresh that
+silently left the daemon on the old mapping is the exact failure this section exists to make
+visible.
+
+### 8.12. Tunnel Keepalive and the Client Reconnect Window
 
 Two settings decide how a tunnel behaves when this gateway is restarted. Both exist because
 neither number was configurable when it mattered: a deploy used to take every attached client

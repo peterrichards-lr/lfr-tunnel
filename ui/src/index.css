@@ -865,6 +865,36 @@ html[dir='rtl'] th {
     display: none !important;
   }
 
+  /* ONLY THE REPORT PRINTS (#1916, second pass).
+     
+     The first attempt named each banner to hide. That is a deny-list, and it missed one the
+     same day: ViewAsBar has TWO render branches -- `.view-as-bar` when previewing, and
+     `.view-as-switcher`, the owner's dropdown, otherwise. Only the first was listed, so an
+     owner's export still carried "View as Owner (you)".
+     
+     So the rule is inverted, as the operator asked: everything at layout level is hidden, and
+     only the chain down to .main-content is restored. A banner added tomorrow is excluded by
+     default rather than by someone remembering this block exists.
+     
+     Direct-child combinators throughout, deliberately: `.flex-1` is a generic utility used
+     INSIDE the report too, so a descendant selector here would blank the content it is meant
+     to preserve. */
+  .h-screen > * {
+    display: none !important;
+  }
+
+  .h-screen > .flex-1 {
+    display: block !important;
+  }
+
+  .h-screen > .flex-1 > * {
+    display: none !important;
+  }
+
+  .h-screen > .flex-1 > .main-content {
+    display: block !important;
+  }
+
   /* Release the viewport confinement so content can flow across pages (#1916).
      
      This previously reset `.app-container`, WHICH DOES NOT EXIST -- grep found it only in this

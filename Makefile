@@ -294,6 +294,7 @@ test-hooks:
 	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-status-vocabulary.sh
 	@./tests/hooks/test-alert-vocabulary.sh
+	@./tests/hooks/test-ci-runs-every-gate.sh
 	@./tests/hooks/test-print-selectors.sh
 	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-outage-visibility.sh

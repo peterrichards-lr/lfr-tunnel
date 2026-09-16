@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -2267,6 +2268,35 @@ func dedupeRegionsByHost(regions map[string]string) map[string]string {
 // answer at all. The unreachable list matters: an election made while some regions were
 // down is provisional, and caching it for the full 24h strands the client on a worse
 // region long after the better one returns (issue #1148).
+// newProbeTransport builds a transport used only for latency probing (#1947).
+//
+// Three properties, each load-bearing:
+//
+//   - DisableKeepAlives, so no probe can reuse a connection another request left warm.
+//   - A private TLSClientConfig with its own ClientSessionCache, because session RESUMPTION
+//     would reintroduce the same asymmetry one layer down: a host the process has already
+//     negotiated with completes its handshake in fewer round trips than one it has not.
+//     Go's default cache is shared, so leaving this nil would leave half the bug in place.
+//   - A fresh transport per call, so nothing accumulates across elections. A client that
+//     re-elects on failover must measure the candidates as they are now, not as they were.
+//
+// Deliberately NOT a package-level var: a shared instance is exactly what went wrong.
+func newProbeTransport() *http.Transport {
+	return &http.Transport{
+		DisableKeepAlives: true,
+		// Sized for one probe round: a handful of concurrent hosts, none reused.
+		MaxIdleConns:        0,
+		IdleConnTimeout:     time.Second,
+		TLSHandshakeTimeout: 1500 * time.Millisecond,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			// Not shared with any other transport, so resumption cannot favour a host
+			// this process has already spoken to.
+			ClientSessionCache: tls.NewLRUClientSessionCache(0),
+		},
+	}
+}
+
 func probeFastestRegion(regions map[string]string) (string, []string) {
 	// One probe per gateway, not per name. The gateway advertises each region twice
 	// ('in' and 'edge-in' are the same host), so probing by name doubled the health
@@ -2282,6 +2312,26 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 	// Named to leave the imported client package reachable inside the probe goroutine.
 	probeClient := &http.Client{
 		Timeout: 1500 * time.Millisecond,
+		// Its OWN transport, never http.DefaultTransport (#1947).
+		//
+		// This is the whole defect. A zero Transport means DefaultTransport, which is
+		// shared process-wide and pools idle connections for 90 seconds. resolveServerURL
+		// calls fetchRemoteRegions IMMEDIATELY BEFORE this, fetching /api/version from the
+		// gateway the client is already using -- so that gateway entered its own election
+		// with a live, pooled, TLS-established connection while every rival paid a fresh
+		// TCP and TLS handshake.
+		//
+		// The incumbent was therefore timed at roughly one round trip and its rivals at
+		// three. Measured against a real user in Orlando: Ireland reported 133ms when a
+		// cold request to it costs ~480ms, while Ohio -- four times closer -- reported
+		// 237ms against a true 160ms. The election inverted, and because every client
+		// fetches /api/version from the same default gateway first, central won nearly
+		// every election fleet-wide.
+		//
+		// DisableKeepAlives makes each probe open and close its own connection, so the
+		// comparison is between equals. It costs a handshake per probe per start, which is
+		// the price of the measurement meaning anything.
+		Transport: newProbeTransport(),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

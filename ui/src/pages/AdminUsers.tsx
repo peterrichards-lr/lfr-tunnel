@@ -81,6 +81,16 @@ const STATUS_BADGE: Record<string, string> = {
 const statusBadgeClass = (status: string): string =>
   STATUS_BADGE[status] ?? 'badge-secondary';
 
+// A queued collection is not synchronous (#1763): the command waits for the client's next
+// tunnel-status heartbeat -- up to 5s -- and only then does the client collect, redact and
+// upload its logs. So the bundle cannot exist when the POST returns, and a single re-fetch
+// would show an admin exactly what the bug in #1944 showed them: nothing.
+const DIAG_POLL_INTERVAL_MS = 3000;
+// A ceiling, not an estimate of how long an upload takes. A client that is asleep, or whose
+// upload never completes, has to end at a message saying so -- a spinner that never resolves is
+// worse than the snapshot it replaced.
+const DIAG_POLL_TIMEOUT_MS = 60000;
+
 export default function AdminUsers() {
   const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
@@ -98,9 +108,17 @@ export default function AdminUsers() {
   const [diagBundles, setDiagBundles] = useState<any[]>([]);
   const [diagRetention, setDiagRetention] = useState<number>(0);
   const [diagBusy, setDiagBusy] = useState(false);
+  // Non-null while waiting for a queued collection to arrive; the value is the wall-clock
+  // instant the wait gives up at (#1944).
+  const [diagPollDeadline, setDiagPollDeadline] = useState<number | null>(null);
+  const [diagPollTimedOut, setDiagPollTimedOut] = useState(false);
   const [_domains, _setDomains] = useState<string[]>([]);
 
   useEffect(() => {
+    // A wait belongs to the dialog that started it: opening a different user must not inherit
+    // the previous one's "waiting" or "nothing arrived" state (#1944).
+    setDiagPollDeadline(null);
+    setDiagPollTimedOut(false);
     if (!selectedUser?.email) {
       setSelectedUserPATs([]);
       return;
@@ -138,21 +156,80 @@ export default function AdminUsers() {
     fetchUserDetails();
   }, [selectedUser?.email]);
 
+  // Wait for a queued collection to turn into a bundle (#1944).
+  //
+  // Keyed on the selected user as well as the deadline, so React's own cleanup is what stops it:
+  // closing the dialog or picking another user unmounts/re-runs this effect and clears the
+  // interval. There is no path where the poll can outlive the panel it writes into.
+  useEffect(() => {
+    const email = selectedUser?.email;
+    if (diagPollDeadline === null || !email) return;
+    let cancelled = false;
+    // The count this wait is looking to exceed. Established by the first read below rather than
+    // taken from the list the dialog opened with: that snapshot can be minutes old -- long
+    // enough for another administrator's collection to have landed -- and counting it would end
+    // the wait on somebody else's bundle.
+    let baseline: number | null = null;
+    const tick = async () => {
+      try {
+        const res = await axios.get(
+          `/api/admin/diagnostics/bundles?email=${encodeURIComponent(email)}`,
+        );
+        // Re-checked after the await as well: the dialog can close while a read is in flight.
+        if (cancelled) return;
+        const bundles = res.data?.bundles || [];
+        if (baseline === null) {
+          baseline = bundles.length;
+        } else if (bundles.length > baseline) {
+          setDiagBundles(bundles);
+          setDiagRetention(res.data?.retention_days || 0);
+          setDiagPollDeadline(null);
+          return;
+        }
+      } catch {
+        // A failed read is not an answer, so it does not end the wait -- only the deadline
+        // below does. Otherwise one gateway blip reads to the admin as "nothing arrived".
+      }
+      if (cancelled) return;
+      if (Date.now() >= diagPollDeadline) {
+        setDiagPollDeadline(null);
+        setDiagPollTimedOut(true);
+      }
+    };
+    // Immediately, to fix the baseline; the interval is what waits for it to be exceeded.
+    void tick();
+    const id = setInterval(tick, DIAG_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [diagPollDeadline, selectedUser?.email]);
+
   // Ask this user's client for its logs (#1763). The endpoint answers on two axes: whether the
   // request was permitted (consent) and whether it could be delivered (is a client connected),
   // and both are surfaced -- a consenting user whose laptop is shut is not a refusal.
   const collectDiagnostics = async () => {
     if (!selectedUser) return;
     setDiagBusy(true);
+    setDiagPollDeadline(null);
+    setDiagPollTimedOut(false);
     try {
       const res = await axios.post('/api/admin/diagnostics/collect', {
         email: selectedUser.email,
       });
       const d = res.data || {};
+      const queued = d.delivery === 'queued';
       showToast(
         d.delivery_detail || t('diag_requested', 'Collection requested.'),
-        d.delivery === 'queued' ? 'success' : 'info',
+        queued ? 'success' : 'info',
       );
+      // Only a QUEUED command can ever produce a bundle. A request that was authorised but
+      // delivered nowhere -- no client connected, or the client served by another gateway --
+      // never will, so waiting on one would be a lie dressed as patience. Those cases keep the
+      // delivery_detail the toast just showed and leave the button usable (#1944).
+      if (queued) {
+        setDiagPollDeadline(Date.now() + DIAG_POLL_TIMEOUT_MS);
+      }
     } catch (err: any) {
       showToast(
         err.response?.data?.error ||
@@ -1426,12 +1503,15 @@ export default function AdminUsers() {
           </h4>
 
           <div className="mb-lg">
+            {/* Disabled while waiting as well as while posting (#1944): clicking again queues a
+                second collection, which the consenting user has to be bothered by all over
+                again -- and repeating it is exactly what a flow that looks inert invites. */}
             <button
               className="btn btn-secondary"
               onClick={collectDiagnostics}
-              disabled={diagBusy}
+              disabled={diagBusy || diagPollDeadline !== null}
             >
-              {diagBusy
+              {diagBusy || diagPollDeadline !== null
                 ? t('diag_collecting', 'Requesting...')
                 : t('diag_collect', 'Request logs from this client')}
             </button>
@@ -1441,6 +1521,24 @@ export default function AdminUsers() {
                 'Only collected if this user has turned diagnostic log sharing on. Every request, and every download below, is recorded in the audit log.',
               )}
             </p>
+            {/* "Still waiting" and "nothing arrived" are different statements, and both have to
+                stay on screen -- a toast scrolls away, and the admin is waiting on a person. */}
+            {diagPollDeadline !== null && (
+              <p className="text-muted text-xs mt-sm mb-0">
+                {t(
+                  'diag_waiting',
+                  'Waiting for this client to send its logs. It picks the request up on its next heartbeat, so this can take up to a minute.',
+                )}
+              </p>
+            )}
+            {diagPollTimedOut && (
+              <p className="text-warning text-xs mt-sm mb-0">
+                {t(
+                  'diag_timeout',
+                  'No logs arrived. The client may be offline, or its upload did not complete. You can request them again.',
+                )}
+              </p>
+            )}
           </div>
 
           {diagBundles.length > 0 && (

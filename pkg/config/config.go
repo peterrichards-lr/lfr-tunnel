@@ -117,12 +117,34 @@ type ServerConfig struct {
 	PortalSessionMaxLifetime time.Duration `yaml:"portal_session_max_lifetime"`
 	MinClientVersion         string        `yaml:"min_client_version"`
 	LatestClientVersion      string        `yaml:"latest_client_version"`
-	DocumentationURL         string        `yaml:"documentation_url"`
-	RepositoryURL            string        `yaml:"repository_url"`
-	SecureTokenGuideURL      string        `yaml:"secure_token_guide_url"`
-	DockerHubURL             string        `yaml:"docker_hub_url"`
-	StatusPageURL            string        `yaml:"status_page_url"`
-	PruneInterval            time.Duration `yaml:"prune_interval"`
+
+	// TunnelKeepAlive is how often the gateway pings each attached tunnel client over the
+	// chisel control channel. Zero means the default in pkg/server (25s).
+	//
+	// Configurable rather than constant because it is one half of a pair whose other half is
+	// nginx's proxy_read_timeout on `location /tunnel`: the ping is what keeps an idle
+	// upstream from looking silent to nginx, so anyone who changes that timeout has to be
+	// able to change this too, without a new gateway binary (#1946).
+	TunnelKeepAlive time.Duration `yaml:"tunnel_keepalive"`
+
+	// ClientReconnectWindow is how long a client should keep trying to reattach to this
+	// gateway -- across a restart, say -- before handing control back to its own region
+	// failover. Advertised on /api/version; zero means "not configured", and a client then
+	// uses its own compiled-in default.
+	//
+	// This exists so a wrong number can be corrected from the server side rather than by
+	// shipping a client release (#1946). Its reach is limited and the limit is the point:
+	// it only steers clients new enough to read it, and a client that has already given up
+	// is not listening at all -- which is why the client's default has to be defensible on
+	// its own, and why the client clamps whatever this says into a range that can neither
+	// undo the fix nor starve failover.
+	ClientReconnectWindow time.Duration `yaml:"client_reconnect_window"`
+	DocumentationURL      string        `yaml:"documentation_url"`
+	RepositoryURL         string        `yaml:"repository_url"`
+	SecureTokenGuideURL   string        `yaml:"secure_token_guide_url"`
+	DockerHubURL          string        `yaml:"docker_hub_url"`
+	StatusPageURL         string        `yaml:"status_page_url"`
+	PruneInterval         time.Duration `yaml:"prune_interval"`
 
 	// WatchdogSpoolPath is where scripts/common/gateway-watchdog.sh records the services it
 	// restarted, so the gateway can forward them to the owner once it is back up (#1875). Empty

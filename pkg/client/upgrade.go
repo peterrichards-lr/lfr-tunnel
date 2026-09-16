@@ -652,6 +652,12 @@ type ServerVersionInfo struct {
 	MaintenanceMode string `json:"maintenance_mode"`
 
 	ClientPlatforms map[string]ServerPlatformInfo `json:"client_platforms"`
+
+	// ClientReconnectSeconds is how long this gateway would like clients to keep trying to
+	// reattach to it before falling back to region failover (#1946). Absent or zero means the
+	// gateway has no opinion and the client's own default applies. Advisory in both
+	// directions: the client clamps it, and a client too old to read it simply does not.
+	ClientReconnectSeconds int `json:"client_reconnect_seconds,omitempty"`
 }
 
 func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {

@@ -834,6 +834,13 @@ docker-compose -f docker-compose-edge.yml kill lfr-tunneld-edge > /dev/null 2>&1
 #
 # One second per iteration, so this is a budget in seconds: the 60s deadline, plus 60s of
 # headroom for the client's own failover cooldown, its re-registration, and CI scheduling noise.
+#
+# A client that can fail over now spends up to ~13s retrying the dead gateway before handing
+# control back (failoverHandbackWindow, pkg/client/client.go), which comes out of that headroom.
+# That window is deliberately bounded BECAUSE of this: the long reconnect window added in #1946
+# is given only to clients with no failover path, which cannot reach this phase. If a change
+# ever makes this phase need a bigger budget, the client's handback is what to look at first --
+# the budget's own 60s component is a property of edgeControlReadDeadline, not a tolerance.
 FAILOVER_RECOVERY_BUDGET="${FAILOVER_RECOVERY_BUDGET:-120}"
 RECOVERED=false
 RECOVERY_SECONDS=0

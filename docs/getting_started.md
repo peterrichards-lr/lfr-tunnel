@@ -419,13 +419,22 @@ In a planned migration the full sequence is
 produces the same sequence without `warning_received`. If every candidate region is exhausted,
 `started` does not fire -- there is no new session to report.
 
+A client that has nowhere to fail over to -- pinned with `-server`, or offered no region list --
+re-registers with the gateway it is already on when its session ends, which is what carries it
+across a gateway restart ([#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946)).
+That fires `stopped` → `starting` → `started`, with no `stopping`: nothing announced the stop,
+so there was no moment before the tunnel came down at which to run it.
+
 Three cases where nothing fires, deliberately:
 
 * **The first connection and a normal shutdown.** `starting`/`started` are about moving to a
   different gateway; the initial connect prints its URLs and `stopping`/`stopped` on Ctrl+C
   would delay the exit for a hook whose work is already done.
-* **A client pinned with `-server`.** A pinned client never fails over ([#1275](https://github.com/peterrichards-lr/lfr-tunnel/issues/1275)),
-  so it has no moves to report.
+* **A client pinned with `-server`, for `warning_received` and `stopping`.** A pinned client
+  never fails over ([#1275](https://github.com/peterrichards-lr/lfr-tunnel/issues/1275)), so it
+  is not warned off a gateway and never moves ahead of one. It does now reconnect to its own
+  gateway after a restart ([#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946)),
+  and that fires `stopped` → `starting` → `started` like any other re-established session.
 * **A hook you have not configured.** No shell is spawned.
 
 ### Contextual environment variables
@@ -507,4 +516,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*

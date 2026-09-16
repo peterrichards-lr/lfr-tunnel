@@ -574,9 +574,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
-	// Optional and absent by default: no MaxMind database is shipped, and without one
-	// this stays nil and every geo call becomes a no-op (#1152).
-	srv.geo, srv.geoDiagnosis = newGeoAggregator(cfg.GeoLite2DBPath, database)
+	// Optional and absent by default: no geo-IP database is shipped by any vendor's
+	// licence, and without one this stays nil and every geo call becomes a no-op (#1152).
+	// The path has two accepted spellings, resolved in one place (#1921).
+	geoPath, geoBothPathsSet := cfg.CountryDatabasePath()
+	srv.geo, srv.geoDiagnosis = newGeoAggregator(geoPath, geoBothPathsSet, database)
 
 	// Reject an unusable statically-declared schedule once, at startup, rather than acting on
 	// it every health cycle (#1282). Dropped rather than fatal: a bad schedule should stop

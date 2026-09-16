@@ -62,18 +62,28 @@ type geoDiagnosis struct {
 }
 
 // newGeoAggregator builds the anonymous geographic aggregator, or returns nil plus the
-// reason when the deployment has no usable MaxMind database (#1152, #1938).
+// reason when the deployment has no usable geo-IP database (#1152, #1938).
 //
 // nil is a working no-op rather than an error, deliberately: this sits on the
 // registration path, and geo-IP being unconfigured must never be able to stop a user
 // connecting or a server starting. That stays true for every reason below -- an
 // unreadable file disables the feature exactly as an absent one does.
-func newGeoAggregator(path string, database *db.DB) (*geo.Aggregator, geoDiagnosis) {
+//
+// bothPathsSet comes from config.CountryDatabasePath: `country_db_path` and its
+// `geolite2_db_path` alias both name a file, and they disagree. The neutral key wins (see
+// that function for why), but the loser is not dropped in silence -- an operator who
+// migrated the key and left the old line behind would otherwise have no way to learn which
+// file is open except by reading source (#1921).
+func newGeoAggregator(path string, bothPathsSet bool, database *db.DB) (*geo.Aggregator, geoDiagnosis) {
 	if database == nil {
 		// Unreachable in production -- NewServer has a database open before it gets here --
 		// but tests construct servers directly, and "no store" is genuinely "off", not an
 		// operator mistake to report against their path.
 		return nil, geoDiagnosis{Reason: geoReasonNotConfigured}
+	}
+	if bothPathsSet {
+		slog.Warn("[Geo] Both country_db_path and geolite2_db_path are set; the neutral key wins "+
+			"and the alias is ignored. Remove geolite2_db_path.", "using", path)
 	}
 	resolver, err := geo.OpenResolver(path)
 	if err != nil {
@@ -92,7 +102,11 @@ func newGeoAggregator(path string, database *db.DB) (*geo.Aggregator, geoDiagnos
 		// useful sentence an operator in this state can be shown.
 		return nil, geoDiagnosis{Reason: geoReasonUnreadable, Path: path, Detail: err.Error()}
 	}
-	slog.Info("[Geo] Anonymous geographic distribution enabled", "path", path, "threshold", geo.DefaultThreshold)
+	// The provider is logged because it decides which attribution the panel renders, and
+	// it is DERIVED from the file rather than configured (#1921). "unknown" here is the
+	// operator's only warning that their vendor's credit line is not being shown.
+	slog.Info("[Geo] Anonymous geographic distribution enabled",
+		"path", path, "provider", string(resolver.Provider()), "threshold", geo.DefaultThreshold)
 	return geo.New(resolver, geoStore{database: database}, geo.Options{}), geoDiagnosis{}
 }
 
@@ -147,11 +161,23 @@ type apiError struct {
 // feature is on.
 type locationAnalyticsResponse struct {
 	Available bool `json:"available"`
+	// Provider is the vendor derived from the open database's own metadata -- "maxmind",
+	// "dbip", "ip2location" or "unknown" (#1921).
+	//
+	// A key, not a rendered sentence: the credit each vendor's licence obliges is a
+	// translatable string that belongs in the i18n bundles with every other portal string,
+	// and both portal arms already resolve keys through the same bundle. Sending prose from
+	// here would put one more string outside `make check-i18n`'s reach.
+	//
+	// Empty when Available is false -- with no database open there is no data on screen and
+	// so nothing to attribute.
+	Provider string `json:"provider,omitempty"`
 	// Reason is one of the geoReason constants, and is empty when Available.
 	Reason geoReason `json:"reason,omitempty"`
-	// ConfiguredPath is the geolite2_db_path the gateway actually tried, sent only for the
-	// two states the operator has to correct so the typo is visible where the complaint is.
-	// Admin-only, like the whole route -- see geoDiagnosis.
+	// ConfiguredPath is the country_db_path (or its geolite2_db_path alias) the gateway
+	// actually tried, sent only for the two states the operator has to correct so the typo
+	// is visible where the complaint is. Admin-only, like the whole route -- see
+	// geoDiagnosis.
 	ConfiguredPath string `json:"configured_path,omitempty"`
 	// Detail is the underlying open error, which for an IP2Location .BIN names the wrong
 	// download rather than the wrong path (#1921). Present only for geoReasonUnreadable.
@@ -176,7 +202,11 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 		Threshold: geo.DefaultThreshold,
 		Buckets:   []db.LocationStat{},
 	}
-	if !resp.Available {
+	if resp.Available {
+		// Which vendor's credit the panel must render (#1921). Only when a database is
+		// actually open: with nothing open there is no data on screen to attribute.
+		resp.Provider = string(s.geo.Provider())
+	} else {
 		// Why it is off, not just that it is (#1938). Read from what the constructor
 		// recorded at startup rather than re-stat'ing the path here: this must describe the
 		// state the running process is actually in, and a file created since startup is not

@@ -1416,7 +1416,7 @@ peer is one of the named addresses, so a visitor arriving directly is never rewr
 they forge the header. Every entry must be an exact address, never a range.
 
 
-### 8.11. Anonymous Geographic Distribution (`geolite2_db_path`)
+### 8.11. Anonymous Geographic Distribution (`country_db_path`)
 
 The admin analytics page can show a **geographic distribution** panel: how many *distinct* users
 registered from each country during the current ISO week. It is off unless you supply a geo-IP
@@ -1503,14 +1503,26 @@ every case you download the file yourself.**
 **MaxMind GeoLite2** — free of charge, but not an anonymous fetch: MaxMind's developer site
 states you must sign up for an account and then generate one or more licence keys to download the
 databases. Distribution is under the **GeoLite End User Licence Agreement**, not a permissive
-licence. Two clauses matter operationally: §6.1 requires MaxMind's prior written consent before
-disclosing the databases to a third party, and **§6.3 requires you to cease use of and destroy old
-versions within thirty (30) days of a new GeoLite release**, with written confirmation on request.
-That second clause turns "keep it current" from good practice into a licence obligation — see
-§8.11.9. These quotes are from MaxMind's published EULA as read on 2026-09-16; check the current
-text, as this is exactly the kind of term an organisation may want its own sign-off on even though
-no money changes hands. **GeoIP2** is the paid product; "a commercial licence is required" usually
-refers to GeoIP2, or to a use of GeoLite2 the EULA does not permit.
+licence. Three clauses matter operationally. **§3 requires attribution**: "to the extent the
+Services contain any copyrightable elements those copyrightable elements are governed by the
+Creative Commons License. You must provide attribution of your use to MaxMind (an example of
+attribution: 'This product includes GeoLite Data created by MaxMind, available from
+<https://www.maxmind.com>.')". §6.1 requires MaxMind's prior written consent before disclosing the
+databases to a third party, and **§6.3 requires you to cease use of and destroy old versions
+within thirty (30) days of a new GeoLite release**, with written confirmation on request. That
+last clause turns "keep it current" from good practice into a licence obligation — see §8.11.9.
+These quotes are from MaxMind's published EULA, effective 2026-02-12 and read on 2026-09-16; check
+the current text, as this is exactly the kind of term an organisation may want its own sign-off on
+even though no money changes hands. **GeoIP2** is the paid product; "a commercial licence is
+required" usually refers to GeoIP2, or to a use of GeoLite2 the EULA does not permit.
+
+> [!NOTE]
+> An earlier version of this section said GeoLite2 required no credit line, on the reasoning that
+> its EULA "restricts disclosure rather than requiring public acknowledgment". §6.1 does restrict
+> disclosure — and §3 *also* requires attribution. Reading the EULA rather than reasoning from
+> the other two vendors is what found it (#1921). **All three supported vendors require a credit,
+> and they require different ones**, which is why the panel renders a per-provider line rather
+> than one sentence.
 
 **DB-IP IP to Country Lite** — the lightest obligations of the three. DB-IP's download page states
 the Lite databases are distributed under the **Creative Commons Attribution 4.0 International
@@ -1541,12 +1553,23 @@ redistribution — if you need to redistribute, resolve that with IP2Location ra
 either statement.
 
 > [!IMPORTANT]
-> **Attribution is not rendered by the portal yet.** DB-IP and IP2Location both require a visible
-> credit wherever their data is used; the gateway does not display one today. If you deploy either
-> of those files, add the credit yourself — the translation and template override mechanisms in
-> §8.6 are the place to do it — until the built-in attribution tracked on
-> [#1921](https://github.com/peterrichards-lr/lfr-tunnel/issues/1921) lands. GeoLite2 needs no
-> such credit line; its EULA restricts disclosure rather than requiring public acknowledgment.
+> **The portal renders the credit for you, and picks it from the file.** Since
+> [#1921](https://github.com/peterrichards-lr/lfr-tunnel/issues/1921) the Geographic Distribution
+> panel displays a per-provider attribution line in both portal arms, whenever a database is open
+> — including the below-threshold state, where rows exist and are suppressed, because DB-IP's
+> wording covers pages that *display or use* results. There is nothing for you to add.
+>
+> The vendor is **derived from the database's own `database_type` metadata**, not configured, so
+> there is no key to get wrong: `DBIP-*` renders DB-IP's CC BY 4.0 credit with a link back to
+> db-ip.com, `GeoLite2-*`/`GeoIP2-*` renders MaxMind's §3 attribution, and IP2Location's MMDB
+> editions render the acknowledgment `LICENSE_LITE.TXT` prescribes.
+>
+> **A file this build does not recognise renders an honest "vendor could not be identified"
+> line instead of somebody else's credit.** If you see that, the startup log's `provider=unknown`
+> says the same thing, and you must add the credit your vendor requires by hand (§8.6 covers the
+> translation and template override mechanisms). This is deliberate: printing a named vendor's
+> acknowledgment over another vendor's data would be a false provenance claim *and* leave the
+> real supplier's licence unmet.
 
 #### 8.11.5. File placement and permissions
 
@@ -1579,7 +1602,7 @@ Note the recursive `chown` above is scoped to `geoip/`, deliberately: re-running
 
 ```yaml
 # /etc/lfr-tunneld/server-config.yaml
-geolite2_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
+country_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
 ```
 
 **Use an absolute path.** The value is passed to the filesystem verbatim, so a relative path
@@ -1587,14 +1610,30 @@ resolves against the daemon's working directory — which the unit file in §4.5
 `/etc/lfr-tunneld`, not to wherever you happened to be standing when you edited the config. No
 expansion of any kind happens: `~`, `$HOME` and shell globs are not interpreted.
 
-The key is also settable as the environment variable **`LFT_GEOLITE2_DB_PATH`**, which overrides
+The key is also settable as the environment variable **`LFT_COUNTRY_DB_PATH`**, which overrides
 the YAML value. That is useful in a container image where the database is mounted at a path the
 baked-in config does not know, but there is no secret here, so `secrets.env` is not the natural
 home for it.
 
-The setting keeps its MaxMind-era name even though three vendors now work; renaming a live config
-key is tracked separately on
-[#1921](https://github.com/peterrichards-lr/lfr-tunnel/issues/1921).
+##### `geolite2_db_path` — the old spelling, still honoured
+
+The setting was called **`geolite2_db_path`** until #1921, which named one vendor for what is
+really "where the country database lives". **That spelling still works and is not going away**:
+breaking a running deployment is not an improvement. Its environment variable,
+`LFT_GEOLITE2_DB_PATH`, still works too.
+
+| Config state | What the gateway opens |
+|---|---|
+| `country_db_path` only | that path |
+| `geolite2_db_path` only | that path — nothing to change on an existing gateway |
+| both, same path | that path, no warning |
+| both, different paths | **`country_db_path` wins**, and the gateway logs a warning naming the file it opened |
+
+The neutral key winning is the deliberate direction. If the alias won, adding `country_db_path` to
+a config that still carried `geolite2_db_path` would do **nothing at all** — silently, with a
+startup log naming the old path and a panel that looks perfectly healthy. That is the one outcome
+you cannot diagnose from the outside. The reverse mistake announces itself in the same log line
+you are told to read in §8.11.7. **Migrate the line rather than duplicating it.**
 
 #### 8.11.7. Applying it, and confirming it took effect
 
@@ -1610,7 +1649,7 @@ Three things that look like they might apply it, and do not:
   will not complain that it did not.
 - **`lfr-tunnel-ops reconcile-server-config`** manages exactly three keys — `session_duration`,
   `session_max_lifetime` and `policy_version` — and leaves every other key on the live box alone.
-  It will neither push nor report drift in `geolite2_db_path`.
+  It will neither push nor report drift in `country_db_path` (or its `geolite2_db_path` alias).
 - **A binary redeploy** is not needed. This is a configuration change; the gateway you are running
   already reads the key.
 
@@ -1623,10 +1662,11 @@ sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
 
 | Log line | Meaning |
 |---|---|
-| `[Geo] Anonymous geographic distribution enabled` — with `path` and `threshold` | Working. The file opened and the panel is live. |
+| `[Geo] Anonymous geographic distribution enabled` — with `path`, `provider` and `threshold` | Working. The file opened and the panel is live. `provider` is the vendor derived from the file's metadata and decides which attribution the panel renders; `provider=unknown` means no vendor's credit is shown and you must add one yourself (§8.11.4). |
 | `[Geo] Geo-IP database not found; geographic distribution disabled` — with `path` | The path is set and there is no file there. Typo, wrong directory, or a location the sandbox hides (§8.11.5). |
 | `[Geo] Failed to open geo-IP database; geographic distribution disabled` — with `path` and `error` | The file exists and could not be read: wrong format (a `.BIN` names itself here), truncated download, or permissions. |
-| *nothing at all* | `geolite2_db_path` is empty. This is the default and is not an error. |
+| `[Geo] Both country_db_path and geolite2_db_path are set` — with `using` | Both spellings name a different file. The neutral key won; remove the alias line. |
+| *nothing at all* | Neither `country_db_path` nor `geolite2_db_path` is set. This is the default and is not an error. |
 
 Once enabled, the panel still needs data before it shows rows, and three entirely normal
 conditions delay that:
@@ -1646,15 +1686,19 @@ panel will faithfully report the country your load balancer sits in.
 #### 8.11.8. The panel says which of the three off states you are in
 
 A wrong path and an unset path used to render the same sentence — "No geo-IP database is
-configured" — so an operator who mistyped `geolite2_db_path` was told they had never set it, and
+configured" — so an operator who mistyped the database path was told they had never set it, and
 the startup log was the only place the difference existed ([#1938](https://github.com/peterrichards-lr/lfr-tunnel/issues/1938)).
 It is not any more. The panel shows one of:
 
 | What the panel says | State | What to do |
 |---|---|---|
-| No geo-IP database is configured… | `geolite2_db_path` is empty. The default, and not an error. | Nothing, unless you want the feature. |
-| No file exists at the geo-IP database path configured in `geolite2_db_path`… *(and names the path it tried)* | The path is set and there is no file there. | Compare the path it names against the file you installed — §8.11.5 if it looks right but the daemon cannot see it. |
-| The geo-IP database configured in `geolite2_db_path` could not be read… *(names the path, and the open error)* | The file exists and is unusable: wrong format, truncated, or unreadable by the daemon's user. | A `.BIN` says so in the quoted error — fetch the MMDB edition (§8.11.2). Otherwise re-download and check ownership. |
+| No geo-IP database is configured… | Neither `country_db_path` nor its `geolite2_db_path` alias is set. The default, and not an error. | Nothing, unless you want the feature. |
+| No file exists at the geo-IP database path configured in `country_db_path`… *(and names the path it tried)* | The path is set and there is no file there. | Compare the path it names against the file you installed — §8.11.5 if it looks right but the daemon cannot see it. |
+| The geo-IP database configured in `country_db_path` could not be read… *(names the path, and the open error)* | The file exists and is unusable: wrong format, truncated, or unreadable by the daemon's user. | A `.BIN` says so in the quoted error — fetch the MMDB edition (§8.11.2). Otherwise re-download and check ownership. |
+
+The second and third name `country_db_path` whichever spelling you actually used: the two
+resolve to one value before anything opens a file (§8.11.6), and the path quoted back to you is
+the one the gateway tried.
 
 The path is shown to **admins only**: `/api/admin/analytics/locations` is behind the same admin
 check as the rest of that page, and the response carries nothing extra when the feature is working.

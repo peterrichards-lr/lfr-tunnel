@@ -54,11 +54,31 @@ const countryName = (code: string, locale: string) => {
   }
 };
 
+// Per-provider attribution for the geographic distribution panel (#1921).
+//
+// Every supported vendor's licence obliges a visible credit, and each obliges a DIFFERENT
+// one, so this is a lookup rather than a hardcoded line: MaxMind's GeoLite EULA §3 ("You must
+// provide attribution of your use to MaxMind"), DB-IP's CC BY 4.0 ("you must include a link
+// back to DB-IP.com on pages that display or use results from the database"), and
+// IP2Location LITE's LICENSE_LITE.TXT, which prescribes its acknowledgment word for word.
+//
+// The link is supplied HERE, not by the bundle: DB-IP's obligation is specifically a link, so
+// a locale file that lost the anchor would quietly breach the licence. The bundle holds only
+// the sentence around it, and its {0} is where the link goes.
+const GEO_ATTRIBUTION_LINK: Record<string, { href: string; text: string }> = {
+  maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
+  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  ip2location: { href: 'https://lite.ip2location.com', text: 'IP geolocation' },
+  // `unknown` is absent on purpose rather than mapped to a vendor: there is nobody to link
+  // to, and naming a vendor anyway would be a false provenance claim AND would leave the real
+  // supplier's licence unmet.
+};
+
 // geoOfflineMessage says WHY the geographic panel is off, not merely that it is (#1938).
 //
 // `available: false` used to carry one sentence for three different situations -- no path
 // set, a path with no file at it, and a file that cannot be read -- so an operator who
-// mistyped `geolite2_db_path` was told they had configured nothing, and the server journal
+// mistyped the database path was told they had configured nothing, and the server journal
 // was the only place the difference existed. The server now sends which of the three it is
 // and, for the two the operator has to correct, the path it actually tried.
 //
@@ -75,12 +95,12 @@ function geoOfflineMessage(
     case 'path_not_found':
       return t(
         'geo_path_not_found',
-        'No file exists at the geo-IP database path configured in geolite2_db_path, so geographic distribution is off. Check it for a typo: {0}',
+        'No file exists at the geo-IP database path configured in country_db_path, so geographic distribution is off. Check it for a typo: {0}',
       ).replace('{0}', path);
     case 'unreadable': {
       const msg = t(
         'geo_unreadable',
-        'The geo-IP database configured in geolite2_db_path could not be read, so geographic distribution is off. It must be a MaxMind-format .mmdb file the gateway can open: {0}',
+        'The geo-IP database configured in country_db_path could not be read, so geographic distribution is off. It must be a MaxMind-format .mmdb file the gateway can open: {0}',
       ).replace('{0}', path);
       // The raw open error, untranslated on purpose: for an IP2Location .BIN it names the
       // wrong DOWNLOAD rather than the wrong path (#1921), which is the one sentence that
@@ -90,7 +110,7 @@ function geoOfflineMessage(
     default:
       return t(
         'geo_unavailable',
-        'No geo-IP database is configured, so geographic distribution is off. Set geolite2_db_path to a MaxMind GeoLite2 country file to enable it.',
+        'No geo-IP database is configured, so geographic distribution is off. Set country_db_path to a country database in .mmdb format -- MaxMind GeoLite2, DB-IP Lite or IP2Location LITE all work -- to enable it.',
       );
   }
 }
@@ -143,7 +163,7 @@ export default function AdminAnalytics() {
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
   // Anonymous geographic distribution (#1152). `available: false` is the normal state --
-  // no MaxMind database ships with the server -- and is deliberately distinct from an
+  // no geo-IP database ships with the server -- and is deliberately distinct from an
   // empty bucket list, which means the feature is on but nothing has cleared the
   // k-threshold yet.
   const [locations, setLocations] = useState<any>(null);
@@ -906,7 +926,7 @@ export default function AdminAnalytics() {
               Three states, and conflating any two of them misleads an admin looking at an
               empty panel:
 
-                * available: false -- no MaxMind database is deployed. The normal state,
+                * available: false -- no geo-IP database is deployed. The normal state,
                   and NOT a fault: the server ships without one, and the feature degrades
                   to off rather than failing a registration. `reason` splits this further
                   into unset / mistyped path / unreadable file (#1938) -- see
@@ -970,6 +990,62 @@ export default function AdminAnalytics() {
                   </table>
                 </div>
               </>
+            )}
+            {/* Rendered whenever a database is open, INCLUDING the below-threshold state
+                where no rows are shown. DB-IP's licence obliges a credit on pages that
+                "display or use results from the database", and a suppressed row is still a
+                result that was used -- so keying the credit off `available` rather than off
+                the row count is the reading that cannot be wrong. Absent only when no
+                database is open, where there is nothing to attribute. */}
+            {locations?.available && (
+              <p
+                data-testid="geo-attribution"
+                className="text-muted text-xs mt-lg mb-0"
+              >
+                {(() => {
+                  // Literal keys, one branch each, rather than t(map[provider].key):
+                  // scripts/check-i18n-keys.cjs can only see a string literal, and a key it
+                  // cannot see is a key it cannot hold in the locale bundles.
+                  const provider = locations.provider || 'unknown';
+                  const text =
+                    provider === 'maxmind'
+                      ? t(
+                          'geo_attribution_maxmind',
+                          'This product includes GeoLite Data created by MaxMind, available from {0}.',
+                        )
+                      : provider === 'dbip'
+                        ? t(
+                            'geo_attribution_dbip',
+                            'IP geolocation data from {0}, used under the Creative Commons Attribution 4.0 International licence.',
+                          )
+                        : provider === 'ip2location'
+                          ? t(
+                              'geo_attribution_ip2location',
+                              'Liferay Tunnel uses the IP2Location LITE database for {0}.',
+                            )
+                          : t(
+                              'geo_attribution_unknown',
+                              'The vendor of this geo-IP database could not be identified from its file metadata, so the gateway cannot render the credit line it requires. Check the licence of the file you deployed and add the attribution yourself: most geo-IP vendors require a visible one wherever their data appears.',
+                            );
+                  const link = GEO_ATTRIBUTION_LINK[provider];
+                  const [before, ...rest] = text.split('{0}');
+                  if (!rest.length || !link) return text;
+                  return (
+                    <>
+                      {before}
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary"
+                      >
+                        {link.text}
+                      </a>
+                      {rest.join('{0}')}
+                    </>
+                  );
+                })()}
+              </p>
             )}
           </div>
 

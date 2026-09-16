@@ -50,7 +50,7 @@ type userKey [sha256.Size]byte
 // which is what makes the dedupe exact, and also what makes the anonymity depend entirely
 // on choosing not to persist the pair.
 //
-// A nil *Aggregator is valid and does nothing. That is how "no MaxMind database
+// A nil *Aggregator is valid and does nothing. That is how "no geo-IP database
 // configured" is represented, so no call site needs a branch for it.
 type Aggregator struct {
 	resolver  Resolver
@@ -169,6 +169,19 @@ func (a *Aggregator) Flush() error {
 		return nil
 	}
 	return a.store.UpsertLocationStats(period, counts)
+}
+
+// Provider names the vendor that supplied the open database, for the attribution its
+// licence requires (#1921).
+//
+// A nil *Aggregator -- the "no database configured" state -- reports ProviderUnknown. That
+// is not a gap: with no database there is no data on screen and so nothing to attribute,
+// and the panel keys the credit off availability rather than off this value.
+func (a *Aggregator) Provider() Provider {
+	if a == nil || a.resolver == nil {
+		return ProviderUnknown
+	}
+	return a.resolver.Provider()
 }
 
 // Close flushes a final time and releases the database handle.

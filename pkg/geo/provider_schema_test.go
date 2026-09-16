@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,7 +85,11 @@ func TestAnAbsentDatabaseIsStillASupportedConfiguration(t *testing.T) {
 	if _, err := OpenResolver(""); err != ErrUnavailable {
 		t.Errorf("an empty path must report ErrUnavailable, got %v", err)
 	}
-	if _, err := OpenResolver(filepath.Join(t.TempDir(), "nope.mmdb")); err != ErrUnavailable {
-		t.Errorf("a missing file must report ErrUnavailable, got %v", err)
+	// A configured-but-missing file stays inside that same non-error state -- errors.Is
+	// rather than == because it now also carries WHICH path was missing (#1938). The
+	// equality above is kept for the unset case on purpose: an unset path has nothing to
+	// add, and bare ErrUnavailable is exactly "the operator configured nothing".
+	if _, err := OpenResolver(filepath.Join(t.TempDir(), "nope.mmdb")); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("a missing file must still match ErrUnavailable, got %v", err)
 	}
 }

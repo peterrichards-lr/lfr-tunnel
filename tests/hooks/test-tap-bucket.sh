@@ -50,6 +50,95 @@ else
     fail "the failure message does not explain the consequence"
 fi
 
+# The credential check (#1975).
+#
+# --dry-run used to end with "The credential is valid" having tested nothing. Both target
+# repositories are PUBLIC, so `git clone` with a bogus token succeeds and exits 0 -- the
+# clone the script inferred validity from could not fail. These cases pin the replacement,
+# which asks the API what the token may actually DO.
+#
+# curl is stubbed so the cases are deterministic and offline: it writes ${STUB_BODY} to the
+# path after -o and prints ${STUB_CODE} as the status, which is the shape the script reads.
+# git is stubbed to fail, so a token that passes the gate stops at the clone rather than
+# reaching the network -- these cases are about the gate, not about cloning.
+STUB_DIR="$(mktemp -d)"
+trap 'rm -rf "${STUB_DIR}"' EXIT
+
+cat > "${STUB_DIR}/curl" <<'STUB'
+#!/usr/bin/env bash
+out=""; prev=""
+for a in "$@"; do
+    [ "$prev" = "-o" ] && out="$a"
+    prev="$a"
+done
+[ -n "$out" ] && printf '%s' "${STUB_BODY:-}" > "$out"
+printf '%s' "${STUB_CODE:-200}"
+exit 0
+STUB
+chmod +x "${STUB_DIR}/curl"
+
+cat > "${STUB_DIR}/git" <<'STUB'
+#!/usr/bin/env bash
+echo "stub git: refusing to reach the network" >&2
+exit 1
+STUB
+chmod +x "${STUB_DIR}/git"
+
+# FIRING. A token that authenticates but cannot write must be refused BEFORE anything is
+# rendered -- otherwise the push fails with the release already published.
+out=$(PATH="${STUB_DIR}:$PATH" STUB_CODE=200 STUB_BODY='{"permissions":{"push":false,"pull":true}}' \
+    bash "$TAP" v9.9.9 fake-pat /dev/null --dry-run 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "cannot push to"; then
+    pass "a token without write access is refused (exit $rc), not reported as valid"
+else
+    fail "a read-only token was accepted -- the push would fail after the release is published"
+fi
+
+# FIRING. An expired token 401s. This is the exact incident after v1.48.31.
+out=$(PATH="${STUB_DIR}:$PATH" STUB_CODE=401 STUB_BODY='{"message":"Bad credentials"}' \
+    bash "$TAP" v9.9.9 expired-pat /dev/null --dry-run 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "not a valid credential"; then
+    pass "an expired credential is detected (exit $rc) instead of cloning anyway"
+else
+    fail "an expired credential was not detected -- the v1.48.31 incident would repeat silently"
+fi
+
+# FIRING. A body with no permissions block means the token was ignored rather than accepted.
+# Absent must never read as granted.
+out=$(PATH="${STUB_DIR}:$PATH" STUB_CODE=200 STUB_BODY='{"name":"homebrew-tap"}' \
+    bash "$TAP" v9.9.9 ignored-pat /dev/null --dry-run 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "push permission: absent"; then
+    pass "a response with no permissions block is refused, not read as permission granted"
+else
+    fail "an absent permissions block was treated as permission to push"
+fi
+
+# CONTROL. The three cases above must be failing for the RIGHT reason. With push:true the
+# script has to get PAST the gate -- if it refused this too, they would pass on a script
+# that simply rejects everything.
+out=$(PATH="${STUB_DIR}:$PATH" STUB_CODE=200 STUB_BODY='{"permissions":{"push":true,"pull":true}}' \
+    bash "$TAP" v9.9.9 good-pat /dev/null --dry-run 2>&1 || true)
+if printf '%s' "$out" | grep -q "push permission confirmed on homebrew-tap" \
+   && printf '%s' "$out" | grep -q "push permission confirmed on scoop-bucket"; then
+    pass "CONTROL  a writable token clears the gate on both repos, so the refusals are specific"
+else
+    fail "CONTROL  a writable token is also refused -- the cases above prove nothing"
+fi
+
+# CONTROL. The gate must run on the REAL path too, not only under --dry-run: a release that
+# cannot land its result should fail before it renders one.
+out=$(PATH="${STUB_DIR}:$PATH" STUB_CODE=401 STUB_BODY='{"message":"Bad credentials"}' \
+    bash "$TAP" v9.9.9 expired-pat /dev/null 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "not a valid credential"; then
+    pass "CONTROL  the check also guards the real path, not just --dry-run"
+else
+    fail "CONTROL  a real run skips the credential check"
+fi
+
 # BOUNDING. A build with genuinely no tap must still be able to opt out deliberately.
 out=$(ALLOW_MISSING_TAP_PAT=true bash "$TAP" v9.9.9 "" /dev/null --dry-run 2>&1)
 rc=$?

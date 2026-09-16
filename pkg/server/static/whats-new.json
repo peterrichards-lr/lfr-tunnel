@@ -1,5 +1,21 @@
 [
   {
+    "version": "v1.48.35",
+    "release_date": "2026-09-16",
+    "features": [
+      "fix(ci): test the tap credential instead of assuming a clone proved it (#1975) (#1976)",
+      "feat(geo): provider-neutral country_db_path and per-provider attribution (#1921) (#1963)",
+      "fix(server): record bandwidth for edge-served sessions (#1958) (#1970)",
+      "ci: make the tap/bucket update dispatchable, and stop it passing when it did nothing (#1969) (#1971)",
+      "fix(privacy): bring the served /privacy page up to PRIVACY.md, and gate it (#1954) (#1966)",
+      "fix(test): compare the token path as JSON-encoded, unbreaking the Windows suite (#1973)",
+      "fix(portal): tell a broken edge-provisioner token from no sidecar (#1956) (#1965)",
+      "feat(client): move a running client when a closer gateway appears (#1937) (#1962)",
+      "fix(portal): tell a mistyped geolite2_db_path from an unset one (#1938) (#1957)",
+      "docs: disclose the anonymous geographic distribution in PRIVACY.md (#1955)"
+    ]
+  },
+  {
     "version": "v1.48.34",
     "release_date": "2026-09-16",
     "features": [
@@ -43,15 +59,6 @@
     "release_date": "2026-09-14",
     "features": [
       "fix(ops): make sign fail closed and restore its exit-code contract (#1906) (#1907)"
-    ]
-  },
-  {
-    "version": "v1.48.30",
-    "release_date": "2026-09-13",
-    "features": [
-      "feat(portal): give every admin alert a toggle, in both arms (#1882) (#1904)",
-      "refactor(db): make db.User.Status a distinct type (#1881) (#1903)",
-      "fix(db): store acknowledgement timestamps where SQLite can read them (#1897) (#1902)"
     ]
   }
 ]

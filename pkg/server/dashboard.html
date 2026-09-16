@@ -640,11 +640,15 @@
                         <div class="glass" style="padding: 16px; grid-column: span 3;" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="region_latency">Region Latency</h4>
                             <p id="region-latency-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
-                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th data-i18n="region">Region</th><th data-i18n="users">Users</th><th data-i18n="median">Median</th><th data-i18n="p90">p90</th><th data-i18n="unreachable">Unreachable</th></tr></thead>
-                                    <tbody id="region-latency-table-body"></tbody>
-                                </table>
+                            <!-- Hidden until there are rows, like the other two panels on
+                                 this row (#1920). -->
+                            <div id="region-latency-table-wrap" style="display: none;">
+                                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                    <table>
+                                        <thead><tr><th data-i18n="region">Region</th><th data-i18n="users">Users</th><th data-i18n="median">Median</th><th data-i18n="p90">p90</th><th data-i18n="unreachable">Unreachable</th></tr></thead>
+                                        <tbody id="region-latency-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                         <!-- Node placement (#1892). Did tunnels start on the closest node the
@@ -654,11 +658,15 @@
                         <div class="glass" style="padding: 16px; grid-column: span 3;" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="node_placement">Node Placement</h4>
                             <p id="node-placement-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
-                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th data-i18n="region">Region</th><th data-i18n="node_placement_sessions">Sessions</th><th data-i18n="node_placement_optimal">Closest</th><th data-i18n="node_placement_suboptimal">Slower option</th><th data-i18n="node_placement_unverifiable">Not assessable</th><th data-i18n="node_placement_worst_miss">Worst miss</th></tr></thead>
-                                    <tbody id="node-placement-table-body"></tbody>
-                                </table>
+                            <!-- Hidden until there are rows, like the other two panels on
+                                 this row (#1920). -->
+                            <div id="node-placement-table-wrap" style="display: none;">
+                                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                    <table>
+                                        <thead><tr><th data-i18n="region">Region</th><th data-i18n="node_placement_sessions">Sessions</th><th data-i18n="node_placement_optimal">Closest</th><th data-i18n="node_placement_suboptimal">Slower option</th><th data-i18n="node_placement_unverifiable">Not assessable</th><th data-i18n="node_placement_worst_miss">Worst miss</th></tr></thead>
+                                        <tbody id="node-placement-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                             <p id="node-placement-unknown" style="display: none; color: var(--warning); font-size: 12px; margin: 12px 0 0;"></p>
                             <!-- How clients chose their gateway (#1922). A pinned client runs no
@@ -681,11 +689,20 @@
                         <div class="glass" style="padding: 16px; grid-column: span 3;" title="Distinct users per country per ISO week. The IP is resolved in memory and discarded; no row can be linked back to a person.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="geo_distribution">Geographic Distribution</h4>
                             <p id="geo-distribution-headline" style="font-size: 13px; margin: 0 0 12px; color: var(--text-muted);"></p>
-                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th data-i18n="country">Country</th><th data-i18n="users">Users</th></tr></thead>
-                                    <tbody id="geo-distribution-table-body"></tbody>
-                                </table>
+                            <!-- Ships hidden and is revealed only when there are buckets to
+                                 show (#1920). The wrapper exists because renderTable() injects
+                                 the search box and the pagination row as siblings of
+                                 .table-container, so hiding the container alone would leave a
+                                 search control sitting over a table that is not there. A failed
+                                 fetch leaves it hidden as well, which is the same argument: an
+                                 empty table is not a report of no users. -->
+                            <div id="geo-distribution-table-wrap" style="display: none;">
+                                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                    <table>
+                                        <thead><tr><th data-i18n="country">Country</th><th data-i18n="users">Users</th></tr></thead>
+                                        <tbody id="geo-distribution-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                         <div class="glass" style="padding: 16px; grid-column: span 3;">

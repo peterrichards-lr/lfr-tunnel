@@ -882,9 +882,16 @@ html[dir='rtl'] th {
     print-color-adjust: exact !important;
   }
 
-  /* Hide layout wrappers & elements not needed for analytics printout */
+  /* Hide layout wrappers & elements not needed for analytics printout.
+     
+     The banner entries are explicit rather than clever: each is page chrome that reached an
+     exported report (#1916) -- the V2 promo with its dismiss button, the view-as bar, and the
+     help control. A NEW banner must be added here or given .print-hide; nothing detects one. */
   .sidebar,
   #header-language-container,
+  #v2-promo-banner,
+  #view-as-bar,
+  .shortcuts-trigger,
   .print-hide,
   .btn,
   #tab-overview,
@@ -900,13 +907,22 @@ html[dir='rtl'] th {
     display: none !important;
   }
 
-  /* Reset layout wrapper limits (remove viewport confinement) to enable natural multi-page flow */
-  .app-container {
-    display: block !important;
+  /* A Chart.js canvas has an intrinsic bitmap size fixed when it renders on screen. Narrowing
+     the CONTAINER in print does not constrain the canvas, so charts were emitted at their
+     on-screen pixel width and clipped by the page edge -- measured in the exported PDF at up to
+     2737pt wide on a 595pt page, 4.6x the paper (#1916). Constraining the box scales the bitmap
+     into it. V1 already paginated correctly; this was the remaining defect there. */
+  canvas {
+    max-width: 100% !important;
     height: auto !important;
-    min-height: 0 !important;
-    width: 100% !important;
   }
+
+  /* The `.app-container` reset that used to sit here is removed (#1916): no V1 document renders
+     that class -- the shell is #dashboard-shell / #dashboard-screen -- so the rule has never
+     matched anything. It is NOT retargeted at the real wrapper, deliberately: V1 already
+     paginates correctly (a 4-page export was measured), so nothing was relying on this, and
+     resetting #dashboard-screen's flex sizing would be a layout change made blind. If V1 ever
+     starts clipping in print, that is the place to look -- but it is not doing so today. */
 
   .main-content {
     display: block !important;

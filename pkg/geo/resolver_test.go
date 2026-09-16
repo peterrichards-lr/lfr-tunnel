@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,37 @@ func TestOpenResolverWithoutADatabaseIsUnavailable(t *testing.T) {
 			t.Errorf("got a resolver %v, want nil", res)
 		}
 	})
+}
+
+// TestOpenResolverSeparatesAnUnsetPathFromAMistypedOne is the assertion that would have
+// caught #1938. Both states are non-fatal and both leave the feature off, so every other
+// test in this file passes either way; what was missing is that they were the SAME error,
+// so nothing downstream could tell an operator's typo from the default.
+//
+// Asserted on the error identity and on the path being named, never on "an error
+// occurred": every failure mode in OpenResolver returns an error, so that alone is
+// satisfied by any of the wrong causes.
+func TestOpenResolverSeparatesAnUnsetPathFromAMistypedOne(t *testing.T) {
+	if _, unset := OpenResolver(""); errors.Is(unset, ErrNotFound) {
+		t.Errorf("an unset path reported ErrNotFound (%v) -- nothing was configured to be missing", unset)
+	}
+
+	typo := filepath.Join(t.TempDir(), "GeoLite2-Cuntry.mmdb")
+	_, err := OpenResolver(typo)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("a configured path with no file at it: got %v, want ErrNotFound", err)
+	}
+	// The panel names the path back to the admin so a typo is self-evident, and it reads
+	// it from here. A sentinel that dropped the path would leave the message no better
+	// than the one it replaced.
+	if err == nil || !strings.Contains(err.Error(), typo) {
+		t.Errorf("error %v does not name the configured path %q", err, typo)
+	}
+	// Still inside the graceful-absence contract: the server must go on treating this as
+	// "feature off", never as a startup failure.
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("a missing configured file stopped matching ErrUnavailable: %v", err)
+	}
 }
 
 // TestOpenResolverWithACorruptDatabaseFails distinguishes a file that is present but

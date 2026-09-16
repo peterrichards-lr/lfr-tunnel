@@ -1614,8 +1614,8 @@ Three things that look like they might apply it, and do not:
 - **A binary redeploy** is not needed. This is a configuration change; the gateway you are running
   already reads the key.
 
-**Then read the journal.** The startup log is the only place the gateway states its geo status
-unambiguously, and it emits exactly one of these:
+**Then read the journal.** The startup log states the gateway's geo status unambiguously, and it
+emits exactly one of these (the admin panel now says the same thing — §8.11.8):
 
 ```bash
 sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
@@ -1643,18 +1643,26 @@ The country is derived from the **resolved** client IP, so §8.10 applies direct
 list that does not match your real topology attributes visitors to the proxy, and the geographic
 panel will faithfully report the country your load balancer sits in.
 
-#### 8.11.8. A wrong path and an unset path look identical in the panel
+#### 8.11.8. The panel says which of the three off states you are in
 
-They should not, and today they do. Both render the same sentence:
+A wrong path and an unset path used to render the same sentence — "No geo-IP database is
+configured" — so an operator who mistyped `geolite2_db_path` was told they had never set it, and
+the startup log was the only place the difference existed ([#1938](https://github.com/peterrichards-lr/lfr-tunnel/issues/1938)).
+It is not any more. The panel shows one of:
 
-> No geo-IP database is configured, so geographic distribution is off. Set `geolite2_db_path` to a
-> MaxMind GeoLite2 country file to enable it.
+| What the panel says | State | What to do |
+|---|---|---|
+| No geo-IP database is configured… | `geolite2_db_path` is empty. The default, and not an error. | Nothing, unless you want the feature. |
+| No file exists at the geo-IP database path configured in `geolite2_db_path`… *(and names the path it tried)* | The path is set and there is no file there. | Compare the path it names against the file you installed — §8.11.5 if it looks right but the daemon cannot see it. |
+| The geo-IP database configured in `geolite2_db_path` could not be read… *(names the path, and the open error)* | The file exists and is unusable: wrong format, truncated, or unreadable by the daemon's user. | A `.BIN` says so in the quoted error — fetch the MMDB edition (§8.11.2). Otherwise re-download and check ownership. |
 
-An operator who set the path and mistyped it is told they never set it. The API reports
-`available: false` for both, so both portal arms show the same string, and **the startup log lines
-in §8.11.7 are currently the only way to tell the two apart.** Check the journal before concluding
-the setting was not applied. This is tracked as a defect on
-[#1938](https://github.com/peterrichards-lr/lfr-tunnel/issues/1938).
+The path is shown to **admins only**: `/api/admin/analytics/locations` is behind the same admin
+check as the rest of that page, and the response carries nothing extra when the feature is working.
+
+The journal lines in §8.11.7 still say the same things and are still the fastest check over SSH;
+they are no longer the *only* place the distinction exists. Note that the panel describes the
+state the **running process** is in — it is decided once at startup, so a file you have just put
+in place shows as missing until you restart.
 
 #### 8.11.9. Keeping it current
 

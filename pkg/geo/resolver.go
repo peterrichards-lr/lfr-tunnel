@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"path/filepath"
+	"strings"
 
 	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 )
@@ -61,6 +63,15 @@ func OpenResolver(path string) (Resolver, error) {
 	}
 	db, err := maxminddb.Open(path)
 	if err != nil {
+		// IP2Location's default download is a .BIN in their own proprietary format, not an
+		// mmdb, and maxminddb reports that as an opaque parse error. Named explicitly
+		// because the fix is a different DOWNLOAD, not a different path or permission, and
+		// nothing else would tell the operator that (#1921).
+		if strings.EqualFold(filepath.Ext(path), ".bin") {
+			return nil, fmt.Errorf("geo: %s is a .BIN file, which is IP2Location's proprietary "+
+				"format and not MaxMind's .mmdb -- download the MMDB edition of the same "+
+				"database instead: %w", path, err)
+		}
 		return nil, fmt.Errorf("geo: open %s: %w", path, err)
 	}
 	return &mmdbResolver{db: db}, nil
@@ -81,11 +92,34 @@ func (r *mmdbResolver) Country(ip netip.Addr) (string, bool) {
 	if !res.Found() || res.Err() != nil {
 		return "", false
 	}
-	var iso string
-	if err := res.DecodePath(&iso, "country", "iso_code"); err != nil || iso == "" {
-		return "", false
+	// Vendors disagree about where the country code lives inside the same mmdb format, so
+	// the paths are tried in turn (#1921). Verified against real databases:
+	//
+	//   country.iso_code   MaxMind GeoLite2/GeoIP2, and DB-IP (which mirrors the schema)
+	//   country_code       IP2Location's MMDB editions
+	//
+	// Only the country is ever decoded, whichever vendor supplied the file. Decoding the
+	// whole record would pull city, subdivision and lat/long into memory -- DB-IP City Lite
+	// and IP2Location DB11 both carry all three -- and those are far more identifying than a
+	// country. The narrow path is the safe one as well as the cheap one.
+	for _, path := range countryPaths {
+		var iso string
+		if err := res.DecodePath(&iso, path...); err == nil && iso != "" {
+			return iso, true
+		}
 	}
-	return iso, true
+	return "", false
+}
+
+// countryPaths are the record locations known to hold an ISO 3166-1 alpha-2 country code,
+// most common first.
+//
+// Ordered rather than probed in parallel because the first hit wins and MaxMind/DB-IP are the
+// overwhelmingly common case; a file that answers on neither path is a vendor this build has
+// not been taught, which SupportedSchemas() exists to report.
+var countryPaths = [][]any{
+	{"country", "iso_code"},
+	{"country_code"},
 }
 
 func (r *mmdbResolver) Close() error {

@@ -42,7 +42,6 @@ import (
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
 	"lfr-tunnel/pkg/provisioner"
-	"lfr-tunnel/pkg/regionvocab"
 	"lfr-tunnel/pkg/webhook"
 
 	"github.com/gorilla/websocket"
@@ -260,7 +259,11 @@ type Server struct {
 	// geo aggregates registrations into anonymous per-country counts (#1152). nil
 	// whenever no MaxMind database is configured, which is the default; every method on
 	// it is nil-safe so no call site needs to check.
-	geo           *geo.Aggregator
+	geo *geo.Aggregator
+	// geoDiagnosis records WHY geo is nil (#1938). An unset path, a mistyped one and an
+	// unreadable file are all nil here and were all one sentence in the admin panel, which
+	// told an operator who had configured a path that they had not.
+	geoDiagnosis  geoDiagnosis
 	portalService PortalService
 	notifications *NotificationService
 	ctx           context.Context
@@ -411,6 +414,11 @@ type Server struct {
 	// cfg.EdgeProvisionerURL is set -- every handler that uses it must treat
 	// nil as "feature not configured," not an error.
 	provisionerClient *provisioner.Client
+	// edgePowerDiagnosis records WHY provisionerClient is nil (#1956). No sidecar
+	// configured, and a configured sidecar whose token file is missing, unreadable or
+	// empty, were all one nil and one sentence -- so an operator's typo was reported to
+	// them as a decision they had made.
+	edgePowerDiagnosis edgePowerDiagnosis
 }
 
 // defaultChiselKeepAlive is how often the gateway pings each attached client over the
@@ -568,13 +576,8 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
 	// Optional and absent by default: no MaxMind database is shipped, and without one
 	// this stays nil and every geo call becomes a no-op (#1152).
-	srv.geo = newGeoAggregator(cfg.GeoLite2DBPath, database)
+	srv.geo, srv.geoDiagnosis = newGeoAggregator(cfg.GeoLite2DBPath, database)
 
-	// Edge power actions (start/stop/restart, schedule editing) are entirely
-	// optional and AWS-specific -- absent unless both the sidecar URL and its
-	// token file are configured. A missing/unreadable token file is treated
-	// as "feature not configured" here, not a fatal startup error, since the
-	// sidecar (which owns the token) may simply not have started yet.
 	// Reject an unusable statically-declared schedule once, at startup, rather than acting on
 	// it every health cycle (#1282). Dropped rather than fatal: a bad schedule should stop
 	// the node being treated as scheduled, not stop the gateway serving traffic.
@@ -585,13 +588,14 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	normaliseEdgeSchedules(cfg.EdgeNodes)
 	srv.edgeNodesCurrent = cfg.EdgeNodes
 
-	if cfg.EdgeProvisionerURL != "" {
-		if token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile); err != nil {
-			slog.Info(fmt.Sprintf("[Server] edge_provisioner_url is set but its token could not be loaded, edge power actions disabled: %v", err))
-		} else {
-			srv.provisionerClient = provisioner.NewClient(cfg.EdgeProvisionerURL, token)
-		}
-	}
+	// Edge power actions (start/stop/restart, schedule editing) are entirely
+	// optional and AWS-specific -- absent unless both the sidecar URL and its
+	// token file are configured. A missing/unreadable token file still disables
+	// the feature rather than failing startup, since the sidecar (which owns the
+	// token) may simply not have started yet -- but it is no longer the SAME
+	// state as having no sidecar at all: newProvisionerClient returns why, and
+	// the admin surfaces say which (#1956).
+	srv.provisionerClient, srv.edgePowerDiagnosis = newProvisionerClient(cfg)
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {
@@ -1101,43 +1105,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				latestClientVer = config.Version
 			}
 
-			regions := make(map[string]string)
-			if len(s.cfg.Domains) > 0 {
-				// Configured verbatim where set, because the construction below assumes both
-				// the scheme and the hostname prefix. A deployment that is neither https nor
-				// tunnel.<domain> was handed a URL that does not answer, and clients failing
-				// over to it retried every attempt against the same dead address (#1286).
-				centralURL := s.cfg.CentralURL
-				if centralURL == "" {
-					centralURL = "https://tunnel." + s.cfg.Domains[0]
-				}
-				// Derived from the declared vocabulary, not written out here (#1919).
-				// These two names and the survivor of them have to agree with what the
-				// analytics matches central's sessions against; when they were written
-				// by hand in three places, one of them picked the wrong survivor.
-				for _, alias := range regionvocab.SortedCentralAliases() {
-					regions[alias] = centralURL
-				}
-			}
-			// An edge that is configured but currently down is reported separately rather
-			// than simply left out (#1690). Omitting it left the client unable to tell "every
-			// region answered" from "a region exists but is asleep": the absent edge was not
-			// unreachable, it was invisible, so an election made inside an edge's scheduled
-			// power-off window looked complete and was cached for the full 24h -- stranding
-			// the client on a distant gateway long after the edge came back.
-			regionsUnavailable := make(map[string]string)
-			s.edgeClientsMu.RLock()
-			for _, edge := range s.edgeNodes() {
-				if edge.URL == "" {
-					continue
-				}
-				target := regionsUnavailable
-				if _, isUp := s.edgeClients[edge.ID]; isUp {
-					target = regions
-				}
-				addEdgeRegionNames(target, edge.ID, edge.URL)
-			}
-			s.edgeClientsMu.RUnlock()
+			// Built in one place so the node-set fingerprint on the heartbeat (#1937) is a
+			// hash of exactly what is advertised here, and the two cannot drift.
+			regions, regionsUnavailable := s.advertisedRegions()
 
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":           latestClientVer,
@@ -2270,6 +2240,17 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 				body = map[string]interface{}{}
 			}
 			body["commands"] = cmds
+		}
+		// The roster fingerprint rides the same body, under its own key, for the same reason
+		// the two above do: it is state the client already listens for, on the only channel a
+		// NATed client can be reached on (#1937). Declarative -- it says what this gateway's
+		// node set hashes to and nothing about what to do with that. Empty on a gateway with no
+		// roster, which is every edge, so this adds nothing to those bodies.
+		if fp := s.nodeSetFingerprint(); fp != "" {
+			if body == nil {
+				body = map[string]interface{}{}
+			}
+			body[nodeSetFingerprintField] = fp
 		}
 		if body != nil {
 			respondJSON(w, http.StatusOK, body)
@@ -7030,6 +7011,34 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		"outbound_ok":                outboundOk,
 		"nodes":                      nodes,
 		"edge_power_actions_enabled": s.provisionerClient != nil,
+	}
+	// Why the feature is off, not merely that it is (#1956) -- and only for an admin.
+	//
+	// This route is the portal's Network Health page, which every signed-in user can load;
+	// edge_power_actions_enabled is what both portal arms hide the power controls on. The
+	// reason, the configured token path and the filesystem's complaint about it are gateway
+	// internals an ordinary user has no business seeing, so a non-admin response is
+	// byte-for-byte what it was before this change. getCurrentUser (not Raw) on purpose:
+	// an owner previewing as a user should see the page that user sees (#1225).
+	//
+	// Read from what the constructor recorded at startup rather than re-stat'ing the file
+	// here: this describes the state the RUNNING process is in, and a token file written
+	// since startup is not loaded -- claiming otherwise would send an admin looking for a
+	// problem that a restart, and only a restart, will clear.
+	if s.provisionerClient == nil {
+		if u, err := s.getCurrentUser(r); err == nil && u != nil && (u.Role == roleAdmin || u.Role == roleOwner) {
+			reason := s.edgePowerDiagnosis.Reason
+			if reason == "" {
+				reason = edgePowerNotConfigured
+			}
+			response["edge_power_actions_reason"] = reason
+			if s.edgePowerDiagnosis.TokenFile != "" {
+				response["edge_power_actions_token_file"] = s.edgePowerDiagnosis.TokenFile
+			}
+			if s.edgePowerDiagnosis.Detail != "" {
+				response["edge_power_actions_detail"] = s.edgePowerDiagnosis.Detail
+			}
+		}
 	}
 	respondJSON(w, http.StatusOK, response)
 }

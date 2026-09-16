@@ -2986,6 +2986,37 @@ function geoBucketLabel(bucket) {
   }
 }
 
+// geoOfflineMessage says WHY the geographic panel is off, not merely that it is (#1938).
+//
+// `available: false` used to carry one sentence for three different situations -- no path
+// set, a path with no file at it, and a file that cannot be read -- so an operator who
+// mistyped `geolite2_db_path` was told they had configured nothing, and the server journal
+// was the only place the difference existed. The server now sends which of the three it is
+// and, for the two the operator has to correct, the path it actually tried.
+//
+// `reason` is absent on a gateway older than this change, and absent is precisely the
+// not-configured wording, so that case falls back to the original string rather than to a
+// blank panel. The same function exists in V2's AdminAnalytics.tsx: the two portals are an
+// A/B test (#1866), so a diagnosis in one arm only would itself be a defect.
+//
+// Returns text, never markup -- the caller assigns it to textContent. The path and the
+// open error come from the gateway's own configuration and are admin-only (the route is
+// behind requireAdmin), but they are still unsanitised strings and must not reach innerHTML.
+function geoOfflineMessage(geo) {
+  const path = (geo && geo.configured_path) || '';
+  if (geo && geo.reason === 'path_not_found') {
+    return t('geo_path_not_found').replace('{0}', path);
+  }
+  if (geo && geo.reason === 'unreadable') {
+    const msg = t('geo_unreadable').replace('{0}', path);
+    // The raw open error, untranslated on purpose: for an IP2Location .BIN it names the
+    // wrong DOWNLOAD rather than the wrong path (#1921), which is the one sentence that
+    // resolves this state, and it exists only in the gateway's own words.
+    return geo.detail ? `${msg} (${geo.detail})` : msg;
+  }
+  return t('geo_unavailable');
+}
+
 // The analytics window, in days. '0' is V2's "All Time" value. Mirrors V2's request shape
 // exactly rather than improving on it: the portals are a live A/B test, so a difference in what
 // the two arms fetch would make the comparison measure the fix instead of the presentation.
@@ -3418,6 +3449,9 @@ async function loadAnalytics() {
       // `available` is what separates "no MaxMind database deployed" from "deployed, but
       // nothing has cleared the k-threshold yet". They look identical in the data and mean
       // completely different things to an admin staring at an empty table.
+      //
+      // `reason` then splits the first of those three ways -- unset, mistyped path,
+      // unreadable file (#1938). See geoOfflineMessage.
       try {
         const geoRes = await fetch('/api/admin/analytics/locations');
         const geoHeadline = document.getElementById(
@@ -3428,7 +3462,7 @@ async function loadAnalytics() {
           const buckets = geo.buckets || [];
           if (geoHeadline) {
             if (!geo.available) {
-              geoHeadline.textContent = t('geo_unavailable');
+              geoHeadline.textContent = geoOfflineMessage(geo);
             } else if (!buckets.length) {
               geoHeadline.textContent = t('geo_below_threshold');
             } else {
@@ -7000,6 +7034,62 @@ window.addEventListener('touchstart', handleModalOverlayClick, {
 let edgePowerActionsEnabled = false;
 let edgeSelectedIds = new Set();
 
+// edgePowerOfflineMessage says WHY edge power actions are off, when the reason is an
+// operator error rather than the default (#1956).
+//
+// `edge_power_actions_enabled: false` used to carry four situations at once: no sidecar
+// configured, and a configured sidecar whose token file is unset, missing, unreadable or
+// empty. All four hid the power controls identically and said, on the only surface that
+// said anything, that the feature was "not configured on this server" -- so an operator who
+// mistyped `edge_provisioner_token_file` was told they had never set one, and one INFO line
+// at startup was the only place the difference existed.
+//
+// Returns null for the default: a deployment with no sidecar must look exactly as it did,
+// or every non-AWS gateway grows a banner about a feature it never asked for. Null is also
+// what an older gateway produces, since it sends no reason at all.
+//
+// Returns text, never markup -- the caller assigns it to textContent. The token PATH is
+// named because that is what makes a typo self-evident, it is admin-only (the server sends
+// these fields to admin and owner sessions only), and it is still an unsanitised string
+// that must not reach innerHTML. The token itself is never sent and must never be shown.
+// Mirrors V2's copy in AdminEdgeHealth.tsx: the portals are an A/B test (#1866), so a
+// diagnosis in one arm only would itself be a defect.
+function edgePowerOfflineMessage(payload) {
+  const tokenFile = (payload && payload.edge_power_actions_token_file) || '';
+  const detail = (payload && payload.edge_power_actions_detail) || '';
+  switch (payload && payload.edge_power_actions_reason) {
+    case 'token_path_unset':
+      return t(
+        'edge_power_token_path_unset',
+        'Edge power actions are configured (edge_provisioner_url), but edge_provisioner_token_file is not set, so they are disabled. Point it at the token file the edge-provisioner sidecar writes.',
+      );
+    case 'token_not_found':
+      return t(
+        'edge_power_token_not_found',
+        'Edge power actions are configured (edge_provisioner_url), but no file exists at the configured edge_provisioner_token_file, so they are disabled. Check it for a typo, and check the edge-provisioner sidecar has started: {0}',
+      ).replace('{0}', tokenFile);
+    case 'token_empty':
+      return t(
+        'edge_power_token_empty',
+        'Edge power actions are configured (edge_provisioner_url), but the token file is empty, so they are disabled. The edge-provisioner sidecar writes it when it starts: {0}',
+      ).replace('{0}', tokenFile);
+    case 'token_unreadable': {
+      const msg = t(
+        'edge_power_token_unreadable',
+        'Edge power actions are configured (edge_provisioner_url), but the token file could not be read, so they are disabled. It must be readable by the user the gateway runs as: {0}',
+      ).replace('{0}', tokenFile);
+      // The filesystem's own words, untranslated on purpose: "permission denied" is the
+      // sentence that resolves this state and it exists nowhere else. It describes opening
+      // the file and never its contents -- the server reads none before failing.
+      return detail ? msg + ' (' + detail + ')' : msg;
+    }
+    default:
+      // 'not_configured', and anything an older or newer gateway sends that this portal
+      // does not know: say nothing rather than guess.
+      return null;
+  }
+}
+
 async function loadNetworkHealth() {
   if (
     !document.getElementById('nav-network-health').classList.contains('active')
@@ -7024,6 +7114,27 @@ async function loadNetworkHealth() {
     if (!edgePowerActionsEnabled) {
       edgeSelectedIds.clear();
       updateEdgeBulkToolbar();
+    }
+
+    // Render or remove the "power actions are off because of a misconfiguration" banner
+    // (#1956). Absent for every deployment that simply has no sidecar, and for every
+    // non-admin, because the server sends no reason in those cases.
+    const powerMsg = edgePowerOfflineMessage(payload);
+    let powerBanner = document.getElementById('edge-power-config-banner');
+    if (powerMsg) {
+      if (!powerBanner) {
+        powerBanner = document.createElement('div');
+        powerBanner.id = 'edge-power-config-banner';
+        powerBanner.className = 'glass';
+        powerBanner.style =
+          'padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--warning); color: var(--warning); border-radius: 8px; margin-bottom: 24px; font-size: 13px; font-weight: 500;';
+        tbody.parentNode.parentNode.insertBefore(powerBanner, tbody.parentNode);
+      }
+      // textContent, never innerHTML: this string carries a configured filesystem path and
+      // the gateway's own error text.
+      powerBanner.textContent = '\u26a0\ufe0f ' + powerMsg;
+    } else if (powerBanner) {
+      powerBanner.remove();
     }
 
     // Render or remove the gateway network error warning banner

@@ -138,6 +138,11 @@ type ControlMessage struct {
 	// ScheduleEnabled above: a string decodes to "" whether it was sent empty or omitted, so
 	// an edge told the empty fingerprint clears what it was holding either way.
 	NodeSet string `json:"node_set,omitempty"`
+	// RateLimit carries the requests-per-second a bandwidth-quota throttle holds a user's
+	// tunnels to (#1959), on the "quota_enforcement" frame below. Central is the counting
+	// authority -- an edge has no database -- so an edge learns a user is over their
+	// allowance only by being told.
+	RateLimit int `json:"rate_limit,omitempty"`
 }
 
 // nodeSetFrameType is the control-channel frame that carries central's roster fingerprint
@@ -777,6 +782,50 @@ func (s *Server) sendEdgeWSHeaders(nodeID, fullHost string, headers map[string]s
 	return err == nil
 }
 
+// broadcastQuotaEnforcement tells every connected edge what the bandwidth quota now says
+// about one user (#1959).
+//
+// Broadcast rather than targeted, unlike sendEdgeWSKick, and that is the decision worth
+// stating: a user can hold leases on several edges at once, and s.edgeLeases is central's
+// cache of where they are rather than the truth. A frame naming a user that an edge has never
+// heard of is a no-op there, so sending to all of them costs one small frame per node and
+// removes the failure where a stale cache leaves one edge serving an over-quota tunnel at
+// full speed. An empty userID means every user, which is what a period rollover is.
+//
+// Best-effort by design. A node that is disconnected simply does not receive it -- the quota
+// fails OPEN across a partition, see quota.go -- and the next sweep after it reconnects sends
+// the frame again, because the standing it was computed from has not changed.
+func (s *Server) broadcastQuotaEnforcement(userID, action string, rateLimit int) {
+	msg := ControlMessage{
+		Type:      "quota_enforcement",
+		UserID:    userID,
+		Action:    action,
+		RateLimit: rateLimit,
+	}
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		slog.Error(fmt.Sprintf("[Edge WS] Could not encode a quota %s for %q: %v", action, userID, err))
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	defer s.edgeClientsMu.RUnlock()
+
+	sent := 0
+	for id, conn := range s.edgeClients {
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			// Named, not swallowed: an edge that did not get this keeps serving the
+			// user at full speed, and the operator should be able to see which one.
+			slog.Warn(fmt.Sprintf("[Edge WS] Quota %s for %q failed to reach %s: %v", action, userID, id, err))
+			continue
+		}
+		sent++
+	}
+	if sent > 0 {
+		slog.Info(fmt.Sprintf("[Edge WS] Sent quota %s for %q to %d edge node(s)", action, userID, sent))
+	}
+}
+
 // SendEdgeRestart sends a restart command to a specific edge node.
 func (s *Server) SendEdgeRestart(nodeID string) error {
 	s.edgeClientsMu.RLock()
@@ -1259,6 +1308,41 @@ func (s *Server) runEdgeControlChannel() {
 				} else {
 					slog.Info(fmt.Sprintf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain))
 					s.registry.KickLease(msg.Subdomain)
+				}
+			case "quota_enforcement":
+				// The edge half of the cumulative bandwidth quota (#1959). An edge holds
+				// no database and does no counting; central decides and this applies.
+				//
+				// Every branch is idempotent and none of them can fail the connection --
+				// telemetry and policy share this channel with kicks and schedules, and
+				// dropping it would take those with it.
+				switch msg.Action {
+				case "throttle":
+					applied := s.registry.SetQuotaRateLimitForUser(msg.UserID, msg.RateLimit)
+					slog.Warn(fmt.Sprintf("[Edge Control] Bandwidth quota: %d lease(s) for user %s throttled to %d rps", applied, msg.UserID, msg.RateLimit))
+				case "stop":
+					stopped := 0
+					for _, subdomain := range s.registry.LeaseSubdomainsForUser(msg.UserID) {
+						if s.registry.KickLease(subdomain) {
+							stopped++
+						}
+					}
+					slog.Warn(fmt.Sprintf("[Edge Control] Bandwidth quota: %d lease(s) for user %s terminated; the allowance is used up", stopped, msg.UserID))
+				case "release":
+					if msg.UserID == "" {
+						// A period rollover. Every lease this node holds goes back
+						// to what it was granted at registration.
+						restored := 0
+						for _, l := range s.registry.ListLeases() {
+							restored += s.registry.ClearQuotaRateLimitForUser(l.UserID)
+						}
+						slog.Info(fmt.Sprintf("[Edge Control] Bandwidth quota period reset; %d lease(s) restored", restored))
+					} else {
+						restored := s.registry.ClearQuotaRateLimitForUser(msg.UserID)
+						slog.Info(fmt.Sprintf("[Edge Control] Bandwidth quota lifted for user %s; %d lease(s) restored", msg.UserID, restored))
+					}
+				default:
+					slog.Warn(fmt.Sprintf("[Edge Control] Ignoring unknown quota action %q", msg.Action))
 				}
 			case "lease_headers":
 				slog.Info(fmt.Sprintf("[Edge Control] Updating custom headers for lease %s", msg.Subdomain))

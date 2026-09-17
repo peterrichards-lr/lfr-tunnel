@@ -1,4 +1,15 @@
 # Central control-plane configuration -- COMPLETE key reference.
+# UNKNOWN KEYS ARE REJECTED. A key this gateway does not understand stops it starting, with the
+# offending key named -- a mistyped key that is silently skipped is indistinguishable from one
+# that took effect, which is how a feature stays off with nothing to explain why.
+#
+# Rolling a gateway BACK to an older build whose config contains a newer key is the one case
+# where that bites. Set LFT_ALLOW_UNKNOWN_CONFIG_KEYS=true to start anyway -- deliberately, and
+# visible in the log.
+#
+# The CLIENT config is deliberately lenient and stays that way: people carry retired keys in
+# ~/.lfr-tunnel/config.yaml from old examples, and a client that refuses to start cannot be
+# fixed remotely.
 #
 # Every top-level key `pkg/config.ServerConfig` accepts appears here exactly once, with a
 # placeholder value. A test asserts that (`TestExampleConfigCoversEveryField`), so adding a
@@ -69,6 +80,22 @@ owner_max_custom_domains: null
 default_max_active_tunnels: 0
 admin_max_active_tunnels: null
 owner_max_active_tunnels: null
+# --- Cumulative bandwidth quota (#1959) ---
+# Enforced on the TOTAL of inbound and outbound traffic per period -- the fairness measure,
+# and the one a user cannot dodge by pulling heavily inbound. Egress is reported separately
+# (admin users screen, alert bodies) because that is the figure the AWS invoice charges for.
+# Three levels, most specific wins: the per-user override (admin users screen) beats
+# role_settings.<role>.bandwidth_quota_bytes, which beats default_bytes here.
+# The period is the calendar month in UTC unless period_days is set.
+bandwidth_quota:
+  # 0 disables the quota fleet-wide. 53687091200 is 50 GiB.
+  default_bytes: 53687091200
+  # Percentage of the allowance at which tunnels are throttled but stay up.
+  throttle_percent: 80
+  # Requests per second a throttled tunnel is held to.
+  throttle_rate_limit: 1
+  # 0 means the calendar month. Set only to use a fixed-length period instead.
+  period_days: 0
 allow_client_auto_reservation: false
 subdomain_quarantine_days: 0
 max_tunnel_rate_limit: 0
@@ -108,8 +135,11 @@ view_config_allowed_role: ""
 role_settings:
   admin:
     allow_auto_reservation: false
+    # Per-role bandwidth allowance in bytes; null (or absent) inherits bandwidth_quota.default_bytes.
+    bandwidth_quota_bytes: null
   owner:
     allow_auto_reservation: true
+    bandwidth_quota_bytes: null
 sso_providers: []
 
 # --- Edge tier. urls are DERIVED from the DNS spec -- see `lfr-tunnel-ops render-edge-nodes` (#1468) ---

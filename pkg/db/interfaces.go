@@ -86,6 +86,11 @@ type MetricRepository interface {
 	GetUserAnalytics(userID string, days int) (*UserAnalytics, error)
 	GetClientVersionStats() ([]ClientVersionStats, error)
 
+	// BandwidthUsageByUserSince is the quota enforcer's feed (#1959): each user's total
+	// in and out since an instant, with the two directions kept apart because the quota
+	// is enforced on the total and reported with egress beside it.
+	BandwidthUsageByUserSince(since time.Time) ([]UserBandwidthUsage, error)
+
 	// Anonymous geographic distribution (#1152). Neither signature is capable of
 	// carrying a user, which is the point: the aggregate is anonymous because nothing
 	// in this layer can express the pairing, not because the current caller declines to.

@@ -31,8 +31,29 @@ type TunnelLease struct {
 	LocalPort       int    `json:"local_port"`
 	TargetPort      int    `json:"target_port"`
 	RateLimit       int    `json:"rate_limit"`
-	ClientIP        string `json:"client_ip"`
-	BasicAuth       string `json:"basic_auth"`
+	// BaseRateLimit is the limit this lease was granted at registration, kept so a
+	// bandwidth-quota throttle can be lifted again (#1959).
+	//
+	// RateLimit is the EFFECTIVE limit the proxy enforces and the quota enforcer
+	// overwrites; this is what it is restored to when the user's allowance is raised or
+	// the period rolls over. Without it, un-throttling would have to guess a number --
+	// and guessing the user's maximum would silently RAISE a tunnel that had asked for
+	// less, so restoring would not be a restore.
+	//
+	// json:"-" because ListLeases' snapshot does not carry this field and the admin
+	// portal serialises those snapshots as active_tunnels. Published, it would print 0
+	// for every tunnel -- and zero elsewhere in this struct means "no limit", so the
+	// payload would state the opposite of the truth for any rate-limited lease rather
+	// than merely omitting it (#2006).
+	//
+	// Kept OFF the snapshot rather than added to it: ListLeases returns a copy, and the
+	// last time quota state travelled on that copy it produced #1958 -- LastBytesIn and
+	// LastBytesOut are absent from it precisely so nothing can write a watermark onto a
+	// copy and believe it landed. This is internal enforcement state; the effective
+	// RateLimit the portal already shows is the number an operator acts on.
+	BaseRateLimit int    `json:"-"`
+	ClientIP      string `json:"client_ip"`
+	BasicAuth     string `json:"basic_auth"`
 	// Access control carried on the lease rather than read from the database per request
 	// (#1329), which also makes it available on an edge, where there is no database to read
 	// (#1367).
@@ -416,6 +437,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 				LocalPort:       localPort,
 				TargetPort:      pm.LocalPort,
 				RateLimit:       rateLimit,
+				BaseRateLimit:   rateLimit,
 				ClientIP:        clientIP,
 				BasicAuth:       basicAuth,
 				AddedHeaders:    addedHeaders,
@@ -495,8 +517,81 @@ func (r *Registry) UpdateLeaseRateLimit(fullHost string, newLimit int) error {
 	if !ok {
 		return fmt.Errorf("active tunnel host %q not found", fullHost)
 	}
+	// Both, because an admin override is a new baseline rather than a temporary state: if
+	// it moved only the effective limit, lifting a quota throttle afterwards would restore
+	// the registration-time value and silently undo the administrator's decision (#1959).
 	lease.RateLimit = newLimit
+	lease.BaseRateLimit = newLimit
 	return nil
+}
+
+// SetQuotaRateLimitForUser drops every live lease this user holds to `limit`, which is how
+// the soft stage of the bandwidth quota is applied (#1959).
+//
+// BaseRateLimit is deliberately left alone: this is a temporary state the enforcer can lift,
+// not a change to what the lease was granted. Returns how many leases were affected so the
+// caller can log whether the throttle actually reached anything -- on an edge it reaches the
+// leases that edge holds, and on central the ones central holds, which together are all of
+// them.
+func (r *Registry) SetQuotaRateLimitForUser(userID string, limit int) int {
+	r.Lock()
+	defer r.Unlock()
+	applied := 0
+	for _, lease := range r.leases {
+		if lease.UserID != userID {
+			continue
+		}
+		lease.RateLimit = limit
+		applied++
+	}
+	return applied
+}
+
+// ClearQuotaRateLimitForUser restores every live lease this user holds to the limit it was
+// granted at registration, undoing SetQuotaRateLimitForUser (#1959).
+//
+// Called when a user's allowance is raised or the period rolls over. A lease registered
+// before BaseRateLimit existed would carry zero, so a zero base is treated as "nothing to
+// restore to" and left alone rather than being reset to unlimited.
+func (r *Registry) ClearQuotaRateLimitForUser(userID string) int {
+	r.Lock()
+	defer r.Unlock()
+	restored := 0
+	for _, lease := range r.leases {
+		if lease.UserID != userID || lease.RateLimit == lease.BaseRateLimit {
+			continue
+		}
+		if lease.BaseRateLimit == 0 && lease.RateLimit > 0 {
+			// Restoring to 0 here would mean "no limit at all", which is a stronger
+			// grant than the lease ever had. Leave it throttled and say nothing
+			// louder than this comment: the next reconnect issues a lease with a
+			// correct base.
+			continue
+		}
+		lease.RateLimit = lease.BaseRateLimit
+		restored++
+	}
+	return restored
+}
+
+// LeaseSubdomainsForUser lists the distinct subdomain prefixes this user currently holds on
+// this node, so a caller can act on each one (#1959).
+//
+// Returned rather than acted on in place because terminating a lease goes through CleanLease,
+// which takes the same lock this holds.
+func (r *Registry) LeaseSubdomainsForUser(userID string) []string {
+	r.RLock()
+	defer r.RUnlock()
+	seen := make(map[string]bool)
+	var subdomains []string
+	for _, lease := range r.leases {
+		if lease.UserID != userID || seen[lease.SubdomainPrefix] {
+			continue
+		}
+		seen[lease.SubdomainPrefix] = true
+		subdomains = append(subdomains, lease.SubdomainPrefix)
+	}
+	return subdomains
 }
 
 // CheckSubdomain checks a subdomain prefix availability and returns availability, reason if unavailable.

@@ -362,8 +362,19 @@ func main() {
 	// How long this gateway wants clients to keep trying to reattach to it before falling back
 	// to region failover (#1946). Advertised so a wrong number is fixable from the server side;
 	// zero, or an unreachable gateway here, leaves the client on its own default.
+	// Everything this gateway advertises about how clients should behave, bounded before it
+	// is applied (#1948). One resolution point, so a new advertised setting is a field and a
+	// bounds-table row rather than another place that has to remember to clamp.
 	if info != nil {
-		engine.SetReconnectWindow(time.Duration(info.ClientReconnectSeconds) * time.Second)
+		settings := client.ResolveSettings(info.ClientSettings, info.ClientReconnectSeconds)
+		engine.SetReconnectWindow(settings.ReconnectWindow)
+		engine.SetHeartbeatInterval(settings.HeartbeatInterval)
+		// Said out loud rather than corrected in silence: a gateway config with a typo in it
+		// is something somebody needs to find out about, and the client is the only place
+		// the effect is visible.
+		for _, adjustment := range settings.Adjustments {
+			slog.Warn(fmt.Sprintf("[Client] Ignoring an out-of-range gateway setting -- %s", adjustment))
+		}
 	}
 	// User-configured lifecycle hooks. Handed to the engine because both ends of the
 	// contract live there: the shutdown-warning path fires warning_received, and the

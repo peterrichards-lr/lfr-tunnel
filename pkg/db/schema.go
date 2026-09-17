@@ -34,6 +34,7 @@ func (db *DB) initSchema() error {
 		max_reservations INTEGER DEFAULT NULL,
 		max_custom_domains INTEGER DEFAULT NULL,
 		max_active_tunnels INTEGER DEFAULT NULL,
+		bandwidth_quota_bytes INTEGER DEFAULT NULL,
 		onboarding_status TEXT NOT NULL DEFAULT 'pending',
 		onboarding_last_step TEXT DEFAULT '',
 		onboarding_reruns INTEGER NOT NULL DEFAULT 0,
@@ -477,4 +478,16 @@ var migrations = []migration{
 		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (user_id, day)
 	)`},
+
+	// The per-user bandwidth allowance (#1959).
+	//
+	// NULL, deliberately, and never backfilled. NULL means "this user has no override", not
+	// "this user is unlimited" -- resolution falls through to the role setting and then to
+	// the global default, the same three-level shape max_reservations has had since #1004.
+	// Backfilling the global default into the column would freeze today's number onto every
+	// existing account, so a later change to the fleet default would silently apply to new
+	// users only. That is the #1004 failure in reverse: there, a missing migration made the
+	// column never exist and every write silently no-op; here, an over-eager one would make
+	// every row opt out of the setting it is supposed to inherit.
+	{35, "ALTER TABLE users ADD COLUMN bandwidth_quota_bytes INTEGER DEFAULT NULL"},
 }

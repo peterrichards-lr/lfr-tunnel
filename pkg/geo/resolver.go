@@ -142,11 +142,15 @@ func (r *mmdbResolver) Country(ip netip.Addr) (string, bool) {
 	if !res.Found() || res.Err() != nil {
 		return "", false
 	}
-	// Vendors disagree about where the country code lives inside the same mmdb format, so
-	// the paths are tried in turn (#1921). Verified against real databases:
+	// The paths are tried in turn, in case a vendor ever disagrees about where the country
+	// code lives inside the same mmdb format (#1921). Every vendor measured so far agrees,
+	// so there is one:
 	//
-	//   country.iso_code   MaxMind GeoLite2/GeoIP2, and DB-IP (which mirrors the schema)
-	//   country_code       IP2Location's MMDB editions
+	//   country.iso_code   MaxMind GeoLite2/GeoIP2; DB-IP, measured on
+	//                      dbip-city-lite-2026-09.mmdb; and IP2Location's MMDB editions,
+	//                      measured on IP2LOCATION-LITE-DB11.MMDB -- which is a drop-in
+	//                      MaxMind clone down to database_type "GeoLite2-City" and
+	//                      MaxMind's eight languages (#1964).
 	//
 	// Only the country is ever decoded, whichever vendor supplied the file. Decoding the
 	// whole record would pull city, subdivision and lat/long into memory -- DB-IP City Lite
@@ -161,15 +165,30 @@ func (r *mmdbResolver) Country(ip netip.Addr) (string, bool) {
 	return "", false
 }
 
-// countryPaths are the record locations known to hold an ISO 3166-1 alpha-2 country code,
-// most common first.
+// countryPaths are the record locations MEASURED to hold an ISO 3166-1 alpha-2 country code
+// in a file from a vendor ParseProvider accepts, most common first.
 //
-// Ordered rather than probed in parallel because the first hit wins and MaxMind/DB-IP are the
-// overwhelmingly common case; a file that answers on neither path is a vendor this build has
-// not been taught, which SupportedSchemas() exists to report.
+// A slice of one, deliberately, and it is the measurement that decides membership rather than
+// a vendor's documentation or a plausible reading of it (#1993). It used to carry a second
+// entry, {"country_code"}, annotated "Verified against real databases -- IP2Location's MMDB
+// editions". No such file was ever decoded: IP2Location's MMDB edition uses country.iso_code
+// like everyone else, and `country_code` is the column name in their CSV and BIN editions,
+// which is the likeliest origin of the claim. A fallback that has never matched anything is
+// untested code on the hot path of every registration, and Country() returns the first
+// non-empty hit -- so a key that means something else in some future vendor's file would be
+// preferred over nothing silently.
+//
+// IPinfo Lite does document a top-level country_code, and is tracked as #2008. It is not a
+// candidate for this list until it is a vendor ParseProvider accepts and a real file has been
+// decoded, because a resolver that reads a vendor's data cannot render that vendor's required
+// credit unless Provider can name it.
+//
+// Ordered rather than probed in parallel because the first hit wins. A file that answers on
+// none of them resolves every address to nothing, which the panel reports as "no country yet
+// has enough distinct users" -- see TestARealDatabaseResolvesKnownAddresses, which is how to
+// tell the two apart against a file you have.
 var countryPaths = [][]any{
 	{"country", "iso_code"},
-	{"country_code"},
 }
 
 // Provider reports the vendor derived from the database's own metadata.

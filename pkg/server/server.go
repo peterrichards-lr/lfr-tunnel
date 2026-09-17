@@ -766,6 +766,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// needs a sweep -- there is no arrival to hang a check off, which is exactly why this
 	// failure mode was invisible.
 	srv.goTracked(func() { srv.watchEdgeMetricsDelivery(ctx) })
+	// Retires collection requests nobody picked up (#1991). Also an ABSENCE, and also
+	// unreachable from any arriving request: a request forwarded to an edge is held here
+	// while that user's heartbeats go to the edge, so nothing else would ever expire it.
+	srv.goTracked(func() { srv.watchDiagnosticsExpiry(ctx) })
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second
@@ -1051,6 +1055,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.URL.Path == "/api/internal/edge-control-ws" {
 			s.handleEdgeControlWS(w, r)
+			return
+		}
+
+		// A diagnostic bundle an edge is relaying for one of its clients (#1991). Beside the
+		// other /api/internal/* endpoints because it is the same thing they are: something
+		// an edge holds and only the control plane can store, authenticated by the edge
+		// token. It is NOT on the control channel -- a bundle is up to 6 MB against a
+		// 128 KB frame limit, and an oversized frame closes the connection that also carries
+		// kicks, schedules and blacklist pushes.
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-diagnostics" {
+			s.handleEdgeDiagnosticsUpload(w, r)
 			return
 		}
 

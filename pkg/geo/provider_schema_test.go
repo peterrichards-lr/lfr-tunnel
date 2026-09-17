@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	maxminddb "github.com/oschwald/maxminddb-golang/v2"
+
+	"lfr-tunnel/pkg/geo/geotest"
 )
 
 // #1921: the panel depended on one vendor because the decode path named one vendor's schema.
@@ -24,7 +26,7 @@ import (
 // life of a path that named a schema no database anyone has measured actually uses. Nothing
 // it could assert would have noticed, because it never decoded anything.
 func TestCountryDecodesTheNestedSchemaFromARealMMDBFile(t *testing.T) {
-	path := writeTestMMDB(t, map[string]any{
+	path := geotest.WriteMMDB(t, map[string]any{
 		"country": map[string]any{"iso_code": "SE"},
 	})
 
@@ -71,7 +73,7 @@ func TestCountryDecodesTheNestedSchemaFromARealMMDBFile(t *testing.T) {
 // name it today, and #2008 tracks it -- this test goes red and is the place to record the
 // measurement that put the path back.
 func TestATopLevelCountryCodeIsNotDecoded(t *testing.T) {
-	path := writeTestMMDB(t, map[string]any{"country_code": "SE"})
+	path := geotest.WriteMMDB(t, map[string]any{"country_code": "SE"})
 
 	// CONTROL, first: the fixture must be a readable database whose record really does carry
 	// the key. Without this, "resolved to nothing" is satisfied by a fixture this test

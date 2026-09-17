@@ -47,6 +47,14 @@ fi
 # The V1 list defaults to the V2 one, so every case below exercises V1 too and the cases that name
 # it are the ones where the two arms deliberately disagree.
 run_case() {
+    # Arity first, before any expansion. A case written in the old 5-argument shape would
+    # otherwise take the CSV list as its regex and die on the unbound 6th under `set -u`, which
+    # kills the suite mid-run and prints no verdict at all -- a skipped case reads exactly like a
+    # passing one in the totals.
+    if [ "$#" -lt 6 ]; then
+        fail "${1:-<unlabelled>} -- run_case takes an expected-output regex as its 3rd argument (#1967)"
+        return
+    fi
     local label="$1" want="$2" want_re="$3" go_list="$4" ui_list="$5" badge_list="$6"
     local v1_list="${7-$badge_list}"
     local dir

@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-load-errors check-privacy check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -74,6 +74,7 @@ help:
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
 	@echo "  make check-print       - Print stylesheets only target markup that exists"
+	@echo "  make check-testids     - E2E specs only name data-testids that markup renders"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
 	@echo "  make check-privacy     - Served /privacy covers every PRIVACY.md category"
@@ -299,6 +300,7 @@ test-hooks:
 	@./tests/hooks/test-ci-runs-every-gate.sh
 	@./tests/hooks/test-tap-bucket.sh
 	@./tests/hooks/test-print-selectors.sh
+	@./tests/hooks/test-spec-testids.sh
 	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-outage-visibility.sh
 	@./tests/hooks/test-watchdog-spool.sh
@@ -361,6 +363,15 @@ check-status:
 
 check-print:
 	@node scripts/check-print-selectors.cjs
+
+# The mirror image of check-print, one corpus over (#1974). An E2E assertion keyed on a
+# data-testid -- `expect(locator('[data-testid="geo-attribution"]')).toHaveCount(0)` -- is
+# satisfied just as well by the testid having been renamed out of ui/src as by the element
+# being absent, so it goes permanently green on the day it should go red. The behavioural
+# control needs a geo-IP database the E2E stack deliberately does not ship, which is #1779's
+# condition for a gate being the right answer instead of a better test.
+check-testids:
+	@node scripts/check-spec-testids.cjs
 
 # Checks every theme's danger colours against WCAG AA (#1458). Discovers theme files
 # rather than listing them, so a theme added later is covered without touching this.

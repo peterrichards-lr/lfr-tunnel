@@ -482,6 +482,14 @@ jobs:
       - name: Print stylesheets must only target markup that exists
         run: node scripts/check-print-selectors.cjs
 
+      # The same shape as the gate above, over the E2E specs instead of the stylesheets
+      # (#1974). An absence assertion keyed on a data-testid -- toHaveCount(0) -- passes just
+      # as well when the testid exists nowhere, so renaming it in ui/src turns the assertion
+      # permanently green rather than red. It cannot be caught from inside the suite: the
+      # behavioural control needs a geo-IP database the E2E stack deliberately ships none of.
+      - name: E2E specs must only name data-testids that markup renders
+        run: node scripts/check-spec-testids.cjs
+
       - name: A failed data load must be surfaced, not shown as empty
         run: node scripts/check-load-failure-surfaced.cjs
 

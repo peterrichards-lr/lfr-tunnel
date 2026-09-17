@@ -112,7 +112,13 @@ func OpenResolver(path string, declared Provider) (Resolver, error) {
 	// which is the cheapest way to catch a typo'd declaration -- and it cannot be an error,
 	// because the one case that provoked this change is a file that legitimately derives to
 	// the wrong vendor (IP2Location's MMDB reports MaxMind's own database_type).
-	if derived := ProviderFromDatabaseType(db.Metadata.DatabaseType); derived != declared {
+	//
+	// Skipped when nothing was declared (#1995). With the vendor now settable at runtime from
+	// System Settings, the database is opened before anybody has necessarily chosen one, and
+	// warning that "unknown" does not match the file's own metadata would fire on exactly the
+	// deployments that have not made the choice yet -- training the reader to ignore the line
+	// that matters when they have made it, and made it wrongly.
+	if derived := ProviderFromDatabaseType(db.Metadata.DatabaseType); declared != ProviderUnknown && derived != declared {
 		slog.Warn("[Geo] The declared vendor does not match the database's own metadata. "+
 			"The declared value is used for attribution. If it is wrong, the panel will "+
 			"credit the wrong vendor and that vendor's licence will be unmet.",

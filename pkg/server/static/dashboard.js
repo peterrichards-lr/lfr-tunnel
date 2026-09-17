@@ -3039,6 +3039,18 @@ function geoAttributionText(provider) {
 function renderGeoAttribution(available, provider) {
   const el = document.getElementById('geo-distribution-attribution');
   if (!el) return;
+  fillGeoAttribution(el, available, provider);
+}
+
+/**
+ * fillGeoAttribution writes one vendor's credit into el, or clears it.
+ *
+ * Split out of renderGeoAttribution so System Settings can preview the credit a chosen vendor
+ * WILL publish through the same code that publishes it (#1995). A preview that can differ from
+ * the thing it previews is worse than no preview: it is the screen an admin uses to decide what
+ * they are publishing on somebody else's behalf.
+ */
+function fillGeoAttribution(el, available, provider) {
   if (!available) {
     el.textContent = '';
     return;
@@ -8426,18 +8438,117 @@ async function loadAlertSettings() {
   try {
     const res = await fetch('/api/admin/settings');
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    renderAlertSettings(container, await res.json());
+    const data = await res.json();
+    renderAlertSettings(container, data);
+    renderGeoProviderSettings(data);
   } catch (e) {
     console.error('Failed to load alert settings', e);
     // Keys stay empty so a later Save cannot post checkbox states nobody chose --
     // an unloaded form reads as "everything off", and writing that would silently
     // disable every alert on the gateway.
     alertSettingKeys = [];
+    // Same reason as alertSettingKeys: a later Save must not post a vendor nobody chose.
+    geoProviderOptions = [];
+    geoProviderLoaded = false;
     container.textContent = t(
       'admin_load_failed',
       'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
     );
   }
+}
+
+// --- Geo-IP vendor (#1995) ---------------------------------------------------
+// The dropdown is filled from the vocabulary the SERVER declares (geo_providers), not from a
+// list kept here -- the same property that stops the alert toggles drifting above. The value
+// decides whose licence-required credit this deployment publishes, so an option this portal
+// offers that the gateway would refuse, or a vendor the gateway accepts that this never
+// offers, are both silent failures with a licence at the end of them.
+//
+// Kept in step with Portal V2's copy in ui/src/pages/AdminSettings.tsx: the two arms are a
+// live A/B test (#1866), so a control present in one and not the other is a defect.
+let geoProviderOptions = [];
+let geoProviderLoaded = false;
+
+function renderGeoProviderSettings(data) {
+  const select = document.getElementById('geo-provider-select');
+  if (!select) return;
+
+  geoProviderOptions = Array.isArray(data.geo_providers)
+    ? data.geo_providers
+    : [];
+  // Empty means the gateway failed to describe itself, not a gateway with no vendors. Saving
+  // from that state would post '' and silently stop crediting a vendor somebody chose.
+  geoProviderLoaded = geoProviderOptions.length > 0;
+
+  select.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = t('geo_provider_none');
+  select.appendChild(none);
+  geoProviderOptions.forEach((option) => {
+    const el = document.createElement('option');
+    el.value = option.value;
+    // textContent, not innerHTML: the label is a translation bundle value.
+    el.textContent = t(option.label_key, option.value);
+    select.appendChild(el);
+  });
+  select.value = data.country_db_provider || '';
+  select.disabled = !geoProviderLoaded;
+
+  // Which source is in force. Rendered rather than computed and discarded: two sources of
+  // truth disagreeing silently is the failure this repo keeps hitting (#1412, #1921, #1919).
+  const source = document.getElementById('geo-provider-source');
+  if (source) {
+    if (data.country_db_provider_source === 'portal') {
+      source.textContent = t('geo_provider_source_portal');
+    } else if (data.country_db_provider_source === 'server_config') {
+      source.textContent = t('geo_provider_source_config').replace(
+        '{0}',
+        data.country_db_provider_config || '',
+      );
+    } else {
+      source.textContent = t('geo_provider_source_unset');
+    }
+  }
+
+  // A configured value this build does not recognise -- reported here as well as in the
+  // analytics panel, because this is the screen where it can be corrected.
+  const warning = document.getElementById('geo-provider-unknown-warning');
+  if (warning) {
+    const unrecognised =
+      !data.country_db_provider && !!data.country_db_provider_source;
+    warning.textContent = unrecognised ? t('geo_provider_unknown') : '';
+    warning.style.display = unrecognised ? 'block' : 'none';
+  }
+
+  const path = document.getElementById('geo-provider-path');
+  if (path) {
+    path.textContent = data.country_db_path || t('geo_provider_path_unset');
+  }
+
+  renderGeoProviderPreview();
+}
+
+// renderGeoProviderPreview fills the credit the SELECTED vendor will publish.
+//
+// Driven by the select's current value rather than by what the server last returned, so the
+// preview follows the choice immediately -- the provider is a display value that never touches
+// decoding, so changing it genuinely needs no restart and the screen must not imply otherwise.
+//
+// Uses renderGeoAttribution, the same function that fills the analytics panel's credit: a
+// preview that can differ from the thing it previews is worse than no preview, because this is
+// the screen an admin uses to decide what they are publishing on somebody else's behalf.
+function renderGeoProviderPreview() {
+  const select = document.getElementById('geo-provider-select');
+  const container = document.getElementById('geo-provider-credit-container');
+  if (!select || !container) return;
+  const chosen = select.value;
+  // Nothing chosen means nobody to credit. Printing any vendor's line here would be a false
+  // provenance claim AND would leave the real supplier's licence unmet -- the same protection
+  // the analytics panel applies when no vendor is in force.
+  container.style.display = chosen ? 'block' : 'none';
+  const el = document.getElementById('geo-provider-credit');
+  if (el) fillGeoAttribution(el, !!chosen, chosen);
 }
 
 function renderAlertSettings(container, data) {
@@ -8480,6 +8591,12 @@ async function saveAlertSettings() {
     const el = document.getElementById('setting-' + key);
     if (el) payload[key] = el.checked ? 'true' : 'false';
   });
+  // Only when the vocabulary actually arrived (#1995). Posting '' from an unloaded form would
+  // clear a vendor the operator chose, and silently stop crediting them.
+  const geoSelect = document.getElementById('geo-provider-select');
+  if (geoProviderLoaded && geoSelect) {
+    payload.country_db_provider = geoSelect.value;
+  }
   const res = await fetch('/api/admin/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

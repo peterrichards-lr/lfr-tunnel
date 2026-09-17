@@ -1250,6 +1250,47 @@
                     </div>
                 </div>
 
+                <!-- Geo-IP Vendor Card (#1995)
+                     A dropdown rather than a text field, because the value decides whose
+                     licence-required credit this deployment publishes: a typo is a licence
+                     problem, so the fix is to make one impossible rather than to report it.
+                     The options are NOT written out here -- renderGeoProviderSettings() fills
+                     the select from the geo_providers vocabulary GET /api/admin/settings
+                     returns, the same way the alert toggles above are built, so a build that
+                     learns a fourth vendor grows a fourth option with no portal change. -->
+                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🌍 <span data-i18n="geo_provider_title">Geo-IP Vendor</span></h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;" data-i18n="geo_provider_desc">
+                        Every supported vendor's licence requires a different visible credit, and a geo-IP database file cannot be trusted to say who published it, so the vendor has to be named. Choosing one here takes effect immediately -- no restart.
+                    </p>
+                    <div class="form-group">
+                        <label style="display: block; margin-bottom: 4px; font-weight: 500;" for="geo-provider-select" data-i18n="geo_provider_label">Database vendor</label>
+                        <select id="geo-provider-select" class="input-field" style="width: 100%; box-sizing: border-box;" onchange="renderGeoProviderPreview()"></select>
+                    </div>
+                    <!-- Which of the two sources is in force, named rather than implied. Without
+                         it an operator edits server-config.yaml, sees no change, and has no way
+                         to learn that a row set here is overriding them (#1412, #1921, #1919). -->
+                    <p id="geo-provider-source" style="color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0; line-height: 1.4;"></p>
+                    <div id="geo-provider-unknown-warning" class="alert-warning" style="display: none; margin-top: 12px; font-size: 13px;"></div>
+                    <!-- The exact credit that will be published. Filled by the same function that
+                         fills the analytics panel's credit, so the preview cannot show an admin
+                         something different from what actually gets published. -->
+                    <div id="geo-provider-credit-container" style="display: none; margin-top: 16px;">
+                        <p style="color: var(--text-muted); font-size: 12px; margin: 0 0 4px 0;" data-i18n="geo_provider_credit_label">This credit will be published wherever geographic distribution is shown:</p>
+                        <p id="geo-provider-credit" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 13px; margin: 0; color: var(--text-main);"></p>
+                    </div>
+                    <!-- country_db_path, read-only on purpose: it is a filesystem path on the
+                         gateway host read at startup, and letting an admin session point the
+                         gateway at an arbitrary readable path is a file-disclosure vector.
+                         Shown because a wrong path is the other half of diagnosing an empty
+                         panel. -->
+                    <div style="margin-top: 16px;">
+                        <p style="color: var(--text-muted); font-size: 12px; margin: 0 0 4px 0;" data-i18n="geo_provider_path_label">Database file</p>
+                        <p id="geo-provider-path" style="font-size: 13px; margin: 0; color: var(--text-main); word-break: break-all;"></p>
+                        <p style="color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0; line-height: 1.4;" data-i18n="geo_provider_path_note">country_db_path is set in server-config.yaml only. It is a path on the gateway host and is read at startup, so it is shown here but cannot be changed from the portal.</p>
+                    </div>
+                </div>
+
                 <!-- Test Integrations Card -->
                 <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
                     <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>

@@ -1606,8 +1606,20 @@ country_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
 country_db_provider: "dbip"   # maxmind | dbip | ip2location -- REQUIRED
 ```
 
-**Both keys are required.** A path without `country_db_provider` leaves geographic distribution
-**off**, and the panel says so rather than guessing.
+**Both keys are required.** A path without a vendor leaves geographic distribution **off**, and
+the panel says so rather than guessing.
+
+The vendor can also be chosen in the portal, under **System Settings -> Geo-IP Vendor** (#1995).
+It is a dropdown there rather than a text field, and it shows the exact credit the chosen vendor
+will publish before you publish it. **A vendor set in the portal wins over this key**, and the
+screen names whichever of the two is in force — so the file and the portal cannot disagree
+without the screen saying so. Changing it takes effect immediately: the vendor is a display
+value that never touches address decoding, so nothing has to be reopened or restarted.
+
+`country_db_path` stays YAML-only, deliberately. It is a path on the gateway host, read at
+startup, and an admin session able to point the gateway at any readable file is a disclosure
+vector worth not opening. The portal shows it read-only, which is what you need to diagnose a
+wrong path.
 
 That is not bureaucracy. Each supported vendor's licence obliges a *different* visible credit, and
 the file cannot be trusted to say which vendor published it. Measured against a real

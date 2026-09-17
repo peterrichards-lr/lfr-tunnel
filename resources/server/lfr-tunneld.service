@@ -9,9 +9,11 @@ Group=lfr-tunnel
 WorkingDirectory=/etc/lfr-tunneld
 ExecStart=/usr/local/bin/lfr-tunneld --config /etc/lfr-tunneld/server-config.yaml
 
-# `systemctl reload lfr-tunneld` re-reads edge_nodes and nothing else (#1309). Withdrawing an
-# edge token used to need a full restart, which drops every tunnel on every edge -- so revoking
-# a credential during an incident meant taking the fleet down to do it.
+# `systemctl reload lfr-tunneld` re-reads edge_nodes (#1309) and the country database keys --
+# country_db_path, its geolite2_db_path alias, and country_db_provider (#1998) -- and nothing
+# else. Both used to need a full restart, which drops every tunnel on every edge: revoking a
+# credential during an incident meant taking the fleet down to do it, and checking whether a
+# geo-IP vendor was credited correctly cost the same outage.
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s

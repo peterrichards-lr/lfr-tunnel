@@ -1,5 +1,32 @@
 [
   {
+    "version": "v1.48.36",
+    "release_date": "2026-09-17",
+    "features": [
+      "feat(portal): choose the geo vendor from a list, and show the credit it will publish (#1995) (#2016)",
+      "feat(server): forward a diagnostics collection request to the edge serving the user (#1991) (#2015)",
+      "refactor(server): resolve the effective rate limit in one place, not once per path (#2005) (#2017)",
+      "feat(geo): reload the country database on SIGHUP, so switching vendor is not a restart (#2013)",
+      "feat(audit): record the client version per session, not just the last one we saw (#2010)",
+      "fix(server): stop publishing a granted rate limit the snapshot does not carry (#2007)",
+      "fix(geo): drop the country_code decode path, which no vendor file uses (#1993) (#2009)",
+      "feat(client): advertise client tuning as a bounded settings block (#2004)",
+      "feat(config): reject unknown keys in the server config (#1997) (#1999)",
+      "feat(quota): enforce a cumulative per-user bandwidth quota, staged throttle then stop (#2003)",
+      "feat(client): opt-in auto-upgrade at start, verified by the same code as -upgrade (#2002)",
+      "feat(server): tell an edge what the node set is, so its clients hear it change (#1960) (#1994)",
+      "feat(server): enforce min_version server-side, on a grace model both deadlines share (#1996)",
+      "feat(geo): require the vendor to be declared, because the file lies (#1964) (#1990)",
+      "feat(portal): give Analytics a period it states, and apply it per gateway (#1992)",
+      "test(client): ping a central that is actually a different gateway (#1961) (#1986)",
+      "fix(portal): stop the admin sidebar clipping its own links (#1984) (#1985)",
+      "feat(ci): make an E2E spec's data-testid prove it exists (#1974) (#1989)",
+      "test(hooks): make the status-vocabulary anti-vacuity control prove the floor (#1983)",
+      "feat(server): notice when an edge stops reporting bandwidth (#1980) (#1982)",
+      "feat(ops): turn remembered release steps into checks that tell you (#1978) (#1979)"
+    ]
+  },
+  {
     "version": "v1.48.35",
     "release_date": "2026-09-16",
     "features": [
@@ -52,13 +79,6 @@
       "chore(deps): bump github.com/oschwald/maxminddb-golang/v2 (#1912)",
       "chore(deps): bump github.com/gogpu/systray from 0.2.8 to 0.3.0 (#1911)",
       "chore(agents): retire the jira-tracker skill in favour of github-jira-sync (#1909)"
-    ]
-  },
-  {
-    "version": "v1.48.31",
-    "release_date": "2026-09-14",
-    "features": [
-      "fix(ops): make sign fail closed and restore its exit-code contract (#1906) (#1907)"
     ]
   }
 ]

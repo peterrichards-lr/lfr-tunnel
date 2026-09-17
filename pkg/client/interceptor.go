@@ -101,6 +101,9 @@ type InterceptorEngine struct {
 	// be corrected without a client release; zero means nothing was advertised and the
 	// client's own default applies. Read once per session, when the chisel config is built.
 	reconnectWindow time.Duration
+	// heartbeatInterval is how often this client posts /api/tunnel-status. Zero means the
+	// client's own default; a gateway-advertised value reaches it already clamped (#1948).
+	heartbeatInterval time.Duration
 
 	// failoverAvailable records whether this client has anywhere to fail over TO -- it is not
 	// pinned with -server, and its gateway advertised a region list. It decides which of the
@@ -573,7 +576,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 	// the signal.
 	e.ResetNodeSet()
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(e.HeartbeatInterval())
 		defer ticker.Stop()
 		for {
 			select {
@@ -944,7 +947,12 @@ func (e *InterceptorEngine) StartVersionWatcher(ctx context.Context, serverURL s
 					// here rather than on its own timer because it is the gateway's answer
 					// to "what should clients do", and it takes effect on the next session
 					// the client starts -- there is nothing to interrupt a working tunnel for.
-					e.SetReconnectWindow(time.Duration(info.ClientReconnectSeconds) * time.Second)
+					// The whole advertised settings block now, not just the one field
+					// (#1948), and clamped before it is stored so nothing downstream has to
+					// remember to.
+					resolved := ResolveSettings(info.ClientSettings, info.ClientReconnectSeconds)
+					e.SetReconnectWindow(resolved.ReconnectWindow)
+					e.SetHeartbeatInterval(resolved.HeartbeatInterval)
 				}
 			}
 		}
@@ -958,6 +966,29 @@ func (e *InterceptorEngine) SetReconnectWindow(d time.Duration) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.reconnectWindow = d
+}
+
+// SetHeartbeatInterval records the tunnel-status tick this client should use. Pass the
+// CLAMPED value: the engine stores what it is told, and bounding advertised numbers is
+// settings.go's job, in one place, for every setting (#1948).
+func (e *InterceptorEngine) SetHeartbeatInterval(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.heartbeatInterval = d
+}
+
+// HeartbeatInterval returns the tick to use, falling back to the compiled-in default when
+// nothing has been set.
+func (e *InterceptorEngine) HeartbeatInterval() time.Duration {
+	if e == nil {
+		return defaultHeartbeatInterval
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.heartbeatInterval <= 0 {
+		return defaultHeartbeatInterval
+	}
+	return e.heartbeatInterval
 }
 
 // ReconnectWindow returns the advertised reconnect window, or zero if the gateway has not

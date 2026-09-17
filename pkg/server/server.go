@@ -392,8 +392,12 @@ type Server struct {
 	// edgeMetricsSeen records when each node last delivered a bandwidth frame, so the portal
 	// can tell a quiet edge from one whose reporting has stopped (#1980).
 	edgeMetricsSeen *edgeMetricsTracker
-	edgeIPs         map[string]string // node_id -> public IP
-	edgeClientsMu   sync.RWMutex
+	// quotas is the cumulative bandwidth quota's view of the fleet (#1959). Central only:
+	// an edge has no database to count from and is told the outcome over the control
+	// channel. Nil on an edge, and every read of it tolerates that.
+	quotas        *quotaTracker
+	edgeIPs       map[string]string // node_id -> public IP
+	edgeClientsMu sync.RWMutex
 	// edgePingSentAt tracks when the control plane's own keepalive Ping was last sent to
 	// each WS-connected edge, so the matching Pong's arrival can be timed for RTT (see
 	// #976 -- edges are configured with no `url` in the current architecture, so the
@@ -582,6 +586,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		metrics:            NewMetricsCollector(database, cfg, registry),
 		edgeMetrics:        newEdgeMetricsReporterFor(cfg),
 		edgeMetricsSeen:    newEdgeMetricsTracker(),
+		quotas:             newQuotaTracker(),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
@@ -766,6 +771,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// needs a sweep -- there is no arrival to hang a check off, which is exactly why this
 	// failure mode was invisible.
 	srv.goTracked(func() { srv.watchEdgeMetricsDelivery(ctx) })
+	// Enforces the cumulative per-user bandwidth quota (#1959). A sweep rather than a check
+	// at the point bytes are recorded, because raising a user's allowance has to lift their
+	// throttle without waiting for them to send another byte.
+	srv.goTracked(func() { srv.watchBandwidthQuotas(ctx) })
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second
@@ -2107,12 +2116,23 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The hard stage of the bandwidth quota (#1959). A terminated tunnel that can
+	// immediately re-register is not enforcement, so the refusal stands until the period
+	// resets or an administrator raises this user's allowance.
+	if refusal := s.quotaRegistrationRefusal(user.ID); refusal != "" {
+		s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: refusal})
+		return
+	}
+
 	// Register in registry
 	sessionToken, remotes, err := s.registry.Register(user.ID, req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
 		return
 	}
+
+	// A throttled user must not be able to shed the throttle by reconnecting.
+	s.applyQuotaToNewLeases(user.ID)
 
 	// Stamp the access-control rules onto the leases just created, so the proxy can read them
 	// without a query per request (#1329).
@@ -4298,6 +4318,11 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		*db.User
 		PortalActive  bool           `json:"portal_active"`
 		ActiveTunnels []*TunnelLease `json:"active_tunnels"`
+		// BandwidthQuota is the cumulative quota's view of this user (#1959): the
+		// resolved allowance, what has been used against it, and how much of that was
+		// egress. Sent for every user, whether or not anything has been measured, so
+		// the limit is visible BEFORE it bites rather than only once it has.
+		BandwidthQuota QuotaStanding `json:"bandwidth_quota"`
 	}
 
 	var allLeases []*TunnelLease
@@ -4341,9 +4366,10 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		s.edgeLeasesMu.Unlock()
 
 		responseList = append(responseList, &AdminUserResponse{
-			User:          u,
-			PortalActive:  portalActive,
-			ActiveTunnels: userLeases,
+			User:           u,
+			PortalActive:   portalActive,
+			ActiveTunnels:  userLeases,
+			BandwidthQuota: s.quotaStandingFor(u),
 		})
 	}
 
@@ -4924,6 +4950,11 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		MaxCustomDomains *int    `json:"max_custom_domains"`
 		MaxTunnels       *int    `json:"max_tunnels"`
 		PreferredDomain  *string `json:"preferred_domain"`
+		// BandwidthQuotaBytes is the per-user override, the most specific of the three
+		// levels and the escape hatch for a genuine need (#1959). A pointer so that
+		// "not supplied" and "set to 0" stay distinguishable: 0 means unlimited for
+		// this user, which is not the same request as leaving the field alone.
+		BandwidthQuotaBytes *int64 `json:"bandwidth_quota_bytes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -5037,6 +5068,16 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		user.MaxTunnels = req.MaxTunnels
 	}
 
+	if req.BandwidthQuotaBytes != nil {
+		if *req.BandwidthQuotaBytes < 0 {
+			http.Error(w, `{"error":"Bandwidth quota cannot be negative"}`, http.StatusBadRequest)
+			return
+		}
+		details["bandwidth_quota_bytes_before"] = user.BandwidthQuotaBytes
+		details["bandwidth_quota_bytes_after"] = *req.BandwidthQuotaBytes
+		user.BandwidthQuotaBytes = req.BandwidthQuotaBytes
+	}
+
 	if req.PreferredDomain != nil {
 		details["preferred_domain_before"] = user.PreferredDomain
 		details["preferred_domain_after"] = *req.PreferredDomain
@@ -5046,6 +5087,14 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	if err := s.db.UpdateUser(user); err != nil {
 		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
 		return
+	}
+
+	// Re-evaluate immediately rather than on the next tick (#1959). Raising a throttled
+	// user's allowance is done BECAUSE they are mid-demo and stuck; waiting up to a sweep
+	// interval for the throttle to lift would make the escape hatch feel broken. Tracked,
+	// because it reads the database and Stop must be able to wait for it (#1833).
+	if req.BandwidthQuotaBytes != nil {
+		s.goTracked(func() { s.sweepBandwidthQuotas(time.Now()) })
 	}
 
 	// Send status update/revocation email notification if configured
@@ -6448,6 +6497,13 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		UserID          string `json:"user_id"`
 		SubdomainPrefix string `json:"subdomain_prefix"`
 		RateLimit       int    `json:"rate_limit"`
+		// QuotaState and QuotaRateLimit carry a standing bandwidth-quota throttle
+		// (#1959). An edge does no counting -- it has no database -- so this is how a
+		// tunnel registering on an edge starts out throttled rather than at full speed
+		// until central's next sweep. An older control plane omits both, which decodes
+		// as empty and means "no throttle", the previous behaviour.
+		QuotaState     string `json:"quota_state"`
+		QuotaRateLimit int    `json:"quota_rate_limit"`
 		// AccessControls is what this edge is to enforce, keyed by domain. It has no database
 		// to read it from, so being told is the only way it can enforce anything at all
 		// (#1367). An older control plane omits the field, which decodes as empty -- the
@@ -6482,6 +6538,14 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		edgeAccess[d] = [3]string{ac.Passcode, ac.WhitelistIPs, ac.AccessMode}
 	}
 	applyAccessControlsToLeases(s.registry, valResp.SubdomainPrefix, activeDomains, edgeAccess)
+
+	// Applied after Register, not by clamping the limit passed to it, so the lease keeps
+	// the limit it was granted as its baseline and a lifted throttle restores to that
+	// rather than to the throttled value (#1959).
+	if valResp.QuotaState == string(quotaThrottled) && valResp.QuotaRateLimit > 0 {
+		applied := s.registry.SetQuotaRateLimitForUser(valResp.UserID, valResp.QuotaRateLimit)
+		slog.Warn(fmt.Sprintf("[Edge] Bandwidth quota: %d lease(s) for user %s registered throttled to %d rps", applied, valResp.UserID, valResp.QuotaRateLimit))
+	}
 
 	var warning string
 	if req.ClientVersion != "" && req.ClientVersion != config.Version {
@@ -6728,6 +6792,14 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The hard stage of the bandwidth quota, decided here because central is the counting
+	// authority and the edge has no database to decide from (#1959). The edge relays this
+	// error to the client verbatim.
+	if refusal := s.quotaRegistrationRefusal(user.ID); refusal != "" {
+		respondJSON(w, http.StatusForbidden, map[string]string{"error": refusal})
+		return
+	}
+
 	s.edgeLeasesMu.Lock()
 	activeEdgeCount := len(s.edgeLeases[user.ID])
 	s.edgeLeasesMu.Unlock()
@@ -6839,10 +6911,25 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The soft stage, carried on the validate response rather than waiting for the next
+	// sweep's control frame (#1959). Sending it here closes the window in which a throttled
+	// user's fresh tunnel would serve at full speed until central next swept.
+	//
+	// quota_rate_limit is deliberately separate from rate_limit rather than folded into it:
+	// rate_limit is what the lease is GRANTED and what a lifted throttle restores to, so
+	// overwriting it here would make the throttle permanent for the life of the lease.
+	quotaRate, quotaThrottling := s.quotaRateLimitFor(user.ID)
+	quotaStateForEdge := ""
+	if quotaThrottling {
+		quotaStateForEdge = string(quotaThrottled)
+	}
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"user_id":          user.ID,
 		"subdomain_prefix": finalSubdomain,
 		"rate_limit":       effectiveLimit,
+		"quota_state":      quotaStateForEdge,
+		"quota_rate_limit": quotaRate,
 		"access_controls":  accessControls,
 		// Forwarded so the edge can hand it to the client verbatim (#1707). An edge holds
 		// no database, so being told is the only way a client registering there can learn

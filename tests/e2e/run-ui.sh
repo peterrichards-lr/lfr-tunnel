@@ -72,6 +72,10 @@ TEST_EXIT_CODE=0
 # shellcheck source=lib/playwright-image.sh
 . "$SCRIPT_DIR/lib/playwright-image.sh"
 lft_playwright_image "$SCRIPT_DIR/ui" || exit 1
+# PLAYWRIGHT_ARGS passes filters through to the runner, so one spec can be iterated on without
+# paying for the whole suite -- e.g.
+#   PLAYWRIGHT_ARGS="sidebar_reachable.spec.ts" ./tests/e2e/run-ui.sh
+# Unset it and everything runs, which is what CI does.
 lft_playwright_build
 
 docker run --rm --network host \
@@ -80,7 +84,7 @@ docker run --rm --network host \
     -v lfr-tunnel-e2e-ui-node-modules:/e2e/node_modules \
     -w /e2e \
     "$PLAYWRIGHT_IMAGE" \
-    /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test" || TEST_EXIT_CODE=$?
+    /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test ${PLAYWRIGHT_ARGS}" || TEST_EXIT_CODE=$?
 
 if [ $TEST_EXIT_CODE -ne 0 ]; then
     echo -e "\n❌ Tests failed. Printing Server Logs:\n"

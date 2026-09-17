@@ -114,10 +114,20 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 			"would show no attribution for data whose licence requires one", dbType)
 	}
 
-	// The same value must reach callers through the Resolver, which is the path the server
-	// actually uses. A derivation that works in isolation and is not wired up looks
-	// identical from here otherwise.
-	r, err := OpenResolver(path, ProviderMaxMind)
+	// The DECLARED vendor must reach callers through the Resolver, which is the path the
+	// server actually uses (#1964). Declared, not derived: since #1990 the operator names the
+	// vendor and the file's own claim is advisory, because an IP2Location MMDB reports
+	// MaxMind's database_type and deriving it credited the wrong vendor.
+	//
+	// This previously passed ProviderMaxMind here -- a mechanical edit when OpenResolver took
+	// its second argument -- and then compared against the DERIVED value. That fails on any
+	// file that is not MaxMind's, including the DB-IP country edition this repo's own setup
+	// guide recommends (#2011). It tested nothing about wiring and everything about the
+	// fixture's luck.
+	//
+	// Declaring what the file actually is, so the case works against whatever download the
+	// person running it has.
+	r, err := OpenResolver(path, provider)
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}
@@ -127,6 +137,29 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 		}
 	})
 	if got := r.Provider(); got != provider {
-		t.Errorf("Resolver.Provider() = %q, but the file's metadata says %q", got, provider)
+		t.Errorf("Resolver.Provider() = %q, but %q was declared -- the declared vendor is not "+
+			"reaching callers, so the panel would credit someone else", got, provider)
+	}
+
+	// And the whole point of #1990: when the declaration DISAGREES with the file, the
+	// declaration wins. Without this the case above passes on a resolver that ignores its
+	// argument and derives internally -- which is precisely the behaviour being replaced.
+	misdeclared := ProviderIP2Location
+	if provider == ProviderIP2Location {
+		misdeclared = ProviderDBIP
+	}
+	r2, err := OpenResolver(path, misdeclared)
+	if err != nil {
+		t.Fatalf("OpenResolver(%s, %q): %v", path, misdeclared, err)
+	}
+	t.Cleanup(func() {
+		if err := r2.Close(); err != nil {
+			t.Errorf("close resolver %s: %v", path, err)
+		}
+	})
+	if got := r2.Provider(); got != misdeclared {
+		t.Errorf("declared %q but Resolver.Provider() = %q -- the file's own claim is "+
+			"overriding the operator's declaration, which is the defect #1964 fixed",
+			misdeclared, got)
 	}
 }

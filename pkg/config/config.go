@@ -190,12 +190,21 @@ type ServerConfig struct {
 	// its own, and why the client clamps whatever this says into a range that can neither
 	// undo the fix nor starve failover.
 	ClientReconnectWindow time.Duration `yaml:"client_reconnect_window"`
-	DocumentationURL      string        `yaml:"documentation_url"`
-	RepositoryURL         string        `yaml:"repository_url"`
-	SecureTokenGuideURL   string        `yaml:"secure_token_guide_url"`
-	DockerHubURL          string        `yaml:"docker_hub_url"`
-	StatusPageURL         string        `yaml:"status_page_url"`
-	PruneInterval         time.Duration `yaml:"prune_interval"`
+	// ClientHeartbeatInterval is how often this gateway would like attached clients to post
+	// /api/tunnel-status. Zero means "no opinion" and the client uses its own default (5s).
+	//
+	// Advertised in the client_settings block on /api/version (#1948) so it can be corrected
+	// from the server side. The cost of this number lands HERE rather than on the client --
+	// a large fleet reporting too often is load only the gateway can see -- which is what
+	// makes it worth advertising at all. The client clamps whatever this says into a range
+	// that can neither flood the gateway nor leave a lease eviction unnoticed.
+	ClientHeartbeatInterval time.Duration `yaml:"client_heartbeat_interval"`
+	DocumentationURL        string        `yaml:"documentation_url"`
+	RepositoryURL           string        `yaml:"repository_url"`
+	SecureTokenGuideURL     string        `yaml:"secure_token_guide_url"`
+	DockerHubURL            string        `yaml:"docker_hub_url"`
+	StatusPageURL           string        `yaml:"status_page_url"`
+	PruneInterval           time.Duration `yaml:"prune_interval"`
 
 	// WatchdogSpoolPath is where scripts/common/gateway-watchdog.sh records the services it
 	// restarted, so the gateway can forward them to the owner once it is back up (#1875). Empty
@@ -859,6 +868,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_CLIENT_HEARTBEAT_INTERVAL"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.ClientHeartbeatInterval = d
+		}
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_GRACE_DAYS"); val != "" {
 		if days, err := strconv.Atoi(val); err == nil {

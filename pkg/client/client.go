@@ -617,6 +617,16 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 // one thing.
 const defaultChiselKeepAlive = 25 * time.Second
 
+// defaultHeartbeatInterval is how often the client posts /api/tunnel-status when the gateway
+// has not said otherwise.
+//
+// 5s is what this loop has always ticked at, and the reconnect window's own sizing is written
+// against it ("the restart PLUS one 5s heartbeat" below), so changing the default would move
+// two things at once. It is server-tunable within bounds because it is the one client-side
+// number whose cost lands on the gateway rather than on the client: a fleet reporting too
+// often is a load problem only the gateway can see (#1948).
+const defaultHeartbeatInterval = 5 * time.Second
+
 // The reconnect window: how long the client keeps trying to reattach to the SAME gateway
 // before handing control back to the session loop, which is what performs region failover
 // (cmd/lfr-tunnel/main.go).
@@ -709,17 +719,15 @@ const chiselBackoffMin = 100 * time.Millisecond
 
 // clampReconnectWindow returns the window the client will actually honour for an advertised
 // value. Zero (nothing advertised) yields the default.
+//
+// The bounds themselves moved into settingBounds in settings.go (#1948), so this and every
+// later advertised setting are bounded by one table rather than by one bespoke function each.
+// The constants above are what that table is built from, and TestReconnectBoundsAreTheSame
+// holds the two in agreement -- a second set of bounds for the same value would be free to
+// drift, which is the failure the shared table exists to prevent.
 func clampReconnectWindow(advertised time.Duration) time.Duration {
-	if advertised <= 0 {
-		return defaultReconnectWindow
-	}
-	if advertised < minReconnectWindow {
-		return minReconnectWindow
-	}
-	if advertised > maxReconnectWindow {
-		return maxReconnectWindow
-	}
-	return advertised
+	seconds, _ := clampSetting("reconnect_seconds", int(advertised/time.Second))
+	return time.Duration(seconds) * time.Second
 }
 
 // retryCountForWindow returns the MaxRetryCount whose cumulative backoff first covers window,

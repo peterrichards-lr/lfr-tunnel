@@ -134,9 +134,9 @@ type ControlMessage struct {
 	// edge_metrics.go for why it rides this channel rather than a connection of its own.
 	Metrics []EdgeByteDelta `json:"metrics,omitempty"`
 	// NodeSet carries central's node-set fingerprint down to every edge (#1960), so an edge
-	// can echo it on its own clients' heartbeats. No omitempty is NOT needed here, unlike
-	// ScheduleEnabled: the zero value of a string is indistinguishable from an absent field
-	// on decode either way, so an edge told "" clears what it was holding regardless.
+	// can echo it on its own clients' heartbeats. omitempty is safe here, unlike on
+	// ScheduleEnabled above: a string decodes to "" whether it was sent empty or omitted, so
+	// an edge told the empty fingerprint clears what it was holding either way.
 	NodeSet string `json:"node_set,omitempty"`
 }
 

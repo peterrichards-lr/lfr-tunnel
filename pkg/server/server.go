@@ -352,7 +352,19 @@ type Server struct {
 	// Held in memory only. A restarted edge re-learns it on its next handshake, so there is
 	// nothing to persist and nothing to go stale across a deploy. Central stays the sole
 	// writer -- it owns the provisioner, so it is the only party that can change a schedule.
-	ownSchedule        nodeSchedule
+	ownSchedule nodeSchedule
+	// upstreamNodeSet is the node-set fingerprint central last pushed down the control
+	// channel (#1960). An edge holds no roster of its own, so this is the only way it can
+	// say anything true about the topology -- and saying nothing, which is what it did
+	// before, left an edge-served client never learning that a gateway it could elect had
+	// appeared.
+	//
+	// Same shape and same reasoning as ownSchedule above: decided by the one node that can
+	// decide it, carried on the control channel, held in memory only, re-sent on the next
+	// handshake. The empty string means central has not told this node yet, and the
+	// heartbeat then omits the field entirely -- an absent fingerprint is not a change to
+	// any client (pkg/client's TestAnAbsentFingerprintIsNotAChange).
+	upstreamNodeSet    string
 	maintTimer         *time.Timer
 	maintScheduledAt   time.Time
 	maintMutex         sync.RWMutex
@@ -6223,6 +6235,14 @@ func (s *Server) ReloadEdgeNodes(configPath string) error {
 	for _, line := range describeEdgeNodeChanges(previous, cfg.EdgeNodes) {
 		slog.Info("[Server] " + line)
 	}
+
+	// A reload is a roster change like any other -- adding a node, removing one, or moving
+	// one's URL all change what /api/version advertises -- so the edges have to be re-told
+	// (#1960). The connect/disconnect broadcasts cannot cover this one: nothing connects or
+	// disconnects when an operator edits the file and sends SIGHUP, so without this an edge
+	// would keep echoing a fingerprint describing the roster from before the reload until
+	// the next unrelated edge event happened to refresh it.
+	s.BroadcastNodeSet()
 	return nil
 }
 

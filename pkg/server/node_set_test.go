@@ -154,19 +154,27 @@ func TestHeartbeatCarriesTheNodeSetFingerprint(t *testing.T) {
 	}
 }
 
-// BOUNDING (§5b.5). An edge holds no roster -- measured against production, in.lfr-demo.se
-// answers /api/version naming only itself -- so it says nothing rather than something false.
-// That is a deliberate limit, not an oversight: clients served by an edge are NOT covered by
-// #1937 and are tracked in #1960. This test exists so widening the scope is a decision someone
-// makes rather than something that happens by accident, and so the limit cannot be quietly
-// forgotten either way.
-func TestGatewayWithNoRosterAdvertisesNoFingerprint(t *testing.T) {
+// BOUNDING (§5b.5), rewritten deliberately by #1960.
+//
+// It previously asserted that an edge advertises NO fingerprint, ever. That was the honest
+// answer while nothing told an edge what the roster was: an edge holds no roster -- measured
+// against production, in.lfr-demo.se answers /api/version naming only itself -- so anything it
+// computed for itself would have been stable while the real roster moved underneath it.
+//
+// #1960 removed the premise rather than the limit. Central now pushes its fingerprint down the
+// control channel, so an edge has a true value to echo and the old assertion went red, which is
+// exactly what a bounding case is for. What remains bounded, and is what this test now pins, is
+// that an edge NEVER makes one up: told nothing, it still says nothing. That covers an edge
+// during startup, and an edge whose control channel has never come up -- which is what the
+// closed loopback port below actually produces.
+func TestEdgeToldNothingAdvertisesNoFingerprint(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"lfr-demo.se"}
 	// Configured as an edge: a control plane to report to, and -- the load-bearing part --
 	// no EdgeNodes of its own, which is what an edge's configuration actually looks like.
 	// Pointed at a closed loopback port so the control channel fails immediately rather than
-	// dialling the real production gateway from a unit test.
+	// dialling the real production gateway from a unit test. Nothing can have told this node
+	// anything, which is the state under test.
 	cfg.ControlPlaneURL = "http://127.0.0.1:1"
 	cfg.EdgeToken = "edge-token"
 	srv, err := NewServer(cfg)
@@ -176,8 +184,9 @@ func TestGatewayWithNoRosterAdvertisesNoFingerprint(t *testing.T) {
 	defer srv.Stop()
 
 	if fp := srv.nodeSetFingerprint(); fp != "" {
-		t.Fatalf("a gateway with no roster advertised the fingerprint %q -- it would be stable "+
-			"while the real roster changed underneath it, and clients would trust it", fp)
+		t.Fatalf("an edge central has not told anything advertised the fingerprint %q -- it "+
+			"would be stable while the real roster changed underneath it, and clients would "+
+			"trust it", fp)
 	}
 
 	token, _, err := srv.registry.Register("user-1937", "edge-served",
@@ -187,6 +196,14 @@ func TestGatewayWithNoRosterAdvertisesNoFingerprint(t *testing.T) {
 	}
 	_, body := heartbeat(t, srv, token, nil)
 	if _, present := body[nodeSetFingerprintField]; present {
-		t.Errorf("an edge's heartbeat carried a node-set fingerprint: %v", body)
+		t.Errorf("an untold edge's heartbeat carried a node-set fingerprint: %v", body)
+	}
+
+	// And the other half of the same property: once central HAS told it, it echoes exactly
+	// that and does not embellish it. The unit-level counterpart to the end-to-end coverage
+	// in edge_node_set_test.go, which is where the value actually has to travel.
+	srv.setUpstreamNodeSet("a1b2c3d4e5f6")
+	if fp := srv.nodeSetFingerprint(); fp != "a1b2c3d4e5f6" {
+		t.Errorf("an edge told %q advertises %q", "a1b2c3d4e5f6", fp)
 	}
 }

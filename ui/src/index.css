@@ -402,17 +402,35 @@ body {
 .sidebar-section-header.collapsed .sidebar-section-toggle {
   transform: rotate(-90deg);
 }
+/* No max-height on the expanded state, and no clipping with it (#1984).
+   
+   This was `max-height: 500px; overflow: hidden`, for a collapse animation. V2 puts all
+   fourteen admin links in ONE section -- 630px of content -- so the last three (Database
+   Backups, Gateway Maintenance, System Settings) were clipped and unreachable with a mouse.
+   They stayed reachable by KEYBOARD, because focusing a clipped child scrolls an
+   `overflow: hidden` box programmatically, which is why it shipped: it worked for anyone who
+   tabbed and failed for everyone who scrolled.
+   
+   V1 carries the same class and does not have the bug, because it splits those links across
+   #section-personal / #section-administration / #section-reporting, each under the limit. The
+   shared class name made the two arms look equivalent when only one of them fit.
+   
+   Raising the number would move the cliff rather than remove it -- the next few links would
+   reach it again, silently and the same way. The clip now belongs to the collapsed state,
+   which is the only state that needs it; expanded sections are their own height.
+   
+   The height transition goes with it. `.collapsed` is not applied anywhere in V2's Sidebar
+   (grep: the class appears only in this stylesheet), so the animation it paid for never ran
+   here -- the magic number was pure liability. Opacity still animates for whenever the
+   collapse is wired up, and the rule below keeps the clip it needs. */
 .sidebar-section-content {
-  overflow: hidden;
-  transition:
-    max-height 0.25s ease-out,
-    opacity 0.25s ease-out;
-  max-height: 500px;
+  transition: opacity 0.25s ease-out;
   opacity: 1;
   flex-shrink: 0;
 }
 .sidebar-section-content.collapsed {
   max-height: 0;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
   margin-bottom: 0;

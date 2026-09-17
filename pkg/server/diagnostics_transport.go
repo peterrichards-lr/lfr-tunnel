@@ -75,6 +75,23 @@ type diagnosticsCommand struct {
 	userID      string
 	requestedBy string
 	queuedAt    time.Time
+	// expiresAt is when this command stops being deliverable, decided ONCE by the gateway
+	// that took the admin's request (#1991). An edge holding a forwarded copy is told what
+	// remains of this window rather than starting a TTL of its own -- two clocks would let
+	// central audit "expired undelivered" for a command an edge had in fact handed over.
+	expiresAt time.Time
+}
+
+// deadline is when this command stops being deliverable.
+//
+// A zero expiresAt falls back to the TTL from when it was queued, so a command constructed
+// without one can never mean "never expires" -- the failure mode worth guarding against here is
+// a collection request that outlives the consent it was authorised under.
+func (c *diagnosticsCommand) deadline() time.Time {
+	if c.expiresAt.IsZero() {
+		return c.queuedAt.Add(diagnosticsCommandTTL)
+	}
+	return c.expiresAt
 }
 
 // queueDiagnosticsCollect records a collection request for a user and returns it.
@@ -83,12 +100,14 @@ type diagnosticsCommand struct {
 // at the authorisation point (handleAdminDiagnosticsCollect) and duplicating it here would make
 // two places able to disagree about who may collect.
 func (s *Server) queueDiagnosticsCollect(userID, requestedBy string) *diagnosticsCommand {
+	now := time.Now().UTC()
 	cmd := &diagnosticsCommand{
 		ID:          newDiagnosticsCommandID(),
 		Type:        diagnosticsCommandCollectLogs,
 		userID:      userID,
 		requestedBy: requestedBy,
-		queuedAt:    time.Now().UTC(),
+		queuedAt:    now,
+		expiresAt:   now.Add(diagnosticsCommandTTL),
 	}
 
 	s.diagCommandsMu.Lock()
@@ -117,10 +136,10 @@ func (s *Server) pendingDiagnosticsCommands(userID string) (live []*diagnosticsC
 		return nil, nil
 	}
 
-	cutoff := time.Now().UTC().Add(-diagnosticsCommandTTL)
+	now := time.Now().UTC()
 	var keep []*diagnosticsCommand
 	for _, c := range queued {
-		if c.queuedAt.Before(cutoff) {
+		if now.After(c.deadline()) {
 			expired = append(expired, c)
 			continue
 		}
@@ -170,6 +189,82 @@ func (s *Server) hasPendingDiagnosticsCommand(userID string) bool {
 	s.diagCommandsMu.Lock()
 	defer s.diagCommandsMu.Unlock()
 	return len(s.diagCommands[userID]) > 0
+}
+
+// hasDiagnosticsCommandID reports whether this exact command is still queued for a user.
+//
+// A read, not a claim. An edge has to know whether an ack is worth relaying BEFORE it drops the
+// command, because dropping it first and failing to relay is the one sequence that loses the
+// evidence of delivery (#1991).
+func (s *Server) hasDiagnosticsCommandID(userID, id string) bool {
+	if userID == "" || id == "" {
+		return false
+	}
+	s.diagCommandsMu.Lock()
+	defer s.diagCommandsMu.Unlock()
+	for _, c := range s.diagCommands[userID] {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// claimDiagnosticsCommandByID removes and returns a command found by id alone, whoever it
+// belongs to, or nil if there is no such command.
+//
+// The id is the capability (#1991): 48 random bits with a five-minute life, issued here and
+// sent only to the one gateway serving that user. Everything arriving from an edge -- the
+// acknowledgement frame and the relayed bundle -- is authorised by presenting it, and central
+// takes the USER from what it finds rather than from what the caller claims. So a relay cannot
+// file an upload against somebody who was never asked, and no caller has to be trusted to name
+// the right user.
+//
+// The scan is over users with an outstanding request, which is approximately none: one entry
+// exists for at most five minutes after an admin asks.
+func (s *Server) claimDiagnosticsCommandByID(id string) *diagnosticsCommand {
+	if id == "" {
+		return nil
+	}
+	s.diagCommandsMu.Lock()
+	defer s.diagCommandsMu.Unlock()
+	for userID, queued := range s.diagCommands {
+		for i, c := range queued {
+			if c.ID != id {
+				continue
+			}
+			rest := append(queued[:i:i], queued[i+1:]...)
+			if len(rest) == 0 {
+				delete(s.diagCommands, userID)
+			} else {
+				s.diagCommands[userID] = rest
+			}
+			return c
+		}
+	}
+	return nil
+}
+
+// requeueDiagnosticsCommand puts a claimed command back, keeping its ORIGINAL deadline.
+//
+// Used when an upload was authorised by the command and then could not be stored: the
+// collection has not happened, and a command that is gone cannot be retried. Restoring the
+// deadline rather than a fresh TTL is what stops a failing relay extending the consent window
+// one retry at a time. A newer request for the same user wins -- it is the one the admin asked
+// for most recently.
+func (s *Server) requeueDiagnosticsCommand(cmd *diagnosticsCommand) {
+	if cmd == nil || cmd.userID == "" {
+		return
+	}
+	s.diagCommandsMu.Lock()
+	defer s.diagCommandsMu.Unlock()
+	if s.diagCommands == nil {
+		s.diagCommands = make(map[string][]*diagnosticsCommand)
+	}
+	if len(s.diagCommands[cmd.userID]) > 0 {
+		return
+	}
+	s.diagCommands[cmd.userID] = []*diagnosticsCommand{cmd}
 }
 
 // newDiagnosticsCommandID returns a short random id. Short because of the 512-byte budget, random
@@ -253,6 +348,22 @@ func (s *Server) recordDiagnosticsAcks(leases []*TunnelLease, ids []string, r *h
 		ids = ids[:4]
 	}
 	for _, id := range ids {
+		// On an EDGE the audit entry cannot be written here -- there is no database -- so
+		// the ack has to travel up the control channel to central, which holds the log
+		// (#1991). Relayed BEFORE the command is dropped, and dropped only if the relay got
+		// through: a client acks on every arrival, so an unrelayed ack is retried on the
+		// next heartbeat, whereas dropping first would leave central auditing "expired
+		// undelivered" for a collection the client had definitely received.
+		if s.isEdgeNode() {
+			if !s.hasDiagnosticsCommandID(userID, id) {
+				// Already satisfied -- normally by the upload, which beats the ack -- or
+				// expired, or never ours. Nothing to relay and nothing to drop.
+				continue
+			}
+			if !s.reportDiagnosticsAckUpstream(id) {
+				continue
+			}
+		}
 		cmd := s.ackDiagnosticsCommand(userID, id)
 		if cmd == nil {
 			// Already acked, expired, or never ours. Not an error: at-least-once delivery

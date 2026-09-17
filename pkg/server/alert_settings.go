@@ -54,6 +54,10 @@ var AlertSettings = []AlertSetting{
 	{Key: "alert_notify_vanity_hook_failure", LabelKey: "alert_vanity_hook_failure", DefaultOn: true},
 	{Key: "alert_notify_extension_requested", LabelKey: "alert_extension_requested", DefaultOn: true},
 	{Key: "alert_notify_watchdog_restart", LabelKey: "alert_watchdog_restart", DefaultOn: true},
+	// An edge that stops reporting bandwidth is silent by nature -- there is no error to
+	// notice (#1980). Defaults on: quota enforcement is sized from this feed, so a dead one
+	// produces limits that never fire.
+	{Key: "alert_notify_edge_metrics_stalled", LabelKey: "alert_edge_metrics_stalled", DefaultOn: true},
 }
 
 // alertSettingDefault reports whether an unset row means on, and whether the key is one this

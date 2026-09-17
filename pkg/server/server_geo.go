@@ -100,7 +100,17 @@ func newGeoAggregator(path, declaredProvider string, bothPathsSet bool, database
 	// warning only: it is NOT what decides whether the aggregator gets built, because it is
 	// now changeable while the process runs and the aggregator is not.
 	inForce, _ := geoProviderInForce(database, declaredProvider)
-	declared, _ := geo.ParseProvider(inForce)
+	declared, perr := geo.ParseProvider(inForce)
+	// Said at boot as well as in the panel, and only when something WAS set: an unset vendor
+	// is the honest default and warning about it would fire on every deployment that has not
+	// made the choice yet -- training the reader to ignore the line that matters when they
+	// have made it, and made it wrongly. A value that does not parse is the opposite case:
+	// somebody typed a vendor, and the panel will credit nobody until it is corrected.
+	if perr != nil && inForce != "" {
+		slog.Warn("[Geo] The vendor in force is not one this build knows, so the panel will "+
+			"publish no credit and no rows until it is corrected in System Settings.",
+			"country_db_provider", inForce, "error", perr)
+	}
 
 	resolver, err := geo.OpenResolver(path, declared)
 	if err != nil {

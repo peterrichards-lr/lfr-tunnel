@@ -5763,6 +5763,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			// instead of carrying its own copy of the list.
 			"alert_settings": AlertSettings,
 		}
+		s.addGeoProviderSettings(out)
 		for _, a := range AlertSettings {
 			stored, err := s.db.GetAdminSetting(a.Key)
 			if err != nil {
@@ -5797,6 +5798,17 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		// An unknown key is now a 400 rather than a shrug, so a typo is visible at the caller
 		// instead of looking like a setting that will not stick.
 		for key := range payload {
+			// The geo-IP vendor is the one non-boolean setting this endpoint accepts
+			// (#1995). Validated against geo.SelectableProviders rather than against a
+			// list here, so the dropdown cannot offer a value this refuses -- an option
+			// that 400s on save is exactly as silent as one that is never offered.
+			if key == geoProviderSettingKey {
+				if v := payload[key]; v != "" && !geoProviderIsSelectable(v) {
+					http.Error(w, fmt.Sprintf(`{"error":"Setting %q must name a supported geo-IP vendor"}`, key), http.StatusBadRequest)
+					return
+				}
+				continue
+			}
 			if _, known := alertSettingDefault(key); !known {
 				http.Error(w, fmt.Sprintf(`{"error":"Unknown setting %q"}`, key), http.StatusBadRequest)
 				return
@@ -5816,6 +5828,17 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			}
 		}
 
+		// The vendor gets its own audit entry. It decides whose credit this deployment
+		// publishes, so "who changed it, and to what" is a licence question rather than a
+		// preference one, and folding it into the email-alerts line would lose the value.
+		if v, ok := payload[geoProviderSettingKey]; ok {
+			detail := "Admin set the geo-IP vendor to " + v
+			if v == "" {
+				detail = "Admin cleared the geo-IP vendor set in the portal; " +
+					"country_db_provider in server-config.yaml applies again, if it is set"
+			}
+			s.writeAudit(actor, "admin.settings_updated", "system", geoProviderSettingKey, detail, r)
+		}
 		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated email alert configuration", r)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"}) //nolint:errcheck
 		return

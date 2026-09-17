@@ -84,26 +84,60 @@ func ProviderFromDatabaseType(databaseType string) Provider {
 	}
 }
 
+// selectableProviders is the vocabulary an operator may declare, in the order a portal offers
+// it (#1995).
+//
+// ONE list, because there were about to be several. The dropdown in System Settings, the
+// validation the settings endpoint applies to what it is sent, and ParseProvider's own switch
+// are three views of the same question -- "which vendors does this build support?" -- and the
+// failure mode of letting them drift is the one this whole area exists to prevent: an option
+// offered but refused on save, or accepted on save and never credited. #1882 is the same
+// lesson one surface over, where the portal's copy of the alert list left three alerts with no
+// control at all.
+//
+// ProviderUnknown is deliberately absent. It is a RESULT ("we could not tell"), never a
+// choice: offering it would let an operator declare that they do not know who published their
+// data, which is exactly the state the panel refuses to render rows in.
+var selectableProviders = []Provider{ProviderMaxMind, ProviderDBIP, ProviderIP2Location}
+
+// SelectableProviders returns the vendors an operator may declare, in portal order.
+//
+// A copy, so a caller that sorts or appends to the result cannot change what the next caller
+// is offered.
+func SelectableProviders() []Provider {
+	out := make([]Provider, len(selectableProviders))
+	copy(out, selectableProviders)
+	return out
+}
+
 // ParseProvider turns a declared config value into a Provider, rejecting anything it does not
 // recognise (#1964).
 //
 // Strict on purpose. The alternative -- accepting an unknown string and rendering no credit --
 // would let a typo disable attribution silently, which is the failure this whole change exists
-// to remove. An operator who names a vendor wrongly is told so at startup.
+// to remove. An operator who names a vendor wrongly is told so, at startup for a YAML value
+// and at the point of saving for a portal one.
+//
+// Resolved against selectableProviders rather than a switch of its own (#1995): a vendor this
+// accepts but the dropdown does not offer is unreachable from the portal, and a vendor the
+// dropdown offers but this rejects is an option that 400s on save. Both are silent until
+// somebody tries it.
 func ParseProvider(declared string) (Provider, error) {
-	switch Provider(strings.ToLower(strings.TrimSpace(declared))) {
-	case ProviderMaxMind:
-		return ProviderMaxMind, nil
-	case ProviderDBIP:
-		return ProviderDBIP, nil
-	case ProviderIP2Location:
-		return ProviderIP2Location, nil
-	case "":
+	normalised := Provider(strings.ToLower(strings.TrimSpace(declared)))
+	if normalised == "" {
 		return ProviderUnknown, ErrProviderNotDeclared
-	default:
-		return ProviderUnknown, fmt.Errorf("%w: %q is not one of %s, %s, %s",
-			ErrProviderUnknown, declared, ProviderMaxMind, ProviderDBIP, ProviderIP2Location)
 	}
+	for _, p := range selectableProviders {
+		if normalised == p {
+			return p, nil
+		}
+	}
+	names := make([]string, 0, len(selectableProviders))
+	for _, p := range selectableProviders {
+		names = append(names, string(p))
+	}
+	return ProviderUnknown, fmt.Errorf("%w: %q is not one of %s",
+		ErrProviderUnknown, declared, strings.Join(names, ", "))
 }
 
 // ErrProviderNotDeclared is an unset country_db_provider: the feature stays off, and this is

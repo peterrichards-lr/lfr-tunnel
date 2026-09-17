@@ -271,6 +271,9 @@ func TestLocationAnalyticsHandlerReturnsStoredBuckets(t *testing.T) {
 	srv := setupGeoTestServer(t)
 
 	srv.geo = geo.New(stubResolver{}, geoStore{database: srv.db}, geo.Options{})
+	// A vendor has to be in force for rows to be served at all (#1995): rendering a table
+	// under nobody's credit is the licence breach the panel is gated on.
+	srv.cfg.CountryDBProvider = string(geo.ProviderMaxMind)
 	if err := srv.db.UpsertLocationStats("2026-W34", []db.LocationStat{{Bucket: "GB", Count: 6}}); err != nil {
 		t.Fatalf("seeding W34: %v", err)
 	}
@@ -508,19 +511,24 @@ func TestGeoDiagnosisIsNotServedToANonAdmin(t *testing.T) {
 	}
 }
 
-// TestLocationAnalyticsCarriesTheProviderForAttribution (#1921).
+// TestLocationAnalyticsCarriesTheProviderForAttribution (#1921, #1964, #1995).
 //
 // The panel has to render the credit the supplying vendor's licence requires, and each
-// vendor requires a different one -- so "which vendor" has to reach the browser. It is
-// derived from the database file's own metadata rather than configured, and this is the test
-// that the derived value actually travels to the client.
+// vendor requires a different one -- so "which vendor" has to reach the browser.
+//
+// It is DECLARED, not derived. #1921 read it from the file's own metadata; #1964 measured a
+// real IP2Location MMDB reporting MaxMind's database_type, description, languages AND record
+// schema, so derivation credited MaxMind for IP2Location's data. The stub therefore reports
+// ProviderUnknown while the setting says dbip: if the handler read the resolver rather than
+// the setting, this would return "unknown" and fail.
 func TestLocationAnalyticsCarriesTheProviderForAttribution(t *testing.T) {
 	srv := setupGeoTestServer(t)
 	srv.geo = geo.New(
-		stubResolver{provider: geo.ProviderDBIP},
+		stubResolver{},
 		geoStore{database: srv.db},
 		geo.Options{},
 	)
+	srv.cfg.CountryDBProvider = string(geo.ProviderDBIP)
 
 	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderDBIP) {
 		t.Errorf("provider: got %q, want %q -- the panel cannot render DB-IP's required "+
@@ -544,18 +552,33 @@ func TestLocationAnalyticsNamesNoProviderWhenThereIsNoDatabase(t *testing.T) {
 	}
 }
 
-// TestAnUnrecognisedDatabaseIsNotAttributedToAVendor.
+// TestAnUndeclaredDatabaseIsNotAttributedToAVendor.
 //
 // The failure this guards is silent by construction: a plausible, complete credit line
 // naming a company that did not supply the data, with the actual supplier's licence still
-// unmet and nothing on the page to contradict it. "unknown" has to survive the whole way to
-// the client for the panel to be able to say so.
-func TestAnUnrecognisedDatabaseIsNotAttributedToAVendor(t *testing.T) {
+// unmet and nothing on the page to contradict it.
+//
+// Before #1964 the vendor was derived and "unknown" travelled to the client so the panel
+// could say it could not tell. Since #1990 it is declared, so the honest answer to "who
+// published this?" with nothing declared is to render no rows and credit nobody -- which is
+// what this now asserts. #1995 moved that decision from startup to request time; the property
+// is unchanged.
+func TestAnUndeclaredDatabaseIsNotAttributedToAVendor(t *testing.T) {
 	srv := setupGeoTestServer(t)
 	srv.geo = geo.New(stubResolver{}, geoStore{database: srv.db}, geo.Options{})
 
-	if resp := locationsFor(t, srv); resp.Provider != string(geo.ProviderUnknown) {
-		t.Errorf("provider: got %q, want %q", resp.Provider, geo.ProviderUnknown)
+	resp := locationsFor(t, srv)
+	if resp.Provider != "" {
+		t.Errorf("provider: got %q with no vendor declared, want empty -- \"we do not know\" "+
+			"must never round to somebody's trademark", resp.Provider)
+	}
+	if resp.Available {
+		t.Error("the panel reported itself available with no vendor declared, so it would " +
+			"render rows under nobody's credit")
+	}
+	if resp.Reason != geoReasonProviderNotDeclared {
+		t.Errorf("reason: got %q, want %q -- telling an operator who deployed a database that "+
+			"they deployed none sends them to check the path", resp.Reason, geoReasonProviderNotDeclared)
 	}
 }
 

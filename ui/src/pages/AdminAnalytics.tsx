@@ -97,6 +97,18 @@ function geoOfflineMessage(
         'geo_path_not_found',
         'No file exists at the geo-IP database path configured in country_db_path, so geographic distribution is off. Check it for a typo: {0}',
       ).replace('{0}', path);
+    case 'provider_not_declared':
+      return t(
+        'geo_provider_not_declared',
+        'A geo-IP database is configured but country_db_provider does not say who published it, so geographic distribution is off. Every supported vendor requires a different visible credit and the file cannot be trusted to identify itself, so the vendor has to be named: set country_db_provider to maxmind, dbip or ip2location.',
+      );
+    case 'provider_unknown': {
+      const msg = t(
+        'geo_provider_unknown',
+        'country_db_provider names a vendor this gateway does not recognise, so geographic distribution is off. It must be one of maxmind, dbip or ip2location.',
+      );
+      return locations.detail ? `${msg} (${locations.detail})` : msg;
+    }
     case 'unreadable': {
       const msg = t(
         'geo_unreadable',

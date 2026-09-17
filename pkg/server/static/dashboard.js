@@ -3078,6 +3078,13 @@ function geoOfflineMessage(geo) {
   if (geo && geo.reason === 'path_not_found') {
     return t('geo_path_not_found').replace('{0}', path);
   }
+  if (geo && geo.reason === 'provider_not_declared') {
+    return t('geo_provider_not_declared');
+  }
+  if (geo && geo.reason === 'provider_unknown') {
+    const msg = t('geo_provider_unknown');
+    return geo.detail ? `${msg} (${geo.detail})` : msg;
+  }
   if (geo && geo.reason === 'unreadable') {
     const msg = t('geo_unreadable').replace('{0}', path);
     // The raw open error, untranslated on purpose: for an IP2Location .BIN it names the

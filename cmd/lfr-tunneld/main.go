@@ -125,11 +125,21 @@ func handleSignals(srv *server.Server, configPath string) <-chan struct{} {
 	go func() {
 		for sig := range sigs {
 			if isReloadSignal(sig) {
-				// SIGHUP re-reads edge_nodes and nothing else (#1309). Withdrawing an edge
-				// token used to require a restart, which drops every tunnel on every edge --
-				// so revoking a credential during an incident meant taking the fleet down.
+				// SIGHUP re-reads edge_nodes (#1309) and the country database (#1998), and
+				// nothing else. Withdrawing an edge token used to require a restart, which
+				// drops every tunnel on every edge -- so revoking a credential during an
+				// incident meant taking the fleet down.
 				if err := srv.ReloadEdgeNodes(configPath); err != nil {
 					slog.Error(fmt.Sprintf("[Server] Reload failed, so nothing changed: %v", err))
+				}
+				// Attempted independently of the edge list, not chained onto it. The two read
+				// the same file but answer to different operators and different failure modes:
+				// a mistyped country_db_path must not stop a token withdrawal from landing,
+				// and a rejected edge list must not stop a vendor swap. Each keeps its own
+				// previous value on failure, so neither can half-apply the other's.
+				if err := srv.ReloadGeoDatabase(configPath); err != nil {
+					slog.Error(fmt.Sprintf("[Geo] Reload failed, so the country database is "+
+						"unchanged: %v", err))
 				}
 				continue
 			}

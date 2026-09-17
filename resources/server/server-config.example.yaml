@@ -1,4 +1,15 @@
 # Central control-plane configuration -- COMPLETE key reference.
+# UNKNOWN KEYS ARE REJECTED. A key this gateway does not understand stops it starting, with the
+# offending key named -- a mistyped key that is silently skipped is indistinguishable from one
+# that took effect, which is how a feature stays off with nothing to explain why.
+#
+# Rolling a gateway BACK to an older build whose config contains a newer key is the one case
+# where that bites. Set LFT_ALLOW_UNKNOWN_CONFIG_KEYS=true to start anyway -- deliberately, and
+# visible in the log.
+#
+# The CLIENT config is deliberately lenient and stays that way: people carry retired keys in
+# ~/.lfr-tunnel/config.yaml from old examples, and a client that refuses to start cannot be
+# fixed remotely.
 #
 # Every top-level key `pkg/config.ServerConfig` accepts appears here exactly once, with a
 # placeholder value. A test asserts that (`TestExampleConfigCoversEveryField`), so adding a
@@ -187,6 +198,14 @@ tunnel_keepalive: "25s"
 # its own region failover. Advertised on /api/version; empty/0 means the client uses its own
 # default (60s). Clients clamp this to 20s-180s (#1946).
 client_reconnect_window: "60s"
+# How often attached clients post /api/tunnel-status. Empty/0 means the client uses its own
+# default (5s). Clients clamp this to 2s-60s.
+#
+# This one is advertised because its cost lands on the GATEWAY, not on the client: a large
+# fleet reporting too often is load only this side can see. Both this and the reconnect window
+# travel in the client_settings block on /api/version (#1948), which is where later tuning
+# values go too -- a client too old to read the block simply keeps its own defaults.
+client_heartbeat_interval: "5s"
 client_platforms: {}
 docker_image: ""
 docker_bypass_url: "https://example.com"

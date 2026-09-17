@@ -3,6 +3,7 @@ package geo
 import (
 	"net/netip"
 	"os"
+	"sort"
 	"testing"
 
 	maxminddb "github.com/oschwald/maxminddb-golang/v2"
@@ -24,7 +25,20 @@ func TestARealDatabaseResolvesKnownAddresses(t *testing.T) {
 		t.Skip("set LFT_GEO_TEST_DB to a .mmdb file to exercise a real vendor database")
 	}
 
-	r, err := OpenResolver(path, ProviderMaxMind)
+	// The declared vendor decides attribution and nothing else, so it cannot affect what
+	// this test measures -- derived from the file only so a run against a non-MaxMind
+	// database is not narrated by a vendor-mismatch warning about a declaration this test
+	// invented.
+	db, err := maxminddb.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	declared := ProviderFromDatabaseType(db.Metadata.DatabaseType)
+	if err := db.Close(); err != nil {
+		t.Fatalf("close %s: %v", path, err)
+	}
+
+	r, err := OpenResolver(path, declared)
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}
@@ -104,6 +118,33 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 	t.Logf("  node_count=%d  record_size=%d  build_epoch=%d",
 		db.Metadata.NodeCount, db.Metadata.RecordSize, db.Metadata.BuildEpoch)
 
+	// And the record's own top-level keys, which is the measurement that settles which
+	// schema a vendor is on -- the question #1993 existed to answer, reconstructed by hand
+	// because nothing logged it. Decoded whole here and nowhere else: this is a test asking
+	// what shape the file is, not the resolver, which decodes the country and stops.
+	res := db.Lookup(netip.MustParseAddr("8.8.8.8"))
+	if !res.Found() {
+		t.Errorf("8.8.8.8 has no record at all in %s", path)
+	} else {
+		var record map[string]any
+		if err := res.Decode(&record); err != nil {
+			t.Errorf("decoding the record for 8.8.8.8: %v", err)
+		} else {
+			keys := make([]string, 0, len(record))
+			for k := range record {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			t.Logf("  record top-level keys=%v", keys)
+			if country, ok := record["country"].(map[string]any); ok {
+				t.Logf("  country=%v", country)
+			}
+			if code, ok := record["country_code"]; ok {
+				t.Logf("  country_code=%v <- a vendor really does use this schema; see countryPaths", code)
+			}
+		}
+	}
+
 	// Asserting only that SOMETHING was recognised, not which vendor: this runs against
 	// whatever file the person running it has, and pinning a vendor would fail on a
 	// different (perfectly valid) download rather than on a defect. ProviderUnknown is the
@@ -114,10 +155,17 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 			"would show no attribution for data whose licence requires one", dbType)
 	}
 
-	// The same value must reach callers through the Resolver, which is the path the server
-	// actually uses. A derivation that works in isolation and is not wired up looks
-	// identical from here otherwise.
-	r, err := OpenResolver(path, ProviderMaxMind)
+	// The DECLARED vendor must reach callers, because that is what #1964 changed and what
+	// the panel credits. Declared here as a vendor this file does NOT derive to, so that
+	// "the declaration was used" and "the derivation was used" cannot both satisfy the
+	// assertion -- declaring the derived value makes the two byte-identical and proves
+	// nothing, which is how this block came to hardcode ProviderMaxMind and then fail
+	// against a real DB-IP file for a reason that was never about the code (#1993).
+	declared := ProviderDBIP
+	if provider == ProviderDBIP {
+		declared = ProviderMaxMind
+	}
+	r, err := OpenResolver(path, declared)
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}
@@ -126,7 +174,9 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 			t.Errorf("close resolver %s: %v", path, err)
 		}
 	})
-	if got := r.Provider(); got != provider {
-		t.Errorf("Resolver.Provider() = %q, but the file's metadata says %q", got, provider)
+	if got := r.Provider(); got != declared {
+		t.Errorf("declared %q on a file whose metadata derives to %q, and Resolver.Provider() "+
+			"returned %q -- the declaration must win, or the panel credits whoever the file "+
+			"claims to be", declared, provider, got)
 	}
 }

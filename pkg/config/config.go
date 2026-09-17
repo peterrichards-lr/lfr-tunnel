@@ -71,23 +71,27 @@ type ServerConfig struct {
 	// uses subdomains (#1004). Same three-tier resolution as MaxReservations otherwise:
 	// per-role RoleSettings entry, then these admin/owner-specific overrides, then this
 	// default.
-	DefaultMaxCustomDomains    int    `yaml:"default_max_custom_domains"`
-	AdminMaxCustomDomains      *int   `yaml:"admin_max_custom_domains"`
-	OwnerMaxCustomDomains      *int   `yaml:"owner_max_custom_domains"`
-	DefaultMaxActiveTunnels    int    `yaml:"default_max_active_tunnels"`
-	AdminMaxActiveTunnels      *int   `yaml:"admin_max_active_tunnels"`
-	OwnerMaxActiveTunnels      *int   `yaml:"owner_max_active_tunnels"`
-	AllowClientAutoReservation bool   `yaml:"allow_client_auto_reservation"`
-	SubdomainQuarantineDays    int    `yaml:"subdomain_quarantine_days"`
-	SSLCertFile                string `yaml:"ssl_cert_file"`
-	SSLKeyFile                 string `yaml:"ssl_key_file"`
-	ClientCAFile               string `yaml:"client_ca_file"`
-	ClientCAKeyFile            string `yaml:"client_ca_key_file"`
-	ForceClientCert            bool   `yaml:"force_client_cert"`
-	ForcePasscode              bool   `yaml:"force_passcode"`
-	ForceIPWhitelist           bool   `yaml:"force_ip_whitelist"`
-	ForceMFA                   bool   `yaml:"force_mfa"`
-	DBPath                     string `yaml:"db_path"`
+	DefaultMaxCustomDomains int  `yaml:"default_max_custom_domains"`
+	AdminMaxCustomDomains   *int `yaml:"admin_max_custom_domains"`
+	OwnerMaxCustomDomains   *int `yaml:"owner_max_custom_domains"`
+	DefaultMaxActiveTunnels int  `yaml:"default_max_active_tunnels"`
+	AdminMaxActiveTunnels   *int `yaml:"admin_max_active_tunnels"`
+	OwnerMaxActiveTunnels   *int `yaml:"owner_max_active_tunnels"`
+	// BandwidthQuota governs the cumulative per-user bandwidth allowance (#1959). See
+	// BandwidthQuotaConfig -- the fleet-wide default lives inside it, alongside the two
+	// numbers that decide what "throttled" means.
+	BandwidthQuota             BandwidthQuotaConfig `yaml:"bandwidth_quota"`
+	AllowClientAutoReservation bool                 `yaml:"allow_client_auto_reservation"`
+	SubdomainQuarantineDays    int                  `yaml:"subdomain_quarantine_days"`
+	SSLCertFile                string               `yaml:"ssl_cert_file"`
+	SSLKeyFile                 string               `yaml:"ssl_key_file"`
+	ClientCAFile               string               `yaml:"client_ca_file"`
+	ClientCAKeyFile            string               `yaml:"client_ca_key_file"`
+	ForceClientCert            bool                 `yaml:"force_client_cert"`
+	ForcePasscode              bool                 `yaml:"force_passcode"`
+	ForceIPWhitelist           bool                 `yaml:"force_ip_whitelist"`
+	ForceMFA                   bool                 `yaml:"force_mfa"`
+	DBPath                     string               `yaml:"db_path"`
 	// CountryDBPath points at a country database in MaxMind's .mmdb format, used to
 	// resolve a client IP to a country in memory at registration (#1152). Empty -- the
 	// default -- disables the anonymous geographic distribution entirely; the panel
@@ -190,12 +194,21 @@ type ServerConfig struct {
 	// its own, and why the client clamps whatever this says into a range that can neither
 	// undo the fix nor starve failover.
 	ClientReconnectWindow time.Duration `yaml:"client_reconnect_window"`
-	DocumentationURL      string        `yaml:"documentation_url"`
-	RepositoryURL         string        `yaml:"repository_url"`
-	SecureTokenGuideURL   string        `yaml:"secure_token_guide_url"`
-	DockerHubURL          string        `yaml:"docker_hub_url"`
-	StatusPageURL         string        `yaml:"status_page_url"`
-	PruneInterval         time.Duration `yaml:"prune_interval"`
+	// ClientHeartbeatInterval is how often this gateway would like attached clients to post
+	// /api/tunnel-status. Zero means "no opinion" and the client uses its own default (5s).
+	//
+	// Advertised in the client_settings block on /api/version (#1948) so it can be corrected
+	// from the server side. The cost of this number lands HERE rather than on the client --
+	// a large fleet reporting too often is load only the gateway can see -- which is what
+	// makes it worth advertising at all. The client clamps whatever this says into a range
+	// that can neither flood the gateway nor leave a lease eviction unnoticed.
+	ClientHeartbeatInterval time.Duration `yaml:"client_heartbeat_interval"`
+	DocumentationURL        string        `yaml:"documentation_url"`
+	RepositoryURL           string        `yaml:"repository_url"`
+	SecureTokenGuideURL     string        `yaml:"secure_token_guide_url"`
+	DockerHubURL            string        `yaml:"docker_hub_url"`
+	StatusPageURL           string        `yaml:"status_page_url"`
+	PruneInterval           time.Duration `yaml:"prune_interval"`
 
 	// WatchdogSpoolPath is where scripts/common/gateway-watchdog.sh records the services it
 	// restarted, so the gateway can forward them to the owner once it is back up (#1875). Empty
@@ -379,6 +392,47 @@ type RoleSetting struct {
 	MaxCustomDomains     *int  `yaml:"max_custom_domains" json:"max_custom_domains"`
 	SubdomainExpiryDays  *int  `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
 	AllowAutoReservation *bool `yaml:"allow_auto_reservation" json:"allow_auto_reservation"`
+	// BandwidthQuotaBytes is this role's cumulative bandwidth allowance per period, in
+	// bytes (#1959). The middle of three levels: a per-user override beats it, and it
+	// beats BandwidthQuota.DefaultBytes. nil means this role says nothing and the global
+	// default applies; 0 means unlimited for the role.
+	BandwidthQuotaBytes *int64 `yaml:"bandwidth_quota_bytes" json:"bandwidth_quota_bytes"`
+}
+
+// BandwidthQuotaConfig is the cumulative per-user bandwidth quota (#1959).
+//
+// The per-tunnel RateLimit this repo already had caps an INSTANTANEOUS rate and protects a
+// node from being saturated right now. This is the other half: what one account may move in
+// total over a period, so no single user can take the system's resources or the bill.
+//
+// Enforcement is staged, because this tool runs live demos and killing one mid-presentation
+// is a worse failure than making it slow:
+//
+//	under ThrottlePercent of the allowance -> nothing
+//	over  ThrottlePercent                  -> rate limit dropped to ThrottleRateLimit
+//	over  the allowance                    -> tunnels terminated, registration refused
+//
+// Throttling alone is not enforcement -- a throttled tunnel still transfers -- so the hard
+// cap is what actually bounds the invoice. The soft stage exists to give a warning that the
+// user can feel before anything stops.
+type BandwidthQuotaConfig struct {
+	// DefaultBytes is the fleet-wide allowance per period, applying to every account with
+	// no role setting and no per-user override. 0 disables the quota entirely, which is
+	// what a deployment that does not want one sets.
+	DefaultBytes int64 `yaml:"default_bytes"`
+	// ThrottlePercent is where the soft stage begins, as a percentage of the allowance.
+	// Values outside 1..99 are ignored in favour of the built-in default: a soft cap at or
+	// above the hard one would mean the throttle and the stop fire together, which is the
+	// staged behaviour silently collapsing back to the unstaged one.
+	ThrottlePercent int `yaml:"throttle_percent"`
+	// ThrottleRateLimit is the requests-per-second a throttled tunnel is dropped to. It is
+	// deliberately low rather than merely lower: the point is that the user notices and
+	// asks, rather than quietly continuing to spend the remaining allowance at full speed.
+	ThrottleRateLimit int `yaml:"throttle_rate_limit"`
+	// PeriodDays, when > 0, replaces the calendar-month period with a fixed-length one.
+	// Present for tests and for a deployment that wants a shorter cycle; the default is
+	// the calendar month, which is what the AWS invoice is cut on.
+	PeriodDays int `yaml:"period_days"`
 }
 
 type PlatformConfig struct {
@@ -580,16 +634,43 @@ type ClientConfig struct {
 // literal at each site so the save guard and the loader cannot drift apart silently.
 const TokenSourceConfigFile = "config file"
 
+// defaultQuotaThrottlePercent is the share of the allowance at which the soft stage starts.
+// 80% leaves a fifth of the allowance to be consumed at the throttled rate, which is enough
+// for a user to notice and ask before anything is terminated.
+const defaultQuotaThrottlePercent = 80
+
+// defaultQuotaThrottleRateLimit is the requests per second a throttled tunnel is held to.
+// One is chosen rather than inherited: a demo remains navigable, slowly, and the user finds
+// out by using it rather than by reading an email they may not have.
+const defaultQuotaThrottleRateLimit = 1
+
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
 	return &ServerConfig{
-		BindAddr:                    ":443",
-		HTTPBindAddr:                ":80",
-		ChiselBindAddr:              ":8081",
-		DefaultMaxReservations:      3,
-		DefaultMaxCustomDomains:     1,
-		DefaultMaxActiveTunnels:     3,
+		BindAddr:                ":443",
+		HTTPBindAddr:            ":80",
+		ChiselBindAddr:          ":8081",
+		DefaultMaxReservations:  3,
+		DefaultMaxCustomDomains: 1,
+		DefaultMaxActiveTunnels: 3,
+		// The fleet-wide bandwidth allowance (#1959).
+		//
+		// 50 GiB per calendar month per user is PROVISIONAL and deliberately generous. It
+		// cannot yet be chosen from data: every tunnel_metrics row written before
+		// v1.48.35 re-reported a session's running total every five minutes (#1970,
+		// measured at ~30x over-count), so the only usable figures start at the
+		// 2026-09-17 07:00 cutoff and there is not yet a representative period of them.
+		//
+		// Shipping a number rather than waiting is the right trade: the mechanism is what
+		// needs building and proving now, and the threshold is a one-line config change
+		// once the clean feed has run long enough to characterise normal usage. A quota
+		// nobody can reach still proves it enforces, via the per-user override.
+		BandwidthQuota: BandwidthQuotaConfig{
+			DefaultBytes:      50 * 1024 * 1024 * 1024,
+			ThrottlePercent:   defaultQuotaThrottlePercent,
+			ThrottleRateLimit: defaultQuotaThrottleRateLimit,
+		},
 		SubdomainQuarantineDays:     3,
 		MaxTunnelRateLimit:          100,
 		EdgeShutdownWarningMinutes:  5,
@@ -715,7 +796,33 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		defer file.Close() //nolint:errcheck
 
 		dec := yaml.NewDecoder(file)
+		// An unknown key is a mistake, and the gateway says so rather than ignoring it.
+		//
+		// A silently skipped key is indistinguishable from one that took effect: an operator
+		// mistypes `country_db_provder`, restarts, sees the feature still off and has nothing
+		// to go on. Same shape as a gate that cannot fail -- the system knows something is
+		// wrong and does not say.
+		//
+		// Server-side ONLY. LoadClientConfig stays lenient deliberately and a test holds it
+		// that way: people have `bypass_proxy` and `nav_placement` in ~/.lfr-tunnel/config.yaml
+		// from copying old examples, and a client that refuses to start cannot be fixed
+		// remotely for a user in another timezone. A gateway config is one file, edited
+		// deliberately, by the person who can also read the error.
+		//
+		// KnownFields rejects unknown STRUCT fields only; map keys are data and still parse.
+		// Verified against all five live gateways before this landed -- central's
+		// `client_platforms` (map[string]PlatformConfig) and `role_settings` carry keys like
+		// `linux_amd64` and `admin` that are not fields and must keep working.
+		if !allowUnknownConfigKeys() {
+			dec.KnownFields(true)
+		}
 		if err := dec.Decode(cfg); err != nil {
+			if !allowUnknownConfigKeys() && strings.Contains(err.Error(), "not found in type") {
+				return nil, fmt.Errorf("%w\n\nThat key is not one this gateway understands. Check it "+
+					"for a typo against resources/server/server-config.example.yaml. If you are rolling "+
+					"BACK to an older gateway and the key belongs to a newer one, set %s=true to start "+
+					"anyway -- deliberately, and visible in the log", err, allowUnknownKeysEnv)
+			}
 			return nil, err
 		}
 	}
@@ -859,6 +966,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_CLIENT_HEARTBEAT_INTERVAL"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.ClientHeartbeatInterval = d
+		}
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_GRACE_DAYS"); val != "" {
 		if days, err := strconv.Atoi(val); err == nil {
@@ -1433,4 +1545,17 @@ func checkInsecurePermissions(path string, label string) {
 			fmt.Fprintf(os.Stderr, "Warning: %s file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", label, path, info.Mode().Perm(), path)
 		}
 	}
+}
+
+// allowUnknownKeysEnv names the escape hatch for a rollback.
+//
+// The hazard is real and one-directional: add a key for a new gateway, roll the BINARY back, and
+// a strict decoder refuses to start -- during an incident, on the node that is a deliberate
+// single point of failure. Refusing to start is worse than ignoring a key, so the operator gets
+// a way out that is named and logged rather than a surprise.
+const allowUnknownKeysEnv = "LFT_ALLOW_UNKNOWN_CONFIG_KEYS"
+
+// allowUnknownConfigKeys reports whether unknown keys should be skipped rather than rejected.
+func allowUnknownConfigKeys() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(allowUnknownKeysEnv)), "true")
 }

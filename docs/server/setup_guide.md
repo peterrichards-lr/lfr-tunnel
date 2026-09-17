@@ -1439,23 +1439,36 @@ all — below that it is folded into an `OTHER` bucket.
 
 #### 8.11.1. Which databases work
 
-The file must be in **MaxMind's `.mmdb` binary format**. Within that format vendors disagree about
-where in the record the country code lives, and the gateway tries both known paths (#1921), so
-three vendors' free country databases all work:
+The file must be in **MaxMind's `.mmdb` binary format**, and the gateway reads the country out of
+it at `country.iso_code`. All three vendors below put it there, so all three free country
+databases work:
 
 | Vendor / edition | Record path | Account needed | Cost | Licence as published by the vendor |
 |---|---|---|---|---|
 | **MaxMind** GeoLite2 Country (and the paid GeoIP2 Country/City) | `country.iso_code` | Yes — an account **and** a generated licence key | GeoLite2 free; GeoIP2 is the paid product | GeoLite End User Licence Agreement |
 | **DB-IP** IP to Country Lite | `country.iso_code` | No | Free | Creative Commons Attribution 4.0 International |
-| **IP2Location** LITE DB1, **MMDB edition** | `country_code` | Yes — a free account | Free | IP2Location LITE "Terms of Use" |
+| **IP2Location** LITE DB1, **MMDB edition** | `country.iso_code` | Yes — a free account | Free | IP2Location LITE "Terms of Use" |
 
 > [!NOTE]
-> Support for the `country_code` schema — the IP2Location half of that table — arrives with
-> [#1935](https://github.com/peterrichards-lr/lfr-tunnel/pull/1935). On a gateway built before
-> that change, only the `country.iso_code` vendors resolve; an IP2Location MMDB opens cleanly and
-> then resolves **every** address to nothing, which the panel reports as "no country yet has
-> enough distinct users" rather than as a problem with the file. The `.BIN` diagnostic quoted in
-> §8.11.2 arrives with the same change; before it, a `.BIN` reports only an opaque parse error.
+> **This table used to say IP2Location's MMDB edition uses a top-level `country_code`, and it does
+> not** (#1993). `country_code` is the column name in IP2Location's CSV and BIN editions; their
+> **MMDB** edition is a deliberate drop-in MaxMind clone, down to `database_type` "GeoLite2-City",
+> MaxMind's eight languages and MaxMind's nested record schema — measured on a real
+> `IP2LOCATION-LITE-DB11.MMDB`, whose record for `8.8.8.8` carries the keys
+> `[city continent country location postal registered_country subdivisions]` and no
+> `country_code` anywhere. The gateway carried a second decode path for that schema from
+> [#1935](https://github.com/peterrichards-lr/lfr-tunnel/pull/1935) until #1993 removed it; it
+> never matched a vendor file, and IP2Location resolved through `country.iso_code` the whole time.
+>
+> If you deploy a file this list does not cover, the symptom is that it opens cleanly and then
+> resolves **every** address to nothing, which the panel reports as "no country yet has enough
+> distinct users" rather than as a problem with the file. To tell those two apart against a file
+> you already have, point the vendor-compat tests at it — they log the record's own top-level keys
+> and name every address that resolved to nothing:
+>
+> ```bash
+> LFT_GEO_TEST_DB=/path/to/your.mmdb make test PKG=./pkg/geo/ TEST_FLAGS="-test.v -test.run ARealDatabase"
+> ```
 
 **DB-IP needs no MaxMind account and no code specific to it.** It mirrors MaxMind's record schema,
 and this was measured rather than assumed: `dbip-city-lite-2026-09.mmdb` resolved `8.8.8.8` → `US`

@@ -787,7 +787,33 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		defer file.Close() //nolint:errcheck
 
 		dec := yaml.NewDecoder(file)
+		// An unknown key is a mistake, and the gateway says so rather than ignoring it.
+		//
+		// A silently skipped key is indistinguishable from one that took effect: an operator
+		// mistypes `country_db_provder`, restarts, sees the feature still off and has nothing
+		// to go on. Same shape as a gate that cannot fail -- the system knows something is
+		// wrong and does not say.
+		//
+		// Server-side ONLY. LoadClientConfig stays lenient deliberately and a test holds it
+		// that way: people have `bypass_proxy` and `nav_placement` in ~/.lfr-tunnel/config.yaml
+		// from copying old examples, and a client that refuses to start cannot be fixed
+		// remotely for a user in another timezone. A gateway config is one file, edited
+		// deliberately, by the person who can also read the error.
+		//
+		// KnownFields rejects unknown STRUCT fields only; map keys are data and still parse.
+		// Verified against all five live gateways before this landed -- central's
+		// `client_platforms` (map[string]PlatformConfig) and `role_settings` carry keys like
+		// `linux_amd64` and `admin` that are not fields and must keep working.
+		if !allowUnknownConfigKeys() {
+			dec.KnownFields(true)
+		}
 		if err := dec.Decode(cfg); err != nil {
+			if !allowUnknownConfigKeys() && strings.Contains(err.Error(), "not found in type") {
+				return nil, fmt.Errorf("%w\n\nThat key is not one this gateway understands. Check it "+
+					"for a typo against resources/server/server-config.example.yaml. If you are rolling "+
+					"BACK to an older gateway and the key belongs to a newer one, set %s=true to start "+
+					"anyway -- deliberately, and visible in the log", err, allowUnknownKeysEnv)
+			}
 			return nil, err
 		}
 	}
@@ -1505,4 +1531,17 @@ func checkInsecurePermissions(path string, label string) {
 			fmt.Fprintf(os.Stderr, "Warning: %s file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", label, path, info.Mode().Perm(), path)
 		}
 	}
+}
+
+// allowUnknownKeysEnv names the escape hatch for a rollback.
+//
+// The hazard is real and one-directional: add a key for a new gateway, roll the BINARY back, and
+// a strict decoder refuses to start -- during an incident, on the node that is a deliberate
+// single point of failure. Refusing to start is worse than ignoring a key, so the operator gets
+// a way out that is named and logged rather than a surprise.
+const allowUnknownKeysEnv = "LFT_ALLOW_UNKNOWN_CONFIG_KEYS"
+
+// allowUnknownConfigKeys reports whether unknown keys should be skipped rather than rejected.
+func allowUnknownConfigKeys() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(allowUnknownKeysEnv)), "true")
 }

@@ -1835,27 +1835,35 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 2. Verify reservation and quarantine rules in DB
+		// 2. Verify reservation and quarantine rules in DB.
+		//
+		// NOT applySubdomainReservationPolicy, deliberately (#2018). This branch looks like the
+		// subdomain one and is a different policy: it keys reservations on Subdomain == "", it
+		// is bounded by the smaller getUserMaxCustomDomains quota rather than
+		// getUserMaxReservations (#1004), it creates PERMANENT reservations rather than
+		// role-expiring ones (#1009), and it says "Domain" where the other says "Subdomain".
+		// Only the quarantine-cutoff test is genuinely shared, so only that is shared --
+		// forcing the rest through one function would have changed behaviour on five axes.
 		if s.db != nil {
 			var domainsToReserve []string
 			d := req.CustomDomain
 			existing, err := s.db.GetSubdomainReservationByName("", d)
 			if err == nil && existing != nil {
-				if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
-					quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
-					if time.Now().Before(quarantineCutoff) {
-						if existing.UserID != user.ID {
-							s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is currently in quarantine"})
-							return
-						}
-						// Quarantined but belongs to this user. We need to extend/re-reserve it.
-						domainsToReserve = append(domainsToReserve, d)
-					} else {
-						// Past quarantine, delete expired reservation and re-reserve
-						_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
-						domainsToReserve = append(domainsToReserve, d)
+				switch s.standingOf(existing) {
+				case reservationQuarantined:
+					if existing.UserID != user.ID {
+						s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is currently in quarantine"})
+						return
 					}
-				} else {
+					// Quarantined but belongs to this user. We need to extend/re-reserve it.
+					domainsToReserve = append(domainsToReserve, d)
+				case reservationLapsed:
+					// Past quarantine, delete expired reservation and re-reserve
+					if err := s.db.DeleteSubdomainReservation(existing.ID); err != nil {
+						slog.Info(fmt.Sprintf("[Server] Failed to delete lapsed custom-domain reservation for %s: %v", d, err))
+					}
+					domainsToReserve = append(domainsToReserve, d)
+				case reservationLive:
 					if existing.UserID != user.ID {
 						s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is reserved by another user"})
 						return
@@ -1976,87 +1984,16 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 			activeDomains = []string{pickedDomain}
 
-			// 2. Verify reservation and quarantine rules in DB
+			// 2. Verify reservation and quarantine rules in DB.
+			//
+			// The policy itself lives in registration_policy.go and is shared with
+			// handleEdgeRegister (#2018) -- the two used to hold byte-identical copies of it,
+			// and only the wire format of a refusal differs. This path answers with a
+			// RegisterResponse the client parses.
 			if s.db != nil {
-				var domainsToReserve []string
-				for _, d := range activeDomains {
-					existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
-					if err == nil && existing != nil {
-						if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
-							quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
-							if time.Now().Before(quarantineCutoff) {
-								if existing.UserID != user.ID {
-									s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
-									return
-								}
-								// Quarantined but belongs to this user. We need to extend/re-reserve it.
-								domainsToReserve = append(domainsToReserve, d)
-							} else {
-								// Past quarantine, delete expired reservation and re-reserve
-								_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
-								domainsToReserve = append(domainsToReserve, d)
-							}
-						} else {
-							if existing.UserID != user.ID {
-								s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
-								return
-							}
-						}
-					} else {
-						// No reservation exists
-						if s.canUserAutoReserve(userRec) {
-							domainsToReserve = append(domainsToReserve, d)
-						} else {
-							s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
-							return
-						}
-					}
-				}
-
-				// If we have domains to auto-reserve, verify quota limit first. Custom domain
-				// reservations (Subdomain == "") are tracked against their own, separate
-				// quota (see the custom-domain branch above) and must not count here.
-				if len(domainsToReserve) > 0 {
-					limit := s.cfg.DefaultMaxReservations
-					if userRec != nil {
-						limit = s.getUserMaxReservations(userRec)
-					}
-
-					list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
-					activeCount := 0
-					if err == nil {
-						for _, res := range list {
-							if res.Subdomain == "" {
-								continue
-							}
-							if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
-								activeCount++
-							}
-						}
-					}
-
-					needed := len(domainsToReserve)
-					if limit >= 0 && activeCount+needed > limit {
-						s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
-						return
-					}
-
-					// Create the reservations
-					for _, d := range domainsToReserve {
-						// Delete any existing quarantined or expired reservation for this user first
-						if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
-							_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
-						}
-						res := &db.SubdomainReservation{
-							UserID:    user.ID,
-							Subdomain: req.SubdomainPrefix,
-							Domain:    d,
-							ExpiresAt: s.getUserSubdomainExpiry(user),
-						}
-						if err := s.db.CreateSubdomainReservation(res); err != nil {
-							slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err))
-						}
-					}
+				if refusal := s.applySubdomainReservationPolicy(req.SubdomainPrefix, activeDomains, user, userRec); refusal != nil {
+					s.respondRegisterResponse(w, refusal.Status, r, RegisterResponse{Status: "error", Error: refusal.Message})
+					return
 				}
 			}
 		}
@@ -2134,23 +2071,17 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		userTunnelsCount := len(uniqueSubs)
 
-		maxTunnels := s.cfg.DefaultMaxActiveTunnels
-		if user.Role == "admin" && s.cfg.AdminMaxActiveTunnels != nil {
-			maxTunnels = *s.cfg.AdminMaxActiveTunnels
-		} else if user.Role == "owner" && s.cfg.OwnerMaxActiveTunnels != nil {
-			maxTunnels = *s.cfg.OwnerMaxActiveTunnels
-		}
-
-		if userRec != nil && userRec.MaxTunnels != nil {
-			maxTunnels = *userRec.MaxTunnels
-		}
+		// The limit itself is resolved in one place for both registration paths (#2018).
+		// Only the COUNT above stays here: a directly-registering client has no edge leases
+		// to add, and the edge path does, so the counting legitimately differs.
+		maxTunnels := s.maxActiveTunnelsFor(user, userRec)
 
 		isReconnecting := uniqueSubs[req.SubdomainPrefix]
 
 		if maxTunnels > 0 && userTunnelsCount >= maxTunnels && !isReconnecting {
 			s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{
 				Status: "error",
-				Error:  fmt.Sprintf("Active tunnels concurrency limit reached (%d). Stop another active tunnel or ask an administrator to increase your limit.", maxTunnels),
+				Error:  activeTunnelLimitRefusal(maxTunnels),
 			})
 			return
 		}
@@ -6748,78 +6679,13 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		// The same reservation/quarantine/auto-reserve policy as the direct path, from the
+		// same place (#2018). Only the refusal's wire format is this path's own: an edge has
+		// no database and relays this JSON to its client verbatim.
 		if s.db != nil {
-			var domainsToReserve []string
-			for _, d := range edgeReq.Domains {
-				existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d)
-				if err == nil && existing != nil {
-					if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
-						quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
-						if time.Now().Before(quarantineCutoff) {
-							if existing.UserID != user.ID {
-								respondJSON(w, http.StatusConflict, map[string]string{"error": "Subdomain is currently in quarantine"})
-								return
-							}
-							domainsToReserve = append(domainsToReserve, d)
-						} else {
-							_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
-							domainsToReserve = append(domainsToReserve, d)
-						}
-					} else {
-						if existing.UserID != user.ID {
-							respondJSON(w, http.StatusConflict, map[string]string{"error": "Subdomain is reserved by another user"})
-							return
-						}
-					}
-				} else {
-					if s.canUserAutoReserve(userRec) {
-						domainsToReserve = append(domainsToReserve, d)
-					} else {
-						respondJSON(w, http.StatusForbidden, map[string]string{"error": "Custom subdomains must be reserved in the portal prior to connecting"})
-						return
-					}
-				}
-			}
-
-			if len(domainsToReserve) > 0 {
-				limit := s.cfg.DefaultMaxReservations
-				if userRec != nil {
-					limit = s.getUserMaxReservations(userRec)
-				}
-
-				list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
-				activeCount := 0
-				if err == nil {
-					for _, res := range list {
-						// Custom domain reservations (Subdomain == "") are tracked against
-						// their own, separate quota and must not count here.
-						if res.Subdomain == "" {
-							continue
-						}
-						if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
-							activeCount++
-						}
-					}
-				}
-
-				needed := len(domainsToReserve)
-				if limit >= 0 && activeCount+needed > limit {
-					respondJSON(w, http.StatusForbidden, map[string]string{"error": "Subdomain reservation quota limit reached"})
-					return
-				}
-
-				for _, d := range domainsToReserve {
-					if existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d); err == nil && existing != nil {
-						_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
-					}
-					res := &db.SubdomainReservation{
-						UserID:    user.ID,
-						Subdomain: finalSubdomain,
-						Domain:    d,
-						ExpiresAt: s.getUserSubdomainExpiry(user),
-					}
-					_ = s.db.CreateSubdomainReservation(res) //nolint:errcheck
-				}
+			if refusal := s.applySubdomainReservationPolicy(finalSubdomain, edgeReq.Domains, user, userRec); refusal != nil {
+				respondJSON(w, refusal.Status, map[string]string{"error": refusal.Message})
+				return
 			}
 		}
 	}
@@ -6901,20 +6767,14 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	s.edgeLeasesMu.Unlock()
 
-	maxTunnels := s.cfg.DefaultMaxActiveTunnels
-	if user.Role == "admin" && s.cfg.AdminMaxActiveTunnels != nil {
-		maxTunnels = *s.cfg.AdminMaxActiveTunnels
-	} else if user.Role == "owner" && s.cfg.OwnerMaxActiveTunnels != nil {
-		maxTunnels = *s.cfg.OwnerMaxActiveTunnels
-	}
-
-	if userRec != nil && userRec.MaxTunnels != nil {
-		maxTunnels = *userRec.MaxTunnels
-	}
+	// The same resolution as the direct path, from the same place (#2018). The COUNT above is
+	// this path's own and stays so: central has to add s.edgeLeases for tunnels it is not
+	// itself serving, which is exactly the part that legitimately differs between the two.
+	maxTunnels := s.maxActiveTunnelsFor(user, userRec)
 
 	if maxTunnels > 0 && (activeEdgeCount+localCount) >= maxTunnels && !isReconnecting {
 		respondJSON(w, http.StatusForbidden, map[string]string{
-			"error": fmt.Sprintf("Active tunnels concurrency limit reached (%d). Stop another active tunnel or ask an administrator to increase your limit.", maxTunnels),
+			"error": activeTunnelLimitRefusal(maxTunnels),
 		})
 		return
 	}

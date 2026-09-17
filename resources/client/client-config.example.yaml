@@ -114,6 +114,20 @@ theme: ""
 # Where the traffic and error logs are written. Empty = ~/.lfr-tunnel/logs. A leading ~ expands.
 log_dir: ""
 
+# Replace this binary with the gateway's latest version automatically, at START only.
+#
+# OFF by default and opt-in on purpose: a binary on your machine should not change without you
+# asking. When on, the upgrade runs before any tunnel exists and never while one is running --
+# replacing the binary under a live tunnel would drop it. The downloaded binary is verified
+# against a minisign signature exactly as `lfr-tunnel -upgrade` verifies it; that check is the
+# same code, not a relaxed copy of it.
+#
+# The replacement lands on disk; the session you are in carries on running the version it
+# started with, and the new one is what runs next time.
+#
+# Also settable as LFT_AUTO_UPGRADE=true.
+auto_upgrade: false
+
 
 # --- Run something when the tunnel moves gateway ---
 # Each value is a command line, passed to /bin/sh -c (cmd.exe /c on Windows), with LFT_EVENT,

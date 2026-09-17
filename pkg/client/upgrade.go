@@ -665,6 +665,12 @@ type ServerVersionInfo struct {
 	// is never weaker than it was before this field existed.
 	MinVersionServerEnforced bool `json:"min_version_server_enforced,omitempty"`
 
+	// ClientSettings is the declarative block a gateway advertises so tuning reaches clients
+	// without a release (#1948). Absent from an older gateway, which reads as "no opinion"
+	// about everything in it. Every value in it is clamped client-side -- see
+	// pkg/client/settings.go.
+	ClientSettings *ClientSettings `json:"client_settings,omitempty"`
+
 	// ClientReconnectSeconds is how long this gateway would like clients to keep trying to
 	// reattach to it before falling back to region failover (#1946). Absent or zero means the
 	// gateway has no opinion and the client's own default applies. Advisory in both

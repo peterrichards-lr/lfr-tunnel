@@ -70,7 +70,15 @@ func (s *Server) handleDiagnosticsUpload(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
+	// An EDGE has no database and so nowhere to put a bundle, but it IS the gateway the
+	// client uploads to -- the client posts to whichever gateway serves it, and since #1991
+	// that can be an edge. Relayed rather than refused: before this it answered 501 and the
+	// client logged an upload failure, which is the collection silently not happening (#1991).
 	if s.db == nil {
+		if s.isEdgeNode() {
+			s.relayDiagnosticsUpload(w, r)
+			return
+		}
 		http.Error(w, `{"error":"Database storage not enabled"}`, http.StatusNotImplemented)
 		return
 	}
@@ -107,6 +115,21 @@ func (s *Server) handleDiagnosticsUpload(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"error":"No collection was requested, or it has already been satisfied"}`, http.StatusForbidden)
 		return
 	}
+
+	s.storeDiagnosticsBundles(w, r, cmd, payload, "")
+}
+
+// storeDiagnosticsBundles re-checks consent, stores what arrived and answers the uploader.
+//
+// Shared by the direct upload above and the relayed one an edge makes on a client's behalf
+// (#1991), so the consent re-check happens on exactly one code path. Two copies of it would be
+// two things able to disagree about whether somebody's logs may be kept, and the relayed path is
+// the one where it matters most: the edge cannot check consent at all -- it has no database --
+// so this is the ONLY check that stands between an edge-served upload and the store.
+//
+// via names the relay in the audit entry, or is empty for a direct upload.
+func (s *Server) storeDiagnosticsBundles(w http.ResponseWriter, r *http.Request, cmd *diagnosticsCommand, payload bundleUpload, via string) {
+	userID := cmd.userID
 
 	target, err := s.db.GetUser(userID)
 	if err != nil || target == nil || !diagnosticsCollectionAllowed(target) {
@@ -145,9 +168,13 @@ func (s *Server) handleDiagnosticsUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	origin := ""
+	if via != "" {
+		origin = ", " + via
+	}
 	s.auditDiagnostics(cmd.requestedBy, diagnosticsAuditUploaded, "user", userID,
-		fmt.Sprintf("Received %d diagnostic log(s), %d bytes, for request %s (kept %d days)",
-			stored, total, cmd.ID, db.DiagnosticsRetentionDays), r)
+		fmt.Sprintf("Received %d diagnostic log(s), %d bytes, for request %s%s (kept %d days)",
+			stored, total, cmd.ID, origin, db.DiagnosticsRetentionDays), r)
 
 	respondJSON(w, http.StatusOK, bundleUploadResult{
 		Status:        "stored",

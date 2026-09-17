@@ -958,9 +958,15 @@ who registered before it. Without a version bump no existing user is ever shown 
 change. Their diagnostics setting stays off either way -- this is about them being told,
 not about their consent state.
 
-Note that log collection itself is not implemented yet (#1763): a request for a consenting
-user's logs is audited and answered with `501`. The consent mechanism is deliberately in place
-first, so the transport cannot ship without something to gate it.
+- **How the request reaches the client**: on the `/api/tunnel-status` heartbeat the client
+  already sends every five seconds (#1763). Only the gateway actually serving a session can
+  hand it over, so when that gateway is an edge, central forwards the request down the edge
+  control channel, the edge hands it to the client, and the acknowledgement and the collected
+  bundle come back up the same way (#1991). An edge with no control connection is reported as
+  unreachable rather than accepting a request nothing would carry.
+- **What an admin sees if nobody picks it up**: nothing is stored, and
+  `diagnostics.collect_expired` is written after five minutes. A request that silently never
+  happened must not look like one that did.
 
 ### 8.3. Customizing Client Binary Downloads & Commands (Self-Hosting & EDR Bypass)
 

@@ -312,32 +312,67 @@ func (s *Server) handleAdminDiagnosticsCollect(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Queued here FIRST, before any forward, and on central whether or not an edge is the
+	// one that will deliver it (#1991). Central's copy is what the audit trail, the
+	// "already requested" guard and the expiry sweep all act on, and it is what the ack and
+	// the relayed upload claim when they come back up -- so an ack that overtook the queueing
+	// would find nothing and the delivery would go unrecorded.
 	cmd := s.queueDiagnosticsCollect(target.ID, actor.Email)
+
+	if reach.edgeNodeID != "" {
+		if !s.SendEdgeDiagnosticsCollect(reach.edgeNodeID, target.ID, cmd.ID, diagnosticsCommandTTL) {
+			// The node went between the reachability check above and this write. Unqueue
+			// rather than leave a request nothing is carrying: it would block the admin's
+			// next attempt with "already requested" for five minutes and then be audited
+			// as expired undelivered, which is true but useless.
+			s.ackDiagnosticsCommand(target.ID, cmd.ID)
+			respondJSON(w, http.StatusAccepted, diagnosticsCollectResponse{
+				Status:    diagnosticsStatusConsentGranted,
+				Consented: true,
+				Delivery:  diagnosticsDeliveryNotReachable,
+				DeliveryDetail: fmt.Sprintf(
+					"This user's tunnel is served by edge node %s, and the request could not be sent to it just now. Try again in a moment.", reach.edgeNodeID),
+			})
+			return
+		}
+	}
+
+	detail := "Requested. The client will acknowledge it within a few seconds and then upload its logs."
+	if reach.edgeNodeID != "" {
+		// Named, because it is the difference between two requests that otherwise look
+		// identical and it is the first thing worth knowing if nothing arrives.
+		detail = fmt.Sprintf(
+			"Requested via edge node %s, which serves this user's tunnel. The client will acknowledge it within a few seconds and then upload its logs.", reach.edgeNodeID)
+	}
 	respondJSON(w, http.StatusAccepted, diagnosticsCollectResponse{
-		Status:    diagnosticsStatusConsentGranted,
-		Consented: true,
-		Delivery:  diagnosticsDeliveryQueued,
-		RequestID: cmd.ID,
-		// Honest about where this stops today, and in DeliveryDetail rather than Error,
-		// because nothing has gone wrong. The command reaches the client and the client
-		// acknowledges it; reading, redacting and uploading the files is the next part of
-		// #1763, and an admin told "collected" when nothing was collected would be worse
-		// than an admin told exactly this.
-		DeliveryDetail: "Requested. The client will acknowledge it within a few seconds; log upload itself is not implemented yet.",
+		Status:         diagnosticsStatusConsentGranted,
+		Consented:      true,
+		Delivery:       diagnosticsDeliveryQueued,
+		RequestID:      cmd.ID,
+		DeliveryDetail: detail,
 	})
 }
 
-// diagnosticsReachability answers whether this gateway can hand a command to a user's client,
+// diagnosticsReachability answers whether this gateway can get a command to a user's client,
 // and if not, why not in words an admin can act on.
 //
 // The distinction matters because only the SERVING gateway's heartbeat response is parsed by the
 // client (interceptor.go checks `pingURL == serverURL`). Central receives the heartbeat of an
 // edge-hosted session too, but the client ignores central's body, so central cannot deliver to
-// one. Forwarding via the edge control channel is the next step; until it exists this says so
-// rather than queueing a command that would expire undelivered.
+// one directly. What it can do, as of #1991, is forward the request down the edge control
+// channel to the node that CAN deliver it -- so an edge-served user is now reachable, and
+// edgeNodeID names the hop the caller has to make.
+//
+// Reachable still means reachable NOW. An edge with no live control connection is reported as
+// unreachable with that stated, rather than queueing a request that nothing could carry: this
+// feature's whole posture is that an admin is told what happened, and "queued" for a command
+// that went nowhere is the one answer worse than "not right now".
 type diagnosticsReach struct {
 	served bool
-	reason string
+	// edgeNodeID is the edge that must carry the request, or "" when this gateway serves the
+	// session itself and can hand it over on the next heartbeat.
+	edgeNodeID string
+	reason     string
 }
 
 func (s *Server) diagnosticsReachability(userID string) diagnosticsReach {
@@ -364,8 +399,19 @@ func (s *Server) diagnosticsReachability(userID string) diagnosticsReach {
 	s.edgeLeasesMu.RUnlock()
 
 	if edgeNode != "" {
-		return diagnosticsReach{reason: fmt.Sprintf(
-			"This user's tunnel is served by edge node %s. Only the gateway serving a session can deliver to it, and forwarding a collection request to an edge is not implemented yet.", edgeNode)}
+		// The forward needs a live control connection to that node -- it is the only way
+		// down. Checked here rather than discovered at send time so the admin is told the
+		// truth in the same reply, though SendEdgeDiagnosticsCollect checks again: the
+		// connection can go in the gap, and a request reported queued because a check
+		// passed a moment earlier is exactly the false reassurance this avoids.
+		s.edgeClientsMu.RLock()
+		_, connected := s.edgeClients[edgeNode]
+		s.edgeClientsMu.RUnlock()
+		if !connected {
+			return diagnosticsReach{reason: fmt.Sprintf(
+				"This user's tunnel is served by edge node %s, which has no control connection to this gateway right now, so the request cannot be forwarded to it. Try again once the node is back.", edgeNode)}
+		}
+		return diagnosticsReach{served: true, edgeNodeID: edgeNode}
 	}
 	return diagnosticsReach{reason: "This user has no connected tunnel right now, so there is nothing to collect from. Ask them to start their client and try again."}
 }

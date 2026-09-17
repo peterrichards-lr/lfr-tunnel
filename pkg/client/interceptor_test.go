@@ -9,7 +9,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -568,20 +573,40 @@ func TestStartFailbackProber_PrimaryStillOffline(t *testing.T) {
 // from either. Central answering 503 during a restart says something about central, not about
 // a tunnel it is not in the data path for (#1306).
 func TestStartHealthChecks_CentralOutageDoesNotDropAnEdgeServedTunnel(t *testing.T) {
+	var edgeHits int64
 	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The serving gateway is healthy and still holds the lease.
+		atomic.AddInt64(&edgeHits, 1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer edge.Close()
 
+	var centralHits int64
 	central := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Central is restarting.
+		atomic.AddInt64(&centralHits, 1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer central.Close()
 
 	engine := NewInterceptorEngine("", nil)
-	engine.SetCentralURL(central.URL)
+	// Addressed as "localhost", not the "127.0.0.1" httptest hands out. statusReportTargets
+	// only adds central as a second heartbeat target when sameGatewayHost says it is a
+	// different gateway, and that comparison is on url.Hostname() ALONE -- two httptest
+	// servers differ only by port, so central was dropped from the target list before a
+	// single request was made and its handler never ran. That is #1961: this test's whole
+	// subject is what the client does with central's 503, and central was never asked.
+	//
+	// Two hostnames is also what production produces. The central URL reaching
+	// SetCentralURL is cfg.Regions["central"] (cmd/lfr-tunnel/main.go:312,574 via
+	// centralControlPlaneURL), a gateway URL such as https://lfr-demo.se, while serverURL
+	// is the elected edge, https://us.lfr-demo.se. An edge-served session on which the two
+	// share a hostname is not a state production can reach.
+	centralURL := strings.Replace(central.URL, "127.0.0.1", "localhost", 1)
+	if centralURL == central.URL {
+		t.Fatalf("the central stand-in is not addressed differently from the serving gateway (%s)", central.URL)
+	}
+	engine.SetCentralURL(centralURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -589,11 +614,65 @@ func TestStartHealthChecks_CentralOutageDoesNotDropAnEdgeServedTunnel(t *testing
 	clientCanceled := make(chan struct{})
 	engine.StartHealthChecks(ctx, func() { close(clientCanceled) }, edge.URL, "us", "session-token", []int{})
 
+	// PREMISE, checked before the survival assertion rather than after it. Keeping it here
+	// is what stops this test silently going vacuous again.
+	deadline := time.Now().Add(9 * time.Second)
+	for time.Now().Before(deadline) &&
+		(atomic.LoadInt64(&edgeHits) == 0 || atomic.LoadInt64(&centralHits) == 0) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if atomic.LoadInt64(&edgeHits) == 0 {
+		t.Fatal("the serving gateway never received a heartbeat -- the harness failed, not the subject")
+	}
+	if atomic.LoadInt64(&centralHits) == 0 {
+		t.Fatal("the control plane never received a heartbeat, so its 503 was never seen; " +
+			"the survival assertion below would pass for the wrong reason (#1961)")
+	}
+
 	select {
 	case <-clientCanceled:
 		t.Fatal("a control plane restart tore down a tunnel the control plane does not serve")
-	case <-time.After(7 * time.Second):
-		// Long enough for at least one 5s heartbeat tick to have hit both endpoints.
+	case <-time.After(2 * time.Second):
+	}
+}
+
+// THE CLASS, not the instance. Two tests now address central by a hostname that differs from
+// the serving gateway's, and each carries its own PREMISE assertion -- but neither stops a third
+// test being written next month with the original hole, and that hole is invisible: the test
+// passes, its handler simply never runs.
+//
+// So assert the property over the package's own test sources. httptest hands every server the
+// same 127.0.0.1 hostname, sameGatewayHost compares url.Hostname() alone, and statusReportTargets
+// therefore drops a central target spelled that way before a single request is made. Passing an
+// httptest server's .URL straight to SetCentralURL is the defect, whatever the test around it is
+// called (#1961).
+func TestNoTestAddressesCentralAtTheServingGatewaysHostname(t *testing.T) {
+	sources, err := filepath.Glob("*_test.go")
+	if err != nil {
+		t.Fatalf("globbing this package's test sources: %v", err)
+	}
+	if len(sources) == 0 {
+		t.Fatal("no test sources found -- this guard scanned nothing and would report clean forever")
+	}
+
+	// SetCentralURL(<something>.URL) -- an httptest server handed over directly. A test that
+	// has done the rewrite passes a local variable instead, so it does not match.
+	rawServerURL := regexp.MustCompile(`SetCentralURL\(\s*\w+\.URL\s*\)`)
+
+	for _, source := range sources {
+		content, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatalf("reading %s: %v", source, err)
+		}
+		for i, line := range strings.Split(string(content), "\n") {
+			if rawServerURL.MatchString(line) {
+				t.Errorf("%s:%d passes an httptest server's .URL straight to SetCentralURL: %s\n"+
+					"\tBoth servers then answer on 127.0.0.1, sameGatewayHost calls them one gateway, "+
+					"and central is never pinged -- every assertion about central's reply is satisfied "+
+					"by central never having been asked (#1961). Address it as \"localhost\" and assert "+
+					"the handler ran.", source, i+1, strings.TrimSpace(line))
+			}
+		}
 	}
 }
 

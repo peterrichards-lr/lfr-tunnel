@@ -98,10 +98,37 @@ type User struct {
 	MaxReservations      *int       `json:"max_reservations,omitempty"`
 	MaxCustomDomains     *int       `json:"max_custom_domains,omitempty"`
 	MaxTunnels           *int       `json:"max_tunnels,omitempty"`
-	OnboardingStatus     string     `json:"onboarding_status"`
-	OnboardingLastStep   string     `json:"onboarding_last_step"`
-	OnboardingReruns     int        `json:"onboarding_reruns"`
+	// BandwidthQuotaBytes is this user's own cumulative bandwidth allowance for the
+	// enforcement period, in bytes (#1959). It is the most specific of three levels --
+	// per-user beats per-role beats the global default -- and is the escape hatch an
+	// administrator uses to accommodate a genuine need without a deploy.
+	//
+	// nil means "not overridden", NOT "unlimited": resolution falls through to the role
+	// setting and then to the global default. A value of 0 means unlimited for this user
+	// specifically, which is how an exemption is expressed.
+	BandwidthQuotaBytes *int64 `json:"bandwidth_quota_bytes,omitempty"`
+	OnboardingStatus    string `json:"onboarding_status"`
+	OnboardingLastStep  string `json:"onboarding_last_step"`
+	OnboardingReruns    int    `json:"onboarding_reruns"`
 }
+
+// UserBandwidthUsage is one user's recorded traffic over a period, as the quota enforcer
+// reads it (#1959).
+//
+// In and out are kept apart all the way to the caller rather than summed in SQL. The
+// ENFORCED number is the total -- that is the fairness measure the issue's title asks for,
+// and the one that cannot be gamed by a user who pulls heavily inbound -- but egress is
+// what maps to the AWS invoice, so it has to remain separately visible wherever the quota
+// is reported. Summing in the query would throw that half away at the point it is cheapest
+// to keep.
+type UserBandwidthUsage struct {
+	UserID   string `json:"user_id"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
+}
+
+// Total is the enforced measure: everything the user moved, in both directions.
+func (u UserBandwidthUsage) Total() int64 { return u.BytesIn + u.BytesOut }
 
 type SubdomainReservation struct {
 	ID                 int64      `json:"id"`

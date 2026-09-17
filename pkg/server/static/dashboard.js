@@ -3914,6 +3914,7 @@ async function loadUsers() {
                             <div><span style="color: var(--text-muted); font-size: 11px;">RPS:</span> <strong>${u.rate_limit ? u.rate_limit : '∞'}</strong></div>
                             <div><span style="color: var(--text-muted); font-size: 11px;">Subdomains:</span> <strong>${u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
                             <div><span style="color: var(--text-muted); font-size: 11px;">Tunnels:</span> <strong>${u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
+                            ${renderBandwidthQuotaCell(u.bandwidth_quota)}
                         </div>
                     `;
 
@@ -3956,6 +3957,7 @@ async function loadUsers() {
                                             <button class="action-menu-item" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Bandwidth Limit</button>
                                             <button class="action-menu-item" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Subdomain Limit</button>
                                             <button class="action-menu-item" onclick="openUserTunnelsLimitModal('${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>
+                                            <button class="action-menu-item" onclick="openUserBandwidthQuotaModal('${escapeHTML(u.email)}', ${u.bandwidth_quota_bytes !== undefined && u.bandwidth_quota_bytes !== null ? u.bandwidth_quota_bytes : ''})">Set Bandwidth Quota</button>
                                             ${
                                               u.role === 'admin'
                                                 ? `
@@ -6901,6 +6903,104 @@ async function submitUserTunnelsLimit() {
   }
 }
 window.submitUserTunnelsLimit = submitUserTunnelsLimit;
+
+// CUMULATIVE BANDWIDTH QUOTA (#1959)
+//
+// Two numbers, always both. used_bytes is the ENFORCED measure -- everything the user moved,
+// in and out, which is the fairness measure the quota is applied to. used_out_bytes is the
+// egress within it, shown beside it because that is the half that maps to the AWS invoice.
+// An admin deciding whether to raise someone's allowance needs to know which of the two the
+// usage actually was.
+function formatQuotaBytes(n) {
+  if (n === null || n === undefined) return '-';
+  if (n < 1024) return n + ' B';
+  const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return v.toFixed(1) + ' ' + units[i];
+}
+window.formatQuotaBytes = formatQuotaBytes;
+
+function renderBandwidthQuotaCell(q) {
+  if (!q) return '';
+  if (!q.allowance_bytes || q.allowance_bytes <= 0) {
+    return `<div><span style="color: var(--text-muted); font-size: 11px;">Bandwidth:</span> <strong>∞</strong></div>`;
+  }
+  // "not measured yet" is deliberately not rendered as a measured zero: a gateway that has
+  // not swept yet and a user who sent nothing look identical otherwise.
+  const used = q.measured ? formatQuotaBytes(q.used_bytes) : '—';
+  const out = q.measured ? formatQuotaBytes(q.used_out_bytes) : '—';
+  let colour = 'var(--text-muted)';
+  let label = '';
+  if (q.state === 'throttled') {
+    colour = '#d97706';
+    label =
+      ' <span class="badge" style="background: rgba(217,119,6,0.15); color: #d97706;">throttled</span>';
+  } else if (q.state === 'stopped') {
+    colour = '#f43f5e';
+    label =
+      ' <span class="badge" style="background: rgba(244,63,94,0.15); color: #f43f5e;">stopped</span>';
+  }
+  return `<div title="Enforced on the total (in + out). Egress is shown separately because that is the figure that maps to the AWS invoice."><span style="color: var(--text-muted); font-size: 11px;">Bandwidth:</span> <strong style="color: ${colour};">${used} / ${formatQuotaBytes(q.allowance_bytes)}</strong> <span style="color: var(--text-muted); font-size: 11px;">(${out} out)</span>${label}</div>`;
+}
+window.renderBandwidthQuotaCell = renderBandwidthQuotaCell;
+
+let bandwidthQuotaEmail = '';
+function openUserBandwidthQuotaModal(email, currentBytes) {
+  bandwidthQuotaEmail = email;
+  document.getElementById('user-bandwidth-quota-email-hint').innerText = email;
+  document.getElementById('user-bandwidth-quota-input').value =
+    currentBytes !== '' && currentBytes !== null && currentBytes !== undefined
+      ? Math.round((currentBytes / (1024 * 1024 * 1024)) * 100) / 100
+      : '';
+  document.getElementById('user-bandwidth-quota-modal').style.display = 'flex';
+}
+window.openUserBandwidthQuotaModal = openUserBandwidthQuotaModal;
+
+function closeUserBandwidthQuotaModal() {
+  document.getElementById('user-bandwidth-quota-modal').style.display = 'none';
+}
+window.closeUserBandwidthQuotaModal = closeUserBandwidthQuotaModal;
+
+async function submitUserBandwidthQuota() {
+  const val = document.getElementById('user-bandwidth-quota-input').value;
+  if (val === '') {
+    showToast(
+      'Enter a value in GiB, or 0 to exempt this user from the quota',
+      'danger',
+    );
+    return;
+  }
+  const bytes = Math.round(parseFloat(val) * 1024 * 1024 * 1024);
+  try {
+    const res = await fetch(
+      `/api/admin/users/${encodeURIComponent(bandwidthQuotaEmail)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bandwidth_quota_bytes: bytes }),
+      },
+    );
+    if (res.ok) {
+      showToast('User bandwidth quota updated successfully', 'success');
+      closeUserBandwidthQuotaModal();
+      loadUsers();
+    } else {
+      const err = await res.json();
+      showToast(
+        'Failed to update quota: ' + (err.error || 'Unknown error'),
+        'danger',
+      );
+    }
+  } catch (e) {
+    console.error('Failed to submit bandwidth quota override', e);
+  }
+}
+window.submitUserBandwidthQuota = submitUserBandwidthQuota;
 
 // COPY TO CLIPBOARD HELPER
 function copyToClipboard(text) {

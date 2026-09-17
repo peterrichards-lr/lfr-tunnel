@@ -438,3 +438,47 @@ func (repo *SQLiteMetricRepo) GetGatewayRuns(limit int) ([]*GatewayRun, error) {
 	}
 	return list, nil
 }
+
+// BandwidthUsageByUserSince totals each user's recorded traffic from `since` onwards, which is
+// the feed the cumulative quota is enforced from (#1959).
+//
+// Three things about this query are decisions rather than incidentals:
+//
+//   - It sums bytes_in and bytes_out SEPARATELY and hands both back. The enforced number is
+//     their total -- the fairness measure, and the one a user cannot dodge by pulling heavily
+//     inbound -- but egress is the AWS invoice, so it stays visible beside it. SUM(bytes_in +
+//     bytes_out) is the shorter query and would discard the half that maps to cost.
+//
+//   - recorded_at, not connected_at. connected_at is the session's START, so a long-lived
+//     tunnel opened before the period began would attribute an entire month's traffic to the
+//     previous period and never trip anything. recorded_at is when the bytes were measured,
+//     which is the instant the period boundary has to cut on.
+//
+//   - Rows with an empty user_id are excluded. They are real traffic, but there is nobody to
+//     charge them to, and GROUP BY would otherwise produce a phantom account whose usage grows
+//     forever and can never be enforced against.
+//
+// The time is formatted the same way RecordTunnelMetric writes it, because these are TEXT
+// columns compared as strings -- a mismatched layout compares wrongly rather than failing.
+func (repo *SQLiteMetricRepo) BandwidthUsageByUserSince(since time.Time) ([]UserBandwidthUsage, error) {
+	rows, err := repo.conn.Query(`
+		SELECT user_id, COALESCE(SUM(bytes_in), 0), COALESCE(SUM(bytes_out), 0)
+		FROM tunnel_metrics
+		WHERE recorded_at >= ? AND user_id IS NOT NULL AND user_id != ''
+		GROUP BY user_id
+	`, since.UTC().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	usage := make([]UserBandwidthUsage, 0)
+	for rows.Next() {
+		var u UserBandwidthUsage
+		if err := rows.Scan(&u.UserID, &u.BytesIn, &u.BytesOut); err != nil {
+			return nil, err
+		}
+		usage = append(usage, u)
+	}
+	return usage, rows.Err()
+}

@@ -133,12 +133,22 @@ type ControlMessage struct {
 	// database, so this is the only way traffic it served reaches tunnel_metrics. See
 	// edge_metrics.go for why it rides this channel rather than a connection of its own.
 	Metrics []EdgeByteDelta `json:"metrics,omitempty"`
+	// NodeSet carries central's node-set fingerprint down to every edge (#1960), so an edge
+	// can echo it on its own clients' heartbeats. omitempty is safe here, unlike on
+	// ScheduleEnabled above: a string decodes to "" whether it was sent empty or omitted, so
+	// an edge told the empty fingerprint clears what it was holding either way.
+	NodeSet string `json:"node_set,omitempty"`
 	// RateLimit carries the requests-per-second a bandwidth-quota throttle holds a user's
 	// tunnels to (#1959), on the "quota_enforcement" frame below. Central is the counting
 	// authority -- an edge has no database -- so an edge learns a user is over their
 	// allowance only by being told.
 	RateLimit int `json:"rate_limit,omitempty"`
 }
+
+// nodeSetFrameType is the control-channel frame that carries central's roster fingerprint
+// down to the edges. Named separately so the sender, the edge's switch and the tests cannot
+// drift apart over a string literal.
+const nodeSetFrameType = "node_set"
 
 // handleEdgeControlWS handles control plane WebSocket connections from Edge nodes.
 func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +300,12 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			StartTime: h.ScheduleStartTime,
 			Timezone:  h.Timezone,
 		})
+		// This node connecting IS a roster change -- it has just moved from
+		// regions_unavailable to regions on /api/version -- so every edge is told, not
+		// just this one. The broadcast reaches the node that just registered too, which
+		// is what makes a restarted or freshly deployed edge current immediately rather
+		// than at the next change (#1960), so no separate send is needed for it.
+		s.BroadcastNodeSet()
 	}()
 
 	// pingStop signals the RTT-ping goroutine below to exit once the read pump's defer
@@ -347,6 +363,18 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			s.edgePingMu.Unlock()
 			_ = conn.Close() //nolint:errcheck
 			slog.Info(fmt.Sprintf("[Edge WS] Edge node %s disconnected.", nodeID))
+
+			// A node dropping is a roster change for everyone still connected: it has
+			// just moved from regions to regions_unavailable (#1960). Under the same
+			// wasActive guard as the teardown above, because a superseded connection's
+			// cleanup removed nothing and so changed no roster -- broadcasting there
+			// would announce a change that did not happen on every reconnect.
+			//
+			// In a goroutine so a slow or dead peer cannot hold up this cleanup, which
+			// still has the health write and the ping map behind it.
+			if wasActive {
+				go s.BroadcastNodeSet()
+			}
 		}()
 
 		// Set read limit and pong handler. 512 bytes was ample while the only thing an edge
@@ -608,6 +636,56 @@ func (s *Server) OwnSchedule() nodeSchedule {
 	s.maintMutex.RLock()
 	defer s.maintMutex.RUnlock()
 	return s.ownSchedule
+}
+
+// BroadcastNodeSet pushes central's node-set fingerprint to every connected edge (#1960).
+//
+// An edge holds no roster -- it is configured with no edge_nodes and has no database -- so
+// before this it answered its own clients' heartbeats with no fingerprint at all, and a client
+// that had elected an edge while some other edge was asleep was never told the topology moved.
+// Central is the only node that knows, so central decides and the edges carry it: the same
+// shape RateLimit and the node schedule already use, rather than a second mechanism.
+//
+// The value is computed ONCE here, outside the loop, and for two reasons. It is the same roster
+// for every recipient, so recomputing it per edge would let two edges be told different things
+// about one moment; and nodeSetFingerprint takes edgeClientsMu itself, so computing it inside
+// the loop below would re-enter a lock this function already holds.
+//
+// A miss is logged, not retried. Every edge is told again the moment any edge connects or
+// disconnects, and a reconnecting edge is told on its handshake, so a node that missed one
+// frame converges on its own -- the same convergence SendEdgeSchedule relies on.
+func (s *Server) BroadcastNodeSet() {
+	fingerprint := s.nodeSetFingerprint()
+	payload, err := json.Marshal(ControlMessage{Type: nodeSetFrameType, NodeSet: fingerprint})
+	if err != nil {
+		slog.Error(fmt.Sprintf("[Edge WS] Could not encode the node set: %v", err))
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	defer s.edgeClientsMu.RUnlock()
+	for nodeID, conn := range s.edgeClients {
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			slog.Info(fmt.Sprintf("[Edge Control] Failed to push the node set to %s: %v", nodeID, err))
+		}
+	}
+}
+
+// setUpstreamNodeSet records the roster fingerprint central last pushed to this node.
+func (s *Server) setUpstreamNodeSet(fingerprint string) {
+	s.maintMutex.Lock()
+	defer s.maintMutex.Unlock()
+	s.upstreamNodeSet = fingerprint
+}
+
+// UpstreamNodeSet returns the roster fingerprint central last pushed to this node, or "" when
+// central has not told it -- which is also what a control plane, which needs no telling,
+// reports. Exported for the same reason OwnSchedule is: it is the edge half of a two-node
+// contract, and a test that can only observe one half cannot exercise the pair.
+func (s *Server) UpstreamNodeSet() string {
+	s.maintMutex.RLock()
+	defer s.maintMutex.RUnlock()
+	return s.upstreamNodeSet
 }
 
 // BroadcastNodeShutdownWarning sends a shutdown warning notification to a specific edge node or all edge nodes.
@@ -1211,6 +1289,18 @@ func (s *Server) runEdgeControlChannel() {
 				} else {
 					slog.Info("[Edge Control] Control plane says this node is not on a shutdown schedule")
 				}
+			case nodeSetFrameType:
+				// Central telling this node what its roster hashes to (#1960). Held in
+				// memory only, like the schedule above: the next handshake re-sends it,
+				// and a value that survived a restart would be a fingerprint nothing had
+				// checked against the live roster.
+				//
+				// Not logged per frame. This arrives on every edge connect and disconnect
+				// across the whole fleet, and the value is meaningless to a human reader --
+				// twelve hex characters whose only property is that it changes. The change
+				// a person cares about is on the client side, where node_set_changed is
+				// already logged with both values.
+				s.setUpstreamNodeSet(msg.NodeSet)
 			case "lease_kick":
 				if msg.Subdomain == "*" || msg.Subdomain == "" {
 					slog.Info("[Edge Control] Kicking ALL leases on this edge node")

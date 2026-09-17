@@ -159,6 +159,41 @@ func isKnownSubcommand(word string) bool {
 	return false
 }
 
+// minVersionPreflight decides what a client below the gateway's advertised minimum version
+// does about it, BEFORE it tries to register (#1988). It returns at most one of a warning to
+// print or a message to die with; both empty means there is nothing to say.
+//
+// Two gateways, two behaviours, and the difference is deliberate.
+//
+// A gateway that enforces the floor itself also runs a per-user grace window, and that window
+// is only reachable if the client does not kill itself first. So defer to it: register, and
+// let the gateway say whether this client is inside its window or out of it. The refusal, when
+// it comes, arrives with a deadline and a remedy attached.
+//
+// A gateway that does NOT enforce it still depends entirely on this check, so the hard stop
+// stays -- with the message it always should have had. "Your client is too old" named neither
+// the version the user is on nor the command that fixes it, which turned every hit into a
+// support request for the one person #1948 exists to protect.
+//
+// A pure function rather than an if-block inside main() so both branches can be tested: the
+// decision is the whole point, and main() is not reachable from a test.
+func minVersionPreflight(currentVersion string, info *client.ServerVersionInfo) (warning, fatal string) {
+	if info == nil || info.MinVersion == "" {
+		return "", ""
+	}
+	if client.CompareVersions(currentVersion, info.MinVersion) >= 0 {
+		return "", ""
+	}
+	if info.MinVersionServerEnforced {
+		return fmt.Sprintf(
+			"This client (%s) is older than the minimum this gateway accepts (%s). Run 'lfr-tunnel -upgrade' to update -- the gateway allows a limited period before it stops accepting new tunnels.",
+			currentVersion, info.MinVersion), ""
+	}
+	return "", fmt.Sprintf(
+		"Your Liferay Tunnel client (%s) is older than the minimum version this gateway accepts (%s).\n\n  Run 'lfr-tunnel -upgrade' to update, then try again.",
+		currentVersion, info.MinVersion)
+}
+
 func main() {
 	flag.Parse()
 
@@ -282,8 +317,10 @@ func main() {
 			os.Exit(1)
 		}
 		if config.Version != "dev" {
-			if client.CompareVersions(config.Version, info.MinVersion) < 0 {
-				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
+			if warning, fatal := minVersionPreflight(config.Version, info); fatal != "" {
+				log.Fatalf("[Error] %s", fatal)
+			} else if warning != "" {
+				slog.Warn(fmt.Sprintf("[Client] %s", warning))
 			}
 			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
 				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s. Run 'lfr-tunnel -upgrade' to update.", info.LatestVersion, config.Version))
@@ -426,6 +463,14 @@ func main() {
 	// the enforcement it warns about -- new tunnels refused at the deadline -- is what
 	// stops the client working. Silent unless the warning window has started.
 	if notice := client.PolicyConsentNotice(regResp); notice != "" {
+		slog.Warn(fmt.Sprintf("[Client] %s", notice))
+	}
+
+	// How long this client has before the gateway's minimum version stops accepting it
+	// (#1988). Printed here for the same reason the consent notice is, and separately from it
+	// because the remedy is different: consent is accepted in the portal, a version is fixed
+	// with `lfr-tunnel -upgrade`. Silent unless the warning window has started.
+	if notice := client.MinVersionNotice(regResp); notice != "" {
 		slog.Warn(fmt.Sprintf("[Client] %s", notice))
 	}
 
@@ -1497,6 +1542,26 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 						"[Client] The Privacy Policy and Cookie Disclosure have changed and your acceptance is overdue.",
 						"[Client] Accept the update in the User Portal to start tunnels again:",
 						fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL),
+						"[Client] Tunnels already running are not affected.",
+					},
+				}
+			}
+
+			// A version refusal is also a 403, and is neither a consent problem nor a
+			// reservation one (#1988). Terminal: every other region enforces the same floor,
+			// so retrying elsewhere only produces the same refusal more slowly.
+			if regErr.MinVersion != nil && regErr.MinVersion.Required {
+				cmd := regErr.MinVersion.UpgradeCommand
+				if cmd == "" {
+					cmd = "lfr-tunnel -upgrade"
+				}
+				return nil, &registrationFailure{
+					err:      err,
+					terminal: true,
+					advice: []string{
+						fmt.Sprintf("[Client] This client (%s) is older than the minimum this gateway accepts (%s), and the upgrade period has ended.", regErr.MinVersion.ClientVersion, regErr.MinVersion.MinVersion),
+						"[Client] Update it and start the tunnel again:",
+						fmt.Sprintf("         👉 %s\n", cmd),
 						"[Client] Tunnels already running are not affected.",
 					},
 				}

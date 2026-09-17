@@ -78,7 +78,7 @@ func registerTunnel(t *testing.T, srv *Server, token, subdomain string) (*httpte
 	return rec, resp
 }
 
-// consentPhase is the whole enforcement decision, so it is tested directly rather than
+// gracePhase is the whole enforcement decision, so it is tested directly rather than
 // only through the handlers it feeds.
 func TestConsentPhaseTransitions(t *testing.T) {
 	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
@@ -109,7 +109,7 @@ func TestConsentPhaseTransitions(t *testing.T) {
 			if !tc.neverSeen {
 				firstSeen = now.Add(-time.Duration(tc.firstSeenDays) * 24 * time.Hour)
 			}
-			phase, deadline := consentPhase(firstSeen, now, grace, warn)
+			phase, deadline := gracePhase(firstSeen, now, grace, warn)
 			if phase != tc.wantPhase {
 				t.Errorf("phase = %q, want %q", phase, tc.wantPhase)
 			}

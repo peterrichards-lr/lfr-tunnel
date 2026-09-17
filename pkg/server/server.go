@@ -2187,7 +2187,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		themePref = userRec.ThemePreference
 	}
 
-	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v)", req.SubdomainPrefix, activeDomains, remotes)
+	// Per-session client provenance (#2001). Everything in the suffix is already in hand at
+	// this point and was previously discarded; see session_context_audit.go for why the user
+	// record's last_client_version cannot answer the question this one does.
+	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v) %s",
+		req.SubdomainPrefix, activeDomains, remotes,
+		sessionContextDetail(req.ClientVersion, req.ClientOS, s.registry.localNodeID(), req.RegionSource))
 	s.writeAudit(user.Email, "tunnel.start", "subdomain", req.SubdomainPrefix, auditDetails, r)
 
 	// Attached even when nothing is outstanding: the client uses the absence of a phase to
@@ -6930,7 +6935,16 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	if userRec != nil && userRec.Email != "" {
 		actorEmail = userRec.Email
 	}
-	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s)", edgeNodeID, finalSubdomain, edgeReq.ClientIP)
+	// The same per-session provenance as the direct path (#2001), and it has to be added
+	// here too rather than only in handleRegister: a client registering through an edge node
+	// never executes handleRegister's body on the control plane, and the edge has no database
+	// to write an audit row with. Most of the fleet registers this way, so covering only the
+	// direct path would record a version for almost nobody. The node is the edge that
+	// accepted the session -- already named in the sentence, and repeated inside the suffix
+	// so one grep answers the question on both paths.
+	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s) %s",
+		edgeNodeID, finalSubdomain, edgeReq.ClientIP,
+		sessionContextDetail(edgeReq.ClientVersion, edgeReq.ClientOS, edgeNodeID, edgeReq.RegionSource))
 	s.writeAudit(actorEmail, "tunnel.start", "subdomain", finalSubdomain, auditDetails, r)
 
 	// access_controls is keyed by domain, because a reservation is keyed on (subdomain, domain)

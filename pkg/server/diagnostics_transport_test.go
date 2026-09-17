@@ -71,8 +71,13 @@ func TestDiagnosticsCommandExpires(t *testing.T) {
 	s := &Server{}
 	cmd := s.queueDiagnosticsCollect("user-1", "admin@example.com")
 
+	// Aged by the field that DECIDES, which is expiresAt since #1991: central sets the
+	// deadline once when it takes the admin's request, and an edge holding a forwarded copy
+	// is told what remains of that window rather than starting a clock of its own. Backdating
+	// queuedAt alone no longer expires anything, and a test that did would be asserting
+	// against a field production stopped consulting.
 	s.diagCommandsMu.Lock()
-	s.diagCommands["user-1"][0].queuedAt = time.Now().UTC().Add(-diagnosticsCommandTTL - time.Minute)
+	s.diagCommands["user-1"][0].expiresAt = time.Now().UTC().Add(-time.Minute)
 	s.diagCommandsMu.Unlock()
 
 	live, expired := s.pendingDiagnosticsCommands("user-1")
@@ -84,6 +89,31 @@ func TestDiagnosticsCommandExpires(t *testing.T) {
 	}
 	if s.hasPendingDiagnosticsCommand("user-1") {
 		t.Error("the expired command is still queued")
+	}
+}
+
+// A command with no deadline must not mean "never expires" (#1991).
+//
+// deadline() falls back to queuedAt plus the TTL when expiresAt is zero. Both constructors set
+// it, so the fallback is defensive -- and an untested defensive branch is how a struct literal
+// added later comes to hold a collection request open indefinitely, outliving the consent it
+// was authorised under.
+func TestADiagnosticsCommandWithNoDeadlineStillExpires(t *testing.T) {
+	s := &Server{}
+	s.queueDiagnosticsCollect("user-1", "admin@example.com")
+
+	s.diagCommandsMu.Lock()
+	s.diagCommands["user-1"][0].expiresAt = time.Time{}
+	s.diagCommands["user-1"][0].queuedAt = time.Now().UTC().Add(-diagnosticsCommandTTL - time.Minute)
+	s.diagCommandsMu.Unlock()
+
+	live, expired := s.pendingDiagnosticsCommands("user-1")
+	if len(live) != 0 {
+		t.Errorf("a command with no deadline was offered for delivery %s after it was queued: %+v",
+			diagnosticsCommandTTL+time.Minute, live)
+	}
+	if len(expired) != 1 {
+		t.Fatalf("the expiry was not reported, so it could not be audited: %+v", expired)
 	}
 }
 

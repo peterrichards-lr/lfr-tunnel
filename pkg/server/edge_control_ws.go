@@ -143,6 +143,18 @@ type ControlMessage struct {
 	// authority -- an edge has no database -- so an edge learns a user is over their
 	// allowance only by being told.
 	RateLimit int `json:"rate_limit,omitempty"`
+	// Diagnostics fields (#1991). DiagRequestID travels in BOTH directions -- down on
+	// diagnostics_collect, back up on diagnostics_ack -- and is the capability that
+	// authorises everything it appears on, so it is the one field both frames share.
+	//
+	// There is deliberately no field naming the command to run. collect_logs is the only
+	// command there is (diagnostics_transport.go), the frame type is the verb, and an edge
+	// synthesises it locally: a forwarding frame with a verb field would be the general
+	// "run this on every client" channel that file exists to refuse.
+	DiagRequestID string `json:"diag_request_id,omitempty"`
+	// DiagExpiresInSecs is what REMAINS of the window central opened, not a TTL for the edge
+	// to start. One clock, held by the node that issued the request.
+	DiagExpiresInSecs int `json:"diag_expires_in,omitempty"`
 }
 
 // nodeSetFrameType is the control-channel frame that carries central's roster fingerprint
@@ -441,7 +453,8 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				slog.Info(fmt.Sprintf("[Edge WS] Ignoring an unparseable frame from %s: %v", nodeID, err))
 				continue
 			}
-			if inbound.Type == edgeMetricsFrameType {
+			switch inbound.Type {
+			case edgeMetricsFrameType:
 				// nodeID is this connection's authenticated identity, not anything the
 				// payload claims, so an edge cannot file its traffic under another node.
 				//
@@ -451,6 +464,15 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				// edge is still alive.
 				s.edgeMetricsSeen.Note(nodeID, len(inbound.Metrics), time.Now())
 				s.queueEdgeMetrics(nodeID, inbound.Metrics)
+			case diagnosticsAckFrameType:
+				// A client on this edge acknowledged a collection request (#1991). The
+				// delivery audit entry is written here because the audit log is here --
+				// an edge has no database, so an ack it could not relay would be an ack
+				// that never happened.
+				// QUEUED, not written here: this read pump is not counted by bgWG, and
+				// the delivery entry reaches the database (#1833). The tracked worker in
+				// watchDiagnosticsExpiry does the write.
+				s.queueForwardedDiagnosticsAck(nodeID, inbound.DiagRequestID)
 			}
 		}
 	}()
@@ -1301,6 +1323,14 @@ func (s *Server) runEdgeControlChannel() {
 				// a person cares about is on the client side, where node_set_changed is
 				// already logged with both values.
 				s.setUpstreamNodeSet(msg.NodeSet)
+			case diagnosticsCollectFrameType:
+				// Central forwarding an admin's collection request for a user THIS node
+				// serves (#1991). Held in memory only, like the schedule and the node set
+				// above, and handed to the client on its next tunnel-status heartbeat --
+				// the only channel a NATed client listens on, and only from the gateway
+				// actually serving it, which is what made this hop necessary.
+				s.queueForwardedDiagnosticsCollect(msg.UserID, msg.DiagRequestID,
+					time.Duration(msg.DiagExpiresInSecs)*time.Second)
 			case "lease_kick":
 				if msg.Subdomain == "*" || msg.Subdomain == "" {
 					slog.Info("[Edge Control] Kicking ALL leases on this edge node")

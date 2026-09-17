@@ -178,9 +178,15 @@ func scoreSession(rtts map[string]int, nodeID string) (verdict string, missMs in
 
 // GetNodePlacement builds the report over the last `days` days.
 func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementReport, error) {
+	// Two floors for one window, because the two sides of this report are stored at different
+	// granularities: region_probes.day is a bare "YYYY-MM-DD" while tunnel_metrics.connected_at
+	// is a full DATETIME. Passing the second-precision floor to the probe query would make
+	// '2026-09-16' >= '2026-09-16 14:00:00' false and silently drop the boundary day's
+	// measurements, leaving that day's sessions unverifiable rather than judged (#1981).
 	since := analyticsFloor(days)
+	sinceDay := analyticsDayFloor(days)
 
-	measured, err := repo.loadMeasurements(since)
+	measured, err := repo.loadMeasurements(sinceDay)
 	if err != nil {
 		return nil, err
 	}

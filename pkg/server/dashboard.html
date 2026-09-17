@@ -590,6 +590,7 @@
                     <h2 data-i18n="tab_analytics_title">Analytics & Monitoring</h2>
                     <div class="analytics-toolbar print-hide">
                         <select id="analytics-range" class="analytics-control" aria-label="Time range" data-i18n-aria-label="time_range" onchange="changeAnalyticsRange(this.value)">
+                            <option value="1" data-i18n="range_24_hours">Last 24 Hours</option>
                             <option value="7" data-i18n="range_7_days">Last 7 Days</option>
                             <option value="14" data-i18n="range_14_days">Last 14 Days</option>
                             <option value="30" selected data-i18n="range_30_days">Last 30 Days</option>
@@ -598,7 +599,15 @@
                         <button class="btn btn-secondary analytics-control" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf">Export PDF</button>
                     </div>
                 </div>
-                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="analytics_desc">View your bandwidth utilization over the last 30 days.</p>
+                <!-- The bounds of the window every figure below covers (#1981). This replaced a
+                     static "over the last 30 days" sentence that stopped being true the moment
+                     #1560 added a range control, and was never true for the other three options.
+                     Filled from the server's own answer in loadAnalytics(), so the label cannot
+                     claim a window the query did not honour. Not print-hidden: a printed report
+                     with no period on it is the artefact this closes -- metrics recorded before
+                     the v1.48.35 watermark fix (#1970) were inflated ~54x and nothing on the
+                     screen distinguished them from corrected data. -->
+                <p id="analytics-period-bounds" class="analytics-period"></p>
                 
                 <!-- Admin Only Section -->
                 <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
@@ -620,6 +629,28 @@
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Portal Usage</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="portalStatsChart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Bandwidth per gateway, for the selected period (#1981). The pie
+                             in Portal V2 counts tunnels held RIGHT NOW and the chart below
+                             counts sessions per day; neither says how many BYTES a gateway
+                             moved in the window being shown. That is the figure a dead
+                             reporting path appears in -- #1958/#1970 was an edge whose bytes
+                             stopped being recorded, and against an unlabelled all-time
+                             aggregate it read as a flat number rather than as a drop.
+                             V1 and V2 are an A/B test (#1866), so the panel lands in both. -->
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="bandwidth_by_gateway">Bandwidth by Gateway</h4>
+                            <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 12px;" data-i18n="bandwidth_by_gateway_desc">Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.</p>
+                            <p id="gateway-bandwidth-total" style="font-size: 13px; margin: 0 0 12px;"></p>
+                            <p id="gateway-bandwidth-empty" style="display: none; color: var(--text-muted); font-size: 13px; margin: 0;" data-i18n="bandwidth_by_gateway_empty">No bandwidth was recorded on any gateway in this period.</p>
+                            <div id="gateway-bandwidth-table-wrap" style="display: none;">
+                                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                    <table>
+                                        <thead><tr><th data-i18n="th_gateway">Gateway</th><th data-i18n="data_in">Data In</th><th data-i18n="data_out">Data Out</th><th data-i18n="th_sessions">Sessions</th></tr></thead>
+                                        <tbody id="gateway-bandwidth-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                         <!-- Sessions per gateway (#1150). Portal V2 already showed a live

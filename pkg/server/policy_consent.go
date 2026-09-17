@@ -41,21 +41,24 @@ const (
 	pathAPITunnelStatus     = "/api/tunnel-status"
 )
 
-// Consent phases. These strings cross the wire to both portals and to the client, so
-// they are part of the API surface.
+// Consent phases. These are ALIASES of the shared grace vocabulary in grace.go, not copies
+// of it (#1988): the min_version floor speaks the same four phases, and two independent
+// definitions of "warning" would be free to drift apart while still looking identical on the
+// wire. The consent-specific names are kept because they are what both portals and the client
+// already read.
 const (
 	// ConsentPhaseNone means there is nothing outstanding: either re-consent is not
 	// configured, or this user has already accepted the current version.
-	ConsentPhaseNone = ""
+	ConsentPhaseNone = GracePhaseNone
 	// ConsentPhaseGrace means outstanding, deadline not close. Portal usable behind a
 	// dismissible gate; clients work normally.
-	ConsentPhaseGrace = "grace"
+	ConsentPhaseGrace = GracePhaseGrace
 	// ConsentPhaseWarning means outstanding and inside the warning window. Escalated
 	// banner in the portal, and a startup warning from the client.
-	ConsentPhaseWarning = "warning"
+	ConsentPhaseWarning = GracePhaseWarning
 	// ConsentPhaseExpired means the grace window has run out. Portal blocked, and new
 	// tunnels refused.
-	ConsentPhaseExpired = "expired"
+	ConsentPhaseExpired = GracePhaseExpired
 )
 
 // ConsentState is one user's standing against the current policy version. It is
@@ -122,41 +125,15 @@ func (s *Server) consentGraceDays() int {
 
 // consentWarningDays returns the warning window, clamped to the grace window. A warning
 // that starts before the window it warns about would be permanently on, which is the
-// same as having no warning at all.
+// same as having no warning at all -- clampWarningDays in grace.go is what enforces that,
+// shared with the min_version floor so both clamp identically.
 func (s *Server) consentWarningDays() int {
 	grace := s.consentGraceDays()
-	if s.cfg == nil || s.cfg.PolicyConsentWarningDays <= 0 {
-		if grace < 5 {
-			return grace
-		}
-		return 5
+	configured := 0
+	if s.cfg != nil {
+		configured = s.cfg.PolicyConsentWarningDays
 	}
-	if s.cfg.PolicyConsentWarningDays > grace {
-		return grace
-	}
-	return s.cfg.PolicyConsentWarningDays
-}
-
-// consentPhase is the whole enforcement decision, as a pure function of four values so
-// it can be tested without a database or a clock.
-//
-// firstSeen is when this user first had the version put in front of them; a zero value
-// means never, which is not expired -- it is "the window has not started". Somebody who
-// has not logged in or run a client since the version was published has not been asked
-// yet, and cutting them off for not answering a question nobody put to them is exactly
-// the failure the first-sight model was chosen to avoid.
-func consentPhase(firstSeen, now time.Time, graceDays, warningDays int) (string, time.Time) {
-	if firstSeen.IsZero() {
-		return ConsentPhaseGrace, time.Time{}
-	}
-	deadline := firstSeen.Add(time.Duration(graceDays) * 24 * time.Hour)
-	if !now.Before(deadline) {
-		return ConsentPhaseExpired, deadline
-	}
-	if !now.Before(deadline.Add(-time.Duration(warningDays) * 24 * time.Hour)) {
-		return ConsentPhaseWarning, deadline
-	}
-	return ConsentPhaseGrace, deadline
+	return clampWarningDays(grace, configured, 5)
 }
 
 // policyConsentState resolves one user's consent standing.
@@ -217,7 +194,7 @@ func (s *Server) policyConsentState(user *db.User, record bool) ConsentState {
 	}
 
 	state.Required = true
-	phase, deadline := consentPhase(firstSeen, now, s.consentGraceDays(), s.consentWarningDays())
+	phase, deadline := gracePhase(firstSeen, now, s.consentGraceDays(), s.consentWarningDays())
 	state.Phase = phase
 	if !deadline.IsZero() {
 		state.Deadline = deadline.Format(time.RFC3339)
@@ -274,35 +251,13 @@ func PolicyConsentNoticeText(c *ConsentState) string {
 	case ConsentPhaseWarning:
 		return fmt.Sprintf(
 			"The Privacy Policy and Cookie Disclosure have changed. Accept the update at %s within %s, or new tunnels will stop being accepted.",
-			where, formatConsentRemaining(c.SecondsRemaining),
+			where, formatGraceRemaining(c.SecondsRemaining),
 		)
 	case ConsentPhaseExpired:
 		return policyConsentRefusalMessage(*c)
 	default:
 		return ""
 	}
-}
-
-// formatConsentRemaining renders a coarse duration -- days and hours, or hours and
-// minutes inside the last day. Coarse on purpose: a deadline days away rendered to the
-// second reads as machine output rather than as something to act on.
-func formatConsentRemaining(seconds int64) string {
-	if seconds <= 0 {
-		return "no time"
-	}
-	d := time.Duration(seconds) * time.Second
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	if days > 0 {
-		if hours > 0 {
-			return fmt.Sprintf("%dd %dh", days, hours)
-		}
-		return fmt.Sprintf("%dd", days)
-	}
-	if hours > 0 {
-		return fmt.Sprintf("%dh %dm", hours, int(d.Minutes())%60)
-	}
-	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
 // handlePolicyConsentAccept records this user's acceptance of the current version.

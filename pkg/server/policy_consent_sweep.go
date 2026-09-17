@@ -134,7 +134,7 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 	if deadline == "" {
 		deadline = "shortly"
 	}
-	remaining := formatConsentRemaining(state.SecondsRemaining)
+	remaining := formatGraceRemaining(state.SecondsRemaining)
 
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "policy_consent_reminder.html", policyReminderEmail{
 		Name:       user.FirstName,

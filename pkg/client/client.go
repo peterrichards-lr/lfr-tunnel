@@ -140,10 +140,15 @@ type RegisterResponse struct {
 	// enforce_policy_consent but is unauthenticated, and this is per-user.
 	//
 	// Nil from a gateway that predates this, which reads as "nothing to say".
-	PolicyConsent      *PolicyConsentState `json:"policy_consent,omitempty"`
-	NodeStopsInSeconds int                 `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string              `json:"node_stop_time,omitempty"`
-	NodeTimezone       string              `json:"node_timezone,omitempty"`
+	PolicyConsent *PolicyConsentState `json:"policy_consent,omitempty"`
+	// MinVersion is this client's standing against the gateway's minimum version (#1988).
+	// Nil from a gateway that predates this, which reads as "nothing to say" -- and in that
+	// case the client's own pre-flight check against /api/version is still the enforcement,
+	// exactly as before.
+	MinVersion         *MinVersionState `json:"min_version,omitempty"`
+	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string           `json:"node_stop_time,omitempty"`
+	NodeTimezone       string           `json:"node_timezone,omitempty"`
 }
 
 // PinnedShutdownNotice returns the warning a client pinned to a specific gateway should be
@@ -270,6 +275,66 @@ func policyConsentNoticeFrom(c *PolicyConsentState) string {
 	}
 }
 
+// MinVersionState mirrors the server's MinVersionState (pkg/server/min_version.go).
+// Duplicated by hand for the same reason RegisterResponse is: there is no package both sides
+// import, so a field added on one side must be added on the other.
+type MinVersionState struct {
+	Required         bool   `json:"required"`
+	MinVersion       string `json:"min_version,omitempty"`
+	ClientVersion    string `json:"client_version,omitempty"`
+	Phase            string `json:"phase,omitempty"`
+	Deadline         string `json:"deadline,omitempty"`
+	SecondsRemaining int64  `json:"seconds_remaining,omitempty"`
+	UpgradeCommand   string `json:"upgrade_command,omitempty"`
+}
+
+// defaultUpgradeCommand is what a message names when the gateway did not say. A gateway that
+// predates #1988 sends no command, and "your client is too old" without a remedy is the exact
+// failure this issue is about.
+const defaultUpgradeCommand = "lfr-tunnel -upgrade"
+
+// MinVersionNotice renders the startup warning for a client approaching the gateway's minimum
+// version, or "" when there is nothing to say.
+//
+// This is the half of the deadline the user actually sees. The portal knows which clients are
+// old, but the people running them are the least likely to open it -- so the warning has to
+// appear in the client's own output, or the first they learn of the floor is a tunnel refused
+// at the worst possible moment.
+//
+// Silent during the grace phase, matching PolicyConsentNotice: a message on every tunnel start
+// for two weeks is noise, and a client below the floor is already being told a newer version
+// exists by the ordinary upgrade nudge.
+func MinVersionNotice(resp *RegisterResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return minVersionNoticeFrom(resp.MinVersion)
+}
+
+func minVersionNoticeFrom(m *MinVersionState) string {
+	if m == nil || !m.Required {
+		return ""
+	}
+	cmd := m.UpgradeCommand
+	if cmd == "" {
+		cmd = defaultUpgradeCommand
+	}
+	switch m.Phase {
+	case ConsentPhaseWarning:
+		return fmt.Sprintf(
+			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s). Run `%s` within %s, or new tunnels will stop being accepted.",
+			m.ClientVersion, m.MinVersion, cmd, formatConsentRemaining(m.SecondsRemaining),
+		)
+	case ConsentPhaseExpired:
+		return fmt.Sprintf(
+			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s) and the upgrade period has ended -- new tunnels are being refused. Run `%s` to update.",
+			m.ClientVersion, m.MinVersion, cmd,
+		)
+	default:
+		return ""
+	}
+}
+
 // formatConsentRemaining renders days and hours, or hours and minutes inside the last
 // day. Coarse on purpose: a deadline days away rendered to the second reads as machine
 // output rather than as something to act on.
@@ -346,6 +411,11 @@ type RegistrationError struct {
 	// reservation/quota 403 the client already knows about, and would be reported with
 	// advice that sends the user looking for a problem they do not have.
 	PolicyConsent *PolicyConsentState
+	// MinVersion is set when the gateway refused because this client is below the minimum
+	// version and its upgrade period has ended (#1988). Same reason as PolicyConsent above:
+	// a version 403 is otherwise indistinguishable from the reservation/quota 403, and would
+	// be reported with advice that sends the user looking for a problem they do not have.
+	MinVersion *MinVersionState
 }
 
 func (e *RegistrationError) Error() string {
@@ -505,6 +575,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 				Message:       regResp.Error,
 				PortalURL:     regResp.PortalURL,
 				PolicyConsent: regResp.PolicyConsent,
+				MinVersion:    regResp.MinVersion,
 			}
 		}
 		return nil, &RegistrationError{

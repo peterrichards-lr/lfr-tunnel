@@ -149,6 +149,16 @@ maintenance_trigger_path: ""
 
 # --- Client distribution ---
 min_client_version: "v1.0.0"
+# How long a client below min_client_version keeps being accepted after this gateway first
+# sees it below the floor, and how long before that deadline the client starts warning in its
+# own output. Both measured from that client's OWN first sight, so somebody on leave gets the
+# whole window. 0 uses the defaults (14 and 5); the warning is clamped to the grace window.
+#
+# Set the grace window PER ROLLOUT. The first bump wants a generous one -- the fleet still
+# contains clients too old to carry the warning code at all -- while a later one tightening an
+# already-current fleet does not.
+min_client_version_grace_days: 14
+min_client_version_warning_days: 5
 latest_client_version: ""
 # How often the gateway pings each attached tunnel client over the chisel control channel.
 # Empty/0 uses the built-in 25s. Pairs with nginx's proxy_read_timeout on `location /tunnel`

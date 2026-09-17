@@ -140,6 +140,24 @@ func (o outcome) String() string {
 	return fmt.Sprintf("%d %q", o.status, o.message)
 }
 
+// decodeOutcome reduces a response to the status and the error text a user is shown.
+//
+// A decode failure is fatal rather than ignored. Both paths answer JSON on every outcome this
+// test drives, so an unparseable body means the request went somewhere unexpected -- and
+// swallowing it would turn that into an empty message, which is exactly how a case expecting a
+// plain 200 would pass for the wrong reason (§5c).
+func decodeOutcome(t *testing.T, path string, rec *httptest.ResponseRecorder) outcome {
+	t.Helper()
+	var resp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("the %s path answered %d with a body that is not JSON (%v): %s",
+			path, rec.Code, err, rec.Body.String())
+	}
+	return outcome{status: rec.Code, message: resp.Error}
+}
+
 // registerDirect registers straight on this gateway.
 func (f *policyFleet) registerDirect(t *testing.T, subdomain string) outcome {
 	t.Helper()
@@ -156,13 +174,7 @@ func (f *policyFleet) registerDirect(t *testing.T, subdomain string) outcome {
 	rec := httptest.NewRecorder()
 	f.srv.ServeHTTP(rec, req)
 
-	var resp struct {
-		Error string `json:"error"`
-	}
-	// A decode failure is not a finding here: the body is asserted through status+message, and
-	// an unparseable body shows up as an empty message against a non-200, which no case wants.
-	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	return outcome{status: rec.Code, message: resp.Error}
+	return decodeOutcome(t, "direct", rec)
 }
 
 // registerViaEdge asks central to validate on an edge's behalf.
@@ -183,11 +195,7 @@ func (f *policyFleet) registerViaEdge(t *testing.T, subdomain string) outcome {
 	rec := httptest.NewRecorder()
 	f.srv.ServeHTTP(rec, req)
 
-	var resp struct {
-		Error string `json:"error"`
-	}
-	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	return outcome{status: rec.Code, message: resp.Error}
+	return decodeOutcome(t, "edge", rec)
 }
 
 // requireAgreement is the property itself: the two paths must answer identically, and the answer

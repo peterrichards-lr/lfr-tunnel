@@ -58,9 +58,12 @@ const (
 func (s *Server) maxActiveTunnelsFor(user *db.User, userRec *db.User) int {
 	maxTunnels := s.cfg.DefaultMaxActiveTunnels
 	if user != nil {
-		if user.Role == "admin" && s.cfg.AdminMaxActiveTunnels != nil {
+		// roleAdmin/roleOwner rather than the literals the two call sites used: goconst
+		// attributes a literal's package-wide occurrences to whichever file is newest, so
+		// moving "admin" here made this file answer for all 33 of them.
+		if user.Role == roleAdmin && s.cfg.AdminMaxActiveTunnels != nil {
 			maxTunnels = *s.cfg.AdminMaxActiveTunnels
-		} else if user.Role == "owner" && s.cfg.OwnerMaxActiveTunnels != nil {
+		} else if user.Role == roleOwner && s.cfg.OwnerMaxActiveTunnels != nil {
 			maxTunnels = *s.cfg.OwnerMaxActiveTunnels
 		}
 	}

@@ -4,6 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import GeoAttribution from '../components/GeoAttribution';
 
 function objectToYAML(obj: any, indent = 0): string {
   if (!obj || typeof obj !== 'object') {
@@ -71,6 +72,24 @@ export default function AdminSettings() {
   const [alertValues, setAlertValues] = useState<Record<string, boolean>>({});
   const [alertsLoaded, setAlertsLoaded] = useState(false);
 
+  // The geo-IP vendor (#1995). A dropdown rather than a text field, so a typo becomes
+  // impossible rather than merely reported -- and getting it wrong means publishing one
+  // vendor's required credit over another vendor's data, which is a licence problem.
+  //
+  // `geoProviders` is the vocabulary THIS gateway supports, served from the endpoint like
+  // `alertSettings` is, so the portal renders what the build declares instead of carrying its
+  // own copy of the list. `geoSource` is which of the two configuration sources the value in
+  // force came from, and it is rendered: two sources of truth disagreeing silently is the
+  // failure this repo keeps hitting (#1412, #1921, #1919).
+  const [geoProviders, setGeoProviders] = useState<
+    { value: string; label_key: string; attribution_key: string }[]
+  >([]);
+  const [geoProvider, setGeoProvider] = useState('');
+  const [geoSource, setGeoSource] = useState('');
+  const [geoConfigValue, setGeoConfigValue] = useState('');
+  const [geoPath, setGeoPath] = useState('');
+  const [geoLoaded, setGeoLoaded] = useState(false);
+
   // Config view state
   const [serverConfig, setServerConfig] = useState('');
   const [configError, setConfigError] = useState('');
@@ -112,6 +131,18 @@ export default function AdminSettings() {
       // Only true when the server actually declared a vocabulary: an empty list is a
       // failure to describe itself, not a gateway with no alerts.
       setAlertsLoaded(declared.length > 0);
+
+      const vendors = Array.isArray(aRes.data.geo_providers)
+        ? aRes.data.geo_providers
+        : [];
+      setGeoProviders(vendors);
+      setGeoProvider(aRes.data.country_db_provider || '');
+      setGeoSource(aRes.data.country_db_provider_source || '');
+      setGeoConfigValue(aRes.data.country_db_provider_config || '');
+      setGeoPath(aRes.data.country_db_path || '');
+      // Same reasoning as alertsLoaded: an empty vocabulary is a gateway that failed to
+      // describe itself, and saving from that state would post a vendor nobody chose.
+      setGeoLoaded(vendors.length > 0);
 
       // Fetched for test_target alone; see the state declaration above.
       const mRes = await axios.get('/api/admin/maintenance');
@@ -175,15 +206,17 @@ export default function AdminSettings() {
       // success message: one half failing while the other succeeded is exactly the
       // state an admin must not read as "saved".
       if (alertsLoaded) {
-        await axios.post(
-          '/api/admin/settings',
-          Object.fromEntries(
+        await axios.post('/api/admin/settings', {
+          ...Object.fromEntries(
             alertSettings.map((a) => [
               a.key,
               alertValues[a.key] ? 'true' : 'false',
             ]),
           ),
-        );
+          // Only when the vocabulary actually arrived. Posting '' from an unloaded form
+          // would clear a vendor the operator chose, and silently stop crediting them.
+          ...(geoLoaded ? { country_db_provider: geoProvider } : {}),
+        });
         showToast('System settings saved successfully.', 'success');
       } else {
         showToast(
@@ -434,6 +467,147 @@ export default function AdminSettings() {
               </label>
             ))}
           </div>
+        ) : (
+          <div className="text-sm text-muted">
+            {t(
+              'admin_load_failed',
+              'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Geo-IP Vendor (#1995). A dropdown, not a text field: the value decides whose
+          licence-required credit this deployment publishes, so a typo is a licence problem
+          and the right fix is to make one impossible rather than to report it. The options
+          come from the gateway (geo_providers), like the alert vocabulary above, so a build
+          that learns a fourth vendor grows a fourth option with no portal release. */}
+      <div className="card mb-xl">
+        <h4 className="section-title mb-xs">
+          {t('geo_provider_title', 'Geo-IP Vendor')}
+        </h4>
+        <p className="text-sm text-muted mb-lg">
+          {t(
+            'geo_provider_desc',
+            "Every supported vendor's licence requires a different visible credit, and a geo-IP database file cannot be trusted to say who published it, so the vendor has to be named. Choosing one here takes effect immediately -- no restart.",
+          )}
+        </p>
+        {geoLoaded ? (
+          <>
+            <div className="form-group">
+              <label className="form-label" htmlFor="geo-provider-select">
+                {t('geo_provider_label', 'Database vendor')}
+              </label>
+              <select
+                id="geo-provider-select"
+                data-testid="geo-provider-select"
+                className="input-field"
+                value={geoProvider}
+                onChange={(e) => setGeoProvider(e.target.value)}
+              >
+                <option value="">
+                  {t(
+                    'geo_provider_none',
+                    '(not set) -- geographic distribution stays off',
+                  )}
+                </option>
+                {geoProviders.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {t(p.label_key, p.value)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Which source is in force, named rather than implied. Without this an operator
+                edits server-config.yaml, sees no change, and has no way to learn that a row
+                set here is overriding them. */}
+            <p
+              className="text-xs text-muted mt-xs"
+              data-testid="geo-provider-source"
+            >
+              {geoSource === 'portal'
+                ? t(
+                    'geo_provider_source_portal',
+                    'In force: the vendor chosen here, which overrides country_db_provider in server-config.yaml.',
+                  )
+                : geoSource === 'server_config'
+                  ? t(
+                      'geo_provider_source_config',
+                      'In force: country_db_provider in server-config.yaml, set to {0}. Choosing a vendor here overrides it.',
+                    ).replace('{0}', geoConfigValue)
+                  : t(
+                      'geo_provider_source_unset',
+                      'No vendor is set here or in server-config.yaml, so geographic distribution is off and no credit is published.',
+                    )}
+            </p>
+
+            {/* A configured value this build does not recognise. Reported here as well as in
+                the analytics panel, because this is the screen where it can be corrected. */}
+            {!geoProvider && geoSource !== '' && (
+              <div className="alert-banner alert-banner--warning mt-md text-sm">
+                {t(
+                  'geo_provider_unknown',
+                  'country_db_provider names a vendor this gateway does not recognise, so geographic distribution is off. It must be one of maxmind, dbip or ip2location.',
+                )}
+              </div>
+            )}
+
+            {/* The exact credit that will be published, rendered by the SAME component the
+                analytics panel uses -- a preview that can differ from the thing it previews
+                is worse than no preview. Absent when no vendor is chosen: there is nobody to
+                credit, and printing any vendor's line would be a false provenance claim. */}
+            {geoProvider && (
+              <div className="mt-lg">
+                <p className="text-xs text-muted mb-xs">
+                  {t(
+                    'geo_provider_credit_label',
+                    'This credit will be published wherever geographic distribution is shown:',
+                  )}
+                </p>
+                <p
+                  data-testid="geo-provider-credit"
+                  className="text-sm m-0 p-md copy-box"
+                >
+                  <GeoAttribution provider={geoProvider} />
+                </p>
+              </div>
+            )}
+
+            {/* country_db_path, read-only and deliberately so: it is a filesystem path on the
+                gateway host, read at startup, and letting an admin session point the gateway
+                at an arbitrary readable path is a file-disclosure vector. Shown because a
+                wrong path is the other half of diagnosing an empty panel. */}
+            <div className="mt-lg">
+              <p className="text-xs text-muted mb-xs">
+                {t('geo_provider_path_label', 'Database file')}
+              </p>
+              <p className="text-sm m-0" data-testid="geo-provider-path">
+                {geoPath || (
+                  <span className="text-muted">
+                    {t(
+                      'geo_provider_path_unset',
+                      'No geo-IP database file is configured.',
+                    )}
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted mt-xs m-0">
+                {t(
+                  'geo_provider_path_note',
+                  'country_db_path is set in server-config.yaml only. It is a path on the gateway host and is read at startup, so it is shown here but cannot be changed from the portal.',
+                )}
+              </p>
+            </div>
+
+            <button
+              className="btn btn-primary mt-lg"
+              onClick={saveSystemSettings}
+              disabled={!settingsLoaded}
+            >
+              Save Settings
+            </button>
+          </>
         ) : (
           <div className="text-sm text-muted">
             {t(

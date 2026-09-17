@@ -311,7 +311,15 @@ func (s *Server) postDiagnosticsBundleToControlPlane(body []byte) (int, []byte, 
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	// Logged rather than suppressed, mirroring the client half of this same relay
+	// (pkg/client/diagnostics_command.go:212): the body has already been read, so a close
+	// failure changes nothing the caller can act on, but it is evidence of a connection that
+	// did not end cleanly and the nolint ratchet is there to stop that becoming invisible.
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Debug(fmt.Sprintf("[Edge Control] Closing central's reply to a relayed bundle: %v", cerr))
+		}
+	}()
 	// Bounded: this is a remote response, and the caller only passes it back to the client.
 	answer, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {

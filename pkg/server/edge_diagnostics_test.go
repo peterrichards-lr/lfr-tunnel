@@ -558,7 +558,12 @@ func TestAnAckThatCouldNotBeRelayedKeepsTheRequestQueued(t *testing.T) {
 	if centralSide == nil {
 		t.Fatal("central holds no control connection for edge-us, so there is no outage to stage")
 	}
-	_ = centralSide.conn.Close() //nolint:errcheck
+	// Checked rather than discarded: the connection was live a line ago (centralTS.Close
+	// takes the listener, not a hijacked connection), so a close that fails means the outage
+	// this test stages did not happen and every assertion below would be measuring nothing.
+	if err := centralSide.conn.Close(); err != nil {
+		t.Fatalf("closing central's end of the control connection: %v -- the outage was not staged", err)
+	}
 
 	waitForNodeSet(t, stated("the edge to notice its control connection is gone"), func() bool {
 		f.edge.edgeUplinkMu.RLock()

@@ -105,7 +105,32 @@ type ServerConfig struct {
 	// Not a deprecation that removes anything: a live gateway is configured with this key,
 	// and a rename that breaks a running deployment is not an improvement. See
 	// CountryDatabasePath for which one wins when both are set.
-	GeoLite2DBPath         string           `yaml:"geolite2_db_path"`
+	GeoLite2DBPath string `yaml:"geolite2_db_path"`
+	// CountryDBProvider names the vendor that published the file at CountryDBPath, and is
+	// REQUIRED to turn the feature on (#1964).
+	//
+	// It is declared rather than derived because deriving it does not work. #1921 read the
+	// vendor out of the mmdb's own metadata, reasoning that "the file already knows what it
+	// is". Measured against a real IP2Location LITE MMDB, it does not:
+	//
+	//	database_type="GeoLite2-City"   description="GeoLite2City database"
+	//	languages=[en de es fr ja pt-BR ru zh-CN]
+	//	country: {geoname_id, iso_code, names{...}}   <- MaxMind's record schema too
+	//
+	// IP2Location ship a deliberate drop-in clone, so an IP2Location file is
+	// indistinguishable from MaxMind's in every observable property. Derivation therefore
+	// resolved it to "maxmind" and the panel rendered MaxMind's credit over IP2Location's
+	// data: a false statement about provenance, with IP2Location's own required
+	// acknowledgment left unshown.
+	//
+	// Every supported vendor's licence obliges a visible credit and each obliges a DIFFERENT
+	// one, so guessing wrong is a licence breach rather than a cosmetic error. Naming it
+	// makes the operator the author of that claim -- a wrong value is then their
+	// misconfiguration, not a false statement this code invented.
+	//
+	// Valid values are geo.Provider's: "maxmind", "dbip", "ip2location". Empty disables the
+	// feature even when CountryDBPath is set, and the panel says which of the two is missing.
+	CountryDBProvider      string           `yaml:"country_db_provider"`
 	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
 	Webhooks               WebhookConfig    `yaml:"webhooks"`
 	SlackApp               SlackAppConfig   `yaml:"slack_app"`

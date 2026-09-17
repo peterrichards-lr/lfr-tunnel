@@ -3004,7 +3004,7 @@ function geoBucketLabel(bucket) {
  */
 const GEO_ATTRIBUTION_LINK = {
   maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
-  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
   ip2location: {
     href: 'https://lite.ip2location.com',
     text: 'IP geolocation',
@@ -3077,6 +3077,13 @@ function geoOfflineMessage(geo) {
   const path = (geo && geo.configured_path) || '';
   if (geo && geo.reason === 'path_not_found') {
     return t('geo_path_not_found').replace('{0}', path);
+  }
+  if (geo && geo.reason === 'provider_not_declared') {
+    return t('geo_provider_not_declared');
+  }
+  if (geo && geo.reason === 'provider_unknown') {
+    const msg = t('geo_provider_unknown');
+    return geo.detail ? `${msg} (${geo.detail})` : msg;
   }
   if (geo && geo.reason === 'unreadable') {
     const msg = t('geo_unreadable').replace('{0}', path);

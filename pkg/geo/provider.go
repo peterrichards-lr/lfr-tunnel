@@ -1,6 +1,10 @@
 package geo
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // Provider names the vendor that published an open database (#1921).
 //
@@ -79,3 +83,32 @@ func ProviderFromDatabaseType(databaseType string) Provider {
 		return ProviderUnknown
 	}
 }
+
+// ParseProvider turns a declared config value into a Provider, rejecting anything it does not
+// recognise (#1964).
+//
+// Strict on purpose. The alternative -- accepting an unknown string and rendering no credit --
+// would let a typo disable attribution silently, which is the failure this whole change exists
+// to remove. An operator who names a vendor wrongly is told so at startup.
+func ParseProvider(declared string) (Provider, error) {
+	switch Provider(strings.ToLower(strings.TrimSpace(declared))) {
+	case ProviderMaxMind:
+		return ProviderMaxMind, nil
+	case ProviderDBIP:
+		return ProviderDBIP, nil
+	case ProviderIP2Location:
+		return ProviderIP2Location, nil
+	case "":
+		return ProviderUnknown, ErrProviderNotDeclared
+	default:
+		return ProviderUnknown, fmt.Errorf("%w: %q is not one of %s, %s, %s",
+			ErrProviderUnknown, declared, ProviderMaxMind, ProviderDBIP, ProviderIP2Location)
+	}
+}
+
+// ErrProviderNotDeclared is an unset country_db_provider: the feature stays off, and this is
+// an operator situation to report rather than a fault.
+var ErrProviderNotDeclared = errors.New("geo: country_db_provider is not set")
+
+// ErrProviderUnknown is a declared vendor this build does not know.
+var ErrProviderUnknown = errors.New("geo: unknown country_db_provider")

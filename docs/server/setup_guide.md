@@ -1603,7 +1603,33 @@ Note the recursive `chown` above is scoped to `geoip/`, deliberately: re-running
 ```yaml
 # /etc/lfr-tunneld/server-config.yaml
 country_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
+country_db_provider: "dbip"   # maxmind | dbip | ip2location -- REQUIRED
 ```
+
+**Both keys are required.** A path without `country_db_provider` leaves geographic distribution
+**off**, and the panel says so rather than guessing.
+
+That is not bureaucracy. Each supported vendor's licence obliges a *different* visible credit, and
+the file cannot be trusted to say which vendor published it. Measured against a real
+`IP2LOCATION-LITE-DB11.MMDB`:
+
+```text
+database_type = "GeoLite2-City"          <- MaxMind's own string
+description   = "GeoLite2City database"
+languages     = [en de es fr ja pt-BR ru zh-CN]
+country       = {geoname_id, iso_code, names{...}}   <- MaxMind's record schema
+```
+
+IP2Location ship a deliberate drop-in clone, so an IP2Location file is indistinguishable from a
+MaxMind one in every observable property. Deriving the vendor from the file credited MaxMind for
+IP2Location's data — a false statement about provenance, with IP2Location's own required
+acknowledgment left unshown (#1964).
+
+Naming the vendor makes you the author of that claim. Get it wrong and the panel credits the wrong
+vendor, but that is then a misconfiguration to correct rather than something the gateway invented.
+The gateway logs a warning when your declared vendor disagrees with the file's own metadata, which
+catches a typo without making the common case fail — but it cannot tell which of you is right, and
+does not try.
 
 **Use an absolute path.** The value is passed to the filesystem verbatim, so a relative path
 resolves against the daemon's working directory — which the unit file in §4.5 sets to
@@ -1819,4 +1845,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*
+*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*

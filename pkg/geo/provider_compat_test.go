@@ -24,7 +24,7 @@ func TestARealDatabaseResolvesKnownAddresses(t *testing.T) {
 		t.Skip("set LFT_GEO_TEST_DB to a .mmdb file to exercise a real vendor database")
 	}
 
-	r, err := OpenResolver(path)
+	r, err := OpenResolver(path, ProviderMaxMind)
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}
@@ -95,6 +95,15 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 	provider := ProviderFromDatabaseType(dbType)
 	t.Logf("  database_type=%q -> provider=%q", dbType, provider)
 
+	// The whole metadata block, because `database_type` turned out NOT to be a reliable
+	// discriminator: IP2Location's MMDB edition reports "GeoLite2-City", MaxMind's own string
+	// (#1964). Anyone verifying a new vendor needs to see what else is there, and finding out
+	// should not require editing this test.
+	t.Logf("  description=%v", db.Metadata.Description)
+	t.Logf("  ip_version=%d  languages=%v", db.Metadata.IPVersion, db.Metadata.Languages)
+	t.Logf("  node_count=%d  record_size=%d  build_epoch=%d",
+		db.Metadata.NodeCount, db.Metadata.RecordSize, db.Metadata.BuildEpoch)
+
 	// Asserting only that SOMETHING was recognised, not which vendor: this runs against
 	// whatever file the person running it has, and pinning a vendor would fail on a
 	// different (perfectly valid) download rather than on a defect. ProviderUnknown is the
@@ -108,7 +117,7 @@ func TestARealDatabaseIdentifiesItsVendor(t *testing.T) {
 	// The same value must reach callers through the Resolver, which is the path the server
 	// actually uses. A derivation that works in isolation and is not wired up looks
 	// identical from here otherwise.
-	r, err := OpenResolver(path)
+	r, err := OpenResolver(path, ProviderMaxMind)
 	if err != nil {
 		t.Fatalf("OpenResolver(%s): %v", path, err)
 	}

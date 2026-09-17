@@ -49,6 +49,12 @@ func SignCommand(args []string) {
 	dryRun := fs.Bool("dry-run", false, "report what would be signed and exit; sign nothing")
 	CheckFatal(fs.Parse(args), "Failed to parse arguments")
 
+	// Before anything else, including the dry run: an op:// reference is not a configured
+	// credential, and every check below would be reasoning about the literal string
+	// "op://Employee/..." rather than a secret (#1978). Re-execs under `op run` and does not
+	// return if it does.
+	ResolveOpRefsOrReexec(append([]string{"sign"}, args...))
+
 	fmt.Println("=== Beginning Signing Process ===")
 
 	binDir := "dist"

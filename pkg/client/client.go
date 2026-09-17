@@ -588,6 +588,11 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 		return nil, fmt.Errorf("registration status: %s, error: %s", regResp.Status, regResp.Error)
 	}
 
+	// From here on a tunnel exists, so the automatic upgrade must refuse to run (#2000).
+	// Recorded at the gateway's acceptance rather than at any later setup step: that is the
+	// earliest instant at which replacing this binary could drop somebody's session.
+	markTunnelEstablished()
+
 	return &regResp, nil
 }
 

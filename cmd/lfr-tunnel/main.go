@@ -329,6 +329,17 @@ func main() {
 		}
 	}
 
+	// Opt-in automatic upgrade (#2000). Here and nowhere later: this is before any tunnel
+	// exists, which is the only point at which replacing this binary harms nobody. Default
+	// off -- a binary on somebody's machine should not change without them asking -- and a
+	// failure is reported rather than fatal, because an upgrade that could not be verified
+	// must not happen but also must not stop the client that already works.
+	if upgraded, err := client.AutoUpgradeAtStart(cfg.AutoUpgrade, config.Version, cfg.ServerURL, info); err != nil {
+		slog.Warn(fmt.Sprintf("[Client] Automatic upgrade failed, continuing on the current version: %v", err))
+	} else if upgraded {
+		slog.Info("[Client] Automatic upgrade completed.")
+	}
+
 	// 3. Resolve port mappings
 	portMappings := resolvePortsAndMappings(cfg)
 

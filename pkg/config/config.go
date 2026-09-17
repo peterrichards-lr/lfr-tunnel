@@ -601,6 +601,17 @@ type ClientConfig struct {
 	// What is reported is a region name and a round trip in milliseconds. No IP, no location,
 	// nothing derived from either.
 	DisableLatencyReport bool `yaml:"disable_latency_report,omitempty"`
+	// AutoUpgrade lets this client replace its own binary at START when the gateway
+	// advertises a newer version (#2000).
+	//
+	// OFF by default and opt-in, deliberately: a binary on somebody's machine should not
+	// change without them asking. The backstop for anyone who never opts in is the
+	// min_version floor (#1988), which refuses a client rather than changing it.
+	//
+	// It only ever runs before a tunnel exists. Replacing the binary under a live tunnel
+	// would drop a customer demo, which is worse than the problem this solves -- and that is
+	// enforced at runtime in pkg/client, not merely by where this happens to be called.
+	AutoUpgrade bool `yaml:"auto_upgrade,omitempty"`
 	// TokenSource names where AuthToken came from, for the startup configuration block
 	// (#1693) -- which reports the source, not just the value. Never the token itself, and
 	// never anything derived from it: that block exists to be pasted into a support channel.
@@ -1321,6 +1332,17 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.Bandwidth = val
 	} else if val := os.Getenv("LFT_BANDWIDTH"); val != "" {
 		cfg.Bandwidth = val
+	}
+	// Only an explicit affirmative turns it on. An unset or unparseable value leaves the
+	// config-file setting alone rather than reading as "yes": the whole point of an opt-in is
+	// that ambiguity resolves to OFF.
+	if val := os.Getenv("LFT_AUTO_UPGRADE"); val != "" {
+		switch strings.ToLower(strings.TrimSpace(val)) {
+		case "true", "1", "yes", "on":
+			cfg.AutoUpgrade = true
+		case "false", "0", "no", "off":
+			cfg.AutoUpgrade = false
+		}
 	}
 
 	return cfg, nil

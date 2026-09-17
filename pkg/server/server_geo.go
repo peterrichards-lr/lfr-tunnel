@@ -2,11 +2,13 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
 
+	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 	"lfr-tunnel/pkg/geo"
 )
@@ -158,7 +160,7 @@ func newGeoAggregator(path, declaredProvider string, bothPathsSet bool, database
 // caller could usefully do about it, and this must not add a failure mode to
 // registration.
 func (s *Server) observeGeoLocation(userID, clientIP string) {
-	if s == nil || s.geo == nil || userID == "" || clientIP == "" {
+	if s == nil || userID == "" || clientIP == "" {
 		return
 	}
 	// clientIPFrom yields a bare address, but an edge node forwards whatever it resolved,
@@ -172,7 +174,206 @@ func (s *Server) observeGeoLocation(userID, clientIP string) {
 		}
 		addr = ap.Addr()
 	}
-	s.geo.Observe(userID, addr)
+	// The nil-aggregator check that used to guard the top of this function now lives inside
+	// withGeoAggregator, under the lock. It cannot be hoisted back out: the aggregator is
+	// swapped on SIGHUP (#1998), so a check made before taking the lock says nothing about
+	// what is in force by the time Observe runs. Aggregator.Observe is nil-safe, so the
+	// unconfigured case is still a no-op rather than a branch every caller repeats.
+	s.withGeoAggregator(func(a *geo.Aggregator) {
+		a.Observe(userID, addr)
+	})
+}
+
+// geoSource is the pair of config values that decide which database is open, and is the
+// whole of what a reload compares (#1998).
+//
+// Compared rather than re-opened blindly so that an identical config is a genuine no-op: an
+// operator sending SIGHUP to withdraw an edge token must not, as a side effect, close and
+// reopen a 127MB mmap and lose the current period's in-memory user sets with it.
+type geoSource struct {
+	// Path is the resolved country database path -- country_db_path, or its geolite2_db_path
+	// alias, already collapsed to one value by config.CountryDatabasePath.
+	Path string
+	// Provider is the declared vendor, verbatim from country_db_provider. Stored unparsed so
+	// that correcting a typo is seen as a change even though both spellings parse to nothing.
+	Provider string
+}
+
+// withGeoAggregator runs fn against the aggregator currently in force, holding geoMu's read
+// side for the whole call.
+//
+// The lock spans fn rather than just the pointer read. Reload closes the aggregator it
+// replaces, and Aggregator.Close closes the mmdb handle -- so a caller that copied the
+// pointer out and dereferenced it afterwards could be looking up an address in a database
+// that has just been closed. Holding the read lock across the call is what makes the
+// close safe, and it is why every production reader goes through here (#1998).
+//
+// fn may be handed a nil aggregator: that is the "no database configured" state, which is
+// the default, and every method on *geo.Aggregator is nil-safe.
+func (s *Server) withGeoAggregator(fn func(*geo.Aggregator)) {
+	if s == nil {
+		return
+	}
+	s.geoMu.RLock()
+	defer s.geoMu.RUnlock()
+	fn(s.geo)
+}
+
+// geoPanelState reports the three things the admin panel renders, read together under one
+// lock so they cannot disagree with each other (#1998).
+//
+// Reading them separately would let a reload land between the "is it on" read and the
+// "which vendor" read, and the panel would then credit the vendor of a file that is no
+// longer open -- the exact false attribution #1964 exists to prevent.
+func (s *Server) geoPanelState() (available bool, provider geo.Provider, diagnosis geoDiagnosis) {
+	if s == nil {
+		return false, geo.ProviderUnknown, geoDiagnosis{Reason: geoReasonNotConfigured}
+	}
+	s.geoMu.RLock()
+	defer s.geoMu.RUnlock()
+	if s.geo == nil {
+		return false, geo.ProviderUnknown, s.geoDiagnosis
+	}
+	// The diagnosis is returned when the database is OPEN too, not replaced with a zero value
+	// (#1995). A readable file whose vendor nobody has named is now a real state -- the
+	// aggregator runs and the panel withholds the rows -- and System Settings has to be able
+	// to show the operator which file was found while telling them it is not being published.
+	// Returning an empty struct here made that screen claim no path was configured.
+	return true, s.geo.Provider(), s.geoDiagnosis
+}
+
+// closeGeo flushes and releases whatever database is open, on shutdown.
+//
+// Under the write lock, and it clears the pointer: a registration arriving between the
+// close and the process actually exiting would otherwise resolve against a closed handle.
+func (s *Server) closeGeo() error {
+	if s == nil {
+		return nil
+	}
+	s.geoMu.Lock()
+	defer s.geoMu.Unlock()
+	err := s.geo.Close()
+	s.geo = nil
+	return err
+}
+
+// ReloadGeoDatabase re-reads the config file and swaps in its country database (#1998).
+//
+// Switching geo-IP vendor means changing country_db_path and country_db_provider (#1964),
+// and both were read once in NewServer -- so changing vendor meant restarting central,
+// which drops every tunnel it serves, for a change that affects one analytics panel. That
+// made verifying a vendor expensive enough not to do, which is how the IP2Location
+// attribution stayed wrong until someone downloaded the file.
+//
+// ONLY country_db_path, its geolite2_db_path alias, and country_db_provider are applied.
+// SIGHUP re-reads the whole file, but a key that appeared to reload and did not would be
+// worse than one that plainly does not -- an operator who edited two things and had one
+// take effect has no way to learn which half is live. Same rule, and the same reason, as
+// ReloadEdgeNodes (#1454).
+//
+// A config that fails to parse leaves the running database untouched, exactly as
+// ReloadEdgeNodes leaves the edge list untouched.
+func (s *Server) ReloadGeoDatabase(configPath string) error {
+	cfg, err := config.LoadServerConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("keeping the geo-IP database already in force: %w", err)
+	}
+	path, bothPathsSet := cfg.CountryDatabasePath()
+	return s.applyGeoDatabase(geoSource{Path: path, Provider: cfg.CountryDBProvider}, bothPathsSet)
+}
+
+// applyGeoDatabase swaps the open database for the one want names, or keeps the running one
+// and says why.
+//
+// Split from ReloadGeoDatabase so the swap can be exercised without a config file on disk,
+// and because the two questions are genuinely separate: what the file says, and what to do
+// about it.
+func (s *Server) applyGeoDatabase(want geoSource, bothPathsSet bool) error {
+	if s == nil {
+		return nil
+	}
+	s.geoMu.RLock()
+	current := s.geoSource
+	open := s.geo != nil
+	s.geoMu.RUnlock()
+	if current == want {
+		// The unchanged case has to be a real no-op, not a cheap reopen. SIGHUP is the edge
+		// token withdrawal signal too (#1309), so this path runs whenever an operator revokes
+		// a credential -- and closing the aggregator would flush and discard the current
+		// period's in-memory user sets as a side effect of an unrelated edit.
+		slog.Info("[Geo] Reloaded country database config: no change; the open file was left alone.",
+			"path", want.Path, "country_db_provider", want.Provider)
+		return nil
+	}
+
+	// A VENDOR-ONLY change does not reopen anything (#1995 + #1998). The vendor never touches
+	// decoding -- Country() resolves through countryPaths whichever vendor supplied the file --
+	// so the same path with a new declaration is the same open file with a new label on it.
+	// Reopening would cost the period's in-memory user sets for a display value, which is the
+	// very trade the unchanged case above refuses to make.
+	if open && current.Path == want.Path {
+		s.geoMu.Lock()
+		s.geoSource = want
+		s.geoMu.Unlock()
+		slog.Info("[Geo] Reloaded country database config: same file, new declared vendor. "+
+			"The panel credits the new one; nothing was reopened.",
+			"path", want.Path, "country_db_provider", want.Provider)
+		return nil
+	}
+
+	// Opened BEFORE the swap, and outside the write lock: opening reads and validates a file
+	// that can be over 100MB, and a failure must cost the running database nothing at all.
+	candidate, diagnosis := newGeoAggregator(want.Path, want.Provider, bothPathsSet, s.db)
+
+	s.geoMu.Lock()
+	defer s.geoMu.Unlock()
+
+	// A fault -- a path with no file at it, an unreadable file, an undeclared or misspelled
+	// vendor -- keeps whatever is already serving. A reload that turns a working panel off
+	// because of a typo is worse than no reload at all, which is the precedent ReloadEdgeNodes
+	// set with "keeping the edge nodes already in force".
+	//
+	// Deliberately clearing the path is NOT a fault: geoReasonNotConfigured means the operator
+	// asked for the feature to be off, and refusing to honour that would make it impossible to
+	// turn off without a restart.
+	if candidate == nil && diagnosis.Reason != geoReasonNotConfigured && s.geo != nil {
+		slog.Warn("[Geo] Reload refused the new country database; keeping the one already in "+
+			"force. The panel still credits the vendor of the file that is actually open.",
+			"path", want.Path, "country_db_provider", want.Provider,
+			"reason", string(diagnosis.Reason), "detail", diagnosis.Detail)
+		return fmt.Errorf("keeping the geo-IP database already in force: %s (%s)",
+			diagnosis.Reason, want.Path)
+	}
+
+	previous := s.geo
+	s.geo = candidate
+	s.geoDiagnosis = diagnosis
+	s.geoSource = want
+
+	// Closed while the write lock is still held, which is the whole point of holding the read
+	// side across a lookup: no reader can be inside withGeoAggregator right now, so nothing
+	// can still be resolving against the handle this releases.
+	//
+	// Close flushes first, so the period's counts survive the swap. They are not double
+	// counted either -- UpsertLocationStats never lowers a stored count (see
+	// TestUpsertLocationStatsNeverLowersACount), so the fresh aggregator's smaller running
+	// totals cannot erase what the outgoing one wrote.
+	if err := previous.Close(); err != nil {
+		slog.Warn("[Geo] Failed to close the country database being replaced", "error", err)
+	}
+
+	switch {
+	case candidate != nil:
+		slog.Info("[Geo] Reload swapped the country database; the panel now credits the new vendor.",
+			"path", want.Path, "provider", string(candidate.Provider()))
+	case previous != nil:
+		slog.Info("[Geo] Reload turned anonymous geographic distribution off: no country database "+
+			"is configured any more.", "reason", string(diagnosis.Reason))
+	default:
+		slog.Info("[Geo] Reload did not enable anonymous geographic distribution; nothing was "+
+			"serving before either.", "path", want.Path, "reason", string(diagnosis.Reason))
+	}
+	return nil
 }
 
 // apiError is the error body these handlers return.
@@ -242,16 +443,24 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 		respondJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	// The vendor in force RIGHT NOW, not the one that was in force at startup (#1995). A DB
-	// row set from System Settings wins; with no row the YAML key applies. Resolved per
-	// request because it is a display value -- nothing about decoding depends on it -- so
-	// changing it must not require a restart.
+	// Two reads, and they answer different questions (#1995 + #1998).
+	//
+	// geoPanelState is ONE read under ONE lock: whether a database is open and, if not, why.
+	// Those two must describe the same instant or the panel can report a reason for a file
+	// that is open, or availability for one that has just been closed by a reload.
+	openDatabase, _, diagnosis := s.geoPanelState()
+	// The VENDOR is resolved separately, per request, and it is deliberately not the one the
+	// open resolver was constructed with. Since #1995 the vendor is a display value settable
+	// from System Settings -- nothing about decoding depends on it -- so an operator who
+	// corrects it must see the credit change without restarting central. Crediting the
+	// resolver's own value instead would show the old vendor until the next reload, which is
+	// the restart this feature exists to remove.
 	provider, _, provErr := s.effectiveGeoProvider()
 	resp := locationAnalyticsResponse{
 		// Both halves. The file has to be open AND a vendor has to be named: rendering rows
 		// under no credit at all is the licence breach this gate exists to prevent, and
 		// rendering a credit with no database open would attribute data nobody is looking at.
-		Available: s.geo != nil && provErr == nil,
+		Available: openDatabase && provErr == nil,
 		Threshold: geo.DefaultThreshold,
 		Buckets:   []db.LocationStat{},
 	}
@@ -259,11 +468,11 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 	case resp.Available:
 		// Which vendor's credit the panel must render (#1921).
 		resp.Provider = string(provider)
-	case s.geo != nil:
+	case openDatabase:
 		// A readable database with no usable vendor. Before #1995 this state was decided at
 		// startup and the aggregator was never built; the reasons and the wording they drive
 		// are deliberately the same two, so both portals' existing messages still apply.
-		resp.ConfiguredPath = s.geoDiagnosis.Path
+		resp.ConfiguredPath = diagnosis.Path
 		if errors.Is(provErr, geo.ErrProviderNotDeclared) {
 			resp.Reason = geoReasonProviderNotDeclared
 		} else {
@@ -271,16 +480,16 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 			resp.Detail = provErr.Error()
 		}
 	default:
-		// Why it is off, not just that it is (#1938). Read from what the constructor
-		// recorded at startup rather than re-stat'ing the path here: this must describe the
-		// state the running process is actually in, and a file created since startup is not
+		// Why it is off, not just that it is (#1938). Read from what the constructor or the
+		// last reload recorded rather than re-stat'ing the path here: this must describe the
+		// state the running process is actually in, and a file created since then is not
 		// open and would make the panel claim a feature the gateway is not running.
-		resp.Reason = s.geoDiagnosis.Reason
+		resp.Reason = diagnosis.Reason
 		if resp.Reason == "" {
 			resp.Reason = geoReasonNotConfigured
 		}
-		resp.ConfiguredPath = s.geoDiagnosis.Path
-		resp.Detail = s.geoDiagnosis.Detail
+		resp.ConfiguredPath = diagnosis.Path
+		resp.Detail = diagnosis.Detail
 	}
 	if !resp.Available || s.db == nil {
 		// No rows unless a vendor is in force (#1995). The aggregator now runs whenever the

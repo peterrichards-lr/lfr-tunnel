@@ -135,13 +135,27 @@ func (s *Server) effectiveGeoProvider() (geo.Provider, geoProviderSource, error)
 	if s == nil {
 		return geo.ProviderUnknown, geoProviderSourceUnset, geo.ErrProviderNotDeclared
 	}
-	var configured string
-	if s.cfg != nil {
+	// The YAML half comes from the source the LAST LOAD applied, not from the config this
+	// process started with (#1995 + #1998). SIGHUP can swap the database and its declared
+	// vendor without restarting, and it does not write back to s.cfg -- so reading s.cfg here
+	// would credit the vendor of a file that was replaced minutes ago, which is exactly the
+	// false attribution #1964 exists to prevent. geoSource is set in NewServer and updated by
+	// every successful reload, so it is the same value at startup and current afterwards.
+	s.geoMu.RLock()
+	source := s.geoSource
+	s.geoMu.RUnlock()
+	configured := source.Provider
+	if source == (geoSource{}) && s.cfg != nil {
+		// A Server built as a struct literal in a test never went through NewServer and so has
+		// no geoSource at all. Told apart from a deliberately CLEARED vendor by comparing the
+		// whole source, not just the provider: an operator who deletes country_db_provider has
+		// set it to nothing on purpose, and falling back to the startup config there would keep
+		// crediting a vendor they just withdrew.
 		configured = s.cfg.CountryDBProvider
 	}
-	raw, source := geoProviderInForce(s.db, configured)
+	raw, providerSource := geoProviderInForce(s.db, configured)
 	p, err := geo.ParseProvider(raw)
-	return p, source, err
+	return p, providerSource, err
 }
 
 // geoProviderIsSelectable reports whether value is one the dropdown offers.

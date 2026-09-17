@@ -1688,24 +1688,44 @@ you are told to read in §8.11.7. **Migrate the line rather than duplicating it.
 
 #### 8.11.7. Applying it, and confirming it took effect
 
-**Restart the daemon. Nothing lighter applies this setting.**
+**Reload the daemon. A restart is not needed, and has not been since #1998.**
 
 ```bash
-sudo systemctl restart lfr-tunneld
+sudo systemctl reload lfr-tunneld
 ```
 
-Three things that look like they might apply it, and do not:
+`SIGHUP` re-reads `country_db_path`, its `geolite2_db_path` alias, and `country_db_provider`, and
+applies them to the running process — the old database is closed, the new one is opened, and the
+panel's attribution follows the file that is actually open. **No tunnel is dropped.** That is the
+whole point: a restart interrupts every tunnel central serves, which made verifying a vendor
+expensive enough not to do — which is how the IP2Location attribution stayed wrong until someone
+finally downloaded the file (#1964).
 
-- **`SIGHUP`** re-reads `edge_nodes` and nothing else (#1309). A reload will not pick this up, and
-  will not complain that it did not.
+So switching vendor is: edit two lines, reload, look at the panel.
+
+Four things worth knowing before you rely on it:
+
+- **A failed reload keeps the database that is already open.** A path with no file at it, an
+  unreadable file, an undeclared or misspelled `country_db_provider` — each is logged and
+  *refused*, and the panel keeps serving and keeps crediting the vendor of the file still open. A
+  reload that turned a working panel off because of a typo would be worse than no reload at all.
+  Check the journal rather than assuming (below).
+- **Clearing `country_db_path` *does* turn the feature off.** That is an instruction rather than a
+  typo, so it is honoured — otherwise the feature could not be switched off without the restart
+  this removes.
+- **Only these keys reload.** SIGHUP re-reads the whole file, but applies only `edge_nodes`
+  (#1309) and the three geo keys above. Every other edit in the file is ignored until a restart,
+  and the reload says so in its own log line — a key that appeared to reload and did not would
+  leave you unable to tell which half of your edit is live (#1454).
 - **`lfr-tunnel-ops reconcile-server-config`** manages exactly three keys — `session_duration`,
   `session_max_lifetime` and `policy_version` — and leaves every other key on the live box alone.
   It will neither push nor report drift in `country_db_path` (or its `geolite2_db_path` alias).
-- **A binary redeploy** is not needed. This is a configuration change; the gateway you are running
-  already reads the key.
 
-**Then read the journal.** The startup log states the gateway's geo status unambiguously, and it
-emits exactly one of these (the admin panel now says the same thing — §8.11.8):
+**A binary redeploy** is not needed either. This is a configuration change; the gateway you are
+running already reads the keys.
+
+**Then read the journal.** The log states the gateway's geo status unambiguously, and it emits
+exactly one of these (the admin panel now says the same thing — §8.11.8):
 
 ```bash
 sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
@@ -1713,11 +1733,22 @@ sudo journalctl -u lfr-tunneld -b | grep '\[Geo\]'
 
 | Log line | Meaning |
 |---|---|
-| `[Geo] Anonymous geographic distribution enabled` — with `path`, `provider` and `threshold` | Working. The file opened and the panel is live. `provider` is the vendor derived from the file's metadata and decides which attribution the panel renders; `provider=unknown` means no vendor's credit is shown and you must add one yourself (§8.11.4). |
+| `[Geo] Anonymous geographic distribution enabled` — with `path`, `provider` and `threshold` | Working. The file opened and the panel is live. `provider` is the vendor you declared in `country_db_provider` and decides which attribution the panel renders. |
 | `[Geo] Geo-IP database not found; geographic distribution disabled` — with `path` | The path is set and there is no file there. Typo, wrong directory, or a location the sandbox hides (§8.11.5). |
 | `[Geo] Failed to open geo-IP database; geographic distribution disabled` — with `path` and `error` | The file exists and could not be read: wrong format (a `.BIN` names itself here), truncated download, or permissions. |
+| `[Geo] A geo-IP database is configured and readable but country_db_provider is not set` — with `path` | The file is fine; the vendor is not declared. Set it (§8.11.6). |
 | `[Geo] Both country_db_path and geolite2_db_path are set` — with `using` | Both spellings name a different file. The neutral key won; remove the alias line. |
 | *nothing at all* | Neither `country_db_path` nor `geolite2_db_path` is set. This is the default and is not an error. |
+
+After a `systemctl reload` there is one more line, and it is the one that tells you whether the
+reload landed:
+
+| Reload line | Meaning |
+|---|---|
+| `[Geo] Reload swapped the country database` — with `path` and `provider` | Applied. The panel now credits `provider`. |
+| `[Geo] Reload refused the new country database; keeping the one already in force` — with `reason` | **Not applied.** The previous database is still serving and still credited. `reason` names which key to fix. |
+| `[Geo] Reloaded country database config: no change; the open file was left alone.` | Neither geo key changed, so nothing was reopened. Expected when you reload to apply an `edge_nodes` edit. |
+| `[Geo] Reload turned anonymous geographic distribution off` | `country_db_path` is now empty. Deliberate, and honoured. |
 
 Once enabled, the panel still needs data before it shows rows, and three entirely normal
 conditions delay that:

@@ -1473,6 +1473,16 @@ html[dir='rtl'] th {
   cursor: pointer;
 }
 
+/* The period every figure on Analytics covers, stated on the page (#1981). The same element and
+   the same wording as Portal V2's .analytics-period -- the portals are a live A/B test (#1866),
+   so the window has to read identically in both arms. Not print-hidden: a printed report with no
+   period on it is the artefact this closes. */
+.analytics-period {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 /* Skip link (#1562). Off-screen rather than display:none or visibility:hidden, both of which
    remove an element from the tab order entirely -- a skip link that cannot be focused is worse
    than none, because it looks present in the markup while doing nothing.

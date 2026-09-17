@@ -16,7 +16,7 @@ func TestAnalyticsFloorTreatsZeroAsNoLowerBound(t *testing.T) {
 
 	// A floor of today is the specific wrong answer that shipped, so name it.
 	today := time.Now().UTC().Format("2006-01-02")
-	if got == today {
+	if got == today || got == today+" 00:00:00" {
 		t.Fatalf("days=0 produced today's date (%s) -- that is 'today only', not all time", got)
 	}
 
@@ -35,12 +35,40 @@ func TestAnalyticsFloorTreatsNegativeAsNoLowerBound(t *testing.T) {
 	}
 }
 
-func TestAnalyticsFloorCountsBackFromToday(t *testing.T) {
+// Second-precision since #1981, not day-precision. Rounding down to a date made "Last N days"
+// mean "since midnight N days ago" -- between N and N+1 days of data depending on the hour the
+// page was opened -- and made a sub-day window inexpressible, so the 24h period the Analytics
+// screen now offers could not exist at all.
+func TestAnalyticsFloorCountsBackFromNow(t *testing.T) {
 	for _, days := range []int{1, 7, 14, 30} {
-		want := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
-		if got := analyticsFloor(days); got != want {
-			t.Errorf("analyticsFloor(%d) = %q, want %q", days, got, want)
+		got := analyticsFloor(days)
+		parsed, err := time.Parse("2006-01-02 15:04:05", got)
+		if err != nil {
+			t.Fatalf("analyticsFloor(%d) = %q, which is not a comparable DATETIME: %v", days, got, err)
 		}
+		want := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+		if d := want.Sub(parsed); d > 2*time.Second || d < -2*time.Second {
+			t.Errorf("analyticsFloor(%d) = %q, want ~%q", days, got, want.Format("2006-01-02 15:04:05"))
+		}
+	}
+}
+
+// The DATE columns cannot take the second-precision floor: SQLite compares region_probes.day as
+// a string, so '2026-09-16' >= '2026-09-16 14:00:00' is false and the boundary day's probes
+// would vanish from every report that reads them.
+func TestAnalyticsDayFloorRoundsDownForDateColumns(t *testing.T) {
+	for _, days := range []int{1, 7, 30} {
+		got := analyticsDayFloor(days)
+		if len(got) != len("2006-01-02") {
+			t.Errorf("analyticsDayFloor(%d) = %q, want a bare date -- a DATE column compares as a string", days, got)
+		}
+		if got > analyticsFloor(days) {
+			t.Errorf("analyticsDayFloor(%d) = %q sorts after the datetime floor %q, so it would drop the boundary day",
+				days, got, analyticsFloor(days))
+		}
+	}
+	if analyticsDayFloor(0) >= "1970-01-01" {
+		t.Errorf("all-time day floor %q is not early enough to precede stored data", analyticsDayFloor(0))
 	}
 }
 

@@ -3418,6 +3418,15 @@ input[type='checkbox'] {
   margin: 0;
 }
 
+/* The period every figure on Analytics covers, stated on the page (#1981). Deliberately not
+   inside .page-header, which is no-print: a printed report with no period on it is the artefact
+   this closes. Uses theme tokens rather than a literal colour so it survives every theme. */
+.analytics-period {
+  margin: calc(-1 * var(--spacing-md)) 0 var(--spacing-xl);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 /* The maintenance form column (#1608). Was an inline style={{ maxWidth: 560 }} in two places --
    the only inline styles in a codebase that otherwise has seven, so against the grain rather
    than with it. */

@@ -1198,6 +1198,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// -- a client clamps this rather than trusting it, because a mistyped value
 				// here would otherwise either undo the fix or starve failover fleet-wide.
 				"client_reconnect_seconds": int(s.cfg.ClientReconnectWindow.Seconds()),
+				// The general settings block (#1948). Tuning values go here from now on, so
+				// the next several decisions cost no client release. Kept ALONGSIDE the
+				// top-level client_reconnect_seconds rather than replacing it: clients
+				// shipped before the block read only the old field, and dropping it would
+				// silently return them to their compiled-in default.
+				//
+				// Only non-zero values are sent, so "this gateway has no opinion" stays
+				// expressible and a client falls back to its own default rather than to a
+				// zero it would have to special-case.
+				"client_settings": s.advertisedClientSettings(),
 			})
 			return
 		}

@@ -198,6 +198,14 @@ tunnel_keepalive: "25s"
 # its own region failover. Advertised on /api/version; empty/0 means the client uses its own
 # default (60s). Clients clamp this to 20s-180s (#1946).
 client_reconnect_window: "60s"
+# How often attached clients post /api/tunnel-status. Empty/0 means the client uses its own
+# default (5s). Clients clamp this to 2s-60s.
+#
+# This one is advertised because its cost lands on the GATEWAY, not on the client: a large
+# fleet reporting too often is load only this side can see. Both this and the reconnect window
+# travel in the client_settings block on /api/version (#1948), which is where later tuning
+# values go too -- a client too old to read the block simply keeps its own defaults.
+client_heartbeat_interval: "5s"
 client_platforms: {}
 docker_image: ""
 docker_bypass_url: "https://example.com"

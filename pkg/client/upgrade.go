@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/jedisct1/go-minisign"
+
+	"lfr-tunnel/pkg/config"
 )
 
 var (
@@ -653,6 +655,16 @@ type ServerVersionInfo struct {
 
 	ClientPlatforms map[string]ServerPlatformInfo `json:"client_platforms"`
 
+	// MinVersionServerEnforced is set by a gateway that refuses a too-old client itself
+	// (#1988), rather than relying on the client to refuse itself.
+	//
+	// It is what lets the client stop hard-failing on its own pre-flight check: when the
+	// gateway enforces the floor, it also applies a per-user grace window, and a client that
+	// killed itself first would make that window unreachable for every client new enough to
+	// look. Absent -- an older gateway -- the client keeps its own hard stop, so enforcement
+	// is never weaker than it was before this field existed.
+	MinVersionServerEnforced bool `json:"min_version_server_enforced,omitempty"`
+
 	// ClientReconnectSeconds is how long this gateway would like clients to keep trying to
 	// reattach to it before falling back to region failover (#1946). Absent or zero means the
 	// gateway has no opinion and the client's own default applies. Advisory in both
@@ -680,26 +692,9 @@ func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {
 }
 
 // CompareVersions returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+//
+// The implementation moved to pkg/config (#1988) so the gateway can order versions with the
+// exact same rules the client does; this stays as the name every existing caller uses.
 func CompareVersions(v1, v2 string) int {
-	v1 = strings.TrimPrefix(v1, "v")
-	v2 = strings.TrimPrefix(v2, "v")
-
-	p1 := strings.Split(v1, ".")
-	p2 := strings.Split(v2, ".")
-
-	for i := 0; i < len(p1) || i < len(p2); i++ {
-		var n1, n2 int
-		if i < len(p1) {
-			fmt.Sscanf(p1[i], "%d", &n1) //nolint:errcheck
-		}
-		if i < len(p2) {
-			fmt.Sscanf(p2[i], "%d", &n2) //nolint:errcheck
-		}
-		if n1 < n2 {
-			return -1
-		} else if n1 > n2 {
-			return 1
-		}
-	}
-	return 0
+	return config.CompareVersions(v1, v2)
 }

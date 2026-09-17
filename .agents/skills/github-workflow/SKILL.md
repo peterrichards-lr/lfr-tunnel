@@ -318,7 +318,24 @@ If several could, name the one you mean.
    ```
    If you ever see `pkg/server/ui-dist` in `git status`, something has force-added it — do not commit it. Its filenames are content-hashed, so committed bundles made every pair of concurrent UI branches conflict unresolvably.
 
-4. **golangci-lint**: run it, in Docker, at the version CI pins. It is the one required check
+4. **The `//nolint:errcheck` ratchet, which is AT its ceiling.** `make nolint-ratchet` (and CI's
+   Lint & Format Check) fails if the count rises, so a branch that adds one suppression goes red
+   on a check that has nothing to do with its subject. Two branches hit this on 2026-09-17.
+
+   `errcheck` here runs with **`check-blank: true`**, so `_ = x.Close()` does NOT satisfy it --
+   that is the first thing people reach for and it does not work. Handle the error: log it at
+   debug where the caller genuinely cannot act (`pkg/client/diagnostics_command.go:212` is the
+   pattern), or assert it in a test, where a close that fails usually means the scenario the test
+   stages never happened.
+
+   The ceiling is meant to fall. #2021 handled six errors its extraction inherited and lowered it
+   750 -> 744 in the same PR, which is what the script's own output asks for.
+
+   `goconst` has a related surprise: it attributes a literal's package-wide occurrences to
+   whichever file is NEWEST, so a new file can go red for a string that was already there ninety
+   times (#1655). Use an existing constant or name one.
+
+5. **golangci-lint**: run it, in Docker, at the version CI pins. It is the one required check
    that cannot be run from this machine's toolchain -- `golangci-lint` is not installed -- which
    makes it the likeliest source of a red PR after every local check passed:
 
@@ -445,4 +462,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-09* | *Last Reviewed: 2026-09-09*
+*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*

@@ -17,6 +17,18 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 - **Why it matters here**: plain `go test [pkg]` compiles an unsigned test binary into the default Go temp dir, NOT `/private/tmp`. Many packages' tests open real network listeners/sockets (e.g. `pkg/server`'s tests use `httptest.NewServer` and real WebSocket connections; `cmd/lfr-tunnel/main_test.go`'s `TestMain_ValidationFailure` even re-execs itself into the real client `main()`). An unsigned freshly-built binary, sitting in an arbitrary temp path, that then opens network connections is exactly the pattern SentinelOne (S1) flags as a dropped malicious binary — it does NOT matter whether the package under test is the client, the server, or anything else.
 - **This already happened once**: `server.test`, flagged "Malicious file executed", 2026-07-28 — cost a full local environment reinstall. S1 terminated the session and deleted unrelated tooling (Claude, jenv, python, LDM, Homebrew) as collateral damage.
 - **The only safe way to run tests is `make test`** — it **exports `GOTMPDIR`** as `LFT_TEST_DIR` (default `/private/tmp`, S1-whitelisted), asserts the toolchain really resolved it (`make edr-guard`), and builds and executes there. The `-o` only names the destination; the export is what keeps the binary out of `/var/folders`. This is enforced by a deny rule in `.claude/settings.json` blocking any `Bash(go test*)` invocation outright — do not try to work around it, including by manually exporting `GOTMPDIR`/`LFT_TEST_DIR` and invoking `go test` directly. `make test` sets those variables internally as part of its own build step; they are not a substitute for running it.
+- **`make test` runs the compiled binary directly, so test flags need the `-test.` prefix.** The
+  Makefile builds with `go test -c` and then executes the binary, which is a plain Go test binary
+  and not the `go test` driver -- so `TEST_FLAGS=-run=Foo` dies with `flag provided but not
+  defined: -run` and a usage dump, which reads like a broken Makefile rather than a wrong flag.
+  Use `-test.run`, `-test.v`, `-test.timeout`. Quote the whole assignment so `make`'s expansion
+  does not hand the shell an unquoted `|`:
+
+  ```bash
+  make test PKG=./pkg/server/... "TEST_FLAGS=-test.run='Geo|Reload' -test.v"
+  make test PKG=./pkg/server/... TEST_BUILD_FLAGS=-race     # -race is a BUILD flag, not a test one
+  ```
+
 - **Pre-execution verification**: if you need to confirm where a test binary landed, verify it targets `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Anything running out of `/var/folders/...` or with an arbitrary binary filename means `make test` wasn't actually used.
 - **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
 - **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the `lfr-tunnel-ops` (deploy tooling) binary. **Not** `lfr-tunneld` -- see "Running the server locally" below, that claim was wrong. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
@@ -117,4 +129,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*

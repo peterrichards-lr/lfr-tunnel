@@ -13,6 +13,7 @@ func printUsage() {
 	fmt.Println("  lfr-tunnel-ops <command> [arguments]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  build       Build cross-platform client binaries")
+	fmt.Println("  preflight   Check a release can be cut (credentials, tools) before starting")
 	fmt.Println("  sign        Sign client binaries for macOS, Windows, and Linux")
 	fmt.Println("  deploy      Deploy server changes to the VPS")
 	fmt.Println("  deploy-clients Deploy signed client binaries to the VPS")
@@ -38,6 +39,8 @@ func main() {
 	args := os.Args[2:]
 
 	switch command {
+	case "preflight":
+		ops.PreflightCommand(args)
 	case "build":
 		ops.BuildCommand(args)
 	case "sign":

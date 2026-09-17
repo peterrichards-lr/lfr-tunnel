@@ -3004,7 +3004,7 @@ function geoBucketLabel(bucket) {
  */
 const GEO_ATTRIBUTION_LINK = {
   maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
-  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
   ip2location: {
     href: 'https://lite.ip2location.com',
     text: 'IP geolocation',

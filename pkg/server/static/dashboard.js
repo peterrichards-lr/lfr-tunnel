@@ -2891,6 +2891,15 @@ function showTab(tabName, skipHistory = false) {
     // branch instead of correcting the name, which is how it stayed for seven weeks.
     loadServerConfig();
     loadIntegrationTestTarget();
+    // The third loader in this section, and it had no call site at all (#1995). Same class
+    // as the two named above and the three in #1785: the markup ships in #tab-system and the
+    // loader that fills it was wired to a branch that never runs -- here, to no branch.
+    //
+    // So the whole editable settings form was blank on this route: the default domain, the
+    // vanity-hook controls, and #1882's six email alert toggles, which is why "three of the
+    // six alerts had no control" was fixed in the endpoint and still did not reach V1. The
+    // geo vendor dropdown (#1995) is simply the first one a test looked at.
+    loadSystemSettings();
   }
   if (tabName === 'tokens') loadTokens();
   if (tabName === 'tunnels') loadTunnels();

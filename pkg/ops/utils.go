@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -77,6 +78,19 @@ func RunCommandCaptureOutput(name string, args ...string) (string, error) {
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// RunCommandQuiet executes a command and reports only pass/fail, printing NOTHING -- not the
+// argv, not stdout, not stderr.
+//
+// For probes whose arguments carry a secret. RunCommand redacts argv but still echoes it, and
+// RunCommandCaptureOutput echoes it unredacted, so neither is safe for `openssl ... -passin
+// pass:<value>`. The caller renders its own message from the error.
+func RunCommandQuiet(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run()
 }
 
 // CheckFatal exits the program if err is not nil.

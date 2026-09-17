@@ -1,4 +1,15 @@
 # Central control-plane configuration -- COMPLETE key reference.
+# UNKNOWN KEYS ARE REJECTED. A key this gateway does not understand stops it starting, with the
+# offending key named -- a mistyped key that is silently skipped is indistinguishable from one
+# that took effect, which is how a feature stays off with nothing to explain why.
+#
+# Rolling a gateway BACK to an older build whose config contains a newer key is the one case
+# where that bites. Set LFT_ALLOW_UNKNOWN_CONFIG_KEYS=true to start anyway -- deliberately, and
+# visible in the log.
+#
+# The CLIENT config is deliberately lenient and stays that way: people carry retired keys in
+# ~/.lfr-tunnel/config.yaml from old examples, and a client that refuses to start cannot be
+# fixed remotely.
 #
 # Every top-level key `pkg/config.ServerConfig` accepts appears here exactly once, with a
 # placeholder value. A test asserts that (`TestExampleConfigCoversEveryField`), so adding a

@@ -469,7 +469,10 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				// delivery audit entry is written here because the audit log is here --
 				// an edge has no database, so an ack it could not relay would be an ack
 				// that never happened.
-				s.recordForwardedDiagnosticsAck(nodeID, inbound.DiagRequestID)
+				// QUEUED, not written here: this read pump is not counted by bgWG, and
+				// the delivery entry reaches the database (#1833). The tracked worker in
+				// watchDiagnosticsExpiry does the write.
+				s.queueForwardedDiagnosticsAck(nodeID, inbound.DiagRequestID)
 			}
 		}
 	}()

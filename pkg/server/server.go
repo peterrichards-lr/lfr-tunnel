@@ -415,6 +415,13 @@ type Server struct {
 	// would mean delivering one whose consent basis predates it -- see diagnosticsCommandTTL.
 	diagCommands   map[string][]*diagnosticsCommand
 	diagCommandsMu sync.Mutex
+	// diagAcks carries acknowledgements off the edge control channel's read pump (#1991).
+	//
+	// A handoff rather than a direct call, because writing the delivery audit entry reaches
+	// the database and that read pump is not counted by bgWG -- so Stop could close the
+	// database underneath it (#1833). The metrics frame arriving on the same pump already
+	// takes this shape, queueing rather than writing.
+	diagAcks       chan diagnosticsAck
 	edgeLeasesMu   sync.RWMutex
 	remoteRoutes   map[string]string // fullHost -> targetURL for fast cross-node proxying (issue #1249)
 	remoteRoutesMu sync.RWMutex
@@ -599,6 +606,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		caCert:             caCert,
 		caKey:              caKey,
 		edgeLeases:         make(map[string][]EdgeLease),
+		diagAcks:           make(chan diagnosticsAck, diagnosticsAckBuffer),
 		remoteRoutes:       make(map[string]string),
 		dns:                newDNSPublisher(cfg.DNSHook, cfg.DNSWithdrawGrace),
 		edgeHealth:         make(map[string]EdgeHealthStatus),

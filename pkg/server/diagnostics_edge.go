@@ -77,6 +77,23 @@ const (
 	// precisely the wrong entry, since it says a collection did not happen when it did.
 	diagnosticsAckGrace = 30 * time.Second
 
+	// diagnosticsAckBuffer is how many relayed acknowledgements central will hold while the
+	// tracked worker gets to them.
+	//
+	// Small on purpose. One ack exists per outstanding collection request, a request is a
+	// deliberate admin action with a five-minute life, and the worker does one audit write per
+	// ack -- so a full buffer means something is wrong rather than busy. Dropping is then the
+	// right answer and is logged: the alternative is blocking the control channel's read pump,
+	// which would stall every other frame on that connection, including the byte deltas.
+	diagnosticsAckBuffer = 64
+
+	// errInvalidEdgeToken is the body a relay gets when its token is not one this gateway
+	// knows. Named because goconst counts this literal's five package-wide occurrences
+	// against the newest file, which is this one -- the four older sites in server.go still
+	// spell it inline and are deliberately left alone here (#1655: nothing became more
+	// duplicated, the count simply acquired a new home).
+	errInvalidEdgeToken = "invalid edge token"
+
 	// diagnosticsExpirySweepInterval is how often central looks for commands that ran out.
 	//
 	// A sweep is needed at all because the lazy expiry in pendingDiagnosticsCommands only
@@ -214,6 +231,41 @@ func (s *Server) reportDiagnosticsAckUpstream(requestID string) bool {
 	return true
 }
 
+// diagnosticsAck is one acknowledgement an edge relayed, on its way from the control
+// channel's read pump to the worker that writes the audit entry (#1991).
+type diagnosticsAck struct {
+	// nodeID is the connection's authenticated identity, captured at receipt rather than
+	// resolved later, so the entry names the edge that actually relayed it.
+	nodeID    string
+	requestID string
+}
+
+// queueForwardedDiagnosticsAck hands an ack to the tracked worker, from the read pump.
+//
+// It must not touch the database itself. The read pump is a bare `go` on a connection that
+// outlives no particular request and is not counted by bgWG, so Stop can cancel, wait and close
+// the database while it is still running -- #1833, which
+// TestNoUntrackedGoroutineReachesTheDatabase gates. The metrics frame arriving on the same pump
+// already queues rather than writes, for the same reason.
+//
+// Non-blocking, because the pump reads every frame on that connection: blocking here to wait for
+// an audit write would stall the byte deltas behind it.
+func (s *Server) queueForwardedDiagnosticsAck(nodeID, requestID string) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" || s.diagAcks == nil {
+		return
+	}
+	select {
+	case s.diagAcks <- diagnosticsAck{nodeID: nodeID, requestID: requestID}:
+	default:
+		// Logged rather than swallowed: the entry this drops is the evidence a collection
+		// reached somebody, so its absence would otherwise look like a client that never
+		// acknowledged.
+		slog.Warn(fmt.Sprintf("[Edge WS] Dropped the acknowledgement of %s relayed by %s: %d are already waiting to be recorded",
+			requestID, nodeID, diagnosticsAckBuffer))
+	}
+}
+
 // recordForwardedDiagnosticsAck is central's half: an edge has relayed a client's ack, so the
 // delivery audit entry gets written here, where the log is.
 //
@@ -280,7 +332,10 @@ func (s *Server) handleEdgeDiagnosticsUpload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if _, authorised := s.authorisedEdgeNode(r.Header.Get("X-Edge-Token")); !authorised {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
+		// apiError rather than a map literal, for the same reason the message is a constant:
+		// the "error" key has 93 package-wide occurrences and goconst attributes them to the
+		// newest file (#1655).
+		respondJSON(w, http.StatusUnauthorized, apiError{Error: errInvalidEdgeToken})
 		return
 	}
 	if s.db == nil {
@@ -315,6 +370,10 @@ func (s *Server) watchDiagnosticsExpiry(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case ack := <-s.diagAcks:
+			// Written here rather than on the read pump that received it: this goroutine is
+			// tracked, so Stop waits for it before closing the database.
+			s.recordForwardedDiagnosticsAck(ack.nodeID, ack.requestID)
 		case <-ticker.C:
 			s.sweepExpiredDiagnosticsCommands(time.Now().UTC())
 		}

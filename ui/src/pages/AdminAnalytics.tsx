@@ -67,7 +67,7 @@ const countryName = (code: string, locale: string) => {
 // the sentence around it, and its {0} is where the link goes.
 const GEO_ATTRIBUTION_LINK: Record<string, { href: string; text: string }> = {
   maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
-  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
   ip2location: { href: 'https://lite.ip2location.com', text: 'IP geolocation' },
   // `unknown` is absent on purpose rather than mapped to a vendor: there is nobody to link
   // to, and naming a vendor anyway would be a false provenance claim AND would leave the real
@@ -97,6 +97,18 @@ function geoOfflineMessage(
         'geo_path_not_found',
         'No file exists at the geo-IP database path configured in country_db_path, so geographic distribution is off. Check it for a typo: {0}',
       ).replace('{0}', path);
+    case 'provider_not_declared':
+      return t(
+        'geo_provider_not_declared',
+        'A geo-IP database is configured but country_db_provider does not say who published it, so geographic distribution is off. Every supported vendor requires a different visible credit and the file cannot be trusted to identify itself, so the vendor has to be named: set country_db_provider to maxmind, dbip or ip2location.',
+      );
+    case 'provider_unknown': {
+      const msg = t(
+        'geo_provider_unknown',
+        'country_db_provider names a vendor this gateway does not recognise, so geographic distribution is off. It must be one of maxmind, dbip or ip2location.',
+      );
+      return locations.detail ? `${msg} (${locations.detail})` : msg;
+    }
     case 'unreadable': {
       const msg = t(
         'geo_unreadable',
@@ -1116,7 +1128,7 @@ export default function AdminAnalytics() {
                       : provider === 'dbip'
                         ? t(
                             'geo_attribution_dbip',
-                            'IP geolocation data from {0}, used under the Creative Commons Attribution 4.0 International licence.',
+                            '{0}, used under the Creative Commons Attribution 4.0 International licence.',
                           )
                         : provider === 'ip2location'
                           ? t(

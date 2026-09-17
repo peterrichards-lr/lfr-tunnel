@@ -14,7 +14,7 @@ import (
 // and it must be reported as "unavailable", never as a startup failure.
 func TestOpenResolverWithoutADatabaseIsUnavailable(t *testing.T) {
 	t.Run("empty path", func(t *testing.T) {
-		res, err := OpenResolver("")
+		res, err := OpenResolver("", ProviderMaxMind)
 		if !errors.Is(err, ErrUnavailable) {
 			t.Errorf("got err %v, want ErrUnavailable", err)
 		}
@@ -25,7 +25,7 @@ func TestOpenResolverWithoutADatabaseIsUnavailable(t *testing.T) {
 
 	t.Run("missing file", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "GeoLite2-Country.mmdb")
-		res, err := OpenResolver(path)
+		res, err := OpenResolver(path, ProviderMaxMind)
 		if !errors.Is(err, ErrUnavailable) {
 			t.Errorf("got err %v, want ErrUnavailable", err)
 		}
@@ -44,12 +44,12 @@ func TestOpenResolverWithoutADatabaseIsUnavailable(t *testing.T) {
 // occurred": every failure mode in OpenResolver returns an error, so that alone is
 // satisfied by any of the wrong causes.
 func TestOpenResolverSeparatesAnUnsetPathFromAMistypedOne(t *testing.T) {
-	if _, unset := OpenResolver(""); errors.Is(unset, ErrNotFound) {
+	if _, unset := OpenResolver("", ProviderMaxMind); errors.Is(unset, ErrNotFound) {
 		t.Errorf("an unset path reported ErrNotFound (%v) -- nothing was configured to be missing", unset)
 	}
 
 	typo := filepath.Join(t.TempDir(), "GeoLite2-Cuntry.mmdb")
-	_, err := OpenResolver(typo)
+	_, err := OpenResolver(typo, ProviderMaxMind)
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("a configured path with no file at it: got %v, want ErrNotFound", err)
 	}
@@ -74,7 +74,7 @@ func TestOpenResolverWithACorruptDatabaseFails(t *testing.T) {
 	if err := os.WriteFile(path, []byte("this is not a MaxMind database"), 0o600); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
-	res, err := OpenResolver(path)
+	res, err := OpenResolver(path, ProviderMaxMind)
 	if err == nil {
 		t.Fatalf("got no error for a corrupt database")
 	}

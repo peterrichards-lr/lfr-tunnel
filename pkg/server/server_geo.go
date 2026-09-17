@@ -47,6 +47,16 @@ const (
 	// geoReasonUnreadable is a file that exists and cannot be used: the wrong format (an
 	// IP2Location .BIN says so in Detail), a truncated download, or permissions.
 	geoReasonUnreadable geoReason = "unreadable"
+	// geoReasonProviderNotDeclared is a database that is present and readable, with no
+	// country_db_provider naming who published it (#1964).
+	//
+	// A distinct reason rather than folding into not_configured, because the operator HAS
+	// configured a database and telling them they have not would send them to check the
+	// path -- the same mistake #1938 fixed for the other two situations.
+	geoReasonProviderNotDeclared geoReason = "provider_not_declared"
+	// geoReasonProviderUnknown is a declared vendor this build does not recognise, i.e. a
+	// typo. Separated from the above so the message can quote what was actually set.
+	geoReasonProviderUnknown geoReason = "provider_unknown"
 )
 
 // geoDiagnosis is why the feature is off, kept for the admin panel.
@@ -74,7 +84,7 @@ type geoDiagnosis struct {
 // that function for why), but the loser is not dropped in silence -- an operator who
 // migrated the key and left the old line behind would otherwise have no way to learn which
 // file is open except by reading source (#1921).
-func newGeoAggregator(path string, bothPathsSet bool, database *db.DB) (*geo.Aggregator, geoDiagnosis) {
+func newGeoAggregator(path, declaredProvider string, bothPathsSet bool, database *db.DB) (*geo.Aggregator, geoDiagnosis) {
 	if database == nil {
 		// Unreachable in production -- NewServer has a database open before it gets here --
 		// but tests construct servers directly, and "no store" is genuinely "off", not an
@@ -85,7 +95,15 @@ func newGeoAggregator(path string, bothPathsSet bool, database *db.DB) (*geo.Agg
 		slog.Warn("[Geo] Both country_db_path and geolite2_db_path are set; the neutral key wins "+
 			"and the alias is ignored. Remove geolite2_db_path.", "using", path)
 	}
-	resolver, err := geo.OpenResolver(path)
+	// Parsed now, ACTED ON after the file checks below (#1964).
+	//
+	// Order matters to the operator: an unset or mistyped path is a more specific problem than
+	// a missing vendor, and reporting the vendor first would send someone who typed the path
+	// wrongly off to set a second key that will not help. The existing #1938 reasons therefore
+	// keep precedence, and the vendor gate applies to a database that is otherwise fine.
+	declared, provErr := geo.ParseProvider(declaredProvider)
+
+	resolver, err := geo.OpenResolver(path, declared)
 	if err != nil {
 		switch {
 		case errors.Is(err, geo.ErrNotFound):
@@ -101,6 +119,36 @@ func newGeoAggregator(path string, bothPathsSet bool, database *db.DB) (*geo.Agg
 		// err carries the .BIN-vs-.mmdb diagnosis from #1921, which is the single most
 		// useful sentence an operator in this state can be shown.
 		return nil, geoDiagnosis{Reason: geoReasonUnreadable, Path: path, Detail: err.Error()}
+	}
+
+	// The database is present and readable. Now the vendor, which is declared rather than
+	// derived because deriving it does not work: an IP2Location MMDB reports MaxMind's own
+	// database_type, description, languages and record schema, so derivation credited MaxMind
+	// for IP2Location's data and left IP2Location's required acknowledgment unshown (#1964).
+	//
+	// Every supported vendor's licence obliges a DIFFERENT visible credit, so a guess here is a
+	// licence breach rather than a cosmetic error. Off is the only honest alternative.
+	if provErr != nil {
+		if cerr := resolver.Close(); cerr != nil {
+			slog.Warn("[Geo] Failed to close the geo-IP database after refusing it", "error", cerr)
+		}
+		switch {
+		case errors.Is(provErr, geo.ErrProviderNotDeclared):
+			slog.Warn("[Geo] A geo-IP database is configured and readable but country_db_provider "+
+				"is not set; geographic distribution is disabled. Each supported vendor's licence "+
+				"requires a different visible credit and the file cannot be trusted to say which "+
+				"it is.", "path", path)
+			return nil, geoDiagnosis{Reason: geoReasonProviderNotDeclared, Path: path}
+		default:
+			slog.Warn("[Geo] country_db_provider names a vendor this build does not know; "+
+				"geographic distribution is disabled.",
+				"path", path, "country_db_provider", declaredProvider, "error", provErr)
+			return nil, geoDiagnosis{
+				Reason: geoReasonProviderUnknown,
+				Path:   path,
+				Detail: provErr.Error(),
+			}
+		}
 	}
 	// The provider is logged because it decides which attribution the panel renders, and
 	// it is DERIVED from the file rather than configured (#1921). "unknown" here is the

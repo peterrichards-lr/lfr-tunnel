@@ -53,7 +53,7 @@ func TestABinFileIsDiagnosedRatherThanReportedAsCorrupt(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 
-	_, err := OpenResolver(bin)
+	_, err := OpenResolver(bin, ProviderMaxMind)
 	if err == nil {
 		t.Fatal("a .BIN must not open as an mmdb")
 	}
@@ -70,7 +70,7 @@ func TestAnUnreadableNonBinFileKeepsThePlainError(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("not an mmdb"), 0o600); err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
-	_, err := OpenResolver(bad)
+	_, err := OpenResolver(bad, ProviderMaxMind)
 	if err == nil {
 		t.Fatal("a corrupt mmdb must not open")
 	}
@@ -82,14 +82,14 @@ func TestAnUnreadableNonBinFileKeepsThePlainError(t *testing.T) {
 func TestAnAbsentDatabaseIsStillASupportedConfiguration(t *testing.T) {
 	// PREMISE for the whole feature: shipping no database is the default and must stay a
 	// clean, non-error state whatever providers are supported.
-	if _, err := OpenResolver(""); err != ErrUnavailable {
+	if _, err := OpenResolver("", ProviderMaxMind); err != ErrUnavailable {
 		t.Errorf("an empty path must report ErrUnavailable, got %v", err)
 	}
 	// A configured-but-missing file stays inside that same non-error state -- errors.Is
 	// rather than == because it now also carries WHICH path was missing (#1938). The
 	// equality above is kept for the unset case on purpose: an unset path has nothing to
 	// add, and bare ErrUnavailable is exactly "the operator configured nothing".
-	if _, err := OpenResolver(filepath.Join(t.TempDir(), "nope.mmdb")); !errors.Is(err, ErrUnavailable) {
+	if _, err := OpenResolver(filepath.Join(t.TempDir(), "nope.mmdb"), ProviderMaxMind); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("a missing file must still match ErrUnavailable, got %v", err)
 	}
 }

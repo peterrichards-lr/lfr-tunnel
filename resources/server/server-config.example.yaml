@@ -214,6 +214,24 @@ proxy_headers: {}
 # Setup, licensing and how to verify it took effect: docs/server/setup_guide.md section 8.11.
 country_db_path: ""
 
+# Who published the file at country_db_path. REQUIRED to turn the feature on: a path without
+# this leaves geographic distribution off, and the panel says which of the two is missing.
+#
+# One of: maxmind | dbip | ip2location
+#
+# Declared rather than derived, because deriving it does not work (#1964). Measured against a
+# real IP2LOCATION-LITE-DB11.MMDB: database_type "GeoLite2-City", description "GeoLite2City
+# database", MaxMind's eight languages, and MaxMind's nested country.iso_code record schema.
+# IP2Location ship a deliberate drop-in clone, so their file is indistinguishable from MaxMind's
+# in every observable property -- and deriving the vendor credited MaxMind for IP2Location's
+# data, leaving IP2Location's own required acknowledgment unshown.
+#
+# Each vendor's licence obliges a DIFFERENT visible credit, so a wrong guess is a licence breach
+# rather than a cosmetic error. Naming it makes the operator the author of the claim. The gateway
+# warns when this disagrees with the file's own metadata -- which catches a typo, but cannot tell
+# which of the two is right and does not try.
+country_db_provider: ""
+
 # Deprecated spelling of country_db_path, still honoured so no running deployment breaks
 # (#1921). It named MaxMind in a setting that is really just "where the country database
 # lives", and three vendors now work. If both are set, country_db_path wins and the gateway

@@ -29,7 +29,6 @@ prune_interval: 1m
 magic_link_expiry: 1m
 invite_link_expiry: 5m
 verification_link_expiry: 5m
-session_expiry: 5m
 pat_retention_days: 30
 
 docker_image: "peterjrichards/lfr-tunnel:latest"

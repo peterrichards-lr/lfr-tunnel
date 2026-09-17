@@ -39,7 +39,19 @@ type TunnelLease struct {
 	// the period rolls over. Without it, un-throttling would have to guess a number --
 	// and guessing the user's maximum would silently RAISE a tunnel that had asked for
 	// less, so restoring would not be a restore.
-	BaseRateLimit int    `json:"base_rate_limit"`
+	//
+	// json:"-" because ListLeases' snapshot does not carry this field and the admin
+	// portal serialises those snapshots as active_tunnels. Published, it would print 0
+	// for every tunnel -- and zero elsewhere in this struct means "no limit", so the
+	// payload would state the opposite of the truth for any rate-limited lease rather
+	// than merely omitting it (#2006).
+	//
+	// Kept OFF the snapshot rather than added to it: ListLeases returns a copy, and the
+	// last time quota state travelled on that copy it produced #1958 -- LastBytesIn and
+	// LastBytesOut are absent from it precisely so nothing can write a watermark onto a
+	// copy and believe it landed. This is internal enforcement state; the effective
+	// RateLimit the portal already shows is the number an operator acts on.
+	BaseRateLimit int    `json:"-"`
 	ClientIP      string `json:"client_ip"`
 	BasicAuth     string `json:"basic_auth"`
 	// Access control carried on the lease rather than read from the database per request

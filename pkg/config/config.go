@@ -152,7 +152,22 @@ type ServerConfig struct {
 	// not set it keeps working exactly as before.
 	PortalSessionMaxLifetime time.Duration `yaml:"portal_session_max_lifetime"`
 	MinClientVersion         string        `yaml:"min_client_version"`
-	LatestClientVersion      string        `yaml:"latest_client_version"`
+	// MinClientVersionGraceDays is how long a client below min_client_version keeps being
+	// accepted after this gateway first sees it below the floor (#1988). Measured from that
+	// client's own first sight, not from a global effective date, so somebody returning from
+	// leave gets the whole window rather than a deadline that expired while they were away.
+	//
+	// Configured per rollout rather than constant: the first bump wants a generous window
+	// because the fleet still contains clients too old to have been warned at all, while a
+	// later one tightening an already-current fleet does not. Zero means the default (14),
+	// not "no grace" -- reading an unset key as an instant fleet-wide lockout is exactly the
+	// surprise the grace window exists to prevent.
+	MinClientVersionGraceDays int `yaml:"min_client_version_grace_days"`
+	// MinClientVersionWarningDays is how long before the deadline the client starts saying
+	// so in its own output. Clamped to the grace window at read time, so a warning cannot
+	// begin before the window it warns about.
+	MinClientVersionWarningDays int    `yaml:"min_client_version_warning_days"`
+	LatestClientVersion         string `yaml:"latest_client_version"`
 
 	// TunnelKeepAlive is how often the gateway pings each attached tunnel client over the
 	// chisel control channel. Zero means the default in pkg/server (25s).
@@ -558,36 +573,38 @@ const TokenSourceConfigFile = "config file"
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
 	return &ServerConfig{
-		BindAddr:                   ":443",
-		HTTPBindAddr:               ":80",
-		ChiselBindAddr:             ":8081",
-		DefaultMaxReservations:     3,
-		DefaultMaxCustomDomains:    1,
-		DefaultMaxActiveTunnels:    3,
-		SubdomainQuarantineDays:    3,
-		MaxTunnelRateLimit:         100,
-		EdgeShutdownWarningMinutes: 5,
-		EnableUserPortal:           true,
-		EnableOnboarding:           true,
-		PortalSessionDuration:      24 * time.Hour,
-		MinClientVersion:           "v1.0.0",
-		LatestClientVersion:        "",
-		DocumentationURL:           DefaultDocumentationURL,
-		RepositoryURL:              DefaultRepositoryURL,
-		SecureTokenGuideURL:        DefaultSecureTokenGuideURL,
-		DockerHubURL:               DefaultDockerHubURL,
-		StatusPageURL:              DefaultStatusPageURL,
-		PruneInterval:              1 * time.Hour,
-		MagicLinkExpiry:            15 * time.Minute,
-		PATRetentionDays:           30,
-		PolicyConsentGraceDays:     14,
-		PolicyConsentWarningDays:   5,
-		InviteLinkExpiry:           7 * 24 * time.Hour,
-		VerificationLinkExpiry:     24 * time.Hour,
-		DockerImage:                "peterjrichards/lfr-tunnel:latest",
-		DockerBypassURL:            DefaultDockerBypassURL,
-		VisitorTimeout:             5 * time.Minute,
-		EnableWAF:                  true,
+		BindAddr:                    ":443",
+		HTTPBindAddr:                ":80",
+		ChiselBindAddr:              ":8081",
+		DefaultMaxReservations:      3,
+		DefaultMaxCustomDomains:     1,
+		DefaultMaxActiveTunnels:     3,
+		SubdomainQuarantineDays:     3,
+		MaxTunnelRateLimit:          100,
+		EdgeShutdownWarningMinutes:  5,
+		EnableUserPortal:            true,
+		EnableOnboarding:            true,
+		PortalSessionDuration:       24 * time.Hour,
+		MinClientVersion:            "v1.0.0",
+		MinClientVersionGraceDays:   14,
+		MinClientVersionWarningDays: 5,
+		LatestClientVersion:         "",
+		DocumentationURL:            DefaultDocumentationURL,
+		RepositoryURL:               DefaultRepositoryURL,
+		SecureTokenGuideURL:         DefaultSecureTokenGuideURL,
+		DockerHubURL:                DefaultDockerHubURL,
+		StatusPageURL:               DefaultStatusPageURL,
+		PruneInterval:               1 * time.Hour,
+		MagicLinkExpiry:             15 * time.Minute,
+		PATRetentionDays:            30,
+		PolicyConsentGraceDays:      14,
+		PolicyConsentWarningDays:    5,
+		InviteLinkExpiry:            7 * 24 * time.Hour,
+		VerificationLinkExpiry:      24 * time.Hour,
+		DockerImage:                 "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:             DefaultDockerBypassURL,
+		VisitorTimeout:              5 * time.Minute,
+		EnableWAF:                   true,
 		// 24h matches what the ban alert has always told operators, and sits in the range the
 		// comparable tools use for an automated block. Escalation is on by default: a genuine
 		// repeat offender should be held longer, and it is the presence of escalation that
@@ -831,6 +848,16 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_GRACE_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.MinClientVersionGraceDays = days
+		}
+	}
+	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_WARNING_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.MinClientVersionWarningDays = days
+		}
 	}
 	if val := os.Getenv("LFT_LATEST_CLIENT_VERSION"); val != "" {
 		cfg.LatestClientVersion = val

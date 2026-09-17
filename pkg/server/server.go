@@ -119,10 +119,19 @@ type RegisterResponse struct {
 	// Present on a refusal too: the 403 that stops a new tunnel carries the same block, so
 	// the client can say what must be accepted and where, rather than only that it was
 	// rejected.
-	PolicyConsent      *ConsentState `json:"policy_consent,omitempty"`
-	NodeStopsInSeconds int           `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string        `json:"node_stop_time,omitempty"`
-	NodeTimezone       string        `json:"node_timezone,omitempty"`
+	PolicyConsent *ConsentState `json:"policy_consent,omitempty"`
+	// MinVersion carries this client's standing against this gateway's minimum version
+	// (#1988). A separate block from PolicyConsent rather than a field on it: the two
+	// obligations expire independently and are fixed in different places -- one in the
+	// portal, one with `lfr-tunnel -upgrade` -- so folding them together would tell a user
+	// the wrong remedy.
+	//
+	// Present on the refusal too, for the same reason consent is: a client told only that it
+	// was rejected has nothing to act on.
+	MinVersion         *MinVersionState `json:"min_version,omitempty"`
+	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string           `json:"node_stop_time,omitempty"`
+	NodeTimezone       string           `json:"node_timezone,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -1139,33 +1148,39 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			regions, regionsUnavailable := s.advertisedRegions()
 
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"latest_version":           latestClientVer,
-				"min_version":              s.cfg.MinClientVersion,
-				"server_version":           config.Version,
-				"domain_allocation_rule":   s.getDomainAllocationRule(),
-				"documentation_url":        s.cfg.DocumentationURL,
-				"repository_url":           s.cfg.RepositoryURL,
-				"secure_token_guide_url":   s.cfg.SecureTokenGuideURL,
-				"docker_hub_url":           s.cfg.DockerHubURL,
-				"status_page_url":          s.cfg.StatusPageURL,
-				"privacy_policy_url":       privacyURL,
-				"cookie_policy_url":        cookieURL,
-				"maintenance_mode":         maintStr,
-				"enforce_policy_consent":   consentStr,
-				"docker_image":             dockerImg,
-				"docker_bypass_url":        s.cfg.DockerBypassURL,
-				"client_platforms":         effectivePlatforms,
-				"regions":                  regions,
-				"regions_unavailable":      regionsUnavailable,
-				"disable_client_downloads": s.cfg.DisableClientDownloads,
-				"disable_brew":             s.cfg.DisableBrew,
-				"disable_scoop":            s.cfg.DisableScoop,
-				"start_time":               s.startTime.Format(time.RFC3339),
-				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
-				"force_mfa":                s.cfg.ForceMFA,
-				"enable_onboarding":        s.cfg.EnableOnboarding,
-				"owner_email":              s.cfg.Owner.UserID,
-				"supported_domains":        s.tunnelDomains(),
+				"latest_version": latestClientVer,
+				"min_version":    s.cfg.MinClientVersion,
+				// Whether THIS gateway refuses a too-old client itself, rather than relying on
+				// the client to refuse itself (#1988). A client that sees this defers the
+				// decision to registration, where a per-user grace window applies; a client
+				// talking to a gateway that predates this sees nothing and keeps its own hard
+				// stop, so enforcement is never weaker than it was.
+				"min_version_server_enforced": true,
+				"server_version":              config.Version,
+				"domain_allocation_rule":      s.getDomainAllocationRule(),
+				"documentation_url":           s.cfg.DocumentationURL,
+				"repository_url":              s.cfg.RepositoryURL,
+				"secure_token_guide_url":      s.cfg.SecureTokenGuideURL,
+				"docker_hub_url":              s.cfg.DockerHubURL,
+				"status_page_url":             s.cfg.StatusPageURL,
+				"privacy_policy_url":          privacyURL,
+				"cookie_policy_url":           cookieURL,
+				"maintenance_mode":            maintStr,
+				"enforce_policy_consent":      consentStr,
+				"docker_image":                dockerImg,
+				"docker_bypass_url":           s.cfg.DockerBypassURL,
+				"client_platforms":            effectivePlatforms,
+				"regions":                     regions,
+				"regions_unavailable":         regionsUnavailable,
+				"disable_client_downloads":    s.cfg.DisableClientDownloads,
+				"disable_brew":                s.cfg.DisableBrew,
+				"disable_scoop":               s.cfg.DisableScoop,
+				"start_time":                  s.startTime.Format(time.RFC3339),
+				"uptime_seconds":              int(time.Since(s.startTime).Seconds()),
+				"force_mfa":                   s.cfg.ForceMFA,
+				"enable_onboarding":           s.cfg.EnableOnboarding,
+				"owner_email":                 s.cfg.Owner.UserID,
+				"supported_domains":           s.tunnelDomains(),
 				// How long a client should keep trying to reattach to this gateway before
 				// handing control back to its own region failover (#1946). Advertised so the
 				// number can be corrected without a client release; omitted when unset, in
@@ -1713,6 +1728,27 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The minimum client version, enforced HERE rather than only advertised (#1988).
+	//
+	// The client has checked itself against /api/version since the floor existed, and that
+	// reaches exactly the clients new enough to contain the check -- never the ones the floor
+	// exists for. This is the half that does not depend on the client's goodwill.
+	//
+	// Same placement and the same reasoning as the consent gate above: on NEW tunnel
+	// establishment and nowhere else. An established tunnel keeps running, because no tunnel
+	// survives a restart and refusing the next one enforces the floor just as completely
+	// without ending a live demo mid-sentence.
+	minVersion := s.minVersionState(userRec, req.ClientVersion, true)
+	if minVersion.Blocking() {
+		m := minVersion
+		s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{
+			Status:     "error",
+			Error:      minVersionRefusalMessage(minVersion),
+			MinVersion: &m,
+		})
+		return
+	}
+
 	// Determine active domains to register dynamically based on rules and request Host
 	activeDomains := topRankedDomain(s.getActiveDomainsForRequest(r, userRec))
 
@@ -2128,6 +2164,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// stay quiet, and sending the block unconditionally means a user who accepted between
 	// two tunnel starts stops being warned without needing a special "cleared" signal.
 	consentForResp := consent
+	minVersionForResp := minVersion
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:             "success",
 		SessionToken:       sessionToken,
@@ -2139,6 +2176,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		ThemePreference:    themePref,
 		ServerVersion:      config.Version,
 		PolicyConsent:      &consentForResp,
+		MinVersion:         &minVersionForResp,
 	})
 }
 
@@ -6394,12 +6432,15 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 			// consent needs to be told what to accept and where, not merely that it was
 			// rejected.
 			PolicyConsent *ConsentState `json:"policy_consent"`
+			// The same for a version refusal (#1988): without this the client would be told
+			// only "403", and would report it as the reservation/quota problem it is not.
+			MinVersion *MinVersionState `json:"min_version"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errResp) //nolint:errcheck
 		if errResp.Error == "" {
 			errResp.Error = fmt.Sprintf("control plane rejected request with status %d", resp.StatusCode)
 		}
-		s.respondRegisterResponse(w, resp.StatusCode, r, RegisterResponse{Status: "error", Error: errResp.Error, PolicyConsent: errResp.PolicyConsent})
+		s.respondRegisterResponse(w, resp.StatusCode, r, RegisterResponse{Status: "error", Error: errResp.Error, PolicyConsent: errResp.PolicyConsent, MinVersion: errResp.MinVersion})
 		return
 	}
 
@@ -6419,6 +6460,9 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		// PolicyConsent is this user's consent standing, computed by the control plane
 		// (#1707). Relayed to the client unchanged.
 		PolicyConsent *ConsentState `json:"policy_consent"`
+		// MinVersion is this client's standing against the version floor, also computed by
+		// the control plane (#1988) and relayed unchanged.
+		MinVersion *MinVersionState `json:"min_version"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&valResp); err != nil {
 		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "invalid response from control plane"})
@@ -6453,6 +6497,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		Warning:         warning,
 		ServerVersion:   config.Version,
 		PolicyConsent:   valResp.PolicyConsent,
+		MinVersion:      valResp.MinVersion,
 	})
 }
 
@@ -6502,6 +6547,20 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"error":          policyConsentRefusalMessage(edgeConsent),
 			"policy_consent": edgeConsent,
+		})
+		return
+	}
+
+	// The same version floor as the direct path (#1988), duplicated here for the same reason
+	// consent is: a client registering through an edge node never executes handleRegister's
+	// body on the control plane, and the edge itself holds no database to compute a per-user
+	// window with. Enforcing only on the direct path would leave every edge region -- which is
+	// most of the fleet -- accepting clients the floor is meant to refuse.
+	edgeMinVersion := s.minVersionState(userRec, edgeReq.ClientVersion, true)
+	if edgeMinVersion.Blocking() {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"error":       minVersionRefusalMessage(edgeMinVersion),
+			"min_version": edgeMinVersion,
 		})
 		return
 	}
@@ -6790,6 +6849,10 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		// its own consent deadline. An older control plane omits it, which decodes as nil
 		// and simply means "no warning to relay".
 		"policy_consent": edgeConsent,
+		// The same, for the version floor (#1988) -- including during the warning window,
+		// which is the only way a client on an edge ever hears about the deadline before it
+		// bites.
+		"min_version": edgeMinVersion,
 	})
 }
 

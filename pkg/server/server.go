@@ -2048,21 +2048,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Determine effective rate limit
-	effectiveLimit := req.RateLimit
-	if userRec != nil && userRec.RateLimit > 0 {
-		if effectiveLimit <= 0 || effectiveLimit > userRec.RateLimit {
-			effectiveLimit = userRec.RateLimit
-		}
-	}
-
-	if s.cfg.MaxTunnelRateLimit > 0 {
-		if effectiveLimit <= 0 || effectiveLimit > s.cfg.MaxTunnelRateLimit {
-			effectiveLimit = s.cfg.MaxTunnelRateLimit
-		}
-	} else if effectiveLimit <= 0 {
-		effectiveLimit = 0
-	}
+	effectiveLimit := s.effectiveTunnelRateLimit(req.RateLimit, userRec)
 
 	clientIP := s.clientIP(r)
 	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
@@ -6773,19 +6759,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	effectiveLimit := edgeReq.RateLimit
-	if userRec != nil && userRec.RateLimit > 0 {
-		if effectiveLimit <= 0 || effectiveLimit > userRec.RateLimit {
-			effectiveLimit = userRec.RateLimit
-		}
-	}
-	if s.cfg.MaxTunnelRateLimit > 0 {
-		if effectiveLimit <= 0 || effectiveLimit > s.cfg.MaxTunnelRateLimit {
-			effectiveLimit = s.cfg.MaxTunnelRateLimit
-		}
-	} else if effectiveLimit <= 0 {
-		effectiveLimit = 0
-	}
+	effectiveLimit := s.effectiveTunnelRateLimit(edgeReq.RateLimit, userRec)
 
 	if (edgeReq.ClientVersion != "" || edgeReq.ClientOS != "") && userRec != nil {
 		changed := false

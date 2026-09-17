@@ -314,6 +314,11 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				delete(s.edgeClients, nodeID)
 				delete(s.edgeVersions, nodeID)
 				delete(s.edgeIPs, nodeID)
+				// Drop the reporting record with the connection (#1980), and only under the
+				// same guard: a node that legitimately went away -- a scheduled power-off --
+				// would otherwise keep its last frame time and read as "stalled" on its next
+				// connect. A signal that cries wolf at every power window gets muted.
+				s.edgeMetricsSeen.Forget(nodeID)
 			}
 			s.edgeClientsMu.Unlock()
 
@@ -403,9 +408,15 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				slog.Info(fmt.Sprintf("[Edge WS] Ignoring an unparseable frame from %s: %v", nodeID, err))
 				continue
 			}
-			if inbound.Type == "edge_metrics" {
+			if inbound.Type == edgeMetricsFrameType {
 				// nodeID is this connection's authenticated identity, not anything the
 				// payload claims, so an edge cannot file its traffic under another node.
+				//
+				// Stamped BEFORE queueEdgeMetrics, which returns early on an empty batch:
+				// the empty frame IS the liveness signal (#1980), so recording delivery
+				// inside the queueing path would drop exactly the frames that prove an idle
+				// edge is still alive.
+				s.edgeMetricsSeen.Note(nodeID, len(inbound.Metrics), time.Now())
 				s.queueEdgeMetrics(nodeID, inbound.Metrics)
 			}
 		}

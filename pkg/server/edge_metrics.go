@@ -68,6 +68,11 @@ import (
 // more machinery than a 30-second exposure on an ungraceful stop justifies.
 const defaultEdgeMetricsInterval = 30 * time.Second
 
+// edgeMetricsFrameType is the control-channel frame an edge reports bandwidth on. Named once so
+// the sender, the heartbeat and the control plane's receiver cannot drift apart -- a typo in one
+// of them would be a silent loss of every measurement from that node.
+const edgeMetricsFrameType = "edge_metrics"
+
 // edgeMetricsMaxPerFrame chunks a report so one frame stays far below edgeControlReadLimit.
 // At roughly 250 bytes of JSON per delta this is ~25 KB against a 128 KB limit; exceeding
 // the limit would close the control channel, which is exactly what telemetry must not do.
@@ -183,7 +188,18 @@ func (r *edgeMetricsReporter) Flush(conn controlWriter) {
 	if dropped > 0 {
 		slog.Warn(fmt.Sprintf("[Edge Metrics] Discarded %d byte deltas that could not be reported before the queue filled; that traffic will not appear in analytics", dropped))
 	}
+	// An empty frame is still sent -- the heartbeat (#1980).
+	//
+	// Returning here meant an idle edge sent NOTHING, so the control plane could not tell a
+	// quiet node from one whose reporting had died. Any staleness signal built on that
+	// ambiguity would flag every quiet edge, so it would have been switched off.
+	//
+	// The frame is a few bytes once per interval per node and it makes silence mean exactly
+	// one thing.
 	if len(batch) == 0 {
+		if err := conn.WriteJSON(ControlMessage{Type: edgeMetricsFrameType}); err != nil {
+			slog.Info(fmt.Sprintf("[Edge Metrics] Failed to send the empty reporting heartbeat: %v", err))
+		}
 		return
 	}
 
@@ -192,7 +208,7 @@ func (r *edgeMetricsReporter) Flush(conn controlWriter) {
 		if end > len(batch) {
 			end = len(batch)
 		}
-		msg := ControlMessage{Type: "edge_metrics", Metrics: batch[i:end]}
+		msg := ControlMessage{Type: edgeMetricsFrameType, Metrics: batch[i:end]}
 		if err := conn.WriteJSON(msg); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Metrics] Failed to report %d byte deltas, keeping them for the next attempt: %v", len(batch)-i, err))
 			r.requeue(batch[i:])

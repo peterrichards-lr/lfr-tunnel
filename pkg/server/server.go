@@ -176,6 +176,13 @@ type EdgeHealthStatus struct {
 	ResolvedIPv4 string `json:"resolved_ipv4,omitempty"`
 	ResolvedIPv6 string `json:"resolved_ipv6,omitempty"`
 	Version      string `json:"version,omitempty"`
+	// MetricsLastReportAt is when this node last delivered a bandwidth frame, empty
+	// heartbeats included, and MetricsStalled says it has been too long (#1980). Reachability
+	// alone could not distinguish an edge that had stopped reporting from a quiet one, which
+	// is why #1958 needed live archaeology across five boxes to characterise.
+	MetricsLastReportAt int64  `json:"metrics_last_report_at,omitempty"`
+	MetricsStalled      bool   `json:"metrics_stalled,omitempty"`
+	MetricsNote         string `json:"metrics_note,omitempty"`
 	// OnlineSince is the unix timestamp of when this node's status last
 	// transitioned to "Online" (0 when not currently online), so the portal
 	// can show uptime without the client needing its own persisted history.
@@ -361,8 +368,11 @@ type Server struct {
 	wsMutex            sync.RWMutex
 	edgeClients        map[string]*safeConn
 	edgeVersions       map[string]string // node_id -> version
-	edgeIPs            map[string]string // node_id -> public IP
-	edgeClientsMu      sync.RWMutex
+	// edgeMetricsSeen records when each node last delivered a bandwidth frame, so the portal
+	// can tell a quiet edge from one whose reporting has stopped (#1980).
+	edgeMetricsSeen *edgeMetricsTracker
+	edgeIPs         map[string]string // node_id -> public IP
+	edgeClientsMu   sync.RWMutex
 	// edgePingSentAt tracks when the control plane's own keepalive Ping was last sent to
 	// each WS-connected edge, so the matching Pong's arrival can be timed for RTT (see
 	// #976 -- edges are configured with no `url` in the current architecture, so the
@@ -550,6 +560,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		violations:         make(map[string]*ipViolations),
 		metrics:            NewMetricsCollector(database, cfg, registry),
 		edgeMetrics:        newEdgeMetricsReporterFor(cfg),
+		edgeMetricsSeen:    newEdgeMetricsTracker(),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
@@ -730,6 +741,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// cancels before it waits. Untracked, a tick landing on Stop was still inside SQLite when
 	// the handle closed (#1833).
 	srv.goTracked(func() { srv.metrics.Start(ctx) })
+	// Detects an edge that stops reporting bandwidth (#1980). The event is an ABSENCE, so it
+	// needs a sweep -- there is no arrival to hang a check off, which is exactly why this
+	// failure mode was invisible.
+	srv.goTracked(func() { srv.watchEdgeMetricsDelivery(ctx) })
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second
@@ -7001,6 +7016,17 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 				h.ResolvedIPv6 = h.ResolvedIP
 			}
 		}
+		// Reporting health, for connected nodes only: a node with no control channel is
+		// Offline, and "its metrics stopped" adds nothing to that (#1980).
+		d, everReported := s.edgeMetricsSeen.Get(nodeID)
+		interval := s.edgeMetricsInterval()
+		now := time.Now()
+		if !d.LastFrameAt.IsZero() {
+			h.MetricsLastReportAt = d.LastFrameAt.Unix()
+		}
+		h.MetricsStalled = edgeMetricsStalled(now, d, true, everReported, interval)
+		h.MetricsNote = describeEdgeMetricsHealth(now, d, true, everReported, interval)
+
 		nodes[nodeID] = h
 	}
 	s.edgeClientsMu.RUnlock()

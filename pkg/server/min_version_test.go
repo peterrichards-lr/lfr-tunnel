@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -328,7 +327,6 @@ func TestEdgeRegisterEnforcesMinVersion(t *testing.T) {
 	defer func() {
 		controlSrv.Stop()
 		time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-		_ = os.RemoveAll(tmpDir)          //nolint:errcheck
 	}()
 
 	if err := controlSrv.db.CreateUser(&db.User{ID: "edge-user", Email: "edge@example.com", Role: "user", Status: "approved"}); err != nil {

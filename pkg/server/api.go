@@ -541,7 +541,23 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The window the figures below actually cover, stated rather than left to be inferred
+	// (#1981). Every number on the Analytics screen was an unlabelled aggregate, so the ~54x
+	// inflation the #1970 watermark bug left in tunnel_metrics could not be told apart from
+	// corrected data -- and "last week versus this week" was unanswerable. `from` is empty
+	// exactly when the window is unbounded, which is the All Time option.
+	windowFrom, windowTo := db.AnalyticsWindow(days)
+	period := map[string]interface{}{
+		"days": days,
+		"from": "",
+		"to":   windowTo.Format(time.RFC3339),
+	}
+	if !windowFrom.IsZero() {
+		period["from"] = windowFrom.Format(time.RFC3339)
+	}
+
 	resp := map[string]interface{}{
+		"period":   period,
 		"personal": userStats,
 		// Whose figures these are, stated rather than inferred (#1294). The UI has to label the
 		// panel, and a client that worked it out from the request it sent would show the wrong
@@ -585,6 +601,7 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		s.edgeLeasesMu.Unlock()
 		globalStats.NodeDistribution = nodeDistribution
 		globalStats.NodeDaily = padNodeDaily(globalStats.NodeDaily, s.knownNodeIDs())
+		globalStats.NodeTotals = padNodeTotals(globalStats.NodeTotals, s.knownNodeIDs())
 
 		slog.Info(fmt.Sprintf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily)))
 		resp["global"] = globalStats
@@ -654,6 +671,51 @@ func padNodeDaily(existing []db.NodeDailySession, knownNodes []string) []db.Node
 	sort.Slice(padded, func(i, j int) bool {
 		if padded[i].Date != padded[j].Date {
 			return padded[i].Date < padded[j].Date
+		}
+		return padded[i].NodeID < padded[j].NodeID
+	})
+	return padded
+}
+
+// padNodeTotals gives every known gateway a row in the per-gateway bandwidth breakdown, at zero
+// if it moved nothing in the window (#1981).
+//
+// Same reasoning as padNodeDaily, and the same reason it matters more here than it looks: the
+// query groups the rows that exist, so a gateway whose reporting path has died produces no row
+// and disappears from the table entirely. An absent row reads as "not part of this deployment";
+// a zero row reads as "carried nothing", which is the finding. #1958/#1970 was precisely an edge
+// whose bytes stopped being recorded, and it was invisible.
+//
+// Unlike padNodeDaily this pads even an empty result: there is no x-axis to invent points along,
+// and "every gateway moved nothing" is a legitimate, informative answer.
+func padNodeTotals(existing []db.NodeBandwidth, knownNodes []string) []db.NodeBandwidth {
+	if len(knownNodes) == 0 {
+		return existing
+	}
+
+	seen := make(map[string]struct{}, len(existing))
+	for _, e := range existing {
+		seen[e.NodeID] = struct{}{}
+	}
+
+	padded := existing
+	if padded == nil {
+		padded = make([]db.NodeBandwidth, 0, len(knownNodes))
+	}
+	for _, n := range knownNodes {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		padded = append(padded, db.NodeBandwidth{NodeID: n})
+	}
+
+	// Busiest first, ties by name -- the same order the query returns, so padding cannot change
+	// how the table reads.
+	sort.Slice(padded, func(i, j int) bool {
+		li := padded[i].BytesIn + padded[i].BytesOut
+		lj := padded[j].BytesIn + padded[j].BytesOut
+		if li != lj {
+			return li > lj
 		}
 		return padded[i].NodeID < padded[j].NodeID
 	})

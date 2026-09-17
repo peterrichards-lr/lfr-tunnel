@@ -3088,11 +3088,10 @@ function geoOfflineMessage(geo) {
   return t('geo_unavailable');
 }
 
-// The analytics window, in days. '0' is V2's "All Time" value. Mirrors V2's request shape
-// exactly rather than improving on it: the portals are a live A/B test, so a difference in what
-// the two arms fetch would make the comparison measure the fix instead of the presentation.
-// (V2's All Time is itself wrong -- omitting `days` falls back to the server's 30-day default --
-// tracked in #1565 and deliberately left identical here.)
+// The analytics window, in days. '0' is the "All Time" value and '1' the 24-hour one added in
+// #1981. Mirrors V2's request shape exactly rather than improving on it: the portals are a live
+// A/B test, so a difference in what the two arms fetch would make the comparison measure the
+// fix instead of the presentation.
 function analyticsRangeDays() {
   const select = document.getElementById('analytics-range');
   return select ? select.value : '30';
@@ -3100,6 +3099,40 @@ function analyticsRangeDays() {
 
 function changeAnalyticsRange() {
   loadAnalytics();
+}
+
+// One bound of the window shown, in UTC (#1981).
+//
+// A fixed "YYYY-MM-DD HH:MM" slice of the server's ISO answer rather than toLocaleString: the
+// figures are aggregated in UTC, so rendering the bound in the reader's own zone would label a
+// UTC window with local wall-clock times that do not match its edges. Character for character
+// the same as Portal V2's formatPeriodInstant in ui/src/pages/AdminAnalytics.tsx -- the portals
+// are a live A/B test (#1866), so one window must read identically in both arms.
+function formatPeriodInstant(iso) {
+  return !iso ? '' : iso.replace('T', ' ').slice(0, 16);
+}
+
+// Writes the period every figure on the screen covers.
+//
+// Driven by the server's own `period` block rather than by the select's value, so the label
+// cannot claim a window the query did not honour. Before this the page carried a static "over
+// the last 30 days" sentence, which stopped being true the moment #1560 added a range control.
+function renderAnalyticsPeriod(period) {
+  const el = document.getElementById('analytics-period-bounds');
+  if (!el) return;
+  if (!period) {
+    el.textContent = '';
+    return;
+  }
+  // `from` is empty exactly when the window is unbounded -- the All Time option.
+  el.textContent = period.from
+    ? t('analytics_period_window', 'Showing {0} to {1} (UTC)')
+        .replace('{0}', formatPeriodInstant(period.from))
+        .replace('{1}', formatPeriodInstant(period.to))
+    : t(
+        'analytics_period_all_time',
+        'Showing everything recorded up to {0} (UTC)',
+      ).replace('{0}', formatPeriodInstant(period.to));
 }
 
 async function loadAnalytics() {
@@ -3219,9 +3252,47 @@ async function loadAnalytics() {
       });
     }
 
+    renderAnalyticsPeriod(data.period);
+
     if (data.global) {
       document.getElementById('admin-analytics-section').style.display =
         'block';
+
+      // Bytes and sessions per gateway, for the selected period (#1981). The totals line is
+      // the screen's only headline figure, and it is scoped to the window above it -- an
+      // all-time number is what made the ~54x inflation from #1970 invisible.
+      const nodeTotals = data.global.node_totals || [];
+      const totals = data.global.totals || {};
+      const totalLine = document.getElementById('gateway-bandwidth-total');
+      if (totalLine) {
+        totalLine.innerHTML =
+          escapeHTML(t('analytics_total_bandwidth', 'Total Bandwidth')) +
+          ': <strong>' +
+          escapeHTML(
+            formatBytes((totals.bytes_in || 0) + (totals.bytes_out || 0)),
+          ) +
+          '</strong> &middot; ' +
+          (totals.sessions || 0) +
+          ' ' +
+          escapeHTML(t('th_sessions', 'Sessions'));
+      }
+      const gatewayEmpty = document.getElementById('gateway-bandwidth-empty');
+      if (gatewayEmpty) {
+        gatewayEmpty.style.display = nodeTotals.length ? 'none' : 'block';
+      }
+      renderTableOrHide(
+        'gateway-bandwidth-table-body',
+        'gateway-bandwidth-table-wrap',
+        nodeTotals,
+        (n) => `
+                <tr>
+                    <td style="font-weight: 600;">${escapeHTML((n.node_id || '').toUpperCase())}</td>
+                    <td>${escapeHTML(formatBytes(n.bytes_in))}</td>
+                    <td>${escapeHTML(formatBytes(n.bytes_out))}</td>
+                    <td>${n.sessions || 0}</td>
+                </tr>
+            `,
+      );
 
       if (data.global.daily) {
         const ctx = document

@@ -114,10 +114,17 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionProbes(userID string, samples []R
 // function, and the row count is bounded by users x regions x days -- small enough that fetching
 // it is cheaper than the CTE gymnastics the alternative needs.
 func (repo *SQLiteRegionProbeRepo) GetRegionLatency(days int) (*RegionLatencyReport, error) {
-	// Shares analyticsFloor so a window means the same thing here as it does for the analytics
-	// reports rendered beside this one. It previously defaulted days <= 0 to 30, which made All
-	// Time show a month of latency next to all-time bandwidth on the same screen (#1565).
-	since := analyticsFloor(days)
+	// Shares the window helper so a period means the same thing here as it does for the
+	// analytics reports rendered beside this one. It previously defaulted days <= 0 to 30, which
+	// made All Time show a month of latency next to all-time bandwidth on the same screen
+	// (#1565).
+	//
+	// analyticsDayFloor, not analyticsFloor: region_probes.day holds a bare "YYYY-MM-DD" and
+	// SQLite compares it as a string, so a second-precision floor makes
+	// '2026-09-16' >= '2026-09-16 14:00:00' false and drops the whole boundary day (#1981). A
+	// DATE column cannot express the sub-day part of the window, and losing a day of probes is
+	// the worse of the two available errors.
+	since := analyticsDayFloor(days)
 
 	rows, err := repo.conn.Query(`
 		SELECT user_id, region, rtt_ms FROM region_probes WHERE day >= ?`, since)

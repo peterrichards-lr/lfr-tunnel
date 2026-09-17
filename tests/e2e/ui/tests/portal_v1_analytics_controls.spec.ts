@@ -36,7 +36,7 @@ test.describe('Portal V1 Analytics controls', () => {
     await expect(page.locator('#tab-analytics')).toBeVisible();
   });
 
-  test('offers the same four ranges V2 does', async ({ page }) => {
+  test('offers the same five ranges V2 does', async ({ page }) => {
     const select = page.locator('#analytics-range');
     await expect(select).toBeVisible();
 
@@ -44,7 +44,9 @@ test.describe('Portal V1 Analytics controls', () => {
       .locator('option')
       .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
     // Same values, same order as V2's control, so the two arms differ only in presentation.
-    expect(values).toEqual(['7', '14', '30', '0']);
+    // '1' is the 24-hour window added in #1981: it is the shortest period the screen offers and
+    // the only one a sub-day floor makes expressible at all.
+    expect(values).toEqual(['1', '7', '14', '30', '0']);
     await expect(select).toHaveValue('30');
   });
 

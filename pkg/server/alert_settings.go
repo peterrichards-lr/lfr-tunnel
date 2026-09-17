@@ -58,6 +58,11 @@ var AlertSettings = []AlertSetting{
 	// notice (#1980). Defaults on: quota enforcement is sized from this feed, so a dead one
 	// produces limits that never fire.
 	{Key: "alert_notify_edge_metrics_stalled", LabelKey: "alert_edge_metrics_stalled", DefaultOn: true},
+	// Two entries, not one with a severity, because they are two different events (#1959).
+	// Throttled is informational: someone is using a lot and has been slowed down, and an
+	// owner may want to raise their allowance. Stopped is somebody's demo ending.
+	{Key: "alert_notify_quota_throttled", LabelKey: "alert_quota_throttled", DefaultOn: true},
+	{Key: "alert_notify_quota_stopped", LabelKey: "alert_quota_stopped", DefaultOn: true},
 }
 
 // alertSettingDefault reports whether an unset row means on, and whether the key is one this

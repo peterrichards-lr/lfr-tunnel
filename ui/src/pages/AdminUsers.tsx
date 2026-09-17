@@ -23,6 +23,19 @@ interface User {
   max_reservations?: number;
   max_custom_domains?: number;
   max_tunnels?: number;
+  // The per-user bandwidth override, and the standing the enforcer computed for this user
+  // (#1959). used_bytes is the ENFORCED measure (in + out); used_out_bytes is the egress
+  // within it, carried separately because that is the half that maps to the AWS invoice.
+  bandwidth_quota_bytes?: number | null;
+  bandwidth_quota?: {
+    state: string;
+    allowance_bytes: number;
+    used_bytes: number;
+    used_out_bytes: number;
+    throttle_at_bytes: number;
+    period_start: string;
+    measured: boolean;
+  };
   last_login_at?: string;
   totp_enabled?: boolean;
   preferred_domain?: string;
@@ -50,6 +63,44 @@ const formatBytes = (bytes: number, decimals = 2) => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
+// One user's bandwidth-quota standing, rendered for the table (#1959).
+//
+// Both numbers, always. The cap is enforced on the total because that is the fairness
+// measure and the one a user cannot dodge by pulling heavily inbound; the egress is shown
+// beside it because that is what the AWS invoice charges for. A "not measured yet" standing
+// renders as an em dash rather than as 0, because a gateway that has not swept and a user
+// who sent nothing are different facts.
+const renderQuotaUsage = (q: User['bandwidth_quota']) => {
+  if (!q) return null;
+  if (!q.allowance_bytes || q.allowance_bytes <= 0) {
+    return (
+      <div>
+        <span className="text-2xs text-muted">Bandwidth:</span>{' '}
+        <strong>∞</strong>
+      </div>
+    );
+  }
+  const badge =
+    q.state === 'throttled' ? (
+      <span className="badge badge-warning">throttled</span>
+    ) : q.state === 'stopped' ? (
+      <span className="badge badge-danger">stopped</span>
+    ) : null;
+  return (
+    <div title="Enforced on the total (in + out). Egress is shown separately because that is the figure that maps to the AWS invoice.">
+      <span className="text-2xs text-muted">Bandwidth:</span>{' '}
+      <strong>
+        {q.measured ? formatBytes(q.used_bytes) : '—'} /{' '}
+        {formatBytes(q.allowance_bytes)}
+      </strong>{' '}
+      <span className="text-2xs text-muted">
+        ({q.measured ? formatBytes(q.used_out_bytes) : '—'} out)
+      </span>{' '}
+      {badge}
+    </div>
+  );
 };
 
 // Status -> badge class, as data rather than as a ternary (#1851).
@@ -286,6 +337,9 @@ export default function AdminUsers() {
   const [modalMaxReservations, setModalMaxReservations] = useState(3);
   const [modalMaxCustomDomains, setModalMaxCustomDomains] = useState(1);
   const [modalMaxTunnels, setModalMaxTunnels] = useState(3);
+  // Held in GiB because that is the unit an administrator thinks in; converted to bytes on
+  // the way out, which is the unit the API and the database use (#1959).
+  const [modalQuotaGiB, setModalQuotaGiB] = useState(0);
   const [updatingLimits, setUpdatingLimits] = useState(false);
 
   useEffect(() => {
@@ -309,6 +363,17 @@ export default function AdminUsers() {
           ? selectedUser.max_tunnels
           : 3,
       );
+      // The resolved allowance, not just the override, so the field shows what is in force
+      // rather than a blank that reads as "no limit" when a role or fleet default applies.
+      setModalQuotaGiB(
+        Math.round(
+          ((selectedUser.bandwidth_quota_bytes ??
+            selectedUser.bandwidth_quota?.allowance_bytes ??
+            0) /
+            (1024 * 1024 * 1024)) *
+            100,
+        ) / 100,
+      );
     }
   }, [selectedUser]);
 
@@ -323,6 +388,9 @@ export default function AdminUsers() {
           max_reservations: Number(modalMaxReservations),
           max_custom_domains: Number(modalMaxCustomDomains),
           max_tunnels: Number(modalMaxTunnels),
+          bandwidth_quota_bytes: Math.round(
+            Number(modalQuotaGiB) * 1024 * 1024 * 1024,
+          ),
         },
       );
       showToast('User settings updated successfully', 'success');
@@ -335,6 +403,9 @@ export default function AdminUsers() {
                 max_reservations: Number(modalMaxReservations),
                 max_custom_domains: Number(modalMaxCustomDomains),
                 max_tunnels: Number(modalMaxTunnels),
+                bandwidth_quota_bytes: Math.round(
+                  Number(modalQuotaGiB) * 1024 * 1024 * 1024,
+                ),
               }
             : u,
         ),
@@ -347,6 +418,9 @@ export default function AdminUsers() {
               max_reservations: Number(modalMaxReservations),
               max_custom_domains: Number(modalMaxCustomDomains),
               max_tunnels: Number(modalMaxTunnels),
+              bandwidth_quota_bytes: Math.round(
+                Number(modalQuotaGiB) * 1024 * 1024 * 1024,
+              ),
             }
           : null,
       );
@@ -954,6 +1028,7 @@ export default function AdminUsers() {
                                   : '3'}
                               </strong>
                             </div>
+                            {renderQuotaUsage(u.bandwidth_quota)}
                           </div>
                         </td>
                       )}
@@ -1274,6 +1349,31 @@ export default function AdminUsers() {
                   onChange={(e) => setModalMaxTunnels(Number(e.target.value))}
                   placeholder="3"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="field-quota"
+              >
+                Bandwidth Quota (GiB)
+              </label>
+              <div>
+                <input
+                  id="field-quota"
+                  type="number"
+                  className="input-field w-full py-xs px-sm text-sm"
+                  min={0}
+                  step={0.01}
+                  value={modalQuotaGiB}
+                  onChange={(e) => setModalQuotaGiB(Number(e.target.value))}
+                  placeholder="50"
+                />
+                <span className="text-2xs text-muted">
+                  Enforced on the total of inbound and outbound traffic per
+                  period. 0 exempts this user.
+                </span>
               </div>
             </div>
 

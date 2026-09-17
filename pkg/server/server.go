@@ -272,14 +272,32 @@ type Server struct {
 	proxyHandler *ProxyHandler
 	chiselProxy  *httputil.ReverseProxy
 	db           *db.DB
+	// geoMu guards geo, geoDiagnosis and geoSource together (#1998).
+	//
+	// All three, not just the pointer: the panel renders "is it on", "which vendor" and
+	// "why not" from one read, and a reload that swapped them one at a time could be caught
+	// mid-swap crediting the vendor of the file it had just closed.
+	//
+	// The READ side is held across the whole lookup, not merely long enough to copy the
+	// pointer out. Reload closes the aggregator it replaced, and closing releases the mmdb
+	// handle underneath it -- so a caller holding a stale pointer would be resolving
+	// addresses in a closed database. Holding the read lock is what makes "closed only once
+	// no lookup can still hold it" true rather than merely likely.
+	geoMu sync.RWMutex
 	// geo aggregates registrations into anonymous per-country counts (#1152). nil
-	// whenever no MaxMind database is configured, which is the default; every method on
+	// whenever no country database is configured, which is the default; every method on
 	// it is nil-safe so no call site needs to check.
+	//
+	// Read it through withGeoAggregator, never directly: it is swapped on SIGHUP (#1998)
+	// and a bare read races that swap.
 	geo *geo.Aggregator
 	// geoDiagnosis records WHY geo is nil (#1938). An unset path, a mistyped one and an
 	// unreadable file are all nil here and were all one sentence in the admin panel, which
 	// told an operator who had configured a path that they had not.
-	geoDiagnosis  geoDiagnosis
+	geoDiagnosis geoDiagnosis
+	// geoSource is the (path, vendor) pair that produced the state above, so a reload can
+	// tell an identical config from a changed one and leave the open file alone (#1998).
+	geoSource     geoSource
 	portalService PortalService
 	notifications *NotificationService
 	ctx           context.Context
@@ -616,6 +634,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// The path has two accepted spellings, resolved in one place (#1921).
 	geoPath, geoBothPathsSet := cfg.CountryDatabasePath()
 	srv.geo, srv.geoDiagnosis = newGeoAggregator(geoPath, cfg.CountryDBProvider, geoBothPathsSet, database)
+	// Recorded so a later SIGHUP can tell an unchanged config from a changed one and leave a
+	// working database open rather than reopening it (#1998).
+	srv.geoSource = geoSource{Path: geoPath, Provider: cfg.CountryDBProvider}
 
 	// Reject an unusable statically-declared schedule once, at startup, rather than acting on
 	// it every health cycle (#1282). Dropped rather than fatal: a bad schedule should stop
@@ -2173,7 +2194,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		themePref = userRec.ThemePreference
 	}
 
-	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v)", req.SubdomainPrefix, activeDomains, remotes)
+	// Per-session client provenance (#2001). Everything in the suffix is already in hand at
+	// this point and was previously discarded; see session_context_audit.go for why the user
+	// record's last_client_version cannot answer the question this one does.
+	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v) %s",
+		req.SubdomainPrefix, activeDomains, remotes,
+		sessionContextDetail(req.ClientVersion, req.ClientOS, s.registry.localNodeID(), req.RegionSource))
 	s.writeAudit(user.Email, "tunnel.start", "subdomain", req.SubdomainPrefix, auditDetails, r)
 
 	// Attached even when nothing is outstanding: the client uses the absence of a phase to
@@ -2525,9 +2551,15 @@ func (s *Server) Start() error {
 					// for the same reason as the portal sessions above (#1152) -- and
 					// because without it a quiet server would never notice the boundary,
 					// there being no registrations to notice it on.
-					if err := s.geo.Flush(); err != nil {
-						slog.Warn("[Geo] Periodic location stats flush failed", "error", err)
-					}
+					//
+					// Through the accessor because the aggregator is swappable on SIGHUP
+					// (#1998): a bare read here races a reload, and the race detector job
+					// would be the one to find it.
+					s.withGeoAggregator(func(a *geo.Aggregator) {
+						if err := a.Flush(); err != nil {
+							slog.Warn("[Geo] Periodic location stats flush failed", "error", err)
+						}
+					})
 					s.checkExpiringReservations()
 					// Warns users entering the policy-consent warning window, and (only
 					// when configured to) drops the tunnels of those past their deadline
@@ -3372,7 +3404,7 @@ func (s *Server) stop() {
 	// Before the database closes: writes the current period's cardinalities and releases
 	// the MaxMind handle. The in-memory user sets are simply dropped with the process --
 	// they have no persistent form to be written to (#1152).
-	if err := s.geo.Close(); err != nil {
+	if err := s.closeGeo(); err != nil {
 		// Shutdown continues regardless -- there is nothing to retry with the database
 		// about to close -- but a final flush failing loses the current period silently.
 		slog.Warn("[Geo] Final location stats flush failed during shutdown", "error", err)
@@ -6295,7 +6327,9 @@ func normaliseEdgeSchedules(nodes []config.EdgeNodeConfig) {
 // active tunnel across every edge node" (#1309). An operator responding to a suspected leak had
 // to choose between revoking the credential and keeping the fleet up. This removes the choice.
 //
-// ONLY edge_nodes is applied. Every other field keeps its startup value, because the rest of the
+// ONLY edge_nodes is applied HERE. The country database is the one other reloadable key and has
+// its own entry point, ReloadGeoDatabase (#1998), so a mistyped path cannot stop a token
+// withdrawal landing. Every remaining field keeps its startup value, because the rest of the
 // config is wired into listeners, schedulers and the database at construction and cannot be
 // swapped underneath them (#1454). A field that appeared to reload but did not would be worse
 // than one that plainly does not, so this is deliberately narrow and says so in the log.
@@ -6328,6 +6362,18 @@ func (s *Server) ReloadEdgeNodes(configPath string) error {
 	s.BroadcastNodeSet()
 	return nil
 }
+
+// reloadNarrowness is the sentence every reload summary ends with: exactly which keys SIGHUP
+// applies, stated where the operator is actually looking.
+//
+// One constant rather than the two near-identical literals it replaced, because the list has
+// now grown once (#1998 added the country database to #1309's edge_nodes) and a second copy is
+// how one of them comes to be a key out of date -- claiming a narrowness the code no longer has.
+// An operator who believes "nothing else is re-read" and edits a third key has been misled by
+// the very line meant to stop that.
+const reloadNarrowness = "SIGHUP applies edge_nodes (#1309) and country_db_path / " +
+	"country_db_provider (#1998), and nothing else; every other config field still needs a " +
+	"restart (#1454)."
 
 // describeEdgeNodeChanges reports what a reload did, by node id.
 //
@@ -6371,11 +6417,9 @@ func describeEdgeNodeChanges(before, after []config.EdgeNodeConfig) []string {
 
 	if len(changes) == 0 {
 		return []string{fmt.Sprintf(
-			"Reloaded edge_nodes: no change (%d node(s)). Nothing else is re-read -- every other "+
-				"config field still needs a restart (#1454).", len(after))}
+			"Reloaded edge_nodes: no change (%d node(s)). %s", len(after), reloadNarrowness)}
 	}
-	return append(changes,
-		"Nothing else was re-read; every other config field still needs a restart (#1454).")
+	return append(changes, reloadNarrowness)
 }
 
 // sameHashSet compares two hash lists order-independently, so reordering edge_nodes in the file
@@ -6881,7 +6925,16 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	if userRec != nil && userRec.Email != "" {
 		actorEmail = userRec.Email
 	}
-	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s)", edgeNodeID, finalSubdomain, edgeReq.ClientIP)
+	// The same per-session provenance as the direct path (#2001), and it has to be added
+	// here too rather than only in handleRegister: a client registering through an edge node
+	// never executes handleRegister's body on the control plane, and the edge has no database
+	// to write an audit row with. Most of the fleet registers this way, so covering only the
+	// direct path would record a version for almost nobody. The node is the edge that
+	// accepted the session -- already named in the sentence, and repeated inside the suffix
+	// so one grep answers the question on both paths.
+	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s) %s",
+		edgeNodeID, finalSubdomain, edgeReq.ClientIP,
+		sessionContextDetail(edgeReq.ClientVersion, edgeReq.ClientOS, edgeNodeID, edgeReq.RegionSource))
 	s.writeAudit(actorEmail, "tunnel.start", "subdomain", finalSubdomain, auditDetails, r)
 
 	// access_controls is keyed by domain, because a reservation is keyed on (subdomain, domain)

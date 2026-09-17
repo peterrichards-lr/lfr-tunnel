@@ -158,13 +158,19 @@ sudo systemctl reload lfr-tunneld
 sudo journalctl -u lfr-tunneld -n 20 --no-pager | grep 'Edge node'
 ```
 
-Two things to know before relying on it:
+Three things to know before relying on it:
 
-- **Only `edge_nodes` is re-read.** Every other field still needs a restart (#1454). The reload
-  says so in its own log line, so a field that looks reloaded but is not cannot mislead you.
+- **`edge_nodes` and the country-database keys are re-read, and nothing else.** `country_db_path`,
+  its `geolite2_db_path` alias and `country_db_provider` reload too (#1998) — §8.11.7 of the
+  [server setup guide](setup_guide.md) covers that half. Every other field still needs a restart
+  (#1454). The reload says so in its own log line, so a field that looks reloaded but is not
+  cannot mislead you.
 - **A config that does not parse changes nothing.** The running list is kept and the failure is
   logged, so a SIGHUP against a half-saved file cannot de-authenticate the fleet. Verify with
   `lfr-tunneld -check-config` first if you want to know before signalling (#1455).
+- **The two halves fail independently.** A mistyped `country_db_path` does not stop a token
+  withdrawal from landing, and a rejected `edge_nodes` list does not stop a vendor swap. Each
+  keeps its own previous value, so neither can half-apply the other's.
 
 #### Registering a New Edge Node with the Control Plane
 
@@ -605,4 +611,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*

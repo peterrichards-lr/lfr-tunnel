@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -506,4 +508,49 @@ func leaseExists(srv *Server, fullHost string) bool {
 	defer srv.registry.RUnlock()
 	_, ok := srv.registry.leases[fullHost]
 	return ok
+}
+
+// TestLeaseDoesNotPublishBaseRateLimit keeps the granted limit off the wire (#2006).
+//
+// ListLeases builds its snapshot by copying fields by hand and does not carry
+// BaseRateLimit, so a published field would report 0 for every tunnel in the admin
+// portal's active_tunnels list -- and 0 means "no limit" everywhere else in this struct,
+// making the payload wrong rather than merely incomplete.
+//
+// The fixture is the real snapshot, not a hand-built lease: the defect only exists because
+// ListLeases drops the field, so a test marshalling the original would pass with the tag
+// restored and guard nothing.
+func TestLeaseDoesNotPublishBaseRateLimit(t *testing.T) {
+	reg := NewRegistry(nil)
+	addLease(reg, &TunnelLease{
+		UserID:          "user-1",
+		SubdomainPrefix: "demo",
+		FullHost:        "demo.example.com",
+		RateLimit:       100,
+		BaseRateLimit:   100,
+	})
+
+	snapshot := reg.ListLeases()
+	if len(snapshot) != 1 {
+		t.Fatalf("expected one lease in the snapshot, got %d", len(snapshot))
+	}
+	if snapshot[0].BaseRateLimit != 0 {
+		t.Fatalf("precondition: ListLeases is expected NOT to copy BaseRateLimit (it returns a copy, "+
+			"and #1958 is what carrying quota state on a copy costs); got %d. If this has deliberately "+
+			"changed, publishing the field becomes correct and this test should be replaced rather than "+
+			"deleted.", snapshot[0].BaseRateLimit)
+	}
+
+	encoded, err := json.Marshal(snapshot[0])
+	if err != nil {
+		t.Fatalf("failed to marshal the lease: %v", err)
+	}
+	if strings.Contains(string(encoded), "base_rate_limit") {
+		t.Fatalf("a lease must not publish base_rate_limit: the snapshot does not carry it, so every "+
+			"tunnel would report 0 -- which reads as \"no limit\" rather than as \"unknown\".\n  got: %s", encoded)
+	}
+	// The effective limit IS published: it is the number an operator acts on.
+	if !strings.Contains(string(encoded), `"rate_limit":100`) {
+		t.Fatalf("the effective rate limit must still be published; got: %s", encoded)
+	}
 }

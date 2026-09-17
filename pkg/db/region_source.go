@@ -58,10 +58,13 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionSource(userID, source string, at 
 // a zero is information ("nobody is pinned") and omitting it would read as "not measured".
 // Anything unrecognised is appended after, named rather than folded into a known bucket.
 func (repo *SQLiteRegionProbeRepo) GetRegionSources(days int) ([]RegionSourceCount, error) {
-	if days <= 0 {
-		days = 30
-	}
-	since := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	// Through the shared helper rather than open-coding a floor, so "All Time" cannot mean a
+	// month here while it means all time in the report this is embedded in -- the exact shape of
+	// #1565, which survived in this one function because handleNodePlacement rejects days=0
+	// before it can arrive and made the divergence unreachable rather than absent (#1981).
+	//
+	// The day form: client_region_source.day is a bare "YYYY-MM-DD".
+	since := analyticsDayFloor(days)
 
 	rows, err := repo.conn.Query(`
 		SELECT source, COUNT(DISTINCT user_id) FROM client_region_source

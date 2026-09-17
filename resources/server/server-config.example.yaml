@@ -160,6 +160,16 @@ maintenance_trigger_path: ""
 
 # --- Client distribution ---
 min_client_version: "v1.0.0"
+# How long a client below min_client_version keeps being accepted after this gateway first
+# sees it below the floor, and how long before that deadline the client starts warning in its
+# own output. Both measured from that client's OWN first sight, so somebody on leave gets the
+# whole window. 0 uses the defaults (14 and 5); the warning is clamped to the grace window.
+#
+# Set the grace window PER ROLLOUT. The first bump wants a generous one -- the fleet still
+# contains clients too old to carry the warning code at all -- while a later one tightening an
+# already-current fleet does not.
+min_client_version_grace_days: 14
+min_client_version_warning_days: 5
 latest_client_version: ""
 # How often the gateway pings each attached tunnel client over the chisel control channel.
 # Empty/0 uses the built-in 25s. Pairs with nginx's proxy_read_timeout on `location /tunnel`
@@ -224,6 +234,24 @@ proxy_headers: {}
 #
 # Setup, licensing and how to verify it took effect: docs/server/setup_guide.md section 8.11.
 country_db_path: ""
+
+# Who published the file at country_db_path. REQUIRED to turn the feature on: a path without
+# this leaves geographic distribution off, and the panel says which of the two is missing.
+#
+# One of: maxmind | dbip | ip2location
+#
+# Declared rather than derived, because deriving it does not work (#1964). Measured against a
+# real IP2LOCATION-LITE-DB11.MMDB: database_type "GeoLite2-City", description "GeoLite2City
+# database", MaxMind's eight languages, and MaxMind's nested country.iso_code record schema.
+# IP2Location ship a deliberate drop-in clone, so their file is indistinguishable from MaxMind's
+# in every observable property -- and deriving the vendor credited MaxMind for IP2Location's
+# data, leaving IP2Location's own required acknowledgment unshown.
+#
+# Each vendor's licence obliges a DIFFERENT visible credit, so a wrong guess is a licence breach
+# rather than a cosmetic error. Naming it makes the operator the author of the claim. The gateway
+# warns when this disagrees with the file's own metadata -- which catches a typo, but cannot tell
+# which of the two is right and does not try.
+country_db_provider: ""
 
 # Deprecated spelling of country_db_path, still honoured so no running deployment breaks
 # (#1921). It named MaxMind in a setting that is really just "where the country database

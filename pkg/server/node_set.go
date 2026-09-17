@@ -51,19 +51,30 @@ const nodeSetFingerprintField = "nodes"
 // bytes of a 512-byte budget already shared with two other messages.
 const nodeSetFingerprintLen = 12
 
-// nodeSetFingerprint hashes the gateways this node is currently advertising as available, or
-// returns "" when this node holds no roster to fingerprint.
+// nodeSetFingerprint hashes the gateways this node is currently advertising as available --
+// or, on a node holding no roster of its own, echoes the fingerprint central pushed down.
 //
-// The empty case is not a corner: an EDGE holds no roster. Measured against production, an edge
-// answers /api/version with `regions` naming only itself under the central aliases and an empty
-// `regions_unavailable`, because s.edgeNodes() is empty there and central never pushes the node
-// list down the control channel. An edge therefore cannot say anything true about the topology,
-// and saying nothing is the only honest answer -- a fingerprint derived from an edge's own view
-// would be stable while the real roster changed underneath it, which is worse than silence
-// because the client would trust it. Clients served by an edge are covered by #1960.
+// The no-roster case is not a corner: an EDGE holds no roster. Measured against production, an
+// edge answers /api/version with `regions` naming only itself under the central aliases and an
+// empty `regions_unavailable`, because s.edgeNodes() is empty there. An edge therefore cannot
+// work the topology out from what it can see, and it must not try -- a fingerprint derived from
+// an edge's own view would be stable while the real roster changed underneath it, which is worse
+// than silence because the client would trust it.
+//
+// So an edge does not compute one. Central computes it and broadcasts it down the control
+// channel (BroadcastNodeSet, #1960), which is the same shape the node schedule and the
+// access-control rules already use: decided by the only node that can decide it, carried on the
+// lease/control channel, applied at the edge. What an edge echoes is therefore central's reading
+// of the roster -- the same value central gives its own clients, moving at the same moment, so
+// two clients served by different gateways see one change rather than one of them seeing none.
+//
+// Still "" on an edge central has not told yet: at startup, before the first handshake
+// completes. That is honest and it is safe -- an absent fingerprint is not a change to any
+// client, and the first one to arrive mid-session only establishes that client's baseline
+// (pkg/client/node_set.go).
 func (s *Server) nodeSetFingerprint() string {
 	if len(s.edgeNodes()) == 0 {
-		return ""
+		return s.UpstreamNodeSet()
 	}
 	regions, _ := s.advertisedRegions()
 	if len(regions) == 0 {

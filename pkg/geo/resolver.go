@@ -17,6 +17,7 @@ package geo
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -81,7 +82,10 @@ type mmdbResolver struct {
 // configured path with no file at it also matches ErrNotFound and names the path, because
 // the second is an operator mistake and the first is the default. Callers that only care
 // whether the feature is on keep testing ErrUnavailable and see no change.
-func OpenResolver(path string) (Resolver, error) {
+// The vendor is DECLARED, not derived (#1964). ParseProvider rejects an empty or unknown
+// value, and the caller keeps the feature off rather than guessing -- see CountryDBProvider
+// in pkg/config for why deriving it cannot work.
+func OpenResolver(path string, declared Provider) (Resolver, error) {
 	if path == "" {
 		return nil, ErrUnavailable
 	}
@@ -104,7 +108,17 @@ func OpenResolver(path string) (Resolver, error) {
 		}
 		return nil, fmt.Errorf("geo: open %s: %w", path, err)
 	}
-	return &mmdbResolver{db: db, provider: ProviderFromDatabaseType(db.Metadata.DatabaseType)}, nil
+	// The declared vendor wins. The derived one is kept only to notice a disagreement,
+	// which is the cheapest way to catch a typo'd declaration -- and it cannot be an error,
+	// because the one case that provoked this change is a file that legitimately derives to
+	// the wrong vendor (IP2Location's MMDB reports MaxMind's own database_type).
+	if derived := ProviderFromDatabaseType(db.Metadata.DatabaseType); derived != declared {
+		slog.Warn("[Geo] The declared vendor does not match the database's own metadata. "+
+			"The declared value is used for attribution. If it is wrong, the panel will "+
+			"credit the wrong vendor and that vendor's licence will be unmet.",
+			"declared", declared, "database_type", db.Metadata.DatabaseType, "derived", derived)
+	}
+	return &mmdbResolver{db: db, provider: declared}, nil
 }
 
 // Country decodes only the country ISO code. Decoding the whole record would pull city,

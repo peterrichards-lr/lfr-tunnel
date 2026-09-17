@@ -105,7 +105,32 @@ type ServerConfig struct {
 	// Not a deprecation that removes anything: a live gateway is configured with this key,
 	// and a rename that breaks a running deployment is not an improvement. See
 	// CountryDatabasePath for which one wins when both are set.
-	GeoLite2DBPath         string           `yaml:"geolite2_db_path"`
+	GeoLite2DBPath string `yaml:"geolite2_db_path"`
+	// CountryDBProvider names the vendor that published the file at CountryDBPath, and is
+	// REQUIRED to turn the feature on (#1964).
+	//
+	// It is declared rather than derived because deriving it does not work. #1921 read the
+	// vendor out of the mmdb's own metadata, reasoning that "the file already knows what it
+	// is". Measured against a real IP2Location LITE MMDB, it does not:
+	//
+	//	database_type="GeoLite2-City"   description="GeoLite2City database"
+	//	languages=[en de es fr ja pt-BR ru zh-CN]
+	//	country: {geoname_id, iso_code, names{...}}   <- MaxMind's record schema too
+	//
+	// IP2Location ship a deliberate drop-in clone, so an IP2Location file is
+	// indistinguishable from MaxMind's in every observable property. Derivation therefore
+	// resolved it to "maxmind" and the panel rendered MaxMind's credit over IP2Location's
+	// data: a false statement about provenance, with IP2Location's own required
+	// acknowledgment left unshown.
+	//
+	// Every supported vendor's licence obliges a visible credit and each obliges a DIFFERENT
+	// one, so guessing wrong is a licence breach rather than a cosmetic error. Naming it
+	// makes the operator the author of that claim -- a wrong value is then their
+	// misconfiguration, not a false statement this code invented.
+	//
+	// Valid values are geo.Provider's: "maxmind", "dbip", "ip2location". Empty disables the
+	// feature even when CountryDBPath is set, and the panel says which of the two is missing.
+	CountryDBProvider      string           `yaml:"country_db_provider"`
 	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
 	Webhooks               WebhookConfig    `yaml:"webhooks"`
 	SlackApp               SlackAppConfig   `yaml:"slack_app"`
@@ -127,7 +152,22 @@ type ServerConfig struct {
 	// not set it keeps working exactly as before.
 	PortalSessionMaxLifetime time.Duration `yaml:"portal_session_max_lifetime"`
 	MinClientVersion         string        `yaml:"min_client_version"`
-	LatestClientVersion      string        `yaml:"latest_client_version"`
+	// MinClientVersionGraceDays is how long a client below min_client_version keeps being
+	// accepted after this gateway first sees it below the floor (#1988). Measured from that
+	// client's own first sight, not from a global effective date, so somebody returning from
+	// leave gets the whole window rather than a deadline that expired while they were away.
+	//
+	// Configured per rollout rather than constant: the first bump wants a generous window
+	// because the fleet still contains clients too old to have been warned at all, while a
+	// later one tightening an already-current fleet does not. Zero means the default (14),
+	// not "no grace" -- reading an unset key as an instant fleet-wide lockout is exactly the
+	// surprise the grace window exists to prevent.
+	MinClientVersionGraceDays int `yaml:"min_client_version_grace_days"`
+	// MinClientVersionWarningDays is how long before the deadline the client starts saying
+	// so in its own output. Clamped to the grace window at read time, so a warning cannot
+	// begin before the window it warns about.
+	MinClientVersionWarningDays int    `yaml:"min_client_version_warning_days"`
+	LatestClientVersion         string `yaml:"latest_client_version"`
 
 	// TunnelKeepAlive is how often the gateway pings each attached tunnel client over the
 	// chisel control channel. Zero means the default in pkg/server (25s).
@@ -516,6 +556,17 @@ type ClientConfig struct {
 	// What is reported is a region name and a round trip in milliseconds. No IP, no location,
 	// nothing derived from either.
 	DisableLatencyReport bool `yaml:"disable_latency_report,omitempty"`
+	// AutoUpgrade lets this client replace its own binary at START when the gateway
+	// advertises a newer version (#2000).
+	//
+	// OFF by default and opt-in, deliberately: a binary on somebody's machine should not
+	// change without them asking. The backstop for anyone who never opts in is the
+	// min_version floor (#1988), which refuses a client rather than changing it.
+	//
+	// It only ever runs before a tunnel exists. Replacing the binary under a live tunnel
+	// would drop a customer demo, which is worse than the problem this solves -- and that is
+	// enforced at runtime in pkg/client, not merely by where this happens to be called.
+	AutoUpgrade bool `yaml:"auto_upgrade,omitempty"`
 	// TokenSource names where AuthToken came from, for the startup configuration block
 	// (#1693) -- which reports the source, not just the value. Never the token itself, and
 	// never anything derived from it: that block exists to be pasted into a support channel.
@@ -533,36 +584,38 @@ const TokenSourceConfigFile = "config file"
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
 	return &ServerConfig{
-		BindAddr:                   ":443",
-		HTTPBindAddr:               ":80",
-		ChiselBindAddr:             ":8081",
-		DefaultMaxReservations:     3,
-		DefaultMaxCustomDomains:    1,
-		DefaultMaxActiveTunnels:    3,
-		SubdomainQuarantineDays:    3,
-		MaxTunnelRateLimit:         100,
-		EdgeShutdownWarningMinutes: 5,
-		EnableUserPortal:           true,
-		EnableOnboarding:           true,
-		PortalSessionDuration:      24 * time.Hour,
-		MinClientVersion:           "v1.0.0",
-		LatestClientVersion:        "",
-		DocumentationURL:           DefaultDocumentationURL,
-		RepositoryURL:              DefaultRepositoryURL,
-		SecureTokenGuideURL:        DefaultSecureTokenGuideURL,
-		DockerHubURL:               DefaultDockerHubURL,
-		StatusPageURL:              DefaultStatusPageURL,
-		PruneInterval:              1 * time.Hour,
-		MagicLinkExpiry:            15 * time.Minute,
-		PATRetentionDays:           30,
-		PolicyConsentGraceDays:     14,
-		PolicyConsentWarningDays:   5,
-		InviteLinkExpiry:           7 * 24 * time.Hour,
-		VerificationLinkExpiry:     24 * time.Hour,
-		DockerImage:                "peterjrichards/lfr-tunnel:latest",
-		DockerBypassURL:            DefaultDockerBypassURL,
-		VisitorTimeout:             5 * time.Minute,
-		EnableWAF:                  true,
+		BindAddr:                    ":443",
+		HTTPBindAddr:                ":80",
+		ChiselBindAddr:              ":8081",
+		DefaultMaxReservations:      3,
+		DefaultMaxCustomDomains:     1,
+		DefaultMaxActiveTunnels:     3,
+		SubdomainQuarantineDays:     3,
+		MaxTunnelRateLimit:          100,
+		EdgeShutdownWarningMinutes:  5,
+		EnableUserPortal:            true,
+		EnableOnboarding:            true,
+		PortalSessionDuration:       24 * time.Hour,
+		MinClientVersion:            "v1.0.0",
+		MinClientVersionGraceDays:   14,
+		MinClientVersionWarningDays: 5,
+		LatestClientVersion:         "",
+		DocumentationURL:            DefaultDocumentationURL,
+		RepositoryURL:               DefaultRepositoryURL,
+		SecureTokenGuideURL:         DefaultSecureTokenGuideURL,
+		DockerHubURL:                DefaultDockerHubURL,
+		StatusPageURL:               DefaultStatusPageURL,
+		PruneInterval:               1 * time.Hour,
+		MagicLinkExpiry:             15 * time.Minute,
+		PATRetentionDays:            30,
+		PolicyConsentGraceDays:      14,
+		PolicyConsentWarningDays:    5,
+		InviteLinkExpiry:            7 * 24 * time.Hour,
+		VerificationLinkExpiry:      24 * time.Hour,
+		DockerImage:                 "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:             DefaultDockerBypassURL,
+		VisitorTimeout:              5 * time.Minute,
+		EnableWAF:                   true,
 		// 24h matches what the ban alert has always told operators, and sits in the range the
 		// comparable tools use for an automated block. Escalation is on by default: a genuine
 		// repeat offender should be held longer, and it is the presence of escalation that
@@ -832,6 +885,16 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_GRACE_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.MinClientVersionGraceDays = days
+		}
+	}
+	if val := os.Getenv("LFT_MIN_CLIENT_VERSION_WARNING_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.MinClientVersionWarningDays = days
+		}
 	}
 	if val := os.Getenv("LFT_LATEST_CLIENT_VERSION"); val != "" {
 		cfg.LatestClientVersion = val
@@ -1223,6 +1286,17 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.Bandwidth = val
 	} else if val := os.Getenv("LFT_BANDWIDTH"); val != "" {
 		cfg.Bandwidth = val
+	}
+	// Only an explicit affirmative turns it on. An unset or unparseable value leaves the
+	// config-file setting alone rather than reading as "yes": the whole point of an opt-in is
+	// that ambiguity resolves to OFF.
+	if val := os.Getenv("LFT_AUTO_UPGRADE"); val != "" {
+		switch strings.ToLower(strings.TrimSpace(val)) {
+		case "true", "1", "yes", "on":
+			cfg.AutoUpgrade = true
+		case "false", "0", "no", "off":
+			cfg.AutoUpgrade = false
+		}
 	}
 
 	return cfg, nil

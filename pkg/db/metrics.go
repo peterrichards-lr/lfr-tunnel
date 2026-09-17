@@ -34,26 +34,59 @@ func (repo *SQLiteMetricRepo) RecordTunnelMetric(m *TunnelMetric) error {
 	return err
 }
 
-// GetGlobalAnalytics retrieves system-wide bandwidth stats for the last N days.
-// analyticsFloor turns a day count into the lower bound its queries compare against.
+// AnalyticsWindow resolves a day count into the half-open period [from, to) every analytics
+// report answers for. A zero `from` means unbounded -- the All Time option both portals offer.
 //
-// days <= 0 means "no lower bound" -- the All Time option both portals offer. Before #1565 that
-// option was broken in two different directions at once: the portals omitted the parameter, so
-// the server fell back to its 30-day default and All Time silently showed 30 days; and had they
-// sent days=0, this floor became today, showing a single day instead.
+// One instant, three renderings, because the columns being compared do not share a
+// granularity: analyticsFloor for DATETIME columns, analyticsDayFloor for the DATE column
+// region_probes.day, and the times themselves for the portals to print. Deriving all of them
+// here is what lets the screen state the bounds it is showing rather than leaving the reader to
+// infer them -- which is the whole of #1981: figures recorded before the v1.48.35 watermark fix
+// (#1970) were inflated ~54x and nothing on the screen said which side of it they fell.
 //
-// The same argument also meant three different things across the package -- today for the two
-// analytics queries, and a 30-day default in GetRegionLatency, which guarded days <= 0 itself.
-// One helper so the window cannot mean different things depending on which report is asked for.
+// days <= 0 means "no lower bound". Before #1565 that option was broken in two directions at
+// once: the portals omitted the parameter, so the server fell back to its 30-day default and All
+// Time silently showed 30 days; and had they sent days=0, the floor became today, showing a
+// single day instead.
+func AnalyticsWindow(days int) (from, to time.Time) {
+	to = time.Now().UTC()
+	if days <= 0 {
+		return time.Time{}, to
+	}
+	return to.Add(-time.Duration(days) * 24 * time.Hour), to
+}
+
+// analyticsFloor is the lower bound for a DATETIME column (tunnel_metrics.recorded_at,
+// tunnel_metrics.connected_at, admin_audit_log.created_at), all of which store
+// "YYYY-MM-DD HH:MM:SS" and so compare correctly as strings.
 //
-// Expressed as a date old enough to precede any row rather than by dropping the predicate: it
-// appears in eight queries across three functions, and a conditional WHERE in each is a lot of
+// Second-precision, not day-precision. It used to round down to a date, which made "Last N days"
+// mean "since midnight N days ago" -- between N and N+1 days of data depending on the hour -- and
+// made a sub-day window inexpressible, so the 24h period #1981 asks for could not exist at all.
+//
+// Expressed as a value old enough to precede any row rather than by dropping the predicate: it
+// appears in nine queries across four functions, and a conditional WHERE in each is a lot of
 // surface to add for one option.
 func analyticsFloor(days int) string {
-	if days <= 0 {
+	from, _ := AnalyticsWindow(days)
+	if from.IsZero() {
+		return "0001-01-01 00:00:00"
+	}
+	return from.Format("2006-01-02 15:04:05")
+}
+
+// analyticsDayFloor is the lower bound for region_probes.day, which stores a bare "YYYY-MM-DD".
+//
+// It must NOT be the second-precision floor: SQLite compares these as strings, so
+// '2026-09-16' >= '2026-09-16 14:00:00' is false and every probe recorded on the boundary day
+// would drop out of the report. A DATE column cannot express a sub-day window, so this rounds
+// down to the day -- the window is inclusive at its edge rather than silently empty there.
+func analyticsDayFloor(days int) string {
+	from, _ := AnalyticsWindow(days)
+	if from.IsZero() {
 		return "0001-01-01"
 	}
-	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	return from.Format("2006-01-02")
 }
 
 func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
@@ -138,6 +171,46 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 	}
 	_ = nodeRows.Close()
 
+	// Bytes and sessions per gateway, for the window rather than for right now (#1981).
+	//
+	// The same COUNT(DISTINCT full_host || '|' || connected_at) as nodeDailyQuery, for the same
+	// reason: a row is a five-minute sample, so COUNT(*) would measure how long tunnels stayed
+	// busy and call it demand.
+	nodeTotalsQuery := `
+		SELECT COALESCE(NULLIF(node_id, ''), 'control') as n,
+		       SUM(bytes_in), SUM(bytes_out),
+		       COUNT(DISTINCT full_host || '|' || connected_at)
+		FROM tunnel_metrics
+		WHERE recorded_at >= ?
+		GROUP BY n
+		ORDER BY (SUM(bytes_in) + SUM(bytes_out)) DESC, n ASC
+	`
+	nodeTotalRows, err := repo.conn.Query(nodeTotalsQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	nodeTotals := make([]NodeBandwidth, 0)
+	var totals BandwidthTotals
+	for nodeTotalRows.Next() {
+		var nb NodeBandwidth
+		if err := nodeTotalRows.Scan(&nb.NodeID, &nb.BytesIn, &nb.BytesOut, &nb.Sessions); err != nil {
+			_ = nodeTotalRows.Close()
+			return nil, err
+		}
+		nodeTotals = append(nodeTotals, nb)
+		// Summed from the per-node rows rather than asked for separately: a second query would
+		// run against a database that may have moved on, so the headline figure and the
+		// breakdown under it could disagree and the screen would be reporting two periods.
+		totals.BytesIn += nb.BytesIn
+		totals.BytesOut += nb.BytesOut
+		totals.Sessions += nb.Sessions
+	}
+	if err := nodeTotalRows.Err(); err != nil {
+		_ = nodeTotalRows.Close()
+		return nil, err
+	}
+	_ = nodeTotalRows.Close()
+
 	topQuery := `
 		SELECT COALESCE(u.email, m.user_id), SUM(m.bytes_in), SUM(m.bytes_out)
 		FROM tunnel_metrics m
@@ -218,7 +291,15 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		portalStats = append(portalStats, ps)
 	}
 
-	return &GlobalAnalytics{Daily: daily, TopUsers: top, TopTunnels: tunnels, PortalStats: portalStats, NodeDaily: nodeDaily}, nil
+	return &GlobalAnalytics{
+		Daily:       daily,
+		TopUsers:    top,
+		TopTunnels:  tunnels,
+		PortalStats: portalStats,
+		NodeDaily:   nodeDaily,
+		NodeTotals:  nodeTotals,
+		Totals:      totals,
+	}, nil
 }
 
 // GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.

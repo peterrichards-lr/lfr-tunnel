@@ -67,7 +67,7 @@ const countryName = (code: string, locale: string) => {
 // the sentence around it, and its {0} is where the link goes.
 const GEO_ATTRIBUTION_LINK: Record<string, { href: string; text: string }> = {
   maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
-  dbip: { href: 'https://db-ip.com', text: 'DB-IP' },
+  dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
   ip2location: { href: 'https://lite.ip2location.com', text: 'IP geolocation' },
   // `unknown` is absent on purpose rather than mapped to a vendor: there is nobody to link
   // to, and naming a vendor anyway would be a false provenance claim AND would leave the real
@@ -97,6 +97,18 @@ function geoOfflineMessage(
         'geo_path_not_found',
         'No file exists at the geo-IP database path configured in country_db_path, so geographic distribution is off. Check it for a typo: {0}',
       ).replace('{0}', path);
+    case 'provider_not_declared':
+      return t(
+        'geo_provider_not_declared',
+        'A geo-IP database is configured but country_db_provider does not say who published it, so geographic distribution is off. Every supported vendor requires a different visible credit and the file cannot be trusted to identify itself, so the vendor has to be named: set country_db_provider to maxmind, dbip or ip2location.',
+      );
+    case 'provider_unknown': {
+      const msg = t(
+        'geo_provider_unknown',
+        'country_db_provider names a vendor this gateway does not recognise, so geographic distribution is off. It must be one of maxmind, dbip or ip2location.',
+      );
+      return locations.detail ? `${msg} (${locations.detail})` : msg;
+    }
     case 'unreadable': {
       const msg = t(
         'geo_unreadable',
@@ -114,6 +126,16 @@ function geoOfflineMessage(
       );
   }
 }
+
+// formatPeriodInstant renders one bound of the window shown, in UTC (#1981).
+//
+// A fixed "YYYY-MM-DD HH:MM" slice of the ISO string rather than toLocaleString: the server
+// answers in UTC and the figures are aggregated in UTC, so rendering the bound in the reader's
+// own zone would label a UTC window with local wall-clock times that do not match its edges.
+// Shared, character for character, with Portal V1's copy in dashboard.js -- the two portals are
+// a live A/B test (#1866), so the same window must read identically in both.
+const formatPeriodInstant = (iso: string) =>
+  !iso ? '' : iso.replace('T', ' ').slice(0, 16);
 
 // Palette for per-gateway series. Fixed order rather than random, so a given gateway keeps
 // the same colour between renders and between the two portals.
@@ -363,10 +385,16 @@ export default function AdminAnalytics() {
             onChange={(e) => setTimeRange(e.target.value)}
             aria-label={t('time_range', 'Time range')}
           >
-            <option value="7">Last 7 Days</option>
-            <option value="14">Last 14 Days</option>
-            <option value="30">Last 30 Days</option>
-            <option value="0">All Time</option>
+            {/* 24 hours is the short window #1981 added, and the labels are translated here
+                for the first time: V1 has carried data-i18n on these four options since
+                #1560 while V2 hard-coded English, which is a difference between the arms of
+                a live A/B test rather than a cosmetic one. Literal keys, because
+                scripts/check-i18n-keys.cjs can only see literals. */}
+            <option value="1">{t('range_24_hours', 'Last 24 Hours')}</option>
+            <option value="7">{t('range_7_days', 'Last 7 Days')}</option>
+            <option value="14">{t('range_14_days', 'Last 14 Days')}</option>
+            <option value="30">{t('range_30_days', 'Last 30 Days')}</option>
+            <option value="0">{t('range_all_time', 'All Time')}</option>
           </select>
           <button
             className="btn btn-secondary analytics-control w-auto inline-flex items-center gap-sm"
@@ -376,6 +404,25 @@ export default function AdminAnalytics() {
           </button>
         </div>
       </div>
+
+      {/* The bounds of the window every figure below covers, stated rather than inferred
+          (#1981). Outside the no-print header on purpose: a printed report with no period on it
+          is exactly the artefact this closes -- metrics recorded before the v1.48.35 watermark
+          fix (#1970) were inflated ~54x and nothing distinguished them from corrected data.
+          Read off the server's own answer, not recomputed from timeRange, so the label cannot
+          claim a window the query did not honour. */}
+      {data.period && (
+        <p className="analytics-period" data-testid="analytics-period">
+          {data.period.from
+            ? t('analytics_period_window', 'Showing {0} to {1} (UTC)')
+                .replace('{0}', formatPeriodInstant(data.period.from))
+                .replace('{1}', formatPeriodInstant(data.period.to))
+            : t(
+                'analytics_period_all_time',
+                'Showing everything recorded up to {0} (UTC)',
+              ).replace('{0}', formatPeriodInstant(data.period.to))}
+        </p>
+      )}
 
       {data.personal && (
         <div className="print-section">
@@ -645,6 +692,71 @@ export default function AdminAnalytics() {
                   </div>
                 </div>
               )}
+          </div>
+
+          {/* Bandwidth per gateway, for the selected period (#1981).
+              The pie above counts tunnels held RIGHT NOW and the chart below counts sessions
+              per day; neither says how many bytes a gateway actually moved in the window being
+              shown. That is the figure a dead reporting path appears in -- #1958/#1970 was an
+              edge whose bytes stopped being recorded, and against an unlabelled all-time
+              aggregate it read as a flat number rather than as a drop. */}
+          <div className="card p-xl mb-xl">
+            <h4 className="text-muted text-base mb-lg">
+              {t('bandwidth_by_gateway', 'Bandwidth by Gateway')}
+            </h4>
+            <p className="text-muted text-sm mt-0 mb-lg">
+              {t(
+                'bandwidth_by_gateway_desc',
+                'Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.',
+              )}
+            </p>
+            <p className="mt-0 mb-lg" data-testid="analytics-total-bandwidth">
+              {t('analytics_total_bandwidth', 'Total Bandwidth')}:{' '}
+              <strong>
+                {formatBytes(
+                  (data.global.totals?.bytes_in || 0) +
+                    (data.global.totals?.bytes_out || 0),
+                )}
+              </strong>{' '}
+              &middot; {data.global.totals?.sessions || 0}{' '}
+              {t('th_sessions', 'Sessions')}
+            </p>
+            {/* Rendered even when every gateway is at zero, for the same reason the sessions
+                chart is: "nothing moved anywhere" is an answer, and an absent panel is not. */}
+            {!data.global.node_totals ||
+            data.global.node_totals.length === 0 ? (
+              <p className="text-muted text-sm m-0">
+                {t(
+                  'bandwidth_by_gateway_empty',
+                  'No bandwidth was recorded on any gateway in this period.',
+                )}
+              </p>
+            ) : (
+              <div className="table-responsive">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className="th-col">{t('th_gateway', 'Gateway')}</th>
+                      <th className="th-col">{t('data_in', 'Data In')}</th>
+                      <th className="th-col">{t('data_out', 'Data Out')}</th>
+                      <th className="th-col">{t('th_sessions', 'Sessions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.global.node_totals.map((n: any) => (
+                      <tr key={n.node_id}>
+                        <td className="td-cell fw-bold">
+                          {(n.node_id || '').toUpperCase()}
+                        </td>
+                        <td className="td-cell">{formatBytes(n.bytes_in)}</td>
+                        <td className="td-cell">{formatBytes(n.bytes_out)}</td>
+                        <td className="td-cell">{n.sessions}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Sessions per gateway over time (#1150). The pie above is the live snapshot;
@@ -1016,7 +1128,7 @@ export default function AdminAnalytics() {
                       : provider === 'dbip'
                         ? t(
                             'geo_attribution_dbip',
-                            'IP geolocation data from {0}, used under the Creative Commons Attribution 4.0 International licence.',
+                            '{0}, used under the Creative Commons Attribution 4.0 International licence.',
                           )
                         : provider === 'ip2location'
                           ? t(

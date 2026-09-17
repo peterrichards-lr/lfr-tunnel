@@ -221,6 +221,34 @@ type GlobalAnalytics struct {
 	PortalStats      []PortalUsageStats `json:"portal_stats"`
 	NodeDistribution map[string]int     `json:"node_distribution"`
 	NodeDaily        []NodeDailySession `json:"node_daily"`
+	NodeTotals       []NodeBandwidth    `json:"node_totals"`
+	Totals           BandwidthTotals    `json:"totals"`
+}
+
+// BandwidthTotals is what the selected period adds up to, computed by the same query the
+// breakdowns are (#1981).
+//
+// It exists because neither portal had a total at all -- only daily series and top-N charts --
+// so "how much traffic last week versus this week" was a question the screen could not answer,
+// and the ~54x inflation the #1970 watermark bug left in tunnel_metrics was invisible on it.
+type BandwidthTotals struct {
+	BytesIn  int64 `json:"bytes_in"`
+	BytesOut int64 `json:"bytes_out"`
+	Sessions int   `json:"sessions"`
+}
+
+// NodeBandwidth is one gateway's share of the selected period.
+//
+// NodeDistribution is a live snapshot of who holds a lease right now and NodeDaily is a session
+// count per day; neither says how many bytes a gateway moved in the window being shown. That is
+// the figure a stalled reporting path shows up in -- #1958/#1970 was exactly an edge whose bytes
+// stopped being recorded, and with no period and no per-node bytes it read as a flat all-time
+// number rather than as a drop (#1981).
+type NodeBandwidth struct {
+	NodeID   string `json:"node_id"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
+	Sessions int    `json:"sessions"`
 }
 
 // NodeDailySession is the number of distinct tunnel sessions a gateway carried on one

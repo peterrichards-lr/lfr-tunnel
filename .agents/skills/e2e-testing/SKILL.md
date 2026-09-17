@@ -136,6 +136,36 @@ rendered nothing, and both still passed:
 then the absences. Without it a test proves the page did not render rather than that it rendered
 correctly, and reports the two identically.
 
+## 3b. A V1 loader that is not wired into `showTab` never runs
+
+Portal V1's sections ship hidden, and several cards inside a section additionally ship
+`display: none` and are revealed only by the loader that fills them. So a loader wired to the
+wrong branch -- or to no branch -- leaves its markup permanently blank on the route a user takes,
+while the elements themselves are present in the DOM and every `toBeVisible()` on the container
+passes.
+
+This has now happened three times:
+
+| loader | wired to | found by |
+|---|---|---|
+| `loadServerConfig()` | a section id that has never existed (`settings`), then moved to `maintenance` rather than corrected | #522 / #525, seven weeks later |
+| `loadMaintenanceStatus()`, `loadDomains()` | the wrong branch | #1785 |
+| `loadSystemSettings()` | **nothing at all** | #1995's spec, on 2026-09-17 |
+
+The third one is the instructive case. It is the only caller of `loadAlertSettings()`, so #1882's
+six email alert toggles -- filed as "three of the six are API-only", fixed in the endpoint and in
+both portals' rendering -- **still never reached a V1 user**, because the function that renders
+them was never invoked. Nothing referenced `alert-settings-container` in any spec, so nothing
+noticed.
+
+**The symptom to recognise:** an element that exists but is empty. A `<select>` with no
+`<option>`, a container with no rows. That is a loader that never ran, not a rendering bug -- and
+`grep -n "loadYourThing" pkg/server/static/dashboard.js pkg/server/dashboard.html` settles it in
+one command. If the only hit is the definition, it is orphaned.
+
+**The corollary for a new spec:** a test that is the first of its kind will find something older
+than itself. Budget for that rather than assuming a red new spec means the new code is wrong.
+
 ## 4. The database is shared, so a fixture is a neighbour
 
 Every spec runs against one gateway and one database, in file order, with a single worker. A
@@ -244,8 +274,9 @@ Three things about that command are load-bearing:
   `tests/e2e/ui/pnpm-lock.yaml`, because the image ships browser builds for exactly ONE library
   version. Pinning `v1.60.0` from `package.json`'s `^1.60.0` was tried and Playwright refused to
   launch: *"Looks like Playwright was just updated to 1.61.1 ... required:
-  mcr.microsoft.com/playwright:v1.61.1-jammy"*. `tests/e2e/ui` also carries a stale
-  `package-lock.json` pinning 1.60.0, which is #1863.
+  mcr.microsoft.com/playwright:v1.61.1-jammy"*. `tests/e2e/ui` used to carry a stale
+  `package-lock.json` pinning 1.60.0 as well; #1863 removed it, and `pnpm-lock.yaml` is now the
+  only lockfile there.
 
 ### The suite needs more than colima's default 4 CPUs
 
@@ -278,4 +309,4 @@ do not need. It runs `npm install` against a pnpm project (#1863) and installs `
 the container on every run; `scripts/run-e2e-ui.sh` is the maintained path.
 
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*

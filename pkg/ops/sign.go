@@ -126,7 +126,30 @@ func SignCommand(args []string) {
 		fmt.Printf("  Windows:  %s\n", wouldSign(plan.Windows))
 		fmt.Printf("  Linux:    %s\n", wouldSign(plan.Linux))
 		fmt.Printf("  minisign: %s\n", wouldSign(plan.Minisign))
+
+		// Configuration being COMPLETE is not the same as it being USABLE, and the old dry run
+		// could not tell the difference: it reported "Windows: will be signed" and the real run
+		// then failed on the password (#1978). Actually open the key.
+		probeFailed := false
+		if plan.Windows {
+			err := ProbeWindowsKey(CredentialProbe{
+				LookPath:  lookPathFn,
+				Run:       RunCommandQuiet,
+				WriteTemp: writeSecretFile,
+			}, signKey, signPass)
+			fmt.Printf("  Windows key: %s\n", DescribeProbe(err))
+			if err != nil && !errors.Is(err, ErrProbeUnavailable) {
+				probeFailed = true
+			}
+		}
+
 		fmt.Println("Nothing was signed.")
+		if probeFailed {
+			// Exit 3, the same code the real run uses for a credential that cannot be used, so a
+			// caller checking only the exit code learns the same thing either way.
+			fmt.Println("A credential was checked and did not work -- the real run would fail.")
+			os.Exit(SignExitCredentials)
+		}
 		return
 	}
 

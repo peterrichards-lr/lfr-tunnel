@@ -266,24 +266,36 @@ func TestReloadWithNoDeclaredVendorKeepsThePreviousDatabase(t *testing.T) {
 
 	cfgPath := writeConfig(t, geoConfigYAML(geoSource{Path: running.Path, Provider: ""}))
 
-	err := srv.ReloadGeoDatabase(cfgPath)
-	if err == nil {
-		t.Fatal("dropping country_db_provider must be reported as a failed reload")
-	}
-	if !strings.Contains(err.Error(), string(geoReasonProviderNotDeclared)) {
-		t.Errorf("the error must name the undeclared vendor as the reason, got: %v", err)
+	// Composed with #1995, which moved the vendor gate from construction to the panel: the
+	// reload SUCCEEDS, because the file is readable and a display value is not a reason to
+	// refuse to open one. What the dropped vendor costs is publication, not the database.
+	if err := srv.ReloadGeoDatabase(cfgPath); err != nil {
+		t.Fatalf("dropping country_db_provider must not fail the reload -- the file is present "+
+			"and readable, and the vendor decides attribution rather than decoding: %v", err)
 	}
 
-	after := locationsFor(t, srv)
-	if !after.Available {
-		t.Fatalf("an undeclared vendor turned the panel off instead of keeping the previous "+
-			"database (reason %q)", after.Reason)
-	}
-	if after.Provider != running.Provider {
-		t.Errorf("the panel credits %q, want %q -- the running file's own vendor", after.Provider, running.Provider)
-	}
+	// The database stays open, which is what this test has always been for. Counts keep
+	// accruing while nobody is looking at them, so naming the vendor later makes the history
+	// visible rather than starting the week again.
 	if openAggregator(t, srv) != serving {
-		t.Error("the open database was replaced despite the reload being refused")
+		t.Error("the open database was replaced when only its declared vendor changed")
+	}
+
+	// And the panel goes to the "choose a vendor" state rather than carrying on crediting the
+	// vendor the config no longer declares. Keeping the old credit would be the #1964 failure
+	// exactly: publishing one vendor's data under another vendor's name, on the strength of a
+	// declaration that has been withdrawn.
+	after := locationsFor(t, srv)
+	if after.Available {
+		t.Errorf("the panel still publishes as %q after the declaration was withdrawn", after.Provider)
+	}
+	if after.Reason != geoReasonProviderNotDeclared {
+		t.Errorf("reason %q, want %q -- an operator who deleted one key must be told which one",
+			after.Reason, geoReasonProviderNotDeclared)
+	}
+	if after.ConfiguredPath != running.Path {
+		t.Errorf("the panel reports path %q, want %q -- it must still show which file was found",
+			after.ConfiguredPath, running.Path)
 	}
 }
 
@@ -310,22 +322,38 @@ func TestReloadWithAnIdenticalConfigDoesNotChurnTheOpenFile(t *testing.T) {
 		t.Error("an unchanged config reopened the database, losing this period's in-memory user sets")
 	}
 
-	// CONTROL. Without it, the assertion above is satisfied by a reload that never reopens
-	// anything -- including the broken one this whole issue exists to replace.
+	// Redeclaring the VENDOR on the same file is also a no-op for the handle, and is asserted
+	// rather than left implied (#1995 + #1998). The vendor never touches decoding, so the same
+	// path with a new label is the same open file -- and reopening it would cost the period's
+	// user sets for a display value. The credit must still follow, which is what stops this
+	// reading as "the reload ignored me".
 	other := geo.ProviderMaxMind
 	if running.Provider == string(other) {
 		other = geo.ProviderDBIP
 	}
-	changed := writeConfig(t, geoConfigYAML(geoSource{Path: running.Path, Provider: string(other)}))
-	if err := srv.ReloadGeoDatabase(changed); err != nil {
+	relabelled := writeConfig(t, geoConfigYAML(geoSource{Path: running.Path, Provider: string(other)}))
+	if err := srv.ReloadGeoDatabase(relabelled); err != nil {
 		t.Fatalf("redeclaring the vendor is a valid change: %v", err)
 	}
-	if openAggregator(t, srv) == serving {
-		t.Fatalf("CONTROL: a CHANGED config left the same database open, so the no-op assertion " +
-			"above proves nothing -- it would hold for a reload that never reopens anything")
+	if openAggregator(t, srv) != serving {
+		t.Error("redeclaring the vendor reopened the same file, losing this period's in-memory user sets")
 	}
 	if got := locationsFor(t, srv); got.Provider != string(other) {
-		t.Errorf("CONTROL: the panel credits %q after redeclaring the vendor as %q", got.Provider, other)
+		t.Errorf("the panel credits %q after redeclaring the vendor as %q -- the label did not move",
+			got.Provider, other)
+	}
+
+	// CONTROL. Without it, both assertions above are satisfied by a reload that never reopens
+	// anything -- including the broken one this whole issue exists to replace. A different FILE
+	// is the only change that must reopen, now that a vendor change deliberately must not.
+	_, second := twoRealDatabasesFromDifferentVendors(t)
+	changed := writeConfig(t, geoConfigYAML(second))
+	if err := srv.ReloadGeoDatabase(changed); err != nil {
+		t.Fatalf("pointing at a second real database is a valid change: %v", err)
+	}
+	if openAggregator(t, srv) == serving {
+		t.Fatalf("CONTROL: a CHANGED file left the same database open, so the no-op assertions " +
+			"above prove nothing -- they would hold for a reload that never reopens anything")
 	}
 }
 

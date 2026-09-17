@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/geo"
 )
 
 // A database with no declared vendor keeps the feature OFF (#1964).
@@ -64,38 +66,52 @@ func aReadableDatabase(t *testing.T) string {
 	return path
 }
 
+// Where this gate lives moved in #1995, and the protection did not.
+//
+// It used to refuse to OPEN the file, so this asserted srv.geo == nil. The vendor is now
+// settable from System Settings without a restart, so refusing to open a perfectly readable
+// file over a display value was the wrong lever: the database opens, the aggregator counts,
+// and the PANEL withholds both the credit and the rows until somebody names the publisher.
+// The licence protection is unchanged -- what changed is where it is applied.
 func TestAConfiguredDatabaseWithNoDeclaredVendorStaysOff(t *testing.T) {
 	path := aReadableDatabase(t)
 	srv := geoServerWithVendor(t, path, "")
 
-	if srv.geo != nil {
-		t.Fatal("geographic distribution started without a declared vendor, so the panel would " +
-			"credit whichever vendor the file claims to be")
+	if srv.geo == nil {
+		t.Fatal("a readable database was not opened because no vendor was declared -- since " +
+			"#1995 the vendor decides attribution, not whether the file can be read")
 	}
-	if srv.geoDiagnosis.Reason != geoReasonProviderNotDeclared {
-		t.Fatalf("reason %q, want %q -- telling an operator who configured a database that they "+
-			"configured nothing sends them to check the path",
-			srv.geoDiagnosis.Reason, geoReasonProviderNotDeclared)
+	_, _, err := srv.effectiveGeoProvider()
+	if !errors.Is(err, geo.ErrProviderNotDeclared) {
+		t.Fatalf("the vendor in force resolved with %v, want ErrProviderNotDeclared -- the panel "+
+			"would publish rows with no credit under them", err)
 	}
-	if srv.geoDiagnosis.Path != path {
-		t.Errorf("diagnosis path %q, want %q", srv.geoDiagnosis.Path, path)
+	available, _, diagnosis := srv.geoPanelState()
+	if !available {
+		t.Error("the panel reports no open database, so it cannot tell the operator the file was found")
+	}
+	if diagnosis.Path != path {
+		t.Errorf("diagnosis path %q, want %q", diagnosis.Path, path)
 	}
 }
 
+// A typo and an unset value still need different remedies, and still get different answers --
+// now from the vendor in force rather than from the startup diagnosis (see above).
 func TestAMisspelledVendorIsReportedSeparatelyFromAnUnsetOne(t *testing.T) {
 	srv := geoServerWithVendor(t, aReadableDatabase(t), "maxmnid")
 
-	if srv.geo != nil {
-		t.Fatal("geographic distribution started with an unrecognised vendor")
+	if srv.geo == nil {
+		t.Fatal("a readable database was not opened because its declared vendor was misspelled")
 	}
-	if srv.geoDiagnosis.Reason != geoReasonProviderUnknown {
-		t.Fatalf("reason %q, want %q -- a typo and an unset value need different remedies",
-			srv.geoDiagnosis.Reason, geoReasonProviderUnknown)
+	_, _, err := srv.effectiveGeoProvider()
+	if !errors.Is(err, geo.ErrProviderUnknown) {
+		t.Fatalf("the vendor in force resolved with %v, want ErrProviderUnknown -- a typo and an "+
+			"unset value send the operator to different places", err)
 	}
 	// The operator has to see what they actually typed or they will read the message and look
 	// straight past their own typo.
-	if !strings.Contains(srv.geoDiagnosis.Detail, "maxmnid") {
-		t.Errorf("the detail does not quote what was set: %q", srv.geoDiagnosis.Detail)
+	if !strings.Contains(err.Error(), "maxmnid") {
+		t.Errorf("the error does not quote what was set: %v", err)
 	}
 }
 

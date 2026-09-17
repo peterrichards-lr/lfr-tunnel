@@ -273,6 +273,25 @@ func TestStateHeadlinePanelAnnotationsLiveWithTheirTable(t *testing.T) {
 			"two arms disagree about when a required credit line appears (#1866, #1921)")
 	}
 
+	// The same credit has a SECOND surface since #1995: the preview in System Settings, which
+	// shows an admin the exact line a chosen vendor will publish before they publish it. It is
+	// subject to the identical rule -- no vendor chosen means no credit rendered -- so both
+	// arms must drive it off the choice and, in V1, through the one clearing path above
+	// rather than a copy of it. A preview with its own renderer is free to say something the
+	// panel never publishes.
+	if !strings.Contains(source, "fillGeoAttribution(el, !!chosen, chosen)") {
+		t.Errorf("dashboard.js renders the System Settings credit preview without going through " +
+			"fillGeoAttribution, so the preview and the published credit can diverge (#1995)")
+	}
+	v2Settings, err := os.ReadFile(filepath.Join("..", "..", "ui", "src", "pages", "AdminSettings.tsx"))
+	if err != nil {
+		t.Fatalf("read AdminSettings.tsx: %v", err)
+	}
+	if !strings.Contains(string(v2Settings), "{geoProvider && (") {
+		t.Errorf("Portal V2 does not gate its credit preview on a chosen vendor, so it would show " +
+			"a credit with no vendor selected (#1866, #1995)")
+	}
+
 	// The caveat must still RENDER -- just not early. Dropping it would be the worse defect:
 	// it exists so the counts cannot be read as a score (placementCaveats,
 	// pkg/db/node_placement.go), and V2 renders it beneath the table it annotates.

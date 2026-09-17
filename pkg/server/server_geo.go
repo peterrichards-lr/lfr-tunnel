@@ -97,13 +97,22 @@ func newGeoAggregator(path, declaredProvider string, bothPathsSet bool, database
 		slog.Warn("[Geo] Both country_db_path and geolite2_db_path are set; the neutral key wins "+
 			"and the alias is ignored. Remove geolite2_db_path.", "using", path)
 	}
-	// Parsed now, ACTED ON after the file checks below (#1964).
-	//
-	// Order matters to the operator: an unset or mistyped path is a more specific problem than
-	// a missing vendor, and reporting the vendor first would send someone who typed the path
-	// wrongly off to set a second key that will not help. The existing #1938 reasons therefore
-	// keep precedence, and the vendor gate applies to a database that is otherwise fine.
-	declared, provErr := geo.ParseProvider(declaredProvider)
+	// The vendor in force at startup, which is the DB row when the portal has set one and the
+	// YAML key otherwise (#1995). Used here for the log line and for the metadata-mismatch
+	// warning only: it is NOT what decides whether the aggregator gets built, because it is
+	// now changeable while the process runs and the aggregator is not.
+	inForce, _ := geoProviderInForce(database, declaredProvider)
+	declared, perr := geo.ParseProvider(inForce)
+	// Said at boot as well as in the panel, and only when something WAS set: an unset vendor
+	// is the honest default and warning about it would fire on every deployment that has not
+	// made the choice yet -- training the reader to ignore the line that matters when they
+	// have made it, and made it wrongly. A value that does not parse is the opposite case:
+	// somebody typed a vendor, and the panel will credit nobody until it is corrected.
+	if perr != nil && inForce != "" {
+		slog.Warn("[Geo] The vendor in force is not one this build knows, so the panel will "+
+			"publish no credit and no rows until it is corrected in System Settings.",
+			"country_db_provider", inForce, "error", perr)
+	}
 
 	resolver, err := geo.OpenResolver(path, declared)
 	if err != nil {
@@ -123,41 +132,25 @@ func newGeoAggregator(path, declaredProvider string, bothPathsSet bool, database
 		return nil, geoDiagnosis{Reason: geoReasonUnreadable, Path: path, Detail: err.Error()}
 	}
 
-	// The database is present and readable. Now the vendor, which is declared rather than
-	// derived because deriving it does not work: an IP2Location MMDB reports MaxMind's own
-	// database_type, description, languages and record schema, so derivation credited MaxMind
-	// for IP2Location's data and left IP2Location's required acknowledgment unshown (#1964).
+	// The database is present and readable, so the aggregator is built. The VENDOR gate is
+	// applied by handleGetLocationAnalytics instead, once per request (#1995).
 	//
-	// Every supported vendor's licence obliges a DIFFERENT visible credit, so a guess here is a
-	// licence breach rather than a cosmetic error. Off is the only honest alternative.
-	if provErr != nil {
-		if cerr := resolver.Close(); cerr != nil {
-			slog.Warn("[Geo] Failed to close the geo-IP database after refusing it", "error", cerr)
-		}
-		switch {
-		case errors.Is(provErr, geo.ErrProviderNotDeclared):
-			slog.Warn("[Geo] A geo-IP database is configured and readable but country_db_provider "+
-				"is not set; geographic distribution is disabled. Each supported vendor's licence "+
-				"requires a different visible credit and the file cannot be trusted to say which "+
-				"it is.", "path", path)
-			return nil, geoDiagnosis{Reason: geoReasonProviderNotDeclared, Path: path}
-		default:
-			slog.Warn("[Geo] country_db_provider names a vendor this build does not know; "+
-				"geographic distribution is disabled.",
-				"path", path, "country_db_provider", declaredProvider, "error", provErr)
-			return nil, geoDiagnosis{
-				Reason: geoReasonProviderUnknown,
-				Path:   path,
-				Detail: provErr.Error(),
-			}
-		}
-	}
-	// The provider is logged because it decides which attribution the panel renders, and
-	// it is DERIVED from the file rather than configured (#1921). "unknown" here is the
-	// operator's only warning that their vendor's credit line is not being shown.
+	// It used to be applied here, which meant an operator who named the vendor after the
+	// gateway started was told to restart it -- and the vendor is the one part of this that
+	// genuinely does not need a restart. It never touches decoding: Country() resolves through
+	// countryPaths whichever vendor supplied the file, and the provider is read in exactly two
+	// places, this log line and the attribution the panel renders. Refusing to OPEN a perfectly
+	// readable file over a display value was the wrong lever.
+	//
+	// The protection itself is unchanged and must stay that way: with no vendor in force the
+	// panel renders the "choose a vendor" state and no rows, because every supported vendor's
+	// licence obliges a DIFFERENT visible credit and guessing is a licence breach rather than a
+	// cosmetic error (#1964). What moved is WHERE that is decided, not WHETHER.
 	slog.Info("[Geo] Anonymous geographic distribution enabled",
-		"path", path, "provider", string(resolver.Provider()), "threshold", geo.DefaultThreshold)
-	return geo.New(resolver, geoStore{database: database}, geo.Options{}), geoDiagnosis{}
+		"path", path, "provider", string(declared), "threshold", geo.DefaultThreshold)
+	// Path is retained on the success diagnosis too, so System Settings can show the operator
+	// which file is actually open. It is admin-only, like the rest of this struct.
+	return geo.New(resolver, geoStore{database: database}, geo.Options{}), geoDiagnosis{Path: path}
 }
 
 // observeGeoLocation records one registration against its country.
@@ -241,7 +234,12 @@ func (s *Server) geoPanelState() (available bool, provider geo.Provider, diagnos
 	if s.geo == nil {
 		return false, geo.ProviderUnknown, s.geoDiagnosis
 	}
-	return true, s.geo.Provider(), geoDiagnosis{}
+	// The diagnosis is returned when the database is OPEN too, not replaced with a zero value
+	// (#1995). A readable file whose vendor nobody has named is now a real state -- the
+	// aggregator runs and the panel withholds the rows -- and System Settings has to be able
+	// to show the operator which file was found while telling them it is not being published.
+	// Returning an empty struct here made that screen claim no path was configured.
+	return true, s.geo.Provider(), s.geoDiagnosis
 }
 
 // closeGeo flushes and releases whatever database is open, on shutdown.
@@ -295,14 +293,30 @@ func (s *Server) applyGeoDatabase(want geoSource, bothPathsSet bool) error {
 		return nil
 	}
 	s.geoMu.RLock()
-	unchanged := s.geoSource == want
+	current := s.geoSource
+	open := s.geo != nil
 	s.geoMu.RUnlock()
-	if unchanged {
+	if current == want {
 		// The unchanged case has to be a real no-op, not a cheap reopen. SIGHUP is the edge
 		// token withdrawal signal too (#1309), so this path runs whenever an operator revokes
 		// a credential -- and closing the aggregator would flush and discard the current
 		// period's in-memory user sets as a side effect of an unrelated edit.
 		slog.Info("[Geo] Reloaded country database config: no change; the open file was left alone.",
+			"path", want.Path, "country_db_provider", want.Provider)
+		return nil
+	}
+
+	// A VENDOR-ONLY change does not reopen anything (#1995 + #1998). The vendor never touches
+	// decoding -- Country() resolves through countryPaths whichever vendor supplied the file --
+	// so the same path with a new declaration is the same open file with a new label on it.
+	// Reopening would cost the period's in-memory user sets for a display value, which is the
+	// very trade the unchanged case above refuses to make.
+	if open && current.Path == want.Path {
+		s.geoMu.Lock()
+		s.geoSource = want
+		s.geoMu.Unlock()
+		slog.Info("[Geo] Reloaded country database config: same file, new declared vendor. "+
+			"The panel credits the new one; nothing was reopened.",
 			"path", want.Path, "country_db_provider", want.Provider)
 		return nil
 	}
@@ -389,8 +403,12 @@ type apiError struct {
 // feature is on.
 type locationAnalyticsResponse struct {
 	Available bool `json:"available"`
-	// Provider is the vendor derived from the open database's own metadata -- "maxmind",
-	// "dbip", "ip2location" or "unknown" (#1921).
+	// Provider is the vendor in force -- "maxmind", "dbip" or "ip2location" (#1921, #1995).
+	//
+	// Declared, never derived: an IP2Location MMDB reports MaxMind's own database_type,
+	// description, languages and record schema, so deriving it credited MaxMind for
+	// IP2Location's data (#1964). Resolved per request from the portal row or the YAML key,
+	// so switching vendor takes effect without a restart.
 	//
 	// A key, not a rendered sentence: the credit each vendor's licence obliges is a
 	// translatable string that belongs in the i18n bundles with every other portal string,
@@ -425,21 +443,43 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 		respondJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	// One read, under one lock: availability, vendor and reason have to describe the same
-	// instant or the panel can credit a file that is no longer open (#1998).
-	available, provider, diagnosis := s.geoPanelState()
+	// Two reads, and they answer different questions (#1995 + #1998).
+	//
+	// geoPanelState is ONE read under ONE lock: whether a database is open and, if not, why.
+	// Those two must describe the same instant or the panel can report a reason for a file
+	// that is open, or availability for one that has just been closed by a reload.
+	openDatabase, _, diagnosis := s.geoPanelState()
+	// The VENDOR is resolved separately, per request, and it is deliberately not the one the
+	// open resolver was constructed with. Since #1995 the vendor is a display value settable
+	// from System Settings -- nothing about decoding depends on it -- so an operator who
+	// corrects it must see the credit change without restarting central. Crediting the
+	// resolver's own value instead would show the old vendor until the next reload, which is
+	// the restart this feature exists to remove.
+	provider, _, provErr := s.effectiveGeoProvider()
 	resp := locationAnalyticsResponse{
-		Available: available,
+		// Both halves. The file has to be open AND a vendor has to be named: rendering rows
+		// under no credit at all is the licence breach this gate exists to prevent, and
+		// rendering a credit with no database open would attribute data nobody is looking at.
+		Available: openDatabase && provErr == nil,
 		Threshold: geo.DefaultThreshold,
 		Buckets:   []db.LocationStat{},
 	}
-	if resp.Available {
-		// Which vendor's credit the panel must render (#1921). Only when a database is
-		// actually open: with nothing open there is no data on screen to attribute. Read
-		// from the resolver in force right now rather than from the config, so a reload
-		// moves the attribution with the file (#1998).
+	switch {
+	case resp.Available:
+		// Which vendor's credit the panel must render (#1921).
 		resp.Provider = string(provider)
-	} else {
+	case openDatabase:
+		// A readable database with no usable vendor. Before #1995 this state was decided at
+		// startup and the aggregator was never built; the reasons and the wording they drive
+		// are deliberately the same two, so both portals' existing messages still apply.
+		resp.ConfiguredPath = diagnosis.Path
+		if errors.Is(provErr, geo.ErrProviderNotDeclared) {
+			resp.Reason = geoReasonProviderNotDeclared
+		} else {
+			resp.Reason = geoReasonProviderUnknown
+			resp.Detail = provErr.Error()
+		}
+	default:
 		// Why it is off, not just that it is (#1938). Read from what the constructor or the
 		// last reload recorded rather than re-stat'ing the path here: this must describe the
 		// state the running process is actually in, and a file created since then is not
@@ -451,7 +491,13 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 		resp.ConfiguredPath = diagnosis.Path
 		resp.Detail = diagnosis.Detail
 	}
-	if s.db == nil {
+	if !resp.Available || s.db == nil {
+		// No rows unless a vendor is in force (#1995). The aggregator now runs whenever the
+		// file opens, so counts can exist for a period before anybody named the publisher --
+		// and serving them would put a vendor's results on an admin's screen with that
+		// vendor's required credit nowhere, which is the licence breach this whole gate
+		// exists to prevent. They are not discarded, only withheld: naming the vendor makes
+		// the history that was already collected visible, rather than starting from zero.
 		respondJSON(w, http.StatusOK, resp)
 		return
 	}

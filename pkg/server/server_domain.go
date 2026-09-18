@@ -15,6 +15,17 @@ import (
 )
 
 func (s *Server) generateRandomSubdomainPrefix(style string) string {
+	// The test seam, and it lives HERE rather than around the registration call sites on
+	// purpose (#2020). The regression the property test guards against is somebody inlining a
+	// weaker candidate loop back into one handler -- and that loop calls this function, so a
+	// seam one level up is one the regression walks straight past, leaving the test green
+	// against exactly the code it exists to catch. Measured, not assumed: with the seam at the
+	// call sites, reverting the edge path to its pre-#2020 body left every collision case
+	// passing. Nil in production.
+	if s.randomSubdomainSource != nil {
+		return s.randomSubdomainSource()
+	}
+
 	randInt := func(max int) int {
 		b := make([]byte, 4)
 		_, _ = rand.Read(b) //nolint:errcheck

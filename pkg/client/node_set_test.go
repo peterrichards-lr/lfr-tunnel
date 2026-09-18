@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestParseNodeSetFingerprint(t *testing.T) {
@@ -158,22 +157,27 @@ func TestHeartbeatRecordsTheServingGatewaysFingerprintOnly(t *testing.T) {
 	defer cancel()
 	engine.StartHealthChecks(ctx, func() {}, serving.URL, "us", "session-token", []int{})
 
-	// The heartbeat ticks every 5s; one tick is enough and the margin is for a slow CI box.
-	deadline := time.Now().Add(9 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt64(&servingHits) == 0 {
-		time.Sleep(50 * time.Millisecond)
-	}
-	if atomic.LoadInt64(&servingHits) == 0 {
+	if !waitFor(func() bool { return atomic.LoadInt64(&servingHits) > 0 }) {
 		t.Fatal("the serving gateway never received a heartbeat -- the harness failed, not the subject")
 	}
 	// PREMISE. The assertion below is only evidence that central's body was IGNORED if central
 	// was actually asked; without this it is satisfied by central never having been pinged.
-	if atomic.LoadInt64(&centralHits) == 0 {
+	//
+	// WAITED FOR, not read once (#2026). statusReportTargets returns [serving, central] and the
+	// health-check loop pings them in that order, sequentially -- so at the instant servingHits
+	// becomes 1, central's POST has not been issued yet. Polling on servingHits alone and then
+	// reading centralHits immediately is a race a loaded runner loses, and it lost it on PR #2028
+	// at exactly 5.00s: the first tick, with this premise reported as a failure of the heartbeat
+	// path rather than of the wait.
+	if !waitFor(func() bool { return atomic.LoadInt64(&centralHits) > 0 }) {
 		t.Fatal("the control plane never received a heartbeat -- the serving-gateway assertion " +
 			"below would pass for the wrong reason")
 	}
-	// The record happens after the response is read, so allow the tick to finish.
-	time.Sleep(500 * time.Millisecond)
+	// The record happens after the response body is read, so let the tick finish. Polled rather
+	// than slept for 500ms: waiting longer can only make a recorded value more likely to be
+	// visible, and can never turn a correct one into a wrong one, so the switch below still
+	// diagnoses what was actually recorded.
+	waitFor(func() bool { return engine.NodeSetFingerprint() != "" })
 
 	switch got := engine.NodeSetFingerprint(); got {
 	case servingFingerprint:

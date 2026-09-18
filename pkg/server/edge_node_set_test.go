@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"lfr-tunnel/pkg/config"
 )
@@ -26,25 +25,8 @@ import (
 // a fingerprint, it was that nothing carried one to the node that needed it, and a fixture that
 // sets upstreamNodeSet directly would have passed against the bug for the whole of its life.
 
-// waitForNodeSet polls until cond holds, or fails naming what never happened.
-//
-// Polled rather than slept: these paths cross two servers, a websocket and two goroutines, and a
-// fixed sleep here would either be slow on every run or flaky on a loaded one.
-func waitForNodeSet(t *testing.T, whatShouldHappen func() string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out after 10s waiting for: %s", whatShouldHappen())
-}
-
-// stated is the fixed-string form of waitForNodeSet's message, for the waits whose failure has
-// only one possible cause.
-func stated(msg string) func() string { return func() string { return msg } }
+// waitUntil and stated were written for these tests and now live in wait_test.go, so that the
+// next test needing "wait for this to happen" finds them instead of growing another one (#2026).
 
 // startCentralForNodeSet brings up a real control plane behind a real HTTP listener, which is
 // what an edge's control channel dials.
@@ -99,7 +81,7 @@ func quoteFP(fp string) string {
 func waitForHeartbeatFingerprint(t *testing.T, edge, central *Server, sessionToken, whatShouldHappen string) string {
 	t.Helper()
 	var fp string
-	waitForNodeSet(t, func() string {
+	waitUntil(t, func() string {
 		return whatShouldHappen + " -- " + whereItStopped(edge, central)
 	}, func() bool {
 		fp = heartbeatFingerprint(t, edge, sessionToken)
@@ -113,7 +95,7 @@ func waitForHeartbeatFingerprint(t *testing.T, edge, central *Server, sessionTok
 func waitForHeartbeatChange(t *testing.T, edge, central *Server, sessionToken, previous, whatShouldHappen string) string {
 	t.Helper()
 	var fp string
-	waitForNodeSet(t, func() string {
+	waitUntil(t, func() string {
 		return whatShouldHappen + " -- it stayed at " + quoteFP(previous) + "; " + whereItStopped(edge, central)
 	}, func() bool {
 		fp = heartbeatFingerprint(t, edge, sessionToken)
@@ -168,7 +150,7 @@ func TestEdgeEchoesCentralsNodeSetAsTheRosterMoves(t *testing.T) {
 
 	edgeUS := nodeSetTestEdge(t, ts.URL, usToken, "us.lfr-demo.se")
 	defer edgeUS.Stop()
-	waitForNodeSet(t, stated("edge-us to authenticate with the control plane"), func() bool {
+	waitUntil(t, stated("edge-us to authenticate with the control plane"), func() bool {
 		return edgeIsRegistered(central, "edge-us")
 	})
 
@@ -199,7 +181,7 @@ func TestEdgeEchoesCentralsNodeSetAsTheRosterMoves(t *testing.T) {
 	// A second edge WAKES. This is the case the issue is about: the client on edge-us can now
 	// elect edge-sa, and before this it had no way to find that out short of restarting.
 	edgeSA := nodeSetTestEdge(t, ts.URL, saToken, "sa.lfr-demo.se")
-	waitForNodeSet(t, stated("edge-sa to authenticate with the control plane"), func() bool {
+	waitUntil(t, stated("edge-sa to authenticate with the control plane"), func() bool {
 		return edgeIsRegistered(central, "edge-sa")
 	})
 
@@ -214,7 +196,7 @@ func TestEdgeEchoesCentralsNodeSetAsTheRosterMoves(t *testing.T) {
 	// off nightly -- and the value has to return to the one that described that roster rather
 	// than drifting somewhere new.
 	edgeSA.Stop()
-	waitForNodeSet(t, stated("central to notice edge-sa's control connection close"), func() bool {
+	waitUntil(t, stated("central to notice edge-sa's control connection close"), func() bool {
 		return !edgeIsRegistered(central, "edge-sa")
 	})
 
@@ -246,7 +228,7 @@ func TestReloadingTheRosterRetellsTheEdges(t *testing.T) {
 
 	edgeUS := nodeSetTestEdge(t, ts.URL, usToken, "us.lfr-demo.se")
 	defer edgeUS.Stop()
-	waitForNodeSet(t, stated("edge-us to authenticate with the control plane"), func() bool {
+	waitUntil(t, stated("edge-us to authenticate with the control plane"), func() bool {
 		return edgeIsRegistered(central, "edge-us")
 	})
 

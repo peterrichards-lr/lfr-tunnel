@@ -616,15 +616,13 @@ func TestStartHealthChecks_CentralOutageDoesNotDropAnEdgeServedTunnel(t *testing
 
 	// PREMISE, checked before the survival assertion rather than after it. Keeping it here
 	// is what stops this test silently going vacuous again.
-	deadline := time.Now().Add(9 * time.Second)
-	for time.Now().Before(deadline) &&
-		(atomic.LoadInt64(&edgeHits) == 0 || atomic.LoadInt64(&centralHits) == 0) {
-		time.Sleep(50 * time.Millisecond)
-	}
-	if atomic.LoadInt64(&edgeHits) == 0 {
+	//
+	// Both counters are waited for, which is what #2026's sibling flake turned out to be missing.
+	// Sharing waitFor with it rather than keeping a second hand-rolled loop here.
+	if !waitFor(func() bool { return atomic.LoadInt64(&edgeHits) > 0 }) {
 		t.Fatal("the serving gateway never received a heartbeat -- the harness failed, not the subject")
 	}
-	if atomic.LoadInt64(&centralHits) == 0 {
+	if !waitFor(func() bool { return atomic.LoadInt64(&centralHits) > 0 }) {
 		t.Fatal("the control plane never received a heartbeat, so its 503 was never seen; " +
 			"the survival assertion below would pass for the wrong reason (#1961)")
 	}

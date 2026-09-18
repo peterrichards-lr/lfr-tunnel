@@ -1098,7 +1098,11 @@ export default function AdminAnalytics() {
                 {/* Shared with the credit PREVIEW in System Settings (#1995), so what an
                     admin is shown before choosing a vendor and what gets published after
                     cannot be two different sentences. */}
-                <GeoAttribution provider={locations.provider || 'unknown'} />
+                <GeoAttribution
+                  provider={locations.provider || 'unknown'}
+                  href={locations.attribution_href}
+                  text={locations.attribution_text}
+                />
               </p>
             )}
           </div>

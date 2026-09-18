@@ -1170,6 +1170,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				consentStr = "true"
 			}
 
+			// nil rather than a zero-valued object when no credit is owed, so a portal can
+			// test presence. An empty object would render an anchor to nowhere.
+			var geoAttributionPayload any
+			if attr, owed := s.geoAttribution(); owed {
+				geoAttributionPayload = attr
+			}
+
 			// Apply default InstallDir fallbacks if not configured
 			effectivePlatforms := make(map[string]config.PlatformConfig)
 			for k, v := range s.cfg.ClientPlatforms {
@@ -1228,17 +1235,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"docker_image":                dockerImg,
 				"docker_bypass_url":           s.cfg.DockerBypassURL,
 				"client_platforms":            effectivePlatforms,
-				"regions":                     regions,
-				"regions_unavailable":         regionsUnavailable,
-				"disable_client_downloads":    s.cfg.DisableClientDownloads,
-				"disable_brew":                s.cfg.DisableBrew,
-				"disable_scoop":               s.cfg.DisableScoop,
-				"start_time":                  s.startTime.Format(time.RFC3339),
-				"uptime_seconds":              int(time.Since(s.startTime).Seconds()),
-				"force_mfa":                   s.cfg.ForceMFA,
-				"enable_onboarding":           s.cfg.EnableOnboarding,
-				"owner_email":                 s.cfg.Owner.UserID,
-				"supported_domains":           s.tunnelDomains(),
+				// The geo vendor's credit, when one is owed (#2044). Public on purpose: the
+				// login screen has no session and cannot call the admin-only locations route,
+				// and every supported vendor's licence obliges a VISIBLE credit -- so the one
+				// surface every visitor sees has to be able to render it.
+				"geo_attribution":          geoAttributionPayload,
+				"regions":                  regions,
+				"regions_unavailable":      regionsUnavailable,
+				"disable_client_downloads": s.cfg.DisableClientDownloads,
+				"disable_brew":             s.cfg.DisableBrew,
+				"disable_scoop":            s.cfg.DisableScoop,
+				"start_time":               s.startTime.Format(time.RFC3339),
+				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
+				"force_mfa":                s.cfg.ForceMFA,
+				"enable_onboarding":        s.cfg.EnableOnboarding,
+				"owner_email":              s.cfg.Owner.UserID,
+				"supported_domains":        s.tunnelDomains(),
 				// How long a client should keep trying to reattach to this gateway before
 				// handing control back to its own region failover (#1946). Advertised so the
 				// number can be corrected without a client release; omitted when unset, in

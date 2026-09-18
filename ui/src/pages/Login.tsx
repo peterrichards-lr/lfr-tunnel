@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import GeoAttribution from '../components/GeoAttribution';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -8,8 +9,26 @@ export default function Login() {
   const navigate = useNavigate();
   const { language, setLanguage, t, availableLanguages } = useI18n();
 
+  // The geo vendor's credit, when one is owed (#2044). /api/version is public, which is why
+  // the credit can reach a page with no session at all -- and the strictest requirement among
+  // the supported vendors is product-level, not "wherever results are shown".
+  const [geoCredit, setGeoCredit] = useState<{
+    provider: string;
+    href: string;
+    text: string;
+  } | null>(null);
   const [email, setEmail] = useState('');
   const [statusMsg, setStatusMsg] = useState({ text: '', isError: false });
+
+  // Failure is tolerated in silence: a credit is owed only when a database is open, and a
+  // login screen must still render if the gateway does not answer.
+  useEffect(() => {
+    axios
+      .get('/api/version')
+      .then((res) => setGeoCredit(res.data?.geo_attribution ?? null))
+      .catch(() => setGeoCredit(null));
+  }, []);
+
   const [isSending, setIsSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
@@ -356,6 +375,18 @@ export default function Login() {
             {t('cookie_title', 'Cookie Disclosure')}
           </a>
         </div>
+        {geoCredit && (
+          <p
+            data-testid="geo-credit-footer"
+            className="login-footer-geo text-xs m-0 mt-sm"
+          >
+            <GeoAttribution
+              provider={geoCredit.provider}
+              href={geoCredit.href}
+              text={geoCredit.text}
+            />
+          </p>
+        )}
       </div>
     </div>
   );

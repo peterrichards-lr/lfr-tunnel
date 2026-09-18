@@ -418,6 +418,16 @@ type locationAnalyticsResponse struct {
 	// Empty when Available is false -- with no database open there is no data on screen and
 	// so nothing to attribute.
 	Provider string `json:"provider,omitempty"`
+	// AttributionHref and AttributionText are the anchor the credit must carry, from the same
+	// table /api/version serves the footers from (#2044). Sent rather than looked up in the
+	// portal so the licence obligation lives in ONE place: it used to be duplicated in
+	// ui/src/components/GeoAttribution.tsx and pkg/server/static/dashboard.js, and adding the
+	// login-screen credit would have made a third copy.
+	//
+	// Not translated, unlike the sentence around them: these are quoted from what each vendor
+	// publishes, and a translator is not free to improve a licensor's words.
+	AttributionHref string `json:"attribution_href,omitempty"`
+	AttributionText string `json:"attribution_text,omitempty"`
 	// Reason is one of the geoReason constants, and is empty when Available.
 	Reason geoReason `json:"reason,omitempty"`
 	// ConfiguredPath is the country_db_path (or its geolite2_db_path alias) the gateway
@@ -466,8 +476,13 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 	}
 	switch {
 	case resp.Available:
-		// Which vendor's credit the panel must render (#1921).
+		// Which vendor's credit the panel must render (#1921), and the anchor it must carry
+		// (#2044) -- from the same table the public /api/version serves the footers from, so
+		// the obligation has one home rather than one per surface.
 		resp.Provider = string(provider)
+		if href, text, ok := geo.AttributionLink(provider); ok {
+			resp.AttributionHref, resp.AttributionText = href, text
+		}
 	case openDatabase:
 		// A readable database with no usable vendor. Before #1995 this state was decided at
 		// startup and the aggregator was never built; the reasons and the wording they drive
@@ -514,4 +529,43 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 		resp.Buckets = stats
 	}
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// GeoAttribution is the credit the portals must display wherever this gateway is running with a
+// geo-IP database open (#2044).
+//
+// Present on /api/version, which is PUBLIC and which both arms already fetch, because the credit
+// has to reach the login screen -- a page with no session, which cannot call the admin-only
+// locations route. The same values reach the analytics panel through that route, so there is one
+// table and no copy to drift.
+//
+// Provider is a KEY, not a sentence: the wording each licence obliges is translatable and lives
+// in the i18n bundles with every other portal string, where `make check-i18n` can see it. Href
+// and Text are NOT translated -- they are quoted from what each vendor publishes, and a
+// translator is not free to improve a licensor's words.
+type GeoAttribution struct {
+	Provider string `json:"provider"`
+	Href     string `json:"href"`
+	Text     string `json:"text"`
+}
+
+// geoAttribution reports the credit owed right now, or false when none is.
+//
+// False whenever no database is open, whatever the reason -- unset, mistyped, unreadable, or a
+// vendor this build does not know. Crediting a vendor whose data is not in use is #1964's false
+// provenance pointing the other way, and the gateway ships with geo off, so this is the normal
+// case rather than an edge one.
+func (s *Server) geoAttribution() (GeoAttribution, bool) {
+	if s == nil || s.geo == nil {
+		return GeoAttribution{}, false
+	}
+	p := s.geo.Provider()
+	href, text, ok := geo.AttributionLink(p)
+	if !ok {
+		// ProviderUnknown: a readable database from a vendor this build cannot name. The panel
+		// already tells an admin to add the attribution by hand; there is nobody to link to, so
+		// the footers stay empty rather than inventing a vendor.
+		return GeoAttribution{}, false
+	}
+	return GeoAttribution{Provider: string(p), Href: href, Text: text}, true
 }

@@ -8858,3 +8858,67 @@ async function setViewAs(role) {
     alert('Could not change the preview role: ' + e.message);
   }
 }
+
+/**
+ * renderGeoCreditFooters publishes the geo vendor's credit in every footer this arm has (#2044).
+ *
+ * Both footers, not just the authenticated one: the login screen is the surface every visitor
+ * sees, and the strictest requirement among the supported vendors is product-level -- IPinfo's
+ * "IP address data is powered by IPinfo", required for commercial and non-commercial use --
+ * rather than DB-IP's page-scoped "wherever results are shown". All vendors are honoured to the
+ * strictest standard rather than reasoning per vendor, because that reasoning would have to be
+ * redone every time the vendor changed, and since #1998 that is a SIGHUP away.
+ *
+ * /api/version is PUBLIC, which is what lets a page with no session render this at all.
+ *
+ * Silent when nothing is owed -- no database open means no vendor's data is in use, and
+ * crediting one anyway would be a false provenance claim (#1964, pointing the other way). The
+ * gateway ships with geo off, so that is the normal case.
+ *
+ * Kept in step with Portal V2's copy in Sidebar.tsx and Login.tsx: the two arms are an A/B test
+ * (#1866), so a credit rendered in one and not the other is a defect.
+ */
+async function renderGeoCreditFooters() {
+  const slots = document.querySelectorAll('.geo-credit-footer');
+  if (!slots.length) return;
+  try {
+    const res = await fetch('/api/version');
+    if (!res.ok) return;
+    const body = await res.json();
+    const credit = body && body.geo_attribution;
+    if (!credit || !credit.provider) return;
+
+    const sentence = geoAttributionText(credit.provider);
+    slots.forEach((el) => {
+      // Built with DOM nodes rather than innerHTML: the sentence comes from a locale bundle and
+      // the href from the gateway, but this renders on a PRE-AUTHENTICATION page, so the narrow
+      // path is the right one regardless of how trustworthy today's inputs are.
+      fillGeoCreditSlot(el, sentence, credit.href, credit.text);
+    });
+  } catch {
+    // A login screen must render whether or not the gateway answers.
+  }
+}
+
+/**
+ * fillGeoCreditSlot writes one credit into el, splitting the sentence on its {0} placeholder and
+ * putting the vendor's anchor there.
+ */
+function fillGeoCreditSlot(el, sentence, href, text) {
+  el.textContent = '';
+  const parts = sentence.split('{0}');
+  if (parts.length < 2 || !href || !text) {
+    el.textContent = sentence;
+    return;
+  }
+  el.appendChild(document.createTextNode(parts[0]));
+  const a = document.createElement('a');
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noreferrer';
+  a.textContent = text;
+  el.appendChild(a);
+  el.appendChild(document.createTextNode(parts.slice(1).join('{0}')));
+}
+
+document.addEventListener('DOMContentLoaded', renderGeoCreditFooters);

@@ -69,6 +69,15 @@ type GeoProviderOption struct {
 	// the SAME key the geographic panel renders. One key, so the preview in System Settings
 	// cannot show an admin something different from what gets published.
 	AttributionKey string `json:"attribution_key"`
+	// AttributionHref and AttributionText are the anchor that credit must carry, from
+	// geo.AttributionLink -- the one table (#2044). Served per option because System Settings
+	// previews the credit for a vendor the admin has SELECTED but not yet saved, which is not
+	// the one in force, so the active-vendor payload on /api/version cannot answer it.
+	//
+	// Not translated, unlike the sentence: these are quoted from what each vendor publishes,
+	// and a translator is not free to improve a licensor's words.
+	AttributionHref string `json:"attribution_href,omitempty"`
+	AttributionText string `json:"attribution_text,omitempty"`
 }
 
 // GeoProviderOptions is the dropdown's vocabulary, derived from geo.SelectableProviders().
@@ -84,13 +93,16 @@ func GeoProviderOptions() []GeoProviderOption {
 	providers := geo.SelectableProviders()
 	out := make([]GeoProviderOption, 0, len(providers))
 	for _, p := range providers {
+		href, text, _ := geo.AttributionLink(p)
 		out = append(out, GeoProviderOption{
 			Value: string(p),
 			// Derived from the value so a vendor added to geo.SelectableProviders cannot
 			// arrive without keys; check-i18n-keys then requires both in every bundle,
 			// and TestEveryOfferedVendorHasALabelAndACredit requires them in English.
-			LabelKey:       "geo_provider_" + string(p),
-			AttributionKey: "geo_attribution_" + string(p),
+			LabelKey:        "geo_provider_" + string(p),
+			AttributionKey:  "geo_attribution_" + string(p),
+			AttributionHref: href,
+			AttributionText: text,
 		})
 	}
 	return out

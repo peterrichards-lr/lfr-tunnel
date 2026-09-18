@@ -107,6 +107,8 @@ func registerAs(t *testing.T, srv *Server, body string) {
 		t.Fatalf("expected 200 from handleRegister, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// writeAudit writes on a tracked goroutine, so the row is not visible synchronously.
+	// Fail-safe (#2038): every caller reads the row back through tunnelStartDetail, which
+	// fails the test outright when there is no entry -- too short a wait goes red.
 	time.Sleep(100 * time.Millisecond)
 }
 
@@ -312,6 +314,8 @@ func TestEdgeTunnelStartAuditRecordsAcceptingNode(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected edge registration 200, got %d: %s", rec.Code, rec.Body.String())
 	}
+	// Fail-safe (#2038): tunnelStartContext below fails when there is no audit row yet, so
+	// too short a wait reports a red rather than an assertion over a row that never landed.
 	time.Sleep(100 * time.Millisecond)
 
 	context := tunnelStartContext(t, srv, "edge-sub")

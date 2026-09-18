@@ -156,7 +156,8 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 	// 4. Manually trigger writeAudit to verify audit forwarding
 	edgeSrv.writeAudit("actor-id", "test-action", "subdomain", "123", "Edge event detailed logs", nil)
 
-	// Wait a moment for async audit notification
+	// Wait a moment for async audit notification. Fail-safe (#2038): too short and
+	// receivedEdgeAudit is still false, which the Fatal below reports.
 	time.Sleep(100 * time.Millisecond)
 
 	mu.Lock()
@@ -178,7 +179,8 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 
 	edgeSrv.registry.CleanLease(leases[0].SessionToken)
 
-	// Wait a moment for async cleanup notification
+	// Wait a moment for async cleanup notification. Fail-safe (#2038): too short and
+	// receivedEdgeDeregister is still false, which the Fatal below reports.
 	time.Sleep(100 * time.Millisecond)
 
 	mu.Lock()

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"path/filepath"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
 )
 
 // newTestLease builds a lease in the state the proxy path actually leaves one in: it lives
@@ -235,7 +237,8 @@ func TestEdgeReportsLeaseBytesOverControlChannel(t *testing.T) {
 	// A lease on the EDGE, carrying bytes. Central holds no lease for this host and never
 	// sees a byte of it, so anything that appears in its database arrived by the reporting
 	// path under test and by no other route.
-	addLease(edgeSrv.registry, newTestLease("demo.example.se", 128, 4096))
+	lease := newTestLease("demo.example.se", 128, 4096)
+	addLease(edgeSrv.registry, lease)
 
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -274,15 +277,30 @@ func TestEdgeReportsLeaseBytesOverControlChannel(t *testing.T) {
 		t.Fatalf("edge bytes were recorded but not against the edge: %+v", global.NodeDaily)
 	}
 
-	// And a second interval with no new traffic must add nothing -- the delta guarantee,
-	// observed through the real reporting loop rather than only at the registry.
-	time.Sleep(2500 * time.Millisecond)
-	analytics, err := controlSrv.db.GetUserAnalytics("user-1", 30)
-	if err != nil {
-		t.Fatalf("failed to re-read user analytics: %v", err)
-	}
-	if len(analytics.Tunnels) != 1 || analytics.Tunnels[0].BytesOut != 4096 {
-		t.Fatalf("idle intervals must not re-report the same bytes, got %+v", analytics.Tunnels)
+	// And a further interval must add only what is NEW -- the delta guarantee, observed
+	// through the real reporting loop rather than only at the registry.
+	//
+	// Driven by a fresh, distinctly-sized increment rather than by sleeping over an idle
+	// interval and re-reading the same number (#2038). "The total is still 4096" is equally
+	// true of a reporting interval that never elapsed at all, so a sleep one tick too short
+	// -- on a loaded runner, or after someone raises EdgeMetricsIntervalSeconds -- passed
+	// without the mechanism under test ever running. The arrival of the 7 new bytes is
+	// positive evidence that another cycle ran, and the total it settles at is what says
+	// that cycle reported the delta and not the running total again.
+	atomic.AddUint64(&lease.BytesOut, 7)
+	var latest db.TunnelBandwidth
+	waitUntil(t, func() string {
+		return fmt.Sprintf("a further reporting cycle to deliver the 7 new bytes out (analytics still %+v)", latest)
+	}, func() bool {
+		a, err := controlSrv.db.GetUserAnalytics("user-1", 30)
+		if err != nil || len(a.Tunnels) != 1 {
+			return false
+		}
+		latest = a.Tunnels[0]
+		return latest.BytesOut != 4096
+	})
+	if latest.BytesOut != 4103 || latest.BytesIn != 128 {
+		t.Fatalf("a reporting cycle re-reported bytes that were already accounted for: expected in=128 out=4103, got %+v", latest)
 	}
 
 	// A reconnect must not replay what was already accepted. Every edge drops its control
@@ -309,12 +327,22 @@ func TestEdgeReportsLeaseBytesOverControlChannel(t *testing.T) {
 		t.Fatal("the edge never re-established its control channel, so the replay check proves nothing")
 	}
 
-	time.Sleep(2500 * time.Millisecond)
-	analytics, err = controlSrv.db.GetUserAnalytics("user-1", 30)
-	if err != nil {
-		t.Fatalf("failed to read user analytics after the reconnect: %v", err)
-	}
-	if len(analytics.Tunnels) != 1 || analytics.Tunnels[0].BytesOut != 4096 || analytics.Tunnels[0].BytesIn != 128 {
-		t.Fatalf("a reconnect replayed bytes that had already been reported: %+v", analytics.Tunnels)
+	// Same shape as above, and for the same reason: the replay this guards against would be
+	// sent by the reconnected edge's next cycle, so the test has to observe that cycle rather
+	// than assume a sleep contained one. 11 more bytes out; a replay arrives as the 4103
+	// already reported on top of them.
+	atomic.AddUint64(&lease.BytesOut, 11)
+	waitUntil(t, func() string {
+		return fmt.Sprintf("the reconnected edge's next reporting cycle to deliver the 11 new bytes out (analytics still %+v)", latest)
+	}, func() bool {
+		a, err := controlSrv.db.GetUserAnalytics("user-1", 30)
+		if err != nil || len(a.Tunnels) != 1 {
+			return false
+		}
+		latest = a.Tunnels[0]
+		return latest.BytesOut != 4103
+	})
+	if latest.BytesOut != 4114 || latest.BytesIn != 128 {
+		t.Fatalf("a reconnect replayed bytes that had already been reported: expected in=128 out=4114, got %+v", latest)
 	}
 }

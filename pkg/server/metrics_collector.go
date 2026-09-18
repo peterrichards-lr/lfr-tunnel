@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"lfr-tunnel/pkg/config"
@@ -24,6 +25,15 @@ type MetricsCollector struct {
 	db       *db.DB
 	cfg      *config.ServerConfig
 	registry *Registry
+	// interval is how often Start sweeps, read from the field rather than the constant so a
+	// test can shorten it. At five minutes no test could observe a sweep at all, and
+	// TestMetricsCollectorLeavesEdgeDeltasForTheReporter asserted that an edge's deltas had
+	// survived a sweep that had never once run (#2038).
+	interval time.Duration
+	// sweeps counts ticker passes that have started, so a test can wait for a real sweep
+	// instead of sleeping a guess at one. Incremented before the edge/control branch below:
+	// it counts the sweep happening, not what the sweep decided to do.
+	sweeps atomic.Uint64
 }
 
 // NewMetricsCollector initializes a new metrics collector.
@@ -33,6 +43,7 @@ func NewMetricsCollector(database *db.DB, cfg *config.ServerConfig, registry *Re
 		db:       database,
 		cfg:      cfg,
 		registry: registry,
+		interval: metricsCollectorInterval,
 	}
 }
 
@@ -47,7 +58,11 @@ func (c *MetricsCollector) Queue(m *db.TunnelMetric) {
 
 // Start begins the background processing loop for metrics.
 func (c *MetricsCollector) Start(ctx context.Context) {
-	ticker := time.NewTicker(metricsCollectorInterval)
+	interval := c.interval
+	if interval <= 0 {
+		interval = metricsCollectorInterval
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -67,6 +82,7 @@ func (c *MetricsCollector) Start(ctx context.Context) {
 				slog.Info(fmt.Sprintf("[MetricsCollector] Failed to record tunnel metrics for %s: %v", m.FullHost, err))
 			}
 		case <-ticker.C:
+			c.sweeps.Add(1)
 			if c.db == nil {
 				// Deliberately does NOT call TakeByteDeltas: taking a delta consumes it, and
 				// on an edge the reporter that can actually deliver it is the one entitled

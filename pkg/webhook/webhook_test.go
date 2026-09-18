@@ -55,7 +55,8 @@ func TestWebhookAlerts(t *testing.T) {
 	service.SendIPBlacklistAlert("127.0.0.1", "spam")
 	service.SendTestAlert("admin@example.com", "2026-07-15 16:30:00 UTC", "v1.34.3")
 
-	// Wait for async goroutines to deliver payloads
+	// Wait for async goroutines to deliver payloads. Fail-safe (#2038): the assertions below
+	// require all five to have arrived, so too short a wait reports "got 3", not a pass.
 	time.Sleep(100 * time.Millisecond)
 
 	mu.Lock()

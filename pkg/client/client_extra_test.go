@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -28,11 +31,34 @@ func TestStartInspector_Basic(t *testing.T) {
 	}
 }
 
+// TestStartHealthChecks asserts that the heartbeat loop actually posts a tunnel-status
+// report carrying this session's token and the local target's state.
+//
+// It used to start the loop, sleep 100ms and assert nothing at all (#2038). The ticker runs
+// at HeartbeatInterval(), which defaults to 5s, so the window closed fifty times over before
+// the first tick: the loop under test never ran a single pass, and the test would have gone
+// on passing had the body of that pass been deleted. It also left the goroutine running on
+// context.Background() after the server it posts to had closed.
 func TestStartHealthChecks(t *testing.T) {
 	engine := NewInterceptorEngine("127.0.0.1", nil)
 	engine.TargetHost = "127.0.0.1"
 
+	var posted atomic.Int64
+	var mu sync.Mutex
+	var gotToken, gotStatus string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tunnel-status" {
+			var report struct {
+				SessionToken string `json:"session_token"`
+				Status       string `json:"status"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&report); err == nil {
+				mu.Lock()
+				gotToken, gotStatus = report.SessionToken, report.Status
+				mu.Unlock()
+				posted.Add(1)
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -41,8 +67,28 @@ func TestStartHealthChecks(t *testing.T) {
 	port, _ := strconv.Atoi(portStr)
 	engine.DestPort = port
 
-	engine.StartHealthChecks(context.Background(), nil, "http://example.com", "central", "dummy-token", []int{port})
-	time.Sleep(100 * time.Millisecond)
+	// Short enough that a tick is observable, which the 5s default is not.
+	engine.SetHeartbeatInterval(20 * time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	engine.StartHealthChecks(ctx, cancel, srv.URL, "central", "dummy-token", []int{port})
+
+	// Polled to waitForDeadline rather than slept: a loaded runner waits longer instead of
+	// declaring a pass over a heartbeat that never happened.
+	if !waitFor(func() bool { return posted.Load() > 0 }) {
+		t.Fatal("the heartbeat loop never posted to /api/tunnel-status, so nothing in it ran")
+	}
+
+	mu.Lock()
+	token, status := gotToken, gotStatus
+	mu.Unlock()
+	if token != "dummy-token" {
+		t.Errorf("the heartbeat did not carry this session's token, got %q -- the gateway cannot tell which tunnel it describes", token)
+	}
+	if status != "up" {
+		t.Errorf("the heartbeat reported %q for a reachable local target, expected \"up\"", status)
+	}
 }
 
 func TestLocalTargetStatus(t *testing.T) {

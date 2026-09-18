@@ -829,7 +829,8 @@ func TestAdminEndpoints(t *testing.T) {
 	}
 
 	// 5. Test audit log
-	// Sleep briefly to ensure async audit log write completes
+	// Sleep briefly to ensure async audit log write completes. Fail-safe (#2038): too short
+	// and there are no entries to list, which the assertion below reports.
 	time.Sleep(100 * time.Millisecond)
 	req5 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/audit?action=user.role_changed", nil)
 	req5.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
@@ -1666,8 +1667,14 @@ func TestServer_DatabaseBackupScheduler(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// 1. Manually trigger a database backup
-	time.Sleep(1 * time.Second) // Ensure unique timestamp
+	// 1. Manually trigger a database backup.
+	//
+	// There used to be a 1s sleep here "to ensure unique timestamp". It guarded against a
+	// second-resolution filename colliding with an earlier backup's -- but setupTestServer
+	// sets DisableBackupScheduler, so no startup backup exists, the directory is per-test,
+	// and this is the only call. It bought a second of suite time per run for nothing
+	// (#2038). If the assumption ever breaks, VACUUM INTO refuses to overwrite an existing
+	// file and the Fatal below names it.
 	err := srv.BackupDatabase()
 	if err != nil {
 		t.Fatalf("BackupDatabase failed: %v", err)
@@ -2801,10 +2808,21 @@ echo "$1 $2" >> "%s"
 	// duplicate-certificate rate limit on nothing more than a flaky connection reconnecting.
 	srv.registry.CleanLease(registerResp.SessionToken)
 
-	time.Sleep(300 * time.Millisecond)
+	// "No remove line in the log" is also exactly what a hook that has not run YET looks
+	// like, so the fixed 300ms sleep this replaces passed whenever the window closed before
+	// the hook could have written -- green without the mechanism under test ever running
+	// (#2038). A probe run through the same mechanism replaces it: runVanityDomainHook
+	// returns only once the script has exited, so once the probe's line is in the log, a
+	// hook fired by the cleanup has had a full execution's worth of time to write its own.
+	// Unlike a fixed sleep, that window widens on a slow machine rather than narrowing.
+	srv.runVanityDomainHook("add", "sync-probe.example.org", "test@example.com")
+
 	logBytesAfterCleanup, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("failed to read hook log after lease cleanup: %v", err)
+	}
+	if !strings.Contains(string(logBytesAfterCleanup), "add sync-probe.example.org") {
+		t.Fatalf("the hook probe never reached the log, so the absence of a remove line proves nothing about the cleanup: %q", string(logBytesAfterCleanup))
 	}
 	if strings.Contains(string(logBytesAfterCleanup), "remove custom-site.org") {
 		t.Errorf("expected ordinary lease cleanup NOT to trigger the remove hook, got log: %q", string(logBytesAfterCleanup))

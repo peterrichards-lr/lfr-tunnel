@@ -65,7 +65,7 @@ func startEdgeDiagFleet(t *testing.T) *edgeDiagFleet {
 
 	edge := nodeSetTestEdge(t, ts.URL, edgeDiagToken, "us.lfr-demo.se")
 	t.Cleanup(edge.Stop)
-	waitForNodeSet(t, stated("edge-us to authenticate with the control plane"), func() bool {
+	waitUntil(t, stated("edge-us to authenticate with the control plane"), func() bool {
 		return edgeIsRegistered(central, "edge-us")
 	})
 
@@ -237,7 +237,7 @@ func listOrNothing(items []string) string {
 func waitForEdgeCommand(t *testing.T, f *edgeDiagFleet, requestID string) []string {
 	t.Helper()
 	var got []string
-	waitForNodeSet(t, func() string {
+	waitUntil(t, func() string {
 		return "the client on edge-us to be handed collection request " + requestID +
 			" -- " + whereDiagStopped(f)
 	}, func() bool {
@@ -282,7 +282,7 @@ func TestEdgeServedCollectionReachesTheClientAndIsAcknowledged(t *testing.T) {
 	// The client acknowledges on its next heartbeat, exactly as pkg/client does.
 	heartbeatCommands(t, f.edge, f.sessionToken, []string{requestID})
 
-	waitForNodeSet(t, func() string {
+	waitUntil(t, func() string {
 		return "central to record the delivery of " + requestID +
 			" once the client acknowledged it to the edge -- " + whereDiagStopped(f) +
 			"; central's audit log holds " + listOrNothing(auditActionNames(t, f.central, f.userID))
@@ -402,7 +402,7 @@ func TestCollectionIsNotQueuedForAnEdgeThatCannotBeReached(t *testing.T) {
 	// The node goes away while its lease record on central remains -- exactly what a
 	// scheduled stop does.
 	f.edge.Stop()
-	waitForNodeSet(t, stated("central to notice edge-us's control connection close"), func() bool {
+	waitUntil(t, stated("central to notice edge-us's control connection close"), func() bool {
 		return !edgeIsRegistered(f.central, "edge-us")
 	})
 
@@ -565,7 +565,7 @@ func TestAnAckThatCouldNotBeRelayedKeepsTheRequestQueued(t *testing.T) {
 		t.Fatalf("closing central's end of the control connection: %v -- the outage was not staged", err)
 	}
 
-	waitForNodeSet(t, stated("the edge to notice its control connection is gone"), func() bool {
+	waitUntil(t, stated("the edge to notice its control connection is gone"), func() bool {
 		f.edge.edgeUplinkMu.RLock()
 		defer f.edge.edgeUplinkMu.RUnlock()
 		return f.edge.edgeUplink == nil

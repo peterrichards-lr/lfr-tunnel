@@ -418,3 +418,68 @@ func (s *Server) applySubdomainReservationPolicy(subdomain string, domains []str
 	}
 	return s.createSubdomainReservations(subdomain, domainsToReserve, user, userRec)
 }
+
+// accessControlSlot indexes the [3]string a lease carries its access controls in. The tuple is
+// what applyAccessControlsToLeases and the edge's access_controls payload both already expect;
+// naming the positions stops a fourth copy of the same literal ordering from being written from
+// memory.
+const (
+	accessControlPasscode = iota
+	accessControlWhitelistIPs
+	accessControlAccessMode
+)
+
+// resolveAccessControls applies any passcode and IP whitelist this registration supplied to the
+// user's reservation rows, and returns what each domain's lease should enforce, keyed by domain.
+//
+// The last member of #2005's class (#2032), and the fourth pass over it -- which is why the
+// durable artefact of that issue is the gate in registration_duplication_test.go rather than this
+// function. The two copies had ALREADY diverged when they were found: the direct path logged a
+// failed UpdateSubdomainReservation and the edge path discarded it under an errcheck suppression.
+// (Spelled out rather than quoted: the ratchet in scripts/check-nolint-ratchet.sh counts the
+// literal wherever it appears, comments included, so quoting it here silently cancelled out the
+// suppression this extraction actually removed -- measured, 742 either way.) The
+// divergence was cosmetic -- both paths carry on with the row they already hold -- but a failed
+// write here means the tunnel is served with the PREVIOUS passcode and whitelist while the client
+// believes it set new ones, so it is now logged once, from here.
+//
+// Keyed by domain because a reservation is keyed on (subdomain, domain) and the same subdomain can
+// carry different rules on each. Only the holder's own rows are touched: a reservation belonging
+// to somebody else is not this registration's to rewrite, and is skipped rather than refused --
+// the refusal, when one is due, has already happened in applySubdomainReservationPolicy.
+//
+// Returns an empty, non-nil map when there is no database, so both callers can range over the
+// result without a nil check. An edge holds no database of its own, so what this returns is the
+// only thing it can enforce from (#1367).
+func (s *Server) resolveAccessControls(subdomain string, domains []string, userID, passcode, whitelistIPs string) map[string][3]string {
+	byDomain := make(map[string][3]string, len(domains))
+	if s.db == nil {
+		return byDomain
+	}
+	for _, d := range domains {
+		existing, err := s.db.GetSubdomainReservationByName(subdomain, d)
+		if err != nil || existing == nil || existing.UserID != userID {
+			continue
+		}
+		updated := false
+		if passcode != "" {
+			existing.Passcode = passcode
+			updated = true
+		}
+		if whitelistIPs != "" {
+			existing.WhitelistIPs = whitelistIPs
+			updated = true
+		}
+		if updated {
+			if err := s.db.UpdateSubdomainReservation(existing); err != nil {
+				slog.Info(fmt.Sprintf("[Server] Failed to update access controls on registration for %s on %s: %v", subdomain, d, err))
+			}
+		}
+		var slot [3]string
+		slot[accessControlPasscode] = existing.Passcode
+		slot[accessControlWhitelistIPs] = existing.WhitelistIPs
+		slot[accessControlAccessMode] = existing.AccessMode
+		byDomain[d] = slot
+	}
+	return byDomain
+}

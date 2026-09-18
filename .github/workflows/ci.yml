@@ -470,9 +470,9 @@ jobs:
       # by hand. A gate nobody runs is documentation with a shebang -- and two of these were
       # written the same week to stop a defect recurring, which they could not have done.
       #
-      # scripts/check-ci-runs-every-gate.sh now asserts this list stays complete, because the
-      # failure mode is silence: a new gate that is never wired in looks exactly like one that
-      # passes every time.
+      # tests/hooks/test-ci-runs-every-gate.sh now asserts this list stays complete -- and, since
+      # #2027, that the git hooks run them too. The failure mode is silence: a new gate that is
+      # never wired in looks exactly like one that passes every time.
       - name: Portal user statuses must match the server vocabulary
         run: node scripts/check-status-vocabulary.cjs
 

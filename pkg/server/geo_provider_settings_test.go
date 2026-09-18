@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -514,6 +515,28 @@ func TestEveryPortalArmRendersACreditForEverySelectableVendor(t *testing.T) {
 					"using it renders geo_attribution_unknown -- \"the vendor could not be "+
 					"identified\" -- over that vendor's data, leaving their licence unmet (%s)",
 					arm, key, p, path)
+				continue
+			}
+
+			// Selecting the key is not enough: it must be looked up WITH a fallback sentence.
+			//
+			// Both arms resolve through a t(key, default) that returns `default || key`, so a
+			// lookup with no default renders the raw key -- "geo_attribution_dbip" -- as the
+			// credit. That shipped: V1's login footer renders on DOMContentLoaded while
+			// /api/i18n is still in flight, so window.translations is unset and the key itself
+			// was published where the vendor's attribution should be. The key was present in
+			// all ten bundles and served correctly; only the fallback was missing.
+			//
+			// The earlier version of this guard used strings.Contains(text, key) alone, which
+			// is true of `t('geo_attribution_dbip')` -- so it passed against the very defect it
+			// existed to prevent. Asserting the fallback is what makes it able to fail.
+			withFallback := regexp.MustCompile(
+				`t\(\s*['"` + "`" + `]` + regexp.QuoteMeta(key) + `['"` + "`" + `]\s*,\s*['"` + "`" + `]`)
+			if !withFallback.MatchString(text) {
+				t.Errorf("%s looks up %q with no fallback sentence, so before the locale bundle "+
+					"arrives it renders the literal key %q as the vendor's credit -- t() returns "+
+					"`default || key`. Pass the English sentence as the second argument, as the "+
+					"other arm does (%s)", arm, key, key, path)
 			}
 		}
 	}

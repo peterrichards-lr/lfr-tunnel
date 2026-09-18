@@ -8,6 +8,14 @@ function t(key, defaultVal) {
 
 function applyTranslations(bundle, lang) {
   window.translations = bundle;
+  // The geo credit is built from a sentence with a {0} anchor, not from a data-i18n attribute,
+  // so the loop below cannot retranslate it. Without this it stays in the fallback language for
+  // the life of the page -- visible on the login screen, which renders before this runs.
+  // Guarded because applyTranslations is also called on the dashboard, where the slots may not
+  // exist yet; renderGeoCreditFooters returns immediately when it finds none.
+  if (typeof renderGeoCreditFooters === 'function') {
+    renderGeoCreditFooters();
+  }
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     if (bundle[key]) {
@@ -3034,15 +3042,40 @@ const GEO_ATTRIBUTION_LINK = {
  * bundles -- which is exactly how 477 keys drifted out before #1701.
  */
 function geoAttributionText(provider) {
-  if (provider === 'maxmind') return t('geo_attribution_maxmind');
-  if (provider === 'dbip') return t('geo_attribution_dbip');
-  if (provider === 'ip2location') return t('geo_attribution_ip2location');
+  // EVERY call passes the English sentence as the default. `t()` returns `defaultVal || key`,
+  // so a call without one renders the raw key -- which is exactly what the login footer showed:
+  // renderGeoCreditFooters runs on DOMContentLoaded, /api/i18n is fetched asynchronously, and
+  // `window.translations` is still unset at that moment. The key was present in all ten bundles
+  // and served correctly; nothing was missing except the fallback. Portal V2 passed its defaults
+  // from the start, which is why only this arm showed it (#1866 -- the arms must agree).
+  //
+  // The literals are also what scripts/check-i18n-keys.cjs reads: a key it cannot see as a
+  // string literal is a key it cannot hold in the bundles.
+  if (provider === 'maxmind')
+    return t(
+      'geo_attribution_maxmind',
+      'This product includes GeoLite Data created by MaxMind, available from {0}.',
+    );
+  if (provider === 'dbip')
+    return t(
+      'geo_attribution_dbip',
+      '{0}, used under the Creative Commons Attribution 4.0 International licence.',
+    );
+  if (provider === 'ip2location')
+    return t(
+      'geo_attribution_ip2location',
+      'Liferay Tunnel uses the IP2Location LITE database for {0}.',
+    );
   // Added with the vendor (#2008). Without this branch an IPinfo deployment renders "the
   // vendor could not be identified" over IPinfo's data -- the key existed in all ten bundles
   // and nothing selected it. TestEveryPortalArmRendersACreditForEverySelectableVendor fails if
   // a vendor reaches geo.SelectableProviders without a branch here.
-  if (provider === 'ipinfo') return t('geo_attribution_ipinfo');
-  return t('geo_attribution_unknown');
+  if (provider === 'ipinfo')
+    return t('geo_attribution_ipinfo', 'IP address data is powered by {0}.');
+  return t(
+    'geo_attribution_unknown',
+    'The vendor of this geo-IP database could not be identified from its file metadata, so the gateway cannot render the credit line it requires. Check the licence of the file you deployed and add the attribution yourself: most geo-IP vendors require a visible one wherever their data appears.',
+  );
 }
 
 /**

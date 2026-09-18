@@ -2221,23 +2221,28 @@ func TestServer_InstallerEndpoints(t *testing.T) {
 	}
 }
 
+// postLocalBroadcast issues one request to /api/local/broadcast, the loopback-only endpoint the
+// local maintenance CLI drives. Package-level so the three tests #2026 split
+// TestServer_LocalBroadcastAPI into can share it.
+func postLocalBroadcast(srv *Server, body, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
+	req, _ := http.NewRequest("POST", "http://localhost/api/local/broadcast", strings.NewReader(body))
+	req.RemoteAddr = remoteAddr
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestServer_LocalBroadcastAPI covers who may post a broadcast and what a malformed one does.
+// Nothing here is timing-dependent; the countdown cases live in the two tests below (#2026).
 func TestServer_LocalBroadcastAPI(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	makeReq := func(method, path string, body string, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
-		req, _ := http.NewRequest(method, "http://localhost"+path, strings.NewReader(body))
-		req.RemoteAddr = remoteAddr
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
-		rec := httptest.NewRecorder()
-		srv.ServeHTTP(rec, req)
-		return rec
-	}
-
 	// 1. Success: Valid local request
-	rec1 := makeReq("POST", "/api/local/broadcast", `{"message":"Deploy warning"}`, "127.0.0.1:12345", nil)
+	rec1 := postLocalBroadcast(srv, `{"message":"Deploy warning"}`, "127.0.0.1:12345", nil)
 	if rec1.Code != http.StatusOK {
 		t.Errorf("Expected 200 for local broadcast, got %d. Body: %s", rec1.Code, rec1.Body.String())
 	}
@@ -2249,47 +2254,97 @@ func TestServer_LocalBroadcastAPI(t *testing.T) {
 	}
 
 	// 2. Failure: From non-loopback IP
-	rec2 := makeReq("POST", "/api/local/broadcast", `{"message":"Hack alert"}`, "8.8.8.8:12345", nil)
+	rec2 := postLocalBroadcast(srv, `{"message":"Hack alert"}`, "8.8.8.8:12345", nil)
 	if rec2.Code != http.StatusForbidden {
 		t.Errorf("Expected 403 Forbidden for remote IP, got %d", rec2.Code)
 	}
 
 	// 3. Failure: From loopback, but carrying proxy headers
 	headers3 := map[string]string{"X-Forwarded-For": "8.8.8.8"}
-	rec3 := makeReq("POST", "/api/local/broadcast", `{"message":"Spoof alert"}`, "127.0.0.1:12345", headers3)
+	rec3 := postLocalBroadcast(srv, `{"message":"Spoof alert"}`, "127.0.0.1:12345", headers3)
 	if rec3.Code != http.StatusForbidden {
 		t.Errorf("Expected 403 Forbidden for proxied loopback request, got %d", rec3.Code)
 	}
 
 	// 4. Failure: Invalid payload format
-	rec4 := makeReq("POST", "/api/local/broadcast", `invalid`, "127.0.0.1:12345", nil)
+	rec4 := postLocalBroadcast(srv, `invalid`, "127.0.0.1:12345", nil)
 	if rec4.Code != http.StatusBadRequest {
 		t.Errorf("Expected 400 Bad Request for invalid payload, got %d", rec4.Code)
 	}
+}
 
-	// 5. Success: Valid local request with countdown scheduling
-	rec5 := makeReq("POST", "/api/local/broadcast", `{"message":"Upgrade scheduling", "countdown_seconds": 1, "duration_minutes": 2}`, "127.0.0.1:12345", nil)
-	if rec5.Code != http.StatusOK {
-		t.Errorf("Expected 200 for countdown scheduling, got %d", rec5.Code)
+// Split from TestServer_LocalBroadcastAPI's case 5 (#2026), which asserted "the countdown is
+// scheduled and has not fired yet" against a countdown of ONE SECOND -- so a runner that spent a
+// second between the POST and the read reported a scheduling bug that does not exist, and said so
+// in a message that sends the reader looking for one.
+//
+// The countdown here is an hour, which cannot lapse mid-test on any machine. That is the whole
+// point: this test asks whether the handler SCHEDULES, and the answer must not depend on how
+// quickly the next statement runs.
+func TestServer_LocalBroadcastSchedulesACountdown(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	before := time.Now()
+	rec := postLocalBroadcast(srv,
+		`{"message":"Upgrade scheduling", "countdown_seconds": 3600, "duration_minutes": 2}`,
+		"127.0.0.1:12345", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for countdown scheduling, got %d. Body: %s", rec.Code, rec.Body.String())
 	}
+
 	srv.maintMutex.RLock()
 	scheduledAt := srv.maintScheduledAt
-	isMaintActiveBefore := srv.maintenanceMode
+	maintActive := srv.maintenanceMode
 	srv.maintMutex.RUnlock()
+
 	if scheduledAt.IsZero() {
 		t.Error("Expected maintScheduledAt to be set, got zero time")
+	} else if !scheduledAt.After(before) {
+		// Asserts the cause rather than the symptom (§5c): a non-zero maintScheduledAt left
+		// over from somewhere else would satisfy the check above, a time in this request's
+		// future would not.
+		t.Errorf("maintScheduledAt is %v, which is not after the request at %v -- the countdown was not scheduled by this POST", scheduledAt, before)
 	}
-	if isMaintActiveBefore {
+	if maintActive {
 		t.Error("Expected maintenanceMode to be false during countdown, got true")
 	}
+}
 
-	// Wait for countdown to expire and verify it becomes active
-	time.Sleep(1200 * time.Millisecond)
+// The other half of the split: the flip itself. Polled to a generous deadline rather than slept
+// past by a fixed 1200ms margin, so that the assertion fails safe in the direction #1390
+// established -- more delay can only make the countdown more expired, so a slow machine polls
+// for longer instead of reporting a defect.
+func TestServer_LocalBroadcastCountdownActivatesMaintenance(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	rec := postLocalBroadcast(srv,
+		`{"message":"Upgrade scheduling", "countdown_seconds": 1, "duration_minutes": 2}`,
+		"127.0.0.1:12345", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for countdown scheduling, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	waitUntil(t, stated("the countdown to switch maintenance mode on"), func() bool {
+		srv.maintMutex.RLock()
+		defer srv.maintMutex.RUnlock()
+		return srv.maintenanceMode
+	})
+
 	srv.maintMutex.RLock()
-	isMaintActiveAfter := srv.maintenanceMode
+	endTime := srv.maintEndTime
+	scheduledAt := srv.maintScheduledAt
 	srv.maintMutex.RUnlock()
-	if !isMaintActiveAfter {
-		t.Error("Expected maintenanceMode to be true after countdown expired, got false")
+
+	// maintenanceMode alone is a symptom several paths share. These two are written by the
+	// countdown callback and by nothing else in this test, so together they name the cause
+	// (§5c): the window it opened, and the schedule it consumed doing so.
+	if !endTime.After(time.Now()) {
+		t.Errorf("maintenance is on but its window ends at %v, already past -- the countdown's duration_minutes was not applied", endTime)
+	}
+	if !scheduledAt.IsZero() {
+		t.Errorf("the countdown fired but maintScheduledAt is still %v -- the portal would keep showing a pending countdown", scheduledAt)
 	}
 }
 

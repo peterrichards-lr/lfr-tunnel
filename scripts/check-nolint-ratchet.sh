@@ -27,7 +27,10 @@ set -euo pipefail
 # Three further suppressions this feature originally had were removed rather than counted: a
 # failed stats write, a failed periodic flush and a failed flush on shutdown now log, because
 # each of those silently loses a whole period of counts.
-CEILING="${LFT_NOLINT_CEILING:-744}"
+# Lowered 744 -> 742 by #2020: extracting the client version/OS bookkeeping out of both
+# registration handlers left one UpdateUser call where there had been two, and its error is now
+# logged rather than suppressed -- errcheck runs with check-blank, so `_ =` never satisfied it.
+CEILING="${LFT_NOLINT_CEILING:-742}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

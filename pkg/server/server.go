@@ -428,6 +428,11 @@ type Server struct {
 	startTime      time.Time
 	edgeLeases     map[string][]EdgeLease
 
+	// randomSubdomainSource overrides generateRandomSubdomainPrefix outright. Nil in
+	// production; set by a test that needs the candidate stream to be deterministic. Read in
+	// server_domain.go, which explains why the seam is there and not at the call sites.
+	randomSubdomainSource func() string
+
 	// Queued diagnostic-collection commands, keyed by user ID (#1763). In memory on purpose:
 	// a request is only meaningful while the client is connected, and surviving a restart
 	// would mean delivering one whose consent basis predates it -- see diagnosticsCommandTTL.
@@ -1935,32 +1940,15 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	} else {
 		requestedRandom := req.SubdomainPrefix == "" || req.SubdomainPrefix == "random"
 		if requestedRandom {
-			found := false
-			for attempt := 0; attempt < 10; attempt++ {
-				candidate := s.generateRandomSubdomainPrefix("liferay")
-				available, _ := s.registry.CheckSubdomain(candidate, activeDomains)
-				if available {
-					dbOk := true
-					if s.db != nil {
-						for _, d := range activeDomains {
-							existing, err := s.db.GetSubdomainReservationByName(candidate, d)
-							if err == nil && existing != nil {
-								dbOk = false
-								break
-							}
-						}
-					}
-					if dbOk {
-						req.SubdomainPrefix = candidate
-						found = true
-						break
-					}
-				}
-			}
-			if !found {
-				s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
+			// Shared with handleEdgeRegister (#2020), which used to check strictly less --
+			// see grantRandomSubdomain for what that cost once tunnel_domains made both
+			// gateways issue the same hostname.
+			granted, ok := s.grantRandomSubdomain(activeDomains)
+			if !ok {
+				s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: randomSubdomainRefusal})
 				return
 			}
+			req.SubdomainPrefix = granted
 		} else {
 			// 1. Verify availability in registry (in-memory leases)
 			var available bool
@@ -2032,20 +2020,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	effectiveLimit := s.effectiveTunnelRateLimit(req.RateLimit, userRec)
 
 	clientIP := s.clientIP(r)
-	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
-		changed := false
-		if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
-			userRec.LastClientVersion = req.ClientVersion
-			changed = true
-		}
-		if req.ClientOS != "" && userRec.LastClientOS != req.ClientOS {
-			userRec.LastClientOS = req.ClientOS
-			changed = true
-		}
-		if changed {
-			_ = s.db.UpdateUser(userRec) //nolint:errcheck
-		}
-	}
+	// Shared with handleEdgeRegister (#2020): the same five lines lived in both handlers.
+	s.recordClientVersionAndOS(userRec, req.ClientVersion, req.ClientOS)
 
 	s.recordRegionProbes(userRec, req.RegionProbes)
 	s.recordRegionSource(userRec, req.RegionSource)
@@ -6655,29 +6631,17 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	requestedRandom := finalSubdomain == "" || finalSubdomain == "random"
 
 	if requestedRandom {
-		found := false
-		for attempt := 0; attempt < 10; attempt++ {
-			candidate := s.generateRandomSubdomainPrefix("liferay")
-			dbOk := true
-			if s.db != nil {
-				for _, d := range edgeReq.Domains {
-					existing, err := s.db.GetSubdomainReservationByName(candidate, d)
-					if err == nil && existing != nil {
-						dbOk = false
-						break
-					}
-				}
-			}
-			if dbOk {
-				finalSubdomain = candidate
-				found = true
-				break
-			}
-		}
-		if !found {
-			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate unique random subdomain"})
+		// The same generation as the direct path, from the same place (#2020). This path used
+		// to check only the reservations table, so central could hand an edge a name a live
+		// lease already held -- and since #1288/#1295 that is one hostname with two owners and
+		// a DNS record deciding between them. Only the refusal's wire format is this path's
+		// own, as everywhere else in this handler.
+		granted, ok := s.grantRandomSubdomain(edgeReq.Domains)
+		if !ok {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": randomSubdomainRefusal})
 			return
 		}
+		finalSubdomain = granted
 	} else {
 		// The same reservation/quarantine/auto-reserve policy as the direct path, from the
 		// same place (#2018). Only the refusal's wire format is this path's own: an edge has
@@ -6717,20 +6681,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 	effectiveLimit := s.effectiveTunnelRateLimit(edgeReq.RateLimit, userRec)
 
-	if (edgeReq.ClientVersion != "" || edgeReq.ClientOS != "") && userRec != nil {
-		changed := false
-		if edgeReq.ClientVersion != "" && userRec.LastClientVersion != edgeReq.ClientVersion {
-			userRec.LastClientVersion = edgeReq.ClientVersion
-			changed = true
-		}
-		if edgeReq.ClientOS != "" && userRec.LastClientOS != edgeReq.ClientOS {
-			userRec.LastClientOS = edgeReq.ClientOS
-			changed = true
-		}
-		if changed {
-			_ = s.db.UpdateUser(userRec) //nolint:errcheck
-		}
-	}
+	// Shared with handleRegister (#2020): the same five lines lived in both handlers.
+	s.recordClientVersionAndOS(userRec, edgeReq.ClientVersion, edgeReq.ClientOS)
 
 	// The hard stage of the bandwidth quota, decided here because central is the counting
 	// authority and the edge has no database to decide from (#1959). The edge relays this

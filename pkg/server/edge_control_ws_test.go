@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,7 +63,8 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 		edgeSrv.Stop()
 	}()
 
-	// Give a moment for the Edge node client loop to connect and authenticate
+	// Fail-safe (#2038): too short and the edge is not registered yet, so the check below
+	// goes red. A sweep for hazardous sleeps does not need to re-read this one.
 	time.Sleep(200 * time.Millisecond)
 
 	// Check that Edge node is registered in Control Plane
@@ -79,7 +81,8 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 	testIP := "198.51.100.42"
 	controlSrv.BroadcastBlacklistUpdate("add", testIP, nil)
 
-	// Wait for WS propagation
+	// Wait for WS propagation. Fail-safe (#2038): too short and the ban has not arrived, so
+	// the assertion goes red rather than passing over a state that never happened.
 	time.Sleep(100 * time.Millisecond)
 
 	if !edgeSrv.isBlacklisted(testIP) {
@@ -87,6 +90,8 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 	}
 
 	controlSrv.BroadcastBlacklistUpdate("remove", testIP, nil)
+	// Fail-safe (#2038): the add above is asserted first, so "not blacklisted" here cannot be
+	// satisfied by a ban that never arrived -- too short and the IP is still banned, red.
 	time.Sleep(100 * time.Millisecond)
 
 	if edgeSrv.isBlacklisted(testIP) {
@@ -95,14 +100,39 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 
 	// 3b. An automatic ban carries its expiry across the control channel, so the edge lifts it
 	// at the same moment the control plane does rather than holding it forever (#1353).
+	//
+	// Rewritten from "sleep past the expiry, then assert it is not blacklisted" (#2038). That
+	// assertion was satisfied just as well by a ban that never crossed the wire at all: an
+	// edge that dropped the frame is in exactly the same state as one that correctly lifted
+	// it, so a sleep that outran the propagation reported a pass over an untested mechanism.
+	// The ban is now observed arriving, and the expiry read off the edge's OWN entry -- the
+	// value #1353 is about -- before anything is said about it lifting.
 	expiringIP := "198.51.100.43"
-	expiry := time.Now().Add(80 * time.Millisecond)
+	expiry := time.Now().Add(200 * time.Millisecond)
 	controlSrv.BroadcastBlacklistUpdate("add", expiringIP, &expiry)
-	time.Sleep(100 * time.Millisecond)
 
-	if edgeSrv.isBlacklisted(expiringIP) {
-		t.Error("an expiring ban was still in force on the Edge node after its expiry -- the edge would outlive the control plane's ban")
+	// Read through the raw map rather than isBlacklisted: the entry is still there once it
+	// expires (isBlacklisted only drops it lazily), so observing the arrival cannot race the
+	// expiry however slow the runner is.
+	var stored time.Time
+	var storedOK bool
+	waitUntil(t, stated("the expiring ban to reach the edge over the control channel"), func() bool {
+		v, ok := edgeSrv.blacklist.Load(expiringIP)
+		if !ok {
+			return false
+		}
+		stored, storedOK = v.(time.Time)
+		return true
+	})
+	switch {
+	case !storedOK || stored.IsZero():
+		t.Error("the edge stored the automatic ban with no expiry, so it would hold it forever -- the expiry did not cross the control channel (#1353)")
+	case stored.Sub(expiry).Abs() > time.Second:
+		t.Errorf("the edge's copy of the ban expires at %v, not the %v the control plane sent", stored, expiry)
 	}
+	waitUntil(t, stated("the expiring ban to lift on the edge, as it does on the control plane"), func() bool {
+		return !edgeSrv.isBlacklisted(expiringIP)
+	})
 
 	// 4. Test Lease Kick propagation
 	// Create a dummy lease on the Edge Node registry
@@ -118,7 +148,8 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 		t.Error("expected exactly 1 lease in the Edge node registry")
 	}
 
-	// Trigger kick from Control Plane
+	// Trigger kick from Control Plane. Fail-safe (#2038): the lease is asserted present
+	// above, so too short a wait leaves it present and the check below goes red.
 	controlSrv.sendEdgeWSKick("usedge", sub)
 	time.Sleep(100 * time.Millisecond)
 
@@ -128,9 +159,17 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 	}
 
 	// 5. Test Maintenance Mode propagation
-	// Create another lease on Edge
-	_, _, _ = edgeSrv.registry.Register("user-1", "maint-lease", []PortMapping{{LocalPort: 8080}}, []string{"usedge.example.se"}, 100, "127.0.0.1", "", nil) //nolint:errcheck
+	// Create another lease on Edge. Checked rather than discarded: "no leases remain" below
+	// is also what a registration that silently failed produces (#2038).
+	if _, _, err := edgeSrv.registry.Register("user-1", "maint-lease", []PortMapping{{LocalPort: 8080}}, []string{"usedge.example.se"}, 100, "127.0.0.1", "", nil); err != nil {
+		t.Fatalf("failed to register the maintenance-mode lease: %v", err)
+	}
+	if len(edgeSrv.registry.ListLeases()) != 1 {
+		t.Fatal("expected exactly 1 lease on the Edge node before maintenance mode, so its termination is observable")
+	}
 
+	// Fail-safe (#2038): too short and maintenance has not propagated, so the assertion that
+	// the edge entered it goes red.
 	controlSrv.BroadcastMaintenance("enable", 10, "Upgrading control plane")
 	time.Sleep(100 * time.Millisecond)
 
@@ -263,7 +302,8 @@ func TestServer_EdgeActions(t *testing.T) {
 		edgeSrv.Stop()
 	}()
 
-	// Give a moment for connection
+	// Give a moment for connection. Fail-safe (#2038): too short and no version is
+	// registered, which the check below reports.
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify version was registered
@@ -285,6 +325,8 @@ func TestServer_EdgeActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to send edge kick all: %v", err)
 	}
+	// Fail-safe (#2038): the lease was registered with its error checked just above, so too
+	// short a wait leaves it in place and this goes red.
 	time.Sleep(100 * time.Millisecond)
 
 	// Lease should be gone
@@ -324,7 +366,16 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	// races handleEdgeControlWS's read: that read happens after the WS upgrade, and
 	// httptest.Server.Close() does not wait for a hijacked connection's handler, so no
 	// amount of teardown ordering here creates the missing happens-before.
-	defer setEdgeControlReadDeadline(setEdgeControlReadDeadline(150 * time.Millisecond))
+	const shortDeadline = 150 * time.Millisecond
+	defer setEdgeControlReadDeadline(setEdgeControlReadDeadline(shortDeadline))
+
+	// The override is the entire basis of this test: at the production 60s the idle below is
+	// a fraction of one deadline, so the connection survives it under the PRE-fix behaviour
+	// too and the test passes having exercised nothing (#2038). Read back through the same
+	// accessor handleEdgeControlWS uses, so "the override took" is asserted, not assumed.
+	if got, _ := edgeTunables(); got != shortDeadline {
+		t.Fatalf("the read deadline in force is %v, not the %v this test overrode it to -- the idle period below would prove nothing", got, shortDeadline)
+	}
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
@@ -385,14 +436,20 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	// interval comfortably shorter than the (shortened) deadline, for well longer
 	// than that deadline's total duration. Under the pre-fix behavior this alone
 	// would never prevent the one-shot deadline from expiring.
+	const pingInterval = 50 * time.Millisecond
 	stop := make(chan struct{})
+	var pings atomic.Int64
 	go func() {
-		ticker := time.NewTicker(50 * time.Millisecond)
+		ticker := time.NewTicker(pingInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				_ = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second)) //nolint:errcheck
+				// Counted, and the error checked: a keepalive whose every write failed
+				// would leave "survived" meaning nothing was ever sent (#2038).
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second)); err == nil {
+					pings.Add(1)
+				}
 			case <-stop:
 				return
 			}
@@ -400,7 +457,14 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	}()
 	defer close(stop)
 
-	time.Sleep(500 * time.Millisecond) // ~3.3x the shortened deadline
+	// Derived from the deadline rather than written as a constant beside it, so raising the
+	// deadline cannot silently shrink the window to less than one of them.
+	idle := 3 * shortDeadline
+	time.Sleep(idle)
+
+	if sent := pings.Load(); sent < int64(idle/pingInterval)-1 {
+		t.Fatalf("only %d keepalive Pings were actually sent in %v, so the connection surviving says nothing about Ping refreshing the deadline", sent, idle)
+	}
 
 	controlSrv.edgeClientsMu.RLock()
 	_, stillConnected := controlSrv.edgeClients["usedge"]
@@ -464,6 +528,8 @@ func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
 	}()
 
 	// Give the edge time to connect, authenticate, and answer at least one RTT ping.
+	// Fail-safe (#2038): too short and there is no edgeHealth entry, or LastCheckAt is still
+	// zero, both of which are asserted below -- this goes red rather than quietly passing.
 	time.Sleep(300 * time.Millisecond)
 
 	controlSrv.edgeHealthMu.RLock()
@@ -501,11 +567,15 @@ func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
 // BroadcastMaintenance/etc is ever sent, so the only thing keeping the connection
 // alive is the edge's own Ping/Pong keepalive -- exactly the idle scenario that
 // exposed the bug.
+// idleTestReadDeadline is the shortened edge-side read deadline the test below installs, and
+// the value it asserts is actually in force before idling past it.
+const idleTestReadDeadline = 300 * time.Millisecond
+
 func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T) {
 	// Under edgeTunableMu (#1370). runEdgeControlChannel's PongHandler reads these from the
 	// reader goroutine gorilla/websocket drives, which Server.bgWG does not cover, so a direct
 	// assignment races it however the teardown is ordered.
-	defer setEdgeClientTunables(300*time.Millisecond, 50*time.Millisecond)()
+	defer setEdgeClientTunables(idleTestReadDeadline, 50*time.Millisecond)()
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
@@ -540,6 +610,8 @@ func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T
 	}
 	defer edgeSrv.Stop()
 
+	// Fail-safe (#2038): too short and there is no registered connection yet, which the
+	// Fatal below reports.
 	time.Sleep(150 * time.Millisecond) // let the initial connection establish
 
 	controlSrv.edgeClientsMu.RLock()
@@ -549,9 +621,19 @@ func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T
 		t.Fatal("expected edge client 'apacedge' to be authenticated and registered on the control plane")
 	}
 
+	// As in TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline: the idle below only
+	// means anything while the shortened deadline is the one in force, so it is read back
+	// and the idle derived from it rather than written as a constant (#2038). At the
+	// production 75s the old hardcoded 1500ms was a fiftieth of one deadline, and the
+	// connection survives that under the pre-fix behaviour too.
+	readDeadline, _ := edgeClientTunables()
+	if readDeadline != idleTestReadDeadline {
+		t.Fatalf("the edge's read deadline is %v, not the %v this test overrode it to -- idling past it would prove nothing", readDeadline, idleTestReadDeadline)
+	}
+
 	// Idle well past several read-deadline cycles, sending no real ControlMessage at
 	// all -- the only thing that can keep this alive is the edge's own Ping/Pong.
-	time.Sleep(1500 * time.Millisecond) // 5x the shortened deadline
+	time.Sleep(5 * readDeadline)
 
 	controlSrv.edgeClientsMu.RLock()
 	finalConn, stillExists := controlSrv.edgeClients["apacedge"]

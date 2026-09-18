@@ -82,10 +82,21 @@ func TestMetricsCollectorLeavesEdgeDeltasForTheReporter(t *testing.T) {
 	cfg.EdgeToken = "usedge-token"
 	collector := NewMetricsCollector(nil, cfg, registry)
 
+	// Shortened so a sweep can actually be observed. At the production five minutes the
+	// sleep this replaces expired 3000x before the first tick, so the assertion below held
+	// over a sweep that had never run: removing the c.db == nil guard left the test green
+	// (#2038).
+	collector.interval = 20 * time.Millisecond
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go collector.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
+
+	// Two, not one: the first proves the ticker fires at all, the second that a sweep which
+	// found deltas already present still left them alone.
+	waitUntil(t, stated("the collector's periodic sweep to run twice"), func() bool {
+		return collector.sweeps.Load() >= 2
+	})
 
 	deltas := registry.TakeByteDeltas()
 	if len(deltas) != 1 || deltas[0].BytesOut != 512 {

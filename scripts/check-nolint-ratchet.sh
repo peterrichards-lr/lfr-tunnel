@@ -37,7 +37,12 @@ set -euo pipefail
 # counts the suppression's spelling in COMMENTS too. #2032's first draft explained the removal in
 # a doc comment that quoted the literal, and the total did not move -- a real removal cancelled by
 # prose about it. Describe a suppression, do not quote it.
-CEILING="${LFT_NOLINT_CEILING:-741}"
+# 741 -> 739 by #2038, both in tests whose sleeps were being made to prove something. The edge
+# keepalive test now checks that its Ping writes actually succeeded, and the maintenance-mode
+# test checks that the lease it terminates was really registered -- in both cases the
+# suppressed error was the difference between the assertion meaning something and meaning
+# nothing.
+CEILING="${LFT_NOLINT_CEILING:-739}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

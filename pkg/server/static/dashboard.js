@@ -3037,6 +3037,11 @@ function geoAttributionText(provider) {
   if (provider === 'maxmind') return t('geo_attribution_maxmind');
   if (provider === 'dbip') return t('geo_attribution_dbip');
   if (provider === 'ip2location') return t('geo_attribution_ip2location');
+  // Added with the vendor (#2008). Without this branch an IPinfo deployment renders "the
+  // vendor could not be identified" over IPinfo's data -- the key existed in all ten bundles
+  // and nothing selected it. TestEveryPortalArmRendersACreditForEverySelectableVendor fails if
+  // a vendor reaches geo.SelectableProviders without a branch here.
+  if (provider === 'ipinfo') return t('geo_attribution_ipinfo');
   return t('geo_attribution_unknown');
 }
 

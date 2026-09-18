@@ -61,10 +61,12 @@ export default function GeoAttribution({ provider }: { provider?: string }) {
               'geo_attribution_ip2location',
               'Liferay Tunnel uses the IP2Location LITE database for {0}.',
             )
-          : t(
-              'geo_attribution_unknown',
-              'The vendor of this geo-IP database could not be identified from its file metadata, so the gateway cannot render the credit line it requires. Check the licence of the file you deployed and add the attribution yourself: most geo-IP vendors require a visible one wherever their data appears.',
-            );
+          : provider === 'ipinfo'
+            ? t('geo_attribution_ipinfo', 'IP address data is powered by {0}.')
+            : t(
+                'geo_attribution_unknown',
+                'The vendor of this geo-IP database could not be identified from its file metadata, so the gateway cannot render the credit line it requires. Check the licence of the file you deployed and add the attribution yourself: most geo-IP vendors require a visible one wherever their data appears.',
+              );
 
   const link = GEO_ATTRIBUTION_LINK[provider];
   const [before, ...rest] = text.split('{0}');

@@ -463,3 +463,58 @@ func TestTheVendorListInEveryMessageNamesEverySelectableVendor(t *testing.T) {
 		}
 	}
 }
+
+// Every portal arm must render a credit for every vendor it offers (#2044).
+//
+// This is the gap that shipped with #2008. Adding IPinfo to geo.SelectableProviders put it in the
+// dropdown and required `geo_attribution_ipinfo` in all ten bundles -- both of which happened --
+// but NOTHING selected that key. Each arm resolves the sentence through a chain of literal
+// comparisons, and a vendor with no branch falls to `geo_attribution_unknown`: "the vendor of
+// this geo-IP database could not be identified". An IPinfo deployment would have published that
+// over IPinfo's data, which is the licence breach the whole design exists to prevent.
+//
+// Neither existing gate could see it. check-i18n-keys proves every key USED resolves, not that
+// every key defined is used. TestEveryOfferedVendorHasALabelAndACredit proves the keys exist in
+// English. The missing link was the component, and only reading the component finds it.
+//
+// Literal comparisons are what make this checkable, and they are required for a separate reason:
+// check-i18n-keys can only see a string literal, so a computed key would be invisible to it.
+func TestEveryPortalArmRendersACreditForEverySelectableVendor(t *testing.T) {
+	arms := map[string]string{
+		"Portal V2": filepath.Join("..", "..", "ui", "src", "components", "GeoAttribution.tsx"),
+		"Portal V1": filepath.Join("static", "dashboard.js"),
+	}
+
+	providers := geo.SelectableProviders()
+	if len(providers) < 2 {
+		t.Fatalf("PREMISE: only %d selectable vendor(s), so a missing branch could not be detected",
+			len(providers))
+	}
+
+	for arm, path := range arms {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("%s: read %s: %v", arm, path, err)
+			continue
+		}
+		text := string(src)
+
+		// PREMISE: this really is the file that resolves the credit. Without it, a rename would
+		// leave every assertion below passing over a file that decides nothing.
+		if !strings.Contains(text, "geo_attribution_unknown") {
+			t.Errorf("PREMISE: %s (%s) does not resolve geo attribution any more -- this guard "+
+				"is reading the wrong file", arm, path)
+			continue
+		}
+
+		for _, p := range providers {
+			key := "geo_attribution_" + string(p)
+			if !strings.Contains(text, key) {
+				t.Errorf("%s does not select %q for the selectable vendor %q, so a deployment "+
+					"using it renders geo_attribution_unknown -- \"the vendor could not be "+
+					"identified\" -- over that vendor's data, leaving their licence unmet (%s)",
+					arm, key, p, path)
+			}
+		}
+	}
+}

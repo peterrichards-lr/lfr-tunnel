@@ -26,13 +26,33 @@ Copy `lfr-tunnel-ops.yaml.example` to `lfr-tunnel-ops.yaml` and fill in your act
 | Which edges the gateway believes in | `edge_nodes` in `/etc/lfr-tunneld/server-config.yaml` on central |
 | Live admin settings | `/etc/lfr-tunneld/lfr-tunnel.db` on central, table `admin_settings` — note `domain_allocation_rule` and `default_domain` live here and override the YAML |
 
-So an edge deploy needs no new information — take the region list from the DNS spec, match it to a key, and:
+So an edge deploy needs no new information. **Every edge is already a named target in
+`lfr-tunnel-ops.yaml`** (`central`, `us`, `apac`, `sa`, `in`), so the current form is:
 
 ```bash
-./bin/lfr-tunnel-ops deploy -u ubuntu -s <region>.lfr-demo.se -i ~/.ssh/<matching-key>.pem
+AWS_PROFILE=lfr-tunnel ./bin/lfr-tunnel-ops deploy -target <name>
 ```
 
-Add each edge to `lfr-tunnel-ops.yaml` as a named target to avoid repeating the flags, and set `aws_region` on any edge with a power schedule so `deploy` starts it, deploys, and stops it back.
+`-target` is not optional here: with more than one target declared, `deploy` exits with
+`defines multiple targets (...) -- specify which one with -target or LFT_OPS_TARGET` rather than
+guessing. The flag form (`-u ubuntu -s <region>.lfr-demo.se -i ~/.ssh/<matching-key>.pem`) still
+works and is what you need for a node not yet in the file; set `aws_region` on any edge with a
+power schedule so `deploy` starts it, deploys, and stops it back.
+
+**There is exactly one way to deploy an edge, and it does one node at a time.** There is no
+fleet-wide flag and no wrapper script — `scripts/liferay/deploy-edge-nodes.sh` was deleted in
+#2048 because a second entry point that could not run read as the supported route right up to
+the moment someone tried it. Deploy the fleet by invoking the command once per edge:
+
+```bash
+for e in us apac sa in; do AWS_PROFILE=lfr-tunnel ./bin/lfr-tunnel-ops deploy -target "$e"; done
+```
+
+Do not add a script for this. A fleet loop that aborts on the first failure leaves the fleet on
+mixed versions, which is the state that makes "which box is on what" a question mid-incident;
+doing it properly needs `DeployCommand` to return errors rather than call `os.Exit` (see the
+power-restore ordering behind #1183/#1453 and its static guard), and that is a deliberate piece
+of work, not a wrapper.
 
 Remember that deploying an edge restarts it, which drops its control channel to central and will trigger a client failover. Deploy before a failover test, not during one.
 
@@ -354,14 +374,17 @@ only chance to see it.
 ### Deploying Client Binaries
 Copies the multi-platform binaries from `dist/` and `checksums.txt` to the VPS static downloads directory (`/var/www/lfr-tunnel/static/downloads`).
 ```bash
-./bin/lfr-tunnel-ops deploy-clients
+./bin/lfr-tunnel-ops deploy-clients -target central
 ```
 
 ### Deploying Gateway Changes
-Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static assets to the VPS, restarting the systemd service.
+Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static assets to the VPS, restarting the systemd service. One node per invocation -- see §0 for the fleet loop and why there is no script for it.
 ```bash
-./bin/lfr-tunnel-ops deploy
+AWS_PROFILE=lfr-tunnel ./bin/lfr-tunnel-ops deploy -target central
 ```
+The cross-compile goes through `RunGoCommand`, which appends `GOTMPDIR` -- so this is the
+EDR-safe path, not something to avoid. Never a bare `go build` to produce the Linux binary
+yourself.
 
 *Note: the edges do not serve the portal. Every portal path on an edge 301-redirects to the
 apex, which central serves -- verified against production on 2026-09-01: `/portal/`,
@@ -703,4 +726,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-18* | *Last Reviewed: 2026-09-18*

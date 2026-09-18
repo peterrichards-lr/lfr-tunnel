@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/config/configtest"
 	"lfr-tunnel/pkg/geo"
 )
 
@@ -28,10 +30,17 @@ import (
 // Written through config.LoadServerConfig rather than set on a struct, because the reload path
 // under test starts at a file on disk -- a struct-level test would skip the parse, which is
 // where a half-saved file goes wrong.
+//
+// The values go in SINGLE-quoted, via configtest.SingleQuoted. Double-quoted, these tests
+// failed on Windows and only on Windows: a temp path there starts `C:\Users\`, and `\U` inside
+// a double-quoted YAML scalar is an escape expecting 8 hex digits, so the parser rejected the
+// file -- `yaml: line 3: did not find expected hexdecimal number` -- before the reload under
+// test was reached. That is #1775 and #1773 a third time, in a third package (#2029); the
+// tree-wide guard that stops a fourth lives in pkg/config/configtest.
 func geoConfigYAML(src geoSource) string {
 	return "domains:\n  - example.com\n" +
-		"country_db_path: \"" + src.Path + "\"\n" +
-		"country_db_provider: \"" + src.Provider + "\"\n"
+		"country_db_path: " + configtest.SingleQuoted(src.Path) + "\n" +
+		"country_db_provider: " + configtest.SingleQuoted(src.Provider) + "\n"
 }
 
 // geoSourceOf reads what the running server has in force, under the same lock production uses.
@@ -517,5 +526,62 @@ func TestTheReloadSummaryNamesEveryReloadableKey(t *testing.T) {
 	}
 	if !strings.Contains(reloadNarrowness, "nothing else") {
 		t.Errorf("the reload summary must still say the list is exhaustive: %q", reloadNarrowness)
+	}
+}
+
+// TestGeoConfigYAMLSurvivesAWindowsPath is the instance-level regression pin for #2029.
+//
+// Every test in this file and in geo_reload_synthetic_test.go goes through geoConfigYAML, so a
+// path that does not survive the round trip does not fail one of them -- it fails all of them,
+// before their subject is reached. That is exactly what master's Windows leg has been reporting
+// since #2022 merged: `yaml: line 3: did not find expected hexdecimal number`, three tests, no
+// geo code involved.
+//
+// The path is a literal Windows-shaped one rather than t.TempDir(), so this fails on Linux and
+// macOS too. Relying on the Windows leg would be relying on the thing that missed it: pkg/server
+// is excluded from ci.yml's platform_sensitive filter, so a PR touching only this package gets
+// no Windows run at all (#1363 bought that speed-up deliberately).
+//
+// It asserts the value that comes back out, not merely that the parse succeeded. A parse error
+// is shared by every malformed-YAML failure; the round-tripped path is produced by nothing else.
+func TestGeoConfigYAMLSurvivesAWindowsPath(t *testing.T) {
+	const windowsish = `C:\Users\RUNNER~1\AppData\Local\Temp\TestReload123\fixture.mmdb`
+
+	cfgPath := writeConfig(t, geoConfigYAML(geoSource{
+		Path:     windowsish,
+		Provider: string(geo.ProviderDBIP),
+	}))
+
+	cfg, err := config.LoadServerConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("a config naming a Windows path must parse, got: %v\n"+
+			"Inside a double-quoted YAML scalar `\\U` introduces an 8-digit hex escape, and every "+
+			"Windows temp path starts C:\\Users\\ -- so the file is rejected before the reload "+
+			"under test is reached. Render the scalar with configtest.SingleQuoted (#2029).", err)
+	}
+	if cfg.CountryDBPath != windowsish {
+		t.Errorf("country_db_path round-tripped as %q, want %q -- the scalar was rewritten by "+
+			"YAML escape processing", cfg.CountryDBPath, windowsish)
+	}
+	if cfg.CountryDBProvider != string(geo.ProviderDBIP) {
+		t.Errorf("country_db_provider round-tripped as %q, want %q",
+			cfg.CountryDBProvider, string(geo.ProviderDBIP))
+	}
+}
+
+// A path containing a single quote must survive too, since single-quoting is the cure.
+// `C:\Users\O'Brien\...` is an ordinary Windows home directory, and an unescaped quote there
+// would end the scalar early -- trading one parse failure for another.
+func TestGeoConfigYAMLSurvivesAQuoteInThePath(t *testing.T) {
+	const quoted = `C:\Users\O'Brien\AppData\Local\Temp\fixture.mmdb`
+
+	cfgPath := writeConfig(t, geoConfigYAML(geoSource{Path: quoted, Provider: string(geo.ProviderDBIP)}))
+
+	cfg, err := config.LoadServerConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("a config naming a path with a quote in it must parse, got: %v", err)
+	}
+	if cfg.CountryDBPath != quoted {
+		t.Errorf("country_db_path round-tripped as %q, want %q", cfg.CountryDBPath, quoted)
 	}
 }

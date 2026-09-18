@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"lfr-tunnel/pkg/config/configtest"
 )
 
 // Tests for the property SaveClientConfig enforces (#1772):
@@ -94,7 +96,7 @@ func TestSaveClientConfigNeverPersistsATokenItDidNotGetFromTheConfigFile(t *test
 			name: "explicit token_file:",
 			arrange: func(t *testing.T, home string) string {
 				tokenPath := writeUnder(t, home, "elsewhere/token", secretToken+"\n")
-				return writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
+				return writeClientConfigFile(t, "token_file: "+configtest.SingleQuoted(tokenPath)+"\n")
 			},
 		},
 		{
@@ -123,7 +125,7 @@ func TestSaveClientConfigNeverPersistsATokenItDidNotGetFromTheConfigFile(t *test
 			// not have it silently deleted the next time they save.
 			name: "inline auth_token:",
 			arrange: func(t *testing.T, home string) string {
-				return writeClientConfigFile(t, "auth_token: \""+secretToken+"\"\n")
+				return writeClientConfigFile(t, "auth_token: "+configtest.SingleQuoted(secretToken)+"\n")
 			},
 			wantPersisted: true,
 		},

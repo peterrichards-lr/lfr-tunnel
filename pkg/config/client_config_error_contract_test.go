@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"lfr-tunnel/pkg/config/configtest"
 )
 
 // Tests for LoadClientConfig's error-return contract (#1777).
@@ -67,7 +69,7 @@ func TestLoadClientConfigReturnsNilOnEveryErrorPath(t *testing.T) {
 			name: "token_file: names a path that does not exist",
 			setup: func(t *testing.T) string {
 				missing := filepath.Join(t.TempDir(), "not-there", "token")
-				return writeClientConfigFile(t, "token_file: "+yamlPath(missing)+"\n")
+				return writeClientConfigFile(t, "token_file: "+configtest.SingleQuoted(missing)+"\n")
 			},
 			wantIn: []string{"token", "Personal Access Token"},
 		},
@@ -75,7 +77,7 @@ func TestLoadClientConfigReturnsNilOnEveryErrorPath(t *testing.T) {
 			name: "token_file: names an empty file",
 			setup: func(t *testing.T) string {
 				tokenPath := writeTokenFile(t, "\n\n  \n")
-				return writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
+				return writeClientConfigFile(t, "token_file: "+configtest.SingleQuoted(tokenPath)+"\n")
 			},
 			wantIn: []string{"empty"},
 		},
@@ -92,7 +94,7 @@ func TestLoadClientConfigReturnsNilOnEveryErrorPath(t *testing.T) {
 				if _, err := os.ReadFile(tokenPath); err == nil {
 					t.Skip("running as a user that ignores permission bits (root)")
 				}
-				return writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
+				return writeClientConfigFile(t, "token_file: "+configtest.SingleQuoted(tokenPath)+"\n")
 			},
 			wantIn: []string{"readable"},
 		},
@@ -271,7 +273,7 @@ func TestLoadClientConfigErrorPathCannotLeakATokenIntoTheConfigFile(t *testing.T
 
 	t.Run("the error path hands back no config to save", func(t *testing.T) {
 		cfgPath := writeClientConfigFile(t,
-			"auth_token: \""+secret+"\"\ntoken_file: "+yamlPath(missing)+"\n")
+			"auth_token: "+configtest.SingleQuoted(secret)+"\ntoken_file: "+configtest.SingleQuoted(missing)+"\n")
 
 		cfg, err := LoadClientConfig(cfgPath)
 		if err == nil {
@@ -316,7 +318,7 @@ func TestLoadClientConfigErrorPathCannotLeakATokenIntoTheConfigFile(t *testing.T
 		// The shape pkg/client/inspector.go uses at both its LoadClientConfig call sites.
 		// Green before this change too -- it pins the caller contract, it does not prove it.
 		cfgPath := writeClientConfigFile(t,
-			"auth_token: \""+secret+"\"\ntoken_file: "+yamlPath(missing)+"\n")
+			"auth_token: "+configtest.SingleQuoted(secret)+"\ntoken_file: "+configtest.SingleQuoted(missing)+"\n")
 
 		cfg, err := LoadClientConfig(cfgPath)
 		if err != nil {

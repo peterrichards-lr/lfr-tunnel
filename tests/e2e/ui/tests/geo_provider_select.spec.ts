@@ -64,16 +64,40 @@ test.describe('Geo-IP vendor selection — Portal V2', () => {
     // A <select>, not a text input: a typo has to be impossible rather than merely reported.
     expect(await select.evaluate((el) => el.tagName)).toBe('SELECT');
 
-    // Exactly the gateway's vocabulary plus the honest default. Asserted as the whole list
-    // rather than "contains dbip", so an option this build does not support cannot appear
-    // and be refused on save.
+    // Exactly the gateway's vocabulary plus the honest default, READ FROM THE GATEWAY rather
+    // than written out here (#2008).
+    //
+    // This asserted a literal ['', 'maxmind', 'dbip', 'ip2location'] and broke the moment a
+    // fourth vendor was added -- while the test's own name claims the vendors are "offered by
+    // the gateway". A hardcoded list cannot check that claim: it passes whether the options
+    // come from the gateway or from a copy of the list in the portal, and it fails on a
+    // correct change. It was a second home for the vocabulary, which is the thing this feature
+    // was built to avoid.
+    //
+    // Comparing against /api/admin/settings tests the real property: the options ARE what this
+    // build offers, whatever that becomes.
+    const offered = await page.evaluate(async () => {
+      const res = await fetch('/api/admin/settings', {
+        credentials: 'include',
+      });
+      const body = await res.json();
+      return (body.geo_providers || []).map((p: { value: string }) => p.value);
+    });
+
+    // PREMISE: the gateway really did serve a vocabulary. Without this, an empty list would
+    // make the comparison below pass against a dropdown with nothing in it but the default.
+    expect(
+      offered.length,
+      'the gateway served no geo vendors, so this comparison would be vacuous',
+    ).toBeGreaterThan(1);
+
     await expect
       .poll(() =>
         select.evaluate((el) =>
           Array.from((el as HTMLSelectElement).options).map((o) => o.value),
         ),
       )
-      .toEqual(['', MAXMIND.value, DBIP.value, 'ip2location']);
+      .toEqual(['', ...offered]);
   });
 
   test('changing the vendor changes the credit that will be published', async ({
@@ -170,13 +194,28 @@ test.describe('Geo-IP vendor selection — Portal V1', () => {
     const select = page.locator('#geo-provider-select');
     await expect(select).toBeVisible();
     expect(await select.evaluate((el) => el.tagName)).toBe('SELECT');
+
+    // Read from the gateway, not written out here -- the same reasoning as V2's copy above
+    // (#2008). Both arms held the same literal list and both broke on a fourth vendor.
+    const offered = await page.evaluate(async () => {
+      const res = await fetch('/api/admin/settings', {
+        credentials: 'include',
+      });
+      const body = await res.json();
+      return (body.geo_providers || []).map((p: { value: string }) => p.value);
+    });
+    expect(
+      offered.length,
+      'the gateway served no geo vendors, so this comparison would be vacuous',
+    ).toBeGreaterThan(1);
+
     await expect
       .poll(() =>
         select.evaluate((el) =>
           Array.from((el as HTMLSelectElement).options).map((o) => o.value),
         ),
       )
-      .toEqual(['', MAXMIND.value, DBIP.value, 'ip2location']);
+      .toEqual(['', ...offered]);
   });
 
   // The same control as V2's. The two portals are a live A/B test (#1866), so a control that

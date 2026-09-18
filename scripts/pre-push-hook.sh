@@ -126,5 +126,75 @@ else
     echo "[Git Hook] No ui/ changes in $RANGE; skipping the UI build."
 fi
 
+# --- The static comparison gates (#2027) ------------------------------------------------------
+#
+# Sixteen of these existed and ran ONLY in CI, so the person who broke one found out thirteen
+# minutes after pushing, from a job called "Lint & Format Check" that does not say which of
+# sixteen fired. Two of the three red runs on 2026-09-17 were check-nolint-ratchet.sh -- a 716ms
+# grep -- on branches whose subject had nothing to do with suppressions.
+#
+# This is #1929's shape one level up: that issue found four gates running NOWHERE and concluded a
+# gate nobody runs is documentation with a shebang. It wired them into CI. Running only in CI is
+# the same defect with a longer feedback loop.
+#
+# Measured on the machine this was written on: all of them together are ~4.5s, against a hook that
+# already runs `make test` in minutes. They scan the whole tree rather than the diff, so they run
+# unconditionally -- gating them on "did a relevant file change" is how a gate comes not to run on
+# the push that needed it.
+echo "[Git Hook] Running the static gates..."
+
+# node is NOT on PATH in every shell this hook runs from: a non-interactive shell never reads
+# .zshrc, so an nvm-managed node is invisible and `node foo.cjs` exits 127. That is indisputably
+# the worst outcome available -- 127 is a FAILURE exit, so the gate reads as having found
+# something. Resolve it explicitly, the same reasoning as the `go` PATH shim (#1860).
+NODE_BIN=""
+for candidate in node /opt/homebrew/bin/node /usr/local/bin/node; do
+    # --version, not just existence: a stale nvm shim or a node too old to parse these gates
+    # would otherwise be chosen and fail with a syntax error, which reads as a gate FINDING
+    # rather than as the wrong interpreter. Picking nothing is better than picking wrong.
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" --version >/dev/null 2>&1; then
+        NODE_BIN="$candidate"
+        break
+    fi
+done
+
+# Discovered ONCE, and used by both the loop and the warning below. Two separate `find`
+# invocations is how a guard on this file came to match the wrong one and report coverage that
+# was not there -- measured while writing #2027's test.
+JS_GATES="$(find scripts -maxdepth 1 \( -name 'check-*.cjs' -o -name 'check-*.mjs' \) -exec basename {} \; | sort)"
+
+GATE_FAILED=0
+
+# Shell gates first: no interpreter to find, and the ratchet is the one that bites most often.
+for gate in check-nolint-ratchet.sh check-test-home-isolation.sh check-required-contexts.sh; do
+    if [ -x "scripts/$gate" ]; then
+        if ! "./scripts/$gate"; then
+            echo "❌ scripts/$gate failed."
+            GATE_FAILED=1
+        fi
+    fi
+done
+
+if [ -n "$NODE_BIN" ]; then
+    for gate in $JS_GATES; do
+        if ! "$NODE_BIN" "scripts/$gate" >/dev/null; then
+            echo "❌ scripts/$gate failed. Re-run it for the detail:  node scripts/$gate"
+            GATE_FAILED=1
+        fi
+    done
+else
+    # Loud, not silent. A skipped gate that says nothing is the #1929 defect wearing a warning's
+    # clothes -- and unlike the pnpm block below, these are cheap enough that there is no reason
+    # to skip them other than a missing interpreter.
+    echo "⚠️ Warning: no node found, so the $(echo "$JS_GATES" | wc -l | tr -d ' ') JavaScript gates did NOT run."
+    echo "   They will run in CI instead. Install node, or set PATH in your git hook environment."
+fi
+
+if [ "$GATE_FAILED" -ne 0 ]; then
+    echo "❌ Error: a static gate failed. These are the same gates CI runs -- fixing them here"
+    echo "   costs seconds; finding out from CI costs a 13-minute cycle."
+    exit 1
+fi
+
 echo "✅ Pre-push checks passed."
 exit 0

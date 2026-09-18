@@ -1987,35 +1987,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Update reservation with registration passcode & whitelist_ips if specified.
+	// Update reservation with registration passcode & whitelist_ips if specified, and keep what
+	// each domain's lease must enforce: the proxy reads access control from the lease rather than
+	// querying per request (#1329).
 	//
-	// The resolved values are kept so they can be stamped onto the lease below: the proxy reads
-	// access control from the lease rather than querying per request (#1329), and an edge has no
-	// database to query at all (#1367). This loop already holds the row, so recording it here
-	// costs nothing extra.
-	accessByDomain := make(map[string][3]string, len(activeDomains))
-	if s.db != nil {
-		for _, d := range activeDomains {
-			existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
-			if err == nil && existing != nil && existing.UserID == user.ID {
-				updated := false
-				if req.Passcode != "" {
-					existing.Passcode = req.Passcode
-					updated = true
-				}
-				if req.WhitelistIPs != "" {
-					existing.WhitelistIPs = req.WhitelistIPs
-					updated = true
-				}
-				if updated {
-					if err := s.db.UpdateSubdomainReservation(existing); err != nil {
-						slog.Info(fmt.Sprintf("[Server] Failed to update access controls on registration: %v", err))
-					}
-				}
-				accessByDomain[d] = [3]string{existing.Passcode, existing.WhitelistIPs, existing.AccessMode}
-			}
-		}
-	}
+	// Shared with handleEdgeRegister (#2032), which held a copy that had already diverged on how
+	// it handled a failed write. See resolveAccessControls.
+	accessByDomain := s.resolveAccessControls(req.SubdomainPrefix, activeDomains, user.ID, req.Passcode, req.WhitelistIPs)
 
 	effectiveLimit := s.effectiveTunnelRateLimit(req.RateLimit, userRec)
 
@@ -6656,28 +6634,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 	// The resolved rules are returned to the edge below. An edge is stateless and has no
 	// database of its own, so without being told it enforced neither passcode nor IP whitelist
-	// on anything it served (#1367).
-	edgeAccessByDomain := make(map[string][3]string, len(edgeReq.Domains))
-	if s.db != nil {
-		for _, d := range edgeReq.Domains {
-			existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d)
-			if err == nil && existing != nil && existing.UserID == user.ID {
-				updated := false
-				if edgeReq.Passcode != "" {
-					existing.Passcode = edgeReq.Passcode
-					updated = true
-				}
-				if edgeReq.WhitelistIPs != "" {
-					existing.WhitelistIPs = edgeReq.WhitelistIPs
-					updated = true
-				}
-				if updated {
-					_ = s.db.UpdateSubdomainReservation(existing) //nolint:errcheck
-				}
-				edgeAccessByDomain[d] = [3]string{existing.Passcode, existing.WhitelistIPs, existing.AccessMode}
-			}
-		}
-	}
+	// on anything it served (#1367). Shared with handleRegister (#2032).
+	edgeAccessByDomain := s.resolveAccessControls(finalSubdomain, edgeReq.Domains, user.ID, edgeReq.Passcode, edgeReq.WhitelistIPs)
 
 	effectiveLimit := s.effectiveTunnelRateLimit(edgeReq.RateLimit, userRec)
 

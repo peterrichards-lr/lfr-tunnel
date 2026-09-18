@@ -30,7 +30,14 @@ set -euo pipefail
 # Lowered 744 -> 742 by #2020: extracting the client version/OS bookkeeping out of both
 # registration handlers left one UpdateUser call where there had been two, and its error is now
 # logged rather than suppressed -- errcheck runs with check-blank, so `_ =` never satisfied it.
-CEILING="${LFT_NOLINT_CEILING:-742}"
+#
+# 742 -> 741 by #2032, the same way: the access-control stamping loop became one
+# resolveAccessControls, and the edge copy's discarded UpdateSubdomainReservation error is now
+# logged. Worth knowing for the next person who lowers this: the count above is a grep, so it
+# counts the suppression's spelling in COMMENTS too. #2032's first draft explained the removal in
+# a doc comment that quoted the literal, and the total did not move -- a real removal cancelled by
+# prose about it. Describe a suppression, do not quote it.
+CEILING="${LFT_NOLINT_CEILING:-741}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

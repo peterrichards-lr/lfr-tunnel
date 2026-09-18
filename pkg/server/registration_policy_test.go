@@ -684,3 +684,152 @@ func TestBothRegistrationPathsRecordTheSameClientVersionAndOS(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------------------------
+// #2032: the access-control stamping loop, the last member of the class.
+// ---------------------------------------------------------------------------------------------
+
+// registerWithAccessControls drives one path with a passcode and an IP whitelist, and returns what
+// that path put in force: the reservation row, and the tuple the serving gateway will enforce.
+//
+// The two paths deliver that tuple differently and always have -- the direct path writes it onto
+// its own registry lease, the edge path returns it as access_controls for an edge that has no
+// database to read it from (#1367). Reading each path's OWN delivery, rather than the shared
+// database row alone, is what makes this a test of the two paths agreeing rather than a test of
+// one function called twice (§5c rule 4).
+func (f *policyFleet) registerWithAccessControls(t *testing.T, path, subdomain, passcode, whitelist string) [3]string {
+	t.Helper()
+
+	if path == "direct" {
+		payload, err := json.Marshal(RegisterRequest{
+			SubdomainPrefix: subdomain,
+			AuthToken:       f.authToken,
+			Ports:           []PortMapping{{LocalPort: 8080}},
+			Passcode:        passcode,
+			WhitelistIPs:    whitelist,
+		})
+		if err != nil {
+			t.Fatalf("marshalling the direct registration: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/register", bytes.NewReader(payload))
+		req.RemoteAddr = "127.0.0.1:54321"
+		rec := httptest.NewRecorder()
+		f.srv.ServeHTTP(rec, req)
+		if got := decodeOutcome(t, path, rec); got.status != http.StatusOK {
+			t.Fatalf("the direct registration was refused with %s -- a refusal stamps nothing, so "+
+				"the assertions below would be about the fixture rather than the access controls", got)
+		}
+		lease, ok := f.srv.registry.GetLease(subdomain + "." + f.domain)
+		if !ok {
+			t.Fatalf("the direct path registered but left no lease for %s.%s", subdomain, f.domain)
+		}
+		p, w, m := lease.AccessControls()
+		return [3]string{p, w, m}
+	}
+
+	payload := []byte(fmt.Sprintf(`{
+		"subdomain_prefix": %q,
+		"auth_token": %q,
+		"ports": [{"local_port": 8080}],
+		"domains": [%q],
+		"client_ip": "8.8.8.8",
+		"passcode": %q,
+		"whitelist_ips": %q
+	}`, subdomain, f.authToken, f.domain, passcode, whitelist))
+	req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/internal/edge-register", bytes.NewReader(payload))
+	req.Header.Set("X-Edge-Token", policyFleetEdgeToken)
+	rec := httptest.NewRecorder()
+	f.srv.ServeHTTP(rec, req)
+	if got := decodeOutcome(t, path, rec); got.status != http.StatusOK {
+		t.Fatalf("the edge registration was refused with %s", got)
+	}
+
+	var resp struct {
+		AccessControls map[string]struct {
+			Passcode     string `json:"passcode"`
+			WhitelistIPs string `json:"whitelist_ips"`
+			AccessMode   string `json:"access_mode"`
+		} `json:"access_controls"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding the edge response: %v", err)
+	}
+	ac, ok := resp.AccessControls[f.domain]
+	if !ok {
+		t.Fatalf("the edge response carried no access controls for %s -- an edge has no database, "+
+			"so it would enforce neither the passcode nor the whitelist (#1367). Got: %s",
+			f.domain, rec.Body.String())
+	}
+	return [3]string{ac.Passcode, ac.WhitelistIPs, ac.AccessMode}
+}
+
+func TestBothRegistrationPathsPutTheSameAccessControlsInForce(t *testing.T) {
+	const (
+		passcode  = "hunter2"
+		whitelist = "203.0.113.0/24"
+	)
+
+	// Each path gets its own subdomain: the policy is stateful -- the row is created by whichever
+	// path reaches it first and then updated -- so a shared one would have the second path
+	// answering a question the first had already settled (§5c rule 3).
+	f := newPolicyFleet(t, nil, nil)
+
+	direct := f.registerWithAccessControls(t, "direct", "access-direct", passcode, whitelist)
+	viaEdge := f.registerWithAccessControls(t, "edge", "access-edge", passcode, whitelist)
+
+	if direct != viaEdge {
+		t.Errorf("the two registration paths put different access controls in force: direct %v, "+
+			"edge %v. Which half of the fleet a client is routed to would decide who can reach "+
+			"their tunnel, and nothing else would report it (#2032)", direct, viaEdge)
+	}
+	// The third slot is the access MODE, which neither path sets at registration: the reservation
+	// row carries "or" by default (api_service_reservation.go) and TunnelLease.AccessControls
+	// substitutes "or" for an empty one. Asserted rather than left as "" -- an empty mode would
+	// mean the two paths agreed on a value the proxy then reinterprets, which is the kind of
+	// agreement that looks right and is not.
+	want := [3]string{passcode, whitelist, "or"}
+	if direct != want {
+		t.Errorf("direct registration enforces %v, want %v", direct, want)
+	}
+	if viaEdge != want {
+		t.Errorf("edge-served registration enforces %v, want %v", viaEdge, want)
+	}
+
+	// And the row itself, which is what survives the tunnel and what the portal shows.
+	for _, sub := range []string{"access-direct", "access-edge"} {
+		row, err := f.srv.db.GetSubdomainReservationByName(sub, f.domain)
+		if err != nil || row == nil {
+			t.Fatalf("reading back the reservation for %q: row %v, err %v", sub, row, err)
+		}
+		if row.Passcode != passcode || row.WhitelistIPs != whitelist {
+			t.Errorf("the reservation for %q holds passcode %q and whitelist %q, want %q and %q",
+				sub, row.Passcode, row.WhitelistIPs, passcode, whitelist)
+		}
+	}
+}
+
+// TestAccessControlsAreNotRewrittenForSomebodyElsesReservation pins the one condition the
+// extraction had to preserve: only the holder's own rows are touched. A registration that reaches
+// a live reservation belonging to another user is refused earlier, by
+// applySubdomainReservationPolicy -- so resolveAccessControls skipping the row rather than
+// refusing is the correct division of labour, and this asserts the skip rather than assuming it.
+func TestAccessControlsAreNotRewrittenForSomebodyElsesReservation(t *testing.T) {
+	f := newPolicyFleet(t, nil, nil)
+	const sub = "not-yours"
+	f.seedReservation(t, policyFleetOtherUserID, sub, nil)
+
+	got := f.srv.resolveAccessControls(sub, []string{f.domain}, policyFleetUserID, "hunter2", "203.0.113.0/24")
+	if len(got) != 0 {
+		t.Errorf("resolveAccessControls returned %v for a reservation held by another user, want "+
+			"nothing -- rewriting it would let one user set the passcode on another's subdomain", got)
+	}
+
+	row, err := f.srv.db.GetSubdomainReservationByName(sub, f.domain)
+	if err != nil || row == nil {
+		t.Fatalf("reading back the seeded reservation: row %v, err %v", row, err)
+	}
+	if row.Passcode != "" || row.WhitelistIPs != "" {
+		t.Errorf("the other user's reservation was modified: passcode %q, whitelist %q",
+			row.Passcode, row.WhitelistIPs)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"lfr-tunnel/pkg/db"
@@ -22,6 +23,11 @@ import (
 // divergence there is not a wrong number on a dashboard, it is a user who can open a tunnel from
 // one region and not from another.
 //
+// #2020 closed the class out with the last two members: the random-subdomain generation loop --
+// the only one that had already diverged, and the only one whose divergence had a live consequence
+// -- and the client version/OS bookkeeping. See grantRandomSubdomain for why that divergence was a
+// defect rather than a deliberate asymmetry, and for the two commits that turned it into one.
+//
 // What is NOT here, deliberately: the tunnel COUNTING around maxActiveTunnelsFor. The two paths
 // count different things and are right to -- central has to add s.edgeLeases for tunnels it is
 // not itself serving, and the direct path has no such leases to add. Only the resolution of the
@@ -37,7 +43,137 @@ const (
 	subdomainReservedByOther     = "Subdomain is reserved by another user"
 	subdomainMustBeReserved      = "Custom subdomains must be reserved in the portal prior to connecting"
 	subdomainQuotaReachedMessage = "Subdomain reservation quota limit reached"
+	randomSubdomainRefusal       = "failed to generate unique random subdomain"
 )
+
+// randomSubdomainAttempts is how many candidates either path tries before refusing. Kept at the
+// 10 both handlers used: the point of this extraction is that the two agree, not that they try
+// harder.
+const randomSubdomainAttempts = 10
+
+// randomSubdomainStyle is the generator both registration paths ask for. Hardcoded here exactly as
+// it was hardcoded in both handlers. The per-user db.User.SubdomainStyle column is writable from
+// the portal (api.go's profile update) and read by nothing -- handleGenerateSubdomain takes its
+// style from a query parameter instead -- so registration has never honoured it. Filed as #2031
+// rather than fixed here: honouring a stored preference is a behaviour change, not a
+// deduplication.
+const randomSubdomainStyle = "liferay"
+
+// subdomainHeldInMemory reports whether a live tunnel already occupies this name, anywhere on the
+// fleet this control plane knows about.
+//
+// BOTH in-memory views, because the control plane has both and a collision between them is a
+// collision on one hostname:
+//
+//   - s.registry holds the leases this gateway serves itself;
+//   - s.edgeLeases holds the leases every edge node serves, recorded by handleEdgeRegister and
+//     read back by resolveRemoteRouteForHost to route visitor traffic.
+//
+// Matching on the full host rather than the bare prefix is what makes this a name collision test
+// and not a prefix one -- resolveRemoteRouteForHost compares the same way. A lease recorded
+// without a full host (no domains were supplied) falls back to the prefix, since that is all the
+// name it has.
+func (s *Server) subdomainHeldInMemory(subdomain string, domains []string) bool {
+	if s.registry != nil {
+		if available, _ := s.registry.CheckSubdomain(subdomain, domains); !available {
+			return true
+		}
+	}
+
+	s.edgeLeasesMu.RLock()
+	defer s.edgeLeasesMu.RUnlock()
+	for _, leases := range s.edgeLeases {
+		for _, el := range leases {
+			if el.FullHost == "" {
+				if strings.EqualFold(el.Subdomain, subdomain) {
+					return true
+				}
+				continue
+			}
+			for _, d := range domains {
+				if strings.EqualFold(el.FullHost, subdomain+"."+d) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// subdomainReserved reports whether any of domains already carries a reservation row for this
+// name. Whose it is does not matter: a random name is being handed out to somebody who did not ask
+// for this one, so "reserved at all" is the answer, unlike the explicit-subdomain path where the
+// holder's identity decides the outcome.
+func (s *Server) subdomainReserved(subdomain string, domains []string) bool {
+	if s.db == nil {
+		return false
+	}
+	for _, d := range domains {
+		if existing, err := s.db.GetSubdomainReservationByName(subdomain, d); err == nil && existing != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// grantRandomSubdomain picks a name for a client that asked for a random one, for both paths.
+// Reports the name and whether one was found at all.
+//
+// This was the last member of #2005's class, and the only one that had already diverged (#2020):
+// the direct path checked the in-memory registry and the reservations table, the edge path checked
+// only the reservations table. The asymmetry was harmless when it was written -- an edge issued
+// tunnels under its own regional domain (#183, 2026-06-25), so a prefix shared with a central
+// tunnel produced two different hostnames. It stopped being harmless on 2026-08-24, when
+// tunnel_domains made every gateway issue on the shared apex (#1288) and the control plane began
+// publishing a per-tunnel DNS record that beats the wildcard (#1295). From then on the two names
+// were one name, and DNS decided which of two users a visitor reached.
+//
+// It is NOT a case of "the edge cannot know". Both handlers run on the control plane -- an edge's
+// registration is validated here, not there -- and handleEdgeRegister already reads both
+// s.registry and s.edgeLeases thirty lines further down to count the user's active tunnels. The
+// information was present and used in the same function.
+func (s *Server) grantRandomSubdomain(domains []string) (string, bool) {
+	for attempt := 0; attempt < randomSubdomainAttempts; attempt++ {
+		candidate := s.generateRandomSubdomainPrefix(randomSubdomainStyle)
+		if s.subdomainHeldInMemory(candidate, domains) {
+			continue
+		}
+		if s.subdomainReserved(candidate, domains) {
+			continue
+		}
+		return candidate, true
+	}
+	return "", false
+}
+
+// recordClientVersionAndOS stamps the client's reported version and OS onto the user row, writing
+// it back only when something actually changed.
+//
+// The lowest-stakes member of the class -- a divergence here shows up as a stale value on an admin
+// screen, not a refusal -- but it was five byte-identical lines in both handlers, and the write it
+// performs is the one both paths were discarding the error of. Logged rather than discarded now:
+// errcheck runs with check-blank, so `_ =` never satisfied it anyway, and a failed write here
+// means the admin screen is about to show a stale client version with nothing saying why.
+func (s *Server) recordClientVersionAndOS(userRec *db.User, clientVersion, clientOS string) {
+	if userRec == nil || s.db == nil {
+		return
+	}
+	changed := false
+	if clientVersion != "" && userRec.LastClientVersion != clientVersion {
+		userRec.LastClientVersion = clientVersion
+		changed = true
+	}
+	if clientOS != "" && userRec.LastClientOS != clientOS {
+		userRec.LastClientOS = clientOS
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	if err := s.db.UpdateUser(userRec); err != nil {
+		slog.Info(fmt.Sprintf("[Server] Failed to record client version/OS for %s: %v", userRec.ID, err))
+	}
+}
 
 // maxActiveTunnelsFor resolves how many concurrent tunnels this registration's user is allowed,
 // where 0 (or less) means unlimited.

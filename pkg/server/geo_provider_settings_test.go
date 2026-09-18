@@ -406,3 +406,60 @@ func TestTheDatabasePathIsReportedButNotSettable(t *testing.T) {
 		t.Fatalf("setting country_db_path from the portal: want 400, got %d", code)
 	}
 }
+
+// Every message that ENUMERATES the vendors must name all of them (#2008).
+//
+// `geo_provider_not_declared` and `geo_provider_unknown` list the accepted values by hand, in ten
+// locale bundles. Adding a fourth vendor left all twenty strings telling an operator that
+// `ipinfo` was not valid, at the moment it became valid -- and the message a misconfigured
+// operator reads is the worst place to be wrong, because it is the one they will trust over the
+// dropdown.
+//
+// The dropdown itself cannot drift: GeoProviderOptions derives from geo.SelectableProviders.
+// These sentences are the one place the vocabulary is written out, so they are the one place that
+// needs a gate.
+//
+// English only, deliberately. A translated sentence is free to order or join the list differently
+// and a locale bundle that omitted a vendor would be a translation bug, not a vocabulary one --
+// and check-i18n-keys already requires every bundle to carry the key.
+func TestTheVendorListInEveryMessageNamesEverySelectableVendor(t *testing.T) {
+	bundle, err := os.ReadFile(filepath.Join("i18n", "Language.properties"))
+	if err != nil {
+		t.Fatalf("read English bundle: %v", err)
+	}
+	text := string(bundle)
+
+	providers := geo.SelectableProviders()
+	if len(providers) < 2 {
+		t.Fatalf("PREMISE: only %d selectable vendor(s), so a missing one could not be detected",
+			len(providers))
+	}
+
+	for _, key := range []string{"geo_provider_not_declared", "geo_provider_unknown"} {
+		line := ""
+		for _, l := range strings.Split(text, "\n") {
+			if strings.HasPrefix(l, key+"=") {
+				line = l
+				break
+			}
+		}
+		if line == "" {
+			t.Errorf("%s is missing from the English bundle", key)
+			continue
+		}
+		// PREMISE: the sentence really is the enumerating kind. If it is ever reworded to point
+		// at the settings screen instead, this case should be deleted rather than left passing
+		// vacuously over a sentence that lists nothing.
+		if !strings.Contains(line, string(geo.ProviderMaxMind)) {
+			t.Errorf("PREMISE: %s no longer enumerates vendors, so this guard is checking "+
+				"nothing -- delete it or re-aim it", key)
+			continue
+		}
+		for _, p := range providers {
+			if !strings.Contains(line, string(p)) {
+				t.Errorf("%s does not name the selectable vendor %q, so it tells an operator "+
+					"that a valid value is invalid:\n  %s", key, p, line)
+			}
+		}
+	}
+}

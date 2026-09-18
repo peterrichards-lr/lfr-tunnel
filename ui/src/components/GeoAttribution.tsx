@@ -15,6 +15,12 @@ const GEO_ATTRIBUTION_LINK: Record<string, { href: string; text: string }> = {
   maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
   dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
   ip2location: { href: 'https://lite.ip2location.com', text: 'IP geolocation' },
+  // IPinfo Lite requires "IP address data is powered by IPinfo" for commercial AND
+  // non-commercial use -- supplied by the operator from IPinfo's terms (#2008). Their Lite
+  // download ships no licence file, unlike IP2Location's LICENSE_LITE.TXT, so the wording
+  // could not be read from the artefact. The bundle holds the sentence and this holds the
+  // anchor, so the rendered credit is theirs verbatim.
+  ipinfo: { href: 'https://ipinfo.io', text: 'IPinfo' },
   // `unknown` is absent on purpose rather than mapped to a vendor: there is nobody to link
   // to, and naming a vendor anyway would be a false provenance claim AND would leave the real
   // supplier's licence unmet.

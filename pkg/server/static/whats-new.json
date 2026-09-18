@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.38",
+    "release_date": "2026-09-18",
+    "features": [
+      "fix(portal): give V1's geo credit a fallback sentence, and retranslate it (#2052) (#2053)",
+      "docs(skill): record that an edge deploy has one entry point and one node per run (#2051)",
+      "chore(scripts): delete the second edge-deploy entry point (#2048) (#2049)"
+    ]
+  },
+  {
     "version": "v1.48.37",
     "release_date": "2026-09-18",
     "features": [
@@ -74,18 +83,6 @@
       "fix(geo): decode both known country schemas, not just MaxMind's (#1943) (#1935)",
       "docs(server): document geolite2_db_path setup, providers and licensing (#1917) (#1941)",
       "fix(portal): print only the report, not everything around it (#1916) (#1936)"
-    ]
-  },
-  {
-    "version": "v1.48.33",
-    "release_date": "2026-09-16",
-    "features": [
-      "ci: run the four comparison gates that ran nowhere, and guard the list (#1929) (#1933)",
-      "feat(analytics): report how clients chose their gateway, so pinned ones are visible (#1922) (#1932)",
-      "feat(docs): gate every docs page on being in the mkdocs nav or explicitly excluded (#1928)",
-      "fix(hooks): say the scan never ran, instead of reporting a secret (#1923) (#1927)",
-      "fix(portal-v1): render no table when the headline says there is nothing to show (#1930)",
-      "fix(portal): make the analytics print export readable in both arms (#1916) (#1926)"
     ]
   }
 ]

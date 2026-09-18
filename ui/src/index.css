@@ -3375,6 +3375,29 @@ input[type='checkbox'] {
   gap: var(--spacing-md);
 }
 
+/* The geo vendor's credit, in the footer of both the authenticated shell and the login screen
+   (#2044).
+
+   Quiet but legible, and deliberately NOT dimmed to the 0.4 opacity the version lines use: this
+   is a licence obligation, and a credit nobody can read does not discharge one. `word-break`
+   because a vendor's anchor text is theirs, not ours, and can be longer than the narrow sidebar
+   -- IPinfo's is short, IP2Location's is a phrase. */
+.sidebar-footer-geo,
+.login-footer-geo {
+  color: var(--text-muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.sidebar-footer-geo a,
+.login-footer-geo a {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+.sidebar-footer-geo a:hover,
+.login-footer-geo a:hover {
+  color: var(--primary);
+}
+
 /* Analytics toolbar (#1604), matching V1's fix in #1560.
    The range select and Export PDF sat at different offsets: .input-field carries a
    margin-bottom intended for stacked forms, which the select kept inside this row while the

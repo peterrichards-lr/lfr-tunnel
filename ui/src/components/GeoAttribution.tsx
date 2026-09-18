@@ -1,51 +1,49 @@
 import { useI18n } from '../contexts/I18nContext';
 
-// Per-provider attribution for the geo-IP database (#1921).
-//
-// Every supported vendor's licence obliges a visible credit, and each obliges a DIFFERENT
-// one, so this is a lookup rather than a hardcoded line: MaxMind's GeoLite EULA §3 ("You must
-// provide attribution of your use to MaxMind"), DB-IP's CC BY 4.0 ("you must include a link
-// back to DB-IP.com on pages that display or use results from the database"), and
-// IP2Location LITE's LICENSE_LITE.TXT, which prescribes its acknowledgment word for word.
-//
-// The link is supplied HERE, not by the bundle: DB-IP's obligation is specifically a link, so
-// a locale file that lost the anchor would quietly breach the licence. The bundle holds only
-// the sentence around it, and its {0} is where the link goes.
-const GEO_ATTRIBUTION_LINK: Record<string, { href: string; text: string }> = {
-  maxmind: { href: 'https://www.maxmind.com', text: 'maxmind.com' },
-  dbip: { href: 'https://db-ip.com', text: 'IP Geolocation by DB-IP' },
-  ip2location: { href: 'https://lite.ip2location.com', text: 'IP geolocation' },
-  // IPinfo Lite requires "IP address data is powered by IPinfo" for commercial AND
-  // non-commercial use -- supplied by the operator from IPinfo's terms (#2008). Their Lite
-  // download ships no licence file, unlike IP2Location's LICENSE_LITE.TXT, so the wording
-  // could not be read from the artefact. The bundle holds the sentence and this holds the
-  // anchor, so the rendered credit is theirs verbatim.
-  ipinfo: { href: 'https://ipinfo.io', text: 'IPinfo' },
-  // `unknown` is absent on purpose rather than mapped to a vendor: there is nobody to link
-  // to, and naming a vendor anyway would be a false provenance claim AND would leave the real
-  // supplier's licence unmet.
-};
-
 // GeoAttribution renders one vendor's credit, link and all.
 //
-// One component, two callers, on purpose (#1995). The analytics panel publishes this credit
-// and System Settings previews the credit a chosen vendor WILL publish -- and a preview that
-// can differ from the thing it previews is worse than no preview, because it is the screen an
-// admin uses to decide what they are publishing on somebody else's behalf. Portal V1 has its
-// own copy in dashboard.js for the same two surfaces; the two arms are an A/B test (#1866), so
-// a credit rendered in one and not the other is a defect.
+// Every supported vendor's licence obliges a visible credit, and each obliges a DIFFERENT one:
+// MaxMind's GeoLite EULA §3 ("You must provide attribution of your use to MaxMind"), DB-IP's
+// CC BY 4.0 ("you must include a link back to DB-IP.com on pages that display or use results
+// from the database"), IP2Location LITE's LICENSE_LITE.TXT, which prescribes its acknowledgment
+// word for word, and IPinfo Lite's "IP address data is powered by IPinfo", required for
+// commercial and non-commercial use alike.
 //
-// Renders nothing at all for an unset provider. That is the licence protection: with no vendor
-// named there is nobody to credit, and printing any vendor's line would be a false statement
-// about provenance.
-export default function GeoAttribution({ provider }: { provider?: string }) {
+// The gateway honours all of them to the STRICTEST standard rather than reasoning per vendor
+// (#2044). Deciding per vendor is a question that would have to be answered again every time the
+// vendor changed -- and since #1998 that is a SIGHUP away, so a change could open a gap nobody
+// re-checked.
+//
+// The ANCHOR arrives as props rather than from a table here. It used to be duplicated in this
+// file and in pkg/server/static/dashboard.js, and the credit now appears in the footers too --
+// which would have made a third copy of a licence obligation, in a place a vendor could be added
+// to one and missed in the others. pkg/geo.AttributionLink is the one table; the server sends
+// href and text on /api/version (PUBLIC, so the login screen can reach it) and on the admin
+// locations route.
+//
+// The SENTENCE stays here, as literal t() keys: scripts/check-i18n-keys.cjs can only see a
+// string literal, and a key it cannot see is a key it cannot hold in the locale bundles.
+//
+// Renders nothing for an unset provider. That is the licence protection: with no vendor named
+// there is nobody to credit, and printing any vendor's line would be a false statement about
+// provenance.
+export default function GeoAttribution({
+  provider,
+  href,
+  text,
+}: {
+  provider?: string;
+  href?: string;
+  text?: string;
+}) {
   const { t } = useI18n();
   if (!provider) return null;
 
-  // Literal keys, one branch each, rather than t(map[provider].key):
-  // scripts/check-i18n-keys.cjs can only see a string literal, and a key it cannot see is a
-  // key it cannot hold in the locale bundles.
-  const text =
+  // One branch per selectable vendor. TestEveryPortalArmRendersACreditForEverySelectableVendor
+  // fails if a vendor reaches geo.SelectableProviders without one -- which happened when IPinfo
+  // was added: the key existed in all ten bundles, nothing selected it, and an IPinfo deployment
+  // rendered "the vendor could not be identified" over IPinfo's data.
+  const sentence =
     provider === 'maxmind'
       ? t(
           'geo_attribution_maxmind',
@@ -68,19 +66,15 @@ export default function GeoAttribution({ provider }: { provider?: string }) {
                 'The vendor of this geo-IP database could not be identified from its file metadata, so the gateway cannot render the credit line it requires. Check the licence of the file you deployed and add the attribution yourself: most geo-IP vendors require a visible one wherever their data appears.',
               );
 
-  const link = GEO_ATTRIBUTION_LINK[provider];
-  const [before, ...rest] = text.split('{0}');
-  if (!rest.length || !link) return <>{text}</>;
+  const [before, ...rest] = sentence.split('{0}');
+  // No anchor to render: either the sentence carries no {0} (the `unknown` case, which is this
+  // gateway's own words rather than a licensor's) or the server sent no link for this vendor.
+  if (!rest.length || !href || !text) return <>{sentence}</>;
   return (
     <>
       {before}
-      <a
-        href={link.href}
-        target="_blank"
-        rel="noreferrer"
-        className="text-primary"
-      >
-        {link.text}
+      <a href={href} target="_blank" rel="noreferrer" className="text-primary">
+        {text}
       </a>
       {rest.join('{0}')}
     </>

@@ -1635,6 +1635,23 @@ html[dir='rtl'] th {
   margin-top: 8px;
 }
 
+/* The geo vendor's credit (#2044). Styled here rather than inline because
+   portal_v1_new_sections_contrast asserts .sidebar-footer-links carries no inline
+   declarations (#1608): forced-colors, prefers-contrast and the high-contrast theme all act
+   on CSS, and an inline declaration cannot be overridden by them. The login slot is styled
+   here too -- that gate's scope does not reach it, but the same accessibility argument does,
+   and the credit has to stay legible under a substituted palette to be a credit at all. */
+.geo-credit-footer {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+.geo-credit-footer-login {
+  font-size: 10px;
+  margin: 12px 0 0;
+  padding-left: 16px;
+}
+
 /* Keyboard shortcuts overlay (#1611), matching V2. */
 .shortcuts-trigger {
   position: fixed;

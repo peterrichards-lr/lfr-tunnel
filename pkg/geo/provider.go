@@ -158,3 +158,38 @@ var ErrProviderNotDeclared = errors.New("geo: country_db_provider is not set")
 
 // ErrProviderUnknown is a declared vendor this build does not know.
 var ErrProviderUnknown = errors.New("geo: unknown country_db_provider")
+
+// AttributionLink is the anchor a vendor's credit must carry: where it points and what it says.
+//
+// ONE table, served to the portals rather than copied into them (#2044). The href and text used
+// to live in ui/src/components/GeoAttribution.tsx and pkg/server/static/dashboard.js, which is
+// two copies of a licence obligation in two languages -- and the credit now has to appear on the
+// login screen too, which would have made three. A vendor added to one and not the others would
+// render no anchor at all in the places that were missed, and an anchor is the whole of what
+// DB-IP and IPinfo require.
+//
+// The TEXT is deliberately not translated and does not live in the locale bundles. It is quoted
+// from what each vendor publishes -- DB-IP's own snippet, IP2Location's LICENSE_LITE.TXT, the
+// wording IPinfo requires -- and a translator is not free to improve a licensor's words. The
+// sentence AROUND it is translated; the bundles hold that, with {0} marking where this goes.
+func AttributionLink(p Provider) (href, text string, ok bool) {
+	switch p {
+	case ProviderMaxMind:
+		return "https://www.maxmind.com", "maxmind.com", true
+	case ProviderDBIP:
+		// DB-IP publish this exact anchor: "You may do it by pasting the HTML code snippet
+		// below into your code: <a href='https://db-ip.com'>IP Geolocation by DB-IP</a>".
+		return "https://db-ip.com", "IP Geolocation by DB-IP", true
+	case ProviderIP2Location:
+		// LICENSE_LITE.TXT prescribes the sentence word for word, with the link on the phrase
+		// "IP geolocation".
+		return "https://lite.ip2location.com", "IP geolocation", true
+	case ProviderIPinfo:
+		return "https://ipinfo.io", "IPinfo", true
+	default:
+		// ProviderUnknown has no anchor ON PURPOSE. There is nobody to link to, and naming a
+		// vendor anyway would be a false provenance claim AND would leave the real supplier's
+		// licence unmet. The panel says it could not identify the vendor instead.
+		return "", "", false
+	}
+}

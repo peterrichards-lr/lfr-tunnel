@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { NavLink } from 'react-router-dom';
+import GeoAttribution from './GeoAttribution';
 import { useI18n } from '../contexts/I18nContext';
 
 interface SidebarProps {
@@ -9,6 +10,10 @@ interface SidebarProps {
   onClose: () => void;
   serverVersion?: string;
   clientVersion?: string;
+  // Null when no geo-IP database is open, which is the normal case -- the gateway ships with
+  // the feature off, and crediting a vendor whose data is not in use would be a false
+  // provenance claim (#2044).
+  geoCredit?: { provider: string; href: string; text: string } | null;
 }
 
 export default function Sidebar({
@@ -17,6 +22,7 @@ export default function Sidebar({
   onClose,
   serverVersion,
   clientVersion,
+  geoCredit,
 }: SidebarProps) {
   // Arrow-key movement within the sidebar (#1562), matching V1's behaviour so the two arms of the
   // A/B test cost a keyboard user the same effort.
@@ -323,6 +329,29 @@ export default function Sidebar({
                 {t('cookie_policy', 'Cookies')}
               </a>
             </div>
+            {/* The geo vendor's credit (#2044).
+                
+                Here rather than only on the analytics panel, because that panel is admin-only:
+                on a deployment where no admin opens it, a credit the vendor's licence requires
+                is never displayed at all while their data is used on every registration. The
+                strictest requirement among the supported vendors is product-level -- IPinfo's
+                "IP address data is powered by IPinfo", for commercial and non-commercial use --
+                and all of them are honoured to it rather than reasoning per vendor.
+                
+                Rendered only when a database is actually open, which is what geoCredit being
+                null means. */}
+            {geoCredit && (
+              <p
+                data-testid="geo-credit-footer"
+                className="sidebar-footer-geo text-xs m-0 mt-sm"
+              >
+                <GeoAttribution
+                  provider={geoCredit.provider}
+                  href={geoCredit.href}
+                  text={geoCredit.text}
+                />
+              </p>
+            )}
           </div>
 
           <div className="text-xs text-muted mb-sm">

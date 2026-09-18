@@ -518,3 +518,64 @@ func TestEveryPortalArmRendersACreditForEverySelectableVendor(t *testing.T) {
 		}
 	}
 }
+
+// The credit must reach a surface that is not admin-only, in BOTH arms (#2044).
+//
+// The panel alone does not discharge it. `/api/admin/analytics/locations` is admin-guarded, so a
+// non-admin at /analytics gets the off-state and no credit -- and on a deployment where nobody
+// opens that screen, a credit the vendor's licence requires is never displayed at all while their
+// data is used on every registration.
+//
+// Every supported vendor is honoured to the STRICTEST standard rather than per vendor: IPinfo's
+// is product-level ("IP address data is powered by IPinfo", commercial and non-commercial alike)
+// where DB-IP's is page-scoped. Reasoning per vendor would have to be redone every time the
+// vendor changed, and since #1998 that is a SIGHUP away -- a change could open a gap nobody
+// re-checked.
+//
+// Checked by reading the source, like the sentence-chain gate above, because the alternative is
+// an E2E run per surface and this is the kind of thing a refactor silently drops.
+func TestBothArmsPublishTheCreditOutsideTheAdminPanel(t *testing.T) {
+	// The public payload is what makes a pre-authentication surface possible at all.
+	server, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatalf("read server.go: %v", err)
+	}
+	if !strings.Contains(string(server), `"geo_attribution"`) {
+		t.Error("/api/version does not carry geo_attribution, so no page without a session " +
+			"can render the credit -- including the login screen")
+	}
+
+	for _, c := range []struct{ arm, path, needle, why string }{
+		{
+			arm: "Portal V2 (authenticated shell)", path: filepath.Join("..", "..", "ui", "src", "components", "Sidebar.tsx"),
+			needle: "geoCredit", why: "the sidebar footer renders the credit for every signed-in user, not just admins",
+		},
+		{
+			arm: "Portal V2 (login)", path: filepath.Join("..", "..", "ui", "src", "pages", "Login.tsx"),
+			needle: "geo_attribution", why: "the login screen is the one surface every visitor sees",
+		},
+		{
+			arm: "Portal V1 (both footers)", path: filepath.Join("static", "dashboard.js"),
+			needle: "renderGeoCreditFooters", why: "V1 must match V2 -- the arms are an A/B test (#1866)",
+		},
+	} {
+		src, err := os.ReadFile(c.path)
+		if err != nil {
+			t.Errorf("%s: read %s: %v", c.arm, c.path, err)
+			continue
+		}
+		if !strings.Contains(string(src), c.needle) {
+			t.Errorf("%s no longer publishes the geo credit (%s): %s", c.arm, c.path, c.why)
+		}
+	}
+
+	// V1's markup must actually carry a slot in BOTH footers, or the renderer writes nowhere.
+	markup, err := os.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatalf("read dashboard.html: %v", err)
+	}
+	if n := strings.Count(string(markup), "geo-credit-footer"); n < 2 {
+		t.Errorf("V1 has %d geo-credit-footer slot(s), want 2 (the login footer and the "+
+			"authenticated one) -- a renderer with nowhere to write fails silently", n)
+	}
+}

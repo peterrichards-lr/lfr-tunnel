@@ -82,7 +82,16 @@ export default function AdminSettings() {
   // force came from, and it is rendered: two sources of truth disagreeing silently is the
   // failure this repo keeps hitting (#1412, #1921, #1919).
   const [geoProviders, setGeoProviders] = useState<
-    { value: string; label_key: string; attribution_key: string }[]
+    {
+      value: string;
+      label_key: string;
+      attribution_key: string;
+      // The anchor the credit must carry, served per option from geo.AttributionLink (#2044).
+      // Per option rather than for the vendor in force, because this screen previews the credit
+      // for one the admin has SELECTED and not yet saved.
+      attribution_href?: string;
+      attribution_text?: string;
+    }[]
   >([]);
   const [geoProvider, setGeoProvider] = useState('');
   const [geoSource, setGeoSource] = useState('');
@@ -569,7 +578,17 @@ export default function AdminSettings() {
                   data-testid="geo-provider-credit"
                   className="text-sm m-0 p-md copy-box"
                 >
-                  <GeoAttribution provider={geoProvider} />
+                  <GeoAttribution
+                    provider={geoProvider}
+                    href={
+                      geoProviders.find((p) => p.value === geoProvider)
+                        ?.attribution_href
+                    }
+                    text={
+                      geoProviders.find((p) => p.value === geoProvider)
+                        ?.attribution_text
+                    }
+                  />
                 </p>
               </div>
             )}

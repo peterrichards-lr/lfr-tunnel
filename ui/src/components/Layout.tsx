@@ -19,6 +19,15 @@ export default function Layout() {
   // gateway -- so during an outage the one pointer telling a user where to look was fetched from
   // the thing that is down, and the link simply disappeared (#1869). localStorage is read
   // synchronously and needs no server, which is the whole requirement here.
+  // The geo vendor's credit, when one is owed (#2044). Served on /api/version so the same
+  // payload reaches the login screen, which has no session and cannot call the admin route.
+  // Absent when no database is open -- crediting a vendor whose data is not in use would be
+  // #1964's false provenance pointing the other way.
+  const [geoCredit, setGeoCredit] = useState<{
+    provider: string;
+    href: string;
+    text: string;
+  } | null>(null);
   const [statusPageUrl, setStatusPageUrl] = useState<string>(
     () => localStorage.getItem('lft.statusPageUrl') || '',
   );
@@ -80,6 +89,8 @@ export default function Layout() {
         // Only rendered when configured. V1 fell back to a hardcoded status.lfr-demo.se when it
         // was not, which put one deployment's URL in the source and showed a link that a
         // different deployment could not honour.
+        setGeoCredit(versionRes?.data?.geo_attribution ?? null);
+
         if (versionRes?.data?.status_page_url) {
           setStatusPageUrl(versionRes.data.status_page_url);
           localStorage.setItem(
@@ -216,6 +227,7 @@ export default function Layout() {
           onClose={() => setIsSidebarOpen(false)}
           serverVersion={serverVersion}
           clientVersion={clientVersion}
+          geoCredit={geoCredit}
         />
 
         {/* Registers the shortcuts and owns the overlay that documents them (#1611). */}

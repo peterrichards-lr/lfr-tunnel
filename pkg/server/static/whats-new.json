@@ -1,5 +1,25 @@
 [
   {
+    "version": "v1.48.37",
+    "release_date": "2026-09-18",
+    "features": [
+      "feat(portal): publish the geo vendor credit where every user can see it (#2044) (#2046)",
+      "test: answer the sleep question for all 25, and fix the 8 that fail green (#2045)",
+      "feat(geo): support IPinfo Lite, the vendor that uses a top-level country_code (#2008) (#2043)",
+      "fix(release): stop a release looking shipped while missing assets (#2041) (#2042)",
+      "feat(server): honour the user's subdomain style when the CLI asks for a generated name (#2031) (#2040)",
+      "test(server): gate the per-registration duplication class instead of enumerating it by hand (#2032) (#2039)",
+      "feat(hooks): run the static gates before the push, not thirteen minutes after it (#2027) (#2028)",
+      "test(server,client): stop two tests racing the clock, and split the assertions they conflated (#2037)",
+      "fix(ci): a green run is only a recovery if it re-ran what broke (#2030) (#2036)",
+      "refactor(server): close out the per-registration class, and fix the one member that had diverged (#2020) (#2034)",
+      "fix(test): one YAML-path helper, and a guard that reads the whole tree (#2035)",
+      "test(server): make the geo vendor gate fail in CI, and give it a control that controls (#2019) (#2033)",
+      "docs(agents): fix one stale reference, and record four traps the corpus did not warn about (#2024) (#2025)",
+      "test(geo): make the SIGHUP geo reload swap able to fail in CI (#2014) (#2022)"
+    ]
+  },
+  {
     "version": "v1.48.36",
     "release_date": "2026-09-17",
     "features": [
@@ -66,19 +86,6 @@
       "fix(hooks): say the scan never ran, instead of reporting a secret (#1923) (#1927)",
       "fix(portal-v1): render no table when the headline says there is nothing to show (#1930)",
       "fix(portal): make the analytics print export readable in both arms (#1916) (#1926)"
-    ]
-  },
-  {
-    "version": "v1.48.32",
-    "release_date": "2026-09-16",
-    "features": [
-      "fix(analytics): match central's sessions against the region clients actually record (#1919) (#1924)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#1915)",
-      "chore(deps): bump github.com/coreos/go-oidc/v3 from 3.20.0 to 3.21.0 (#1914)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2 from 1.46.0 to 1.47.0 (#1913)",
-      "chore(deps): bump github.com/oschwald/maxminddb-golang/v2 (#1912)",
-      "chore(deps): bump github.com/gogpu/systray from 0.2.8 to 0.3.0 (#1911)",
-      "chore(agents): retire the jira-tracker skill in favour of github-jira-sync (#1909)"
     ]
   }
 ]

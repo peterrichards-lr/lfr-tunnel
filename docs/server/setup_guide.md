@@ -1496,6 +1496,12 @@ reports a plain open error, so it does not send you downloading a format you alr
 
 #### 8.11.3. Prefer a country-level edition
 
+**IPinfo Lite** is a fourth option, free and signup-light, and the only supported vendor
+whose record puts the code at a top-level `country_code` rather than nesting it under
+`country` (#2008). The gateway handles both shapes, so this matters only if you are
+reading the file yourself. Its `country` field holds the country NAME, which the gateway
+deliberately never decodes.
+
 Pick the **country** edition — GeoLite2 Country, DB-IP IP to Country Lite, IP2Location LITE
 **DB1**. Not GeoLite2 City, not DB-IP City Lite, not DB11.
 
@@ -1622,7 +1628,7 @@ Note the recursive `chown` above is scoped to `geoip/`, deliberately: re-running
 ```yaml
 # /etc/lfr-tunneld/server-config.yaml
 country_db_path: "/etc/lfr-tunneld/geoip/country.mmdb"
-country_db_provider: "dbip"   # maxmind | dbip | ip2location -- REQUIRED
+country_db_provider: "dbip"   # maxmind | dbip | ip2location | ipinfo -- REQUIRED
 ```
 
 **Both keys are required.** A path without a vendor leaves geographic distribution **off**, and
@@ -1907,4 +1913,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-18* | *Last Reviewed: 2026-09-18*

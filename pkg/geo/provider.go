@@ -40,6 +40,13 @@ const (
 	ProviderDBIP Provider = "dbip"
 	// ProviderIP2Location is an IP2Location MMDB-edition database.
 	ProviderIP2Location Provider = "ip2location"
+	// ProviderIPinfo is an IPinfo Lite database (#2008).
+	//
+	// The only supported vendor whose record does NOT nest the code under `country`: it puts a
+	// top-level `country_code`, and a top-level `country` holding the country's NAME. Measured
+	// against ipinfo_lite.mmdb -- `country_code = "US"`, `country = "United States"` -- which is
+	// why countryPaths carries both shapes and why the name field is not one of them.
+	ProviderIPinfo Provider = "ipinfo"
 	// ProviderUnknown is a readable mmdb whose metadata names a vendor this build has not
 	// been taught.
 	//
@@ -77,6 +84,11 @@ func ProviderFromDatabaseType(databaseType string) Provider {
 		return ProviderDBIP
 	case strings.Contains(t, "ip2location"):
 		return ProviderIP2Location
+	// Measured: "ipinfo bundle_location_lite.mmdb". Unlike IP2Location -- whose MMDB reports
+	// MaxMind's own "GeoLite2-City" and is indistinguishable from it -- IPinfo names itself, so
+	// a mismatch warning against a declared vendor is meaningful here.
+	case strings.Contains(t, "ipinfo"):
+		return ProviderIPinfo
 	case strings.HasPrefix(t, "geolite"), strings.HasPrefix(t, "geoip"):
 		return ProviderMaxMind
 	default:
@@ -98,7 +110,7 @@ func ProviderFromDatabaseType(databaseType string) Provider {
 // ProviderUnknown is deliberately absent. It is a RESULT ("we could not tell"), never a
 // choice: offering it would let an operator declare that they do not know who published their
 // data, which is exactly the state the panel refuses to render rows in.
-var selectableProviders = []Provider{ProviderMaxMind, ProviderDBIP, ProviderIP2Location}
+var selectableProviders = []Provider{ProviderMaxMind, ProviderDBIP, ProviderIP2Location, ProviderIPinfo}
 
 // SelectableProviders returns the vendors an operator may declare, in portal order.
 //

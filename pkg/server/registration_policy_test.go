@@ -410,3 +410,277 @@ func TestBothRegistrationPathsApplyTheSameSubdomainReservationPolicy(t *testing.
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------------------------
+// #2020: the random-subdomain grant, the one member of the class that had already diverged.
+// ---------------------------------------------------------------------------------------------
+
+// grant is one random-subdomain registration reduced to what both paths share: the outcome, and
+// the name that was handed out.
+type grant struct {
+	outcome
+	subdomain string
+}
+
+// decodeGrant reads both halves. Same fatal-on-unparseable rule as decodeOutcome, and for the
+// same reason: a body that is not JSON would otherwise reduce to an empty subdomain, and "the
+// name granted is not the taken one" is satisfied for free by an empty string (§5c).
+func decodeGrant(t *testing.T, path string, rec *httptest.ResponseRecorder) grant {
+	t.Helper()
+	var resp struct {
+		Error           string `json:"error"`
+		SubdomainPrefix string `json:"subdomain_prefix"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("the %s path answered %d with a body that is not JSON (%v): %s",
+			path, rec.Code, err, rec.Body.String())
+	}
+	return grant{outcome: outcome{status: rec.Code, message: resp.Error}, subdomain: resp.SubdomainPrefix}
+}
+
+// firstCandidate makes the generator hand out name as the FIRST candidate of the next
+// registration, then a fresh unique name for every attempt after it.
+//
+// The seam (server_domain.go) is the whole reason this test can fail. Against the real generator,
+// "the name granted is not the one already held" is satisfied by the candidate space being in the
+// millions, whether or not anything checks (§5c, rule 3) -- which is how the edge path went from
+// #183 to #2020 without the check and without a red test. Installed per registration, so each path
+// meets the collision at its own first attempt rather than inheriting the other's spent stream.
+func (f *policyFleet) firstCandidate(name string) {
+	var n int
+	f.srv.randomSubdomainSource = func() string {
+		n++
+		if n == 1 {
+			return name
+		}
+		return fmt.Sprintf("free-%d", n)
+	}
+}
+
+// everyCandidate makes the generator hand out the same taken name every time, so all ten attempts
+// collide and both paths must reach their refusal.
+func (f *policyFleet) everyCandidate(name string) {
+	f.srv.randomSubdomainSource = func() string { return name }
+}
+
+// grantRandomDirect asks this gateway for a random name.
+func (f *policyFleet) grantRandomDirect(t *testing.T) grant {
+	t.Helper()
+	payload, err := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "random",
+		AuthToken:       f.authToken,
+		Ports:           []PortMapping{{LocalPort: 8080}},
+	})
+	if err != nil {
+		t.Fatalf("marshalling the direct registration: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/register", bytes.NewReader(payload))
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	f.srv.ServeHTTP(rec, req)
+
+	return decodeGrant(t, "direct", rec)
+}
+
+// grantRandomViaEdge asks central for a random name on an edge's behalf.
+func (f *policyFleet) grantRandomViaEdge(t *testing.T) grant {
+	t.Helper()
+	payload := []byte(fmt.Sprintf(`{
+		"subdomain_prefix": "random",
+		"auth_token": %q,
+		"ports": [{"local_port": 8080}],
+		"domains": [%q],
+		"client_ip": "8.8.8.8"
+	}`, f.authToken, f.domain))
+	req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/internal/edge-register", bytes.NewReader(payload))
+	req.Header.Set("X-Edge-Token", policyFleetEdgeToken)
+	rec := httptest.NewRecorder()
+	f.srv.ServeHTTP(rec, req)
+
+	return decodeGrant(t, "edge", rec)
+}
+
+// dropReservation removes the reservation row a successful registration auto-created, and fails
+// if there was none.
+//
+// This is what makes a lease case attributable. Registering "held" on either path also reserves
+// it, so leaving the row in place would let the reservations check -- which BOTH paths already
+// had -- account for the whole result, and the test would pass identically against the divergent
+// code it is meant to catch (§5c, rule 3). With the row gone, the in-memory lease is the only
+// thing left that can refuse the name. The fatal is deliberate: if auto-reservation stops
+// happening, this isolation has silently stopped being isolation.
+func (f *policyFleet) dropReservation(t *testing.T, subdomain string) {
+	t.Helper()
+	existing, err := f.srv.db.GetSubdomainReservationByName(subdomain, f.domain)
+	if err != nil || existing == nil {
+		t.Fatalf("expected registering %q to have auto-reserved it, so this case can isolate the "+
+			"in-memory check; got row %v, err %v", subdomain, existing, err)
+	}
+	if err := f.srv.db.DeleteSubdomainReservation(existing.ID); err != nil {
+		t.Fatalf("deleting the auto-created reservation for %q: %v", subdomain, err)
+	}
+}
+
+// requireFreshGrant is the property for one path: it registered, and the name it handed out is
+// not the one something already holds.
+func requireFreshGrant(t *testing.T, path string, g grant, taken string) {
+	t.Helper()
+	if g.status != http.StatusOK {
+		t.Fatalf("%s registration for a random subdomain answered %s, want 200 -- a path that "+
+			"cannot register at all satisfies the collision assertion for free", path, g.outcome)
+	}
+	if g.subdomain == "" {
+		t.Fatalf("%s registration answered 200 but named no subdomain", path)
+	}
+	if g.subdomain == taken {
+		t.Errorf("%s registration handed out %q, which is already held. A random name granted on "+
+			"one path must be one the other path would also refuse: since #1288 both gateways "+
+			"issue on the same apex and #1295 publishes a per-tunnel DNS record, so one name with "+
+			"two owners is decided by whichever record a visitor resolves (#2020)", path, g.subdomain)
+	}
+}
+
+func TestBothRegistrationPathsRefuseAnAlreadyHeldRandomSubdomain(t *testing.T) {
+	// Unlimited tunnels: every case registers the holder and then two more, and a
+	// max-active-tunnels refusal would answer the collision question with a 403 that has
+	// nothing to do with it (§5c).
+	unlimited := func(c *config.ServerConfig) { c.DefaultMaxActiveTunnels = 0 }
+
+	cases := []struct {
+		name string
+		// hold puts the fleet into the state that must make taken unavailable, and is
+		// responsible for leaving exactly ONE mechanism able to refuse it.
+		hold func(t *testing.T, f *policyFleet, taken string)
+	}{
+		{
+			// The case the direct path already handled and the edge path did not.
+			name: "a live lease this gateway serves itself",
+			hold: func(t *testing.T, f *policyFleet, taken string) {
+				if got := f.registerDirect(t, taken); got.status != http.StatusOK {
+					t.Fatalf("seeding a local lease on %q was refused with %s", taken, got)
+				}
+				f.dropReservation(t, taken)
+			},
+		},
+		{
+			// The mirror, which NEITHER path handled: an edge's lease lives in central's
+			// edgeLeases, not in central's registry, so the direct path's registry check
+			// could not see it either. Same class, opposite direction -- the one #1750 ->
+			// #1757 -> #1767 was missed three times in a row.
+			name: "a live lease an edge node serves",
+			hold: func(t *testing.T, f *policyFleet, taken string) {
+				if got := f.registerViaEdge(t, taken); got.status != http.StatusOK {
+					t.Fatalf("seeding an edge lease on %q was refused with %s", taken, got)
+				}
+				f.dropReservation(t, taken)
+			},
+		},
+		{
+			// The check both paths did have. Here so the test still covers it after the
+			// extraction, and so a regression that drops the reservation check from the
+			// shared function is caught rather than only the lease ones.
+			name: "a reservation held by another user",
+			hold: func(t *testing.T, f *policyFleet, taken string) {
+				f.seedReservation(t, policyFleetOtherUserID, taken, nil)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPolicyFleet(t, unlimited, nil)
+			const taken = "already-held"
+			tc.hold(t, f, taken)
+
+			f.firstCandidate(taken)
+			requireFreshGrant(t, "direct", f.grantRandomDirect(t), taken)
+
+			f.firstCandidate(taken)
+			requireFreshGrant(t, "edge", f.grantRandomViaEdge(t), taken)
+		})
+	}
+}
+
+func TestBothRegistrationPathsRefuseTheSameWayWhenNoRandomSubdomainIsFree(t *testing.T) {
+	f := newPolicyFleet(t, func(c *config.ServerConfig) { c.DefaultMaxActiveTunnels = 0 }, nil)
+
+	const taken = "always-held"
+	f.seedReservation(t, policyFleetOtherUserID, taken, nil)
+
+	// Every one of the ten attempts collides, on both paths, so each must give up -- with the
+	// same status and the same words, since the edge relays this text to its client verbatim.
+	want := outcome{status: http.StatusInternalServerError, message: randomSubdomainRefusal}
+
+	f.everyCandidate(taken)
+	direct := f.grantRandomDirect(t)
+	f.everyCandidate(taken)
+	viaEdge := f.grantRandomViaEdge(t)
+
+	requireAgreement(t, direct.outcome, viaEdge.outcome, want)
+}
+
+func TestBothRegistrationPathsRecordTheSameClientVersionAndOS(t *testing.T) {
+	// The low-stakes half of #2020: five byte-identical lines in both handlers. A divergence
+	// here is a stale value on an admin screen, so the property is that the same registration
+	// leaves the same user row whichever path served it.
+	const (
+		version = "v9.9.9"
+		osName  = "plan9/arm64"
+	)
+
+	for _, path := range []string{"direct", "edge"} {
+		t.Run(path, func(t *testing.T) {
+			f := newPolicyFleet(t, nil, nil)
+
+			var rec *httptest.ResponseRecorder
+			if path == "direct" {
+				payload, err := json.Marshal(RegisterRequest{
+					SubdomainPrefix: "versioned",
+					AuthToken:       f.authToken,
+					Ports:           []PortMapping{{LocalPort: 8080}},
+					ClientVersion:   version,
+					ClientOS:        osName,
+				})
+				if err != nil {
+					t.Fatalf("marshalling the direct registration: %v", err)
+				}
+				req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/register", bytes.NewReader(payload))
+				req.RemoteAddr = "127.0.0.1:54321"
+				rec = httptest.NewRecorder()
+				f.srv.ServeHTTP(rec, req)
+			} else {
+				payload := []byte(fmt.Sprintf(`{
+					"subdomain_prefix": "versioned",
+					"auth_token": %q,
+					"ports": [{"local_port": 8080}],
+					"domains": [%q],
+					"client_ip": "8.8.8.8",
+					"client_version": %q,
+					"client_os": %q
+				}`, f.authToken, f.domain, version, osName))
+				req := httptest.NewRequest(http.MethodPost, "http://"+f.domain+"/api/internal/edge-register", bytes.NewReader(payload))
+				req.Header.Set("X-Edge-Token", policyFleetEdgeToken)
+				rec = httptest.NewRecorder()
+				f.srv.ServeHTTP(rec, req)
+			}
+
+			if got := decodeOutcome(t, path, rec); got.status != http.StatusOK {
+				t.Fatalf("the %s registration was refused with %s -- a refusal writes no user row, "+
+					"so the assertion below would be about the fixture rather than the bookkeeping", path, got)
+			}
+
+			// Re-read from the database, not from the struct the handler happened to hold: the
+			// write itself is the thing under test.
+			stored, err := f.srv.db.GetUser(policyFleetUserID)
+			if err != nil || stored == nil {
+				t.Fatalf("re-reading the user row: %v", err)
+			}
+			if stored.LastClientVersion != version {
+				t.Errorf("the %s path stored last_client_version %q, want %q", path, stored.LastClientVersion, version)
+			}
+			if stored.LastClientOS != osName {
+				t.Errorf("the %s path stored last_client_os %q, want %q", path, stored.LastClientOS, osName)
+			}
+		})
+	}
+}

@@ -182,16 +182,38 @@ jobs:
           # the same as a GOOS suffix: the file compiles on two of the three legs and not the
           # third, which is exactly what this filter exists to notice.
           #
-          # NOT included, deliberately: pkg/server and its dependencies. It has per-OS lines of
-          # its own (runtime.GOOS guards in api.go), but it is the gateway -- it deploys to
-          # Linux only -- and it is the busiest tree in the repo, 609 file-touches in the last
-          # 200 commits against pkg/config's 225. Listing it would put the full matrix on most
-          # PRs and give back the speed-up #1343 bought. Same for pkg/ops, which builds and
-          # signs from a developer's own machine and is never shipped.
+          # pkg/server IS included, as of #2029 -- reversing the exclusion this comment used
+          # to argue for. The argument was that the gateway deploys to Linux only and is the
+          # busiest tree in the repo (609 file-touches in the last 200 commits against
+          # pkg/config's 225), so listing it would put the full matrix on most PRs and give
+          # back the speed-up #1343 bought. That cost is real, and is now accepted knowingly,
+          # because what it was buying turned out not to exist: for pkg/server, a green PR did
+          # not imply a green master.
+          #
+          #   | run                              | platform_sensitive | Windows | outcome       |
+          #   |----------------------------------|--------------------|---------|---------------|
+          #   | #2022 as a PR (pkg/server only)  | false              | skipped | green, merged |
+          #   | c2f702e9 (that merge, on master) | always true (push) | ran     | RED           |
+          #   | 05d58a51 (#2025, docs only)      | false              | skipped | green, masked |
+          #   | #2028 (scripts/ + workflows/)    | true               | ran     | red -- found  |
+          #
+          # The red stayed invisible because the next master run skipped Windows and reported
+          # success over it, and it was found only by an unrelated PR that happened to touch a
+          # path already on this list. Deploying to Linux only was never the point: the tests
+          # run on three, and pkg/server writes config files, joins paths and branches on
+          # runtime.GOOS like any other package.
+          #
+          # STILL not included, deliberately: pkg/ops, which builds and signs from a developer's
+          # own machine and is never shipped, and pkg/db and pkg/server's other dependencies,
+          # which have produced no per-OS failure. This decision was about pkg/server.
+          #
+          # tests/hooks/test-ci-platform-matrix.sh pins both halves -- pkg/server/api.go in its
+          # must-match list, pkg/ops/deploy.go and pkg/db/store.go in its must-NOT-match list --
+          # so reversing either direction again has to be deliberate rather than quiet.
           #
           # Anything that is not a pull_request -- a master push or a tag -- always gets the
           # full matrix, so a platform regression cannot reach a release unproven.
-          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^cmd/lfr-tunnel/|^pkg/client/|^pkg/config/|^pkg/gui/|^pkg/mcp/|^pkg/osutil/|^pkg/proxyutil/|^pkg/regionvocab/|_(windows|darwin|linux|unix)(_test)?\.go$|dns_hook'; then
+          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^cmd/lfr-tunnel/|^pkg/client/|^pkg/config/|^pkg/gui/|^pkg/mcp/|^pkg/osutil/|^pkg/proxyutil/|^pkg/regionvocab/|^pkg/server/|_(windows|darwin|linux|unix)(_test)?\.go$|dns_hook'; then
             PLATFORM_SENSITIVE=true
           else
             PLATFORM_SENSITIVE=false

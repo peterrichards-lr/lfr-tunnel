@@ -60,6 +60,8 @@ pkg/gui/gui.go
 pkg/mcp/server.go
 pkg/osutil/exec_unix.go
 pkg/proxyutil/forwarded.go
+pkg/server/api.go
+pkg/server/geo_provider_settings.go
 cmd/lfr-tunneld/reload_windows.go
 cmd/lfr-tunneld/reload_unix.go
 Makefile
@@ -76,12 +78,19 @@ for path in $MUST_MATCH; do
   fi
 done
 
-# 2. Paths that must NOT match, or the filter is "always true" and gates nothing. pkg/server is
-#    here as a boundary, not as an accident: it is the Linux-only gateway and the busiest tree in
-#    the repo, and listing it would put the full matrix on nearly every PR. If a later change
-#    decides that trade differently, this line is where to say so out loud.
+# 2. Paths that must NOT match, or the filter is "always true" and gates nothing.
+#
+#    pkg/server used to sit in THIS list, as a deliberate boundary: the Linux-only gateway and
+#    the busiest tree in the repo, whose inclusion would put the full matrix on nearly every PR.
+#    The line above it invited a later change to decide that trade differently, out loud, and
+#    #2029 did: pkg/server's tests write config files and a double-quoted YAML path broke the
+#    Windows leg of master for the third time, on a PR that was green because this filter
+#    skipped Windows for it. pkg/server/api.go therefore moved to MUST_MATCH above.
+#
+#    What remains here is the rest of the trade, unchanged: pkg/ops never ships, and pkg/db and
+#    pkg/server's other dependencies have produced no per-OS failure. Moving one of these is the
+#    same kind of decision and belongs in the same place.
 MUST_NOT_MATCH="
-pkg/server/api.go
 pkg/db/store.go
 pkg/ops/deploy.go
 docs/README.md

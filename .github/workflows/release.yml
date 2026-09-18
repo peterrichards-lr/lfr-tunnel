@@ -160,7 +160,12 @@ jobs:
           git rm -rf . || true
           cp ../dist/checksums.txt .
           git add checksums.txt
-          git commit -m "update checksums for ${{ github.ref_name }}"
+          # `|| true` because a RE-RUN produces identical checksums, and `git commit` exits
+          # non-zero when there is nothing to commit. Under `bash -e` that killed the whole step
+          # -- before Publish Release, which is the step a re-run exists to retry. One transient
+          # upload timeout on v1.48.36 therefore became unrecoverable: the release kept 7 of its
+          # 9 assets and the tap step, which runs after publish, never ran at all.
+          git commit -m "update checksums for ${{ github.ref_name }}" || echo "checksums unchanged; nothing to commit"
           git push -u origin checksums --force
 
       - name: Publish Release
@@ -173,6 +178,47 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A published release that is MISSING assets looks identical to a complete one.
+      #
+      # v1.48.36 uploaded 7 of 9 and then hit `Headers Timeout Error` on the two lfr-tunneld
+      # binaries -- the largest files by some margin. The job failed, but the release existed,
+      # was not a draft, and read as published; only counting its assets revealed otherwise.
+      # Anyone installing the gateway from that release got a 404.
+      #
+      # So the set is verified against what was actually built, and anything missing is
+      # re-uploaded rather than reported. `--clobber` because a partial upload can leave a
+      # zero-length asset behind, which would otherwise block the retry.
+      - name: Verify every built artefact was published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          missing=0
+          for f in dist/*; do
+            name="$(basename "$f")"
+            for attempt in 1 2 3; do
+              if gh release view "${{ github.ref_name }}" --json assets \
+                   --jq '.assets[].name' | grep -qxF "$name"; then
+                break
+              fi
+              echo "::warning::$name is not on the release (attempt $attempt); uploading"
+              gh release upload "${{ github.ref_name }}" "$f" --clobber || true
+              sleep 5
+            done
+            if gh release view "${{ github.ref_name }}" --json assets \
+                 --jq '.assets[].name' | grep -qxF "$name"; then
+              echo "  ok: $name"
+            else
+              echo "::error::$name was built but could not be published"
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing built artefact(s) are missing from ${{ github.ref_name }}."
+            echo "::error::The release is INCOMPLETE and must not be treated as shipped."
+            exit 1
+          fi
+          echo "All $(ls dist | wc -l | tr -d ' ') built artefact(s) are published."
 
       - name: Update Homebrew Tap & Scoop Bucket
         env:

@@ -51,13 +51,62 @@ const (
 // harder.
 const randomSubdomainAttempts = 10
 
-// randomSubdomainStyle is the generator both registration paths ask for. Hardcoded here exactly as
-// it was hardcoded in both handlers. The per-user db.User.SubdomainStyle column is writable from
-// the portal (api.go's profile update) and read by nothing -- handleGenerateSubdomain takes its
-// style from a query parameter instead -- so registration has never honoured it. Filed as #2031
-// rather than fixed here: honouring a stored preference is a behaviour change, not a
-// deduplication.
-const randomSubdomainStyle = "liferay"
+// defaultSubdomainStyle is the generator used when a registration has no usable preference to
+// honour. It is the value db.User defaults the column to, so an account that has never touched
+// the setting keeps exactly the names it had before #2031.
+const defaultSubdomainStyle = subdomainStyleLiferay
+
+// The generator styles, named once. goconst attributes a literal's package-wide occurrences to
+// whichever file is newest (#1655), so introducing the set below as bare strings made this file
+// answer for every "random" and "words" in the package -- and the names are worth having anyway,
+// because server_domain.go's switch and subdomainStyles below MUST agree and now say so.
+const (
+	subdomainStyleLiferay = "liferay"
+	subdomainStyleWords   = "words"
+	subdomainStyleHeroku  = "heroku"
+	subdomainStyleNgrok   = "ngrok"
+	// subdomainStyleRandom is generateRandomSubdomainPrefix's default branch: eight
+	// alphanumerics. A real style, not a fallback.
+	subdomainStyleRandom = "random"
+)
+
+// subdomainStyles is every value generateRandomSubdomainPrefix actually distinguishes, and so
+// every value a stored preference may name.
+//
+// "random" is in it deliberately: it is the portal's "Alphanumeric" option and reaches
+// generateRandomSubdomainPrefix's default branch, which is a real style rather than a fallback.
+// Note it is unrelated to the literal "random" a client sends as its SUBDOMAIN PREFIX to ask for
+// a generated name -- different field, same word.
+//
+// TestEveryStyleThePortalOffersIsOneTheServerHonours holds this in step with the two account
+// settings screens that write the column, so offering a style the server quietly ignores fails
+// the build rather than shipping -- which is the defect #2031 itself was.
+var subdomainStyles = map[string]bool{
+	subdomainStyleLiferay: true,
+	subdomainStyleWords:   true,
+	subdomainStyleHeroku:  true,
+	subdomainStyleNgrok:   true,
+	subdomainStyleRandom:  true,
+}
+
+// subdomainStyleFor resolves which generator this registration should use.
+//
+// #2031: db.User.SubdomainStyle is writable from both portals and, until now, was read by nothing
+// on the registration path -- both handlers hardcoded "liferay". The account setting's own help
+// text says "The style used to generate a default subdomain when you connect your CLI without
+// specifying one", which was the one thing it did not do.
+//
+// A nil userRec falls back rather than refusing: it means there is no database, or the read of the
+// user's row failed, and an unavailable record is not evidence of a preference. An unrecognised
+// value falls back too, rather than reaching generateRandomSubdomainPrefix's default branch --
+// that branch is the "random" style, so letting a typo land there would silently grant a DIFFERENT
+// real style instead of the intended one.
+func subdomainStyleFor(userRec *db.User) string {
+	if userRec == nil || !subdomainStyles[userRec.SubdomainStyle] {
+		return defaultSubdomainStyle
+	}
+	return userRec.SubdomainStyle
+}
 
 // subdomainHeldInMemory reports whether a live tunnel already occupies this name, anywhere on the
 // fleet this control plane knows about.
@@ -119,6 +168,9 @@ func (s *Server) subdomainReserved(subdomain string, domains []string) bool {
 // grantRandomSubdomain picks a name for a client that asked for a random one, for both paths.
 // Reports the name and whether one was found at all.
 //
+// The generator is the registering user's own, via subdomainStyleFor (#2031); userRec may be nil,
+// which falls back to defaultSubdomainStyle.
+//
 // This was the last member of #2005's class, and the only one that had already diverged (#2020):
 // the direct path checked the in-memory registry and the reservations table, the edge path checked
 // only the reservations table. The asymmetry was harmless when it was written -- an edge issued
@@ -132,9 +184,10 @@ func (s *Server) subdomainReserved(subdomain string, domains []string) bool {
 // registration is validated here, not there -- and handleEdgeRegister already reads both
 // s.registry and s.edgeLeases thirty lines further down to count the user's active tunnels. The
 // information was present and used in the same function.
-func (s *Server) grantRandomSubdomain(domains []string) (string, bool) {
+func (s *Server) grantRandomSubdomain(domains []string, userRec *db.User) (string, bool) {
+	style := subdomainStyleFor(userRec)
 	for attempt := 0; attempt < randomSubdomainAttempts; attempt++ {
-		candidate := s.generateRandomSubdomainPrefix(randomSubdomainStyle)
+		candidate := s.generateRandomSubdomainPrefix(style)
 		if s.subdomainHeldInMemory(candidate, domains) {
 			continue
 		}

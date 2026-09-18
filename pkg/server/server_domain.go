@@ -36,14 +36,17 @@ func (s *Server) generateRandomSubdomainPrefix(style string) string {
 		return val % max
 	}
 
+	// The cases are the named constants from registration_policy.go: this switch and
+	// subdomainStyles must list the same styles, and #2031 was what happens when the server's
+	// idea of the set and the portal's drift apart.
 	switch style {
-	case "words":
+	case subdomainStyleWords:
 		return fmt.Sprintf("%s-%s-%s", generatorWords[randInt(len(generatorWords))], generatorWords[randInt(len(generatorWords))], generatorWords[randInt(len(generatorWords))])
-	case "heroku":
+	case subdomainStyleHeroku:
 		return fmt.Sprintf("%s-%s-%d", generatorAdjectives[randInt(len(generatorAdjectives))], generatorNouns[randInt(len(generatorNouns))], randInt(9000)+1000)
-	case "liferay":
+	case subdomainStyleLiferay:
 		return fmt.Sprintf("%s-%s-%d", generatorTechAdjectives[randInt(len(generatorTechAdjectives))], generatorLiferayNouns[randInt(len(generatorLiferayNouns))], randInt(900)+100)
-	case "ngrok":
+	case subdomainStyleNgrok:
 		const hexChars = "0123456789abcdef"
 		b := make([]byte, 4)
 		_, _ = rand.Read(b) //nolint:errcheck

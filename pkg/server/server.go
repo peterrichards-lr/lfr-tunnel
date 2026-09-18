@@ -1943,7 +1943,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			// Shared with handleEdgeRegister (#2020), which used to check strictly less --
 			// see grantRandomSubdomain for what that cost once tunnel_domains made both
 			// gateways issue the same hostname.
-			granted, ok := s.grantRandomSubdomain(activeDomains)
+			granted, ok := s.grantRandomSubdomain(activeDomains, userRec)
 			if !ok {
 				s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: randomSubdomainRefusal})
 				return
@@ -6636,7 +6636,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		// lease already held -- and since #1288/#1295 that is one hostname with two owners and
 		// a DNS record deciding between them. Only the refusal's wire format is this path's
 		// own, as everywhere else in this handler.
-		granted, ok := s.grantRandomSubdomain(edgeReq.Domains)
+		granted, ok := s.grantRandomSubdomain(edgeReq.Domains, userRec)
 		if !ok {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": randomSubdomainRefusal})
 			return

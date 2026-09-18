@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -682,5 +685,171 @@ func TestBothRegistrationPathsRecordTheSameClientVersionAndOS(t *testing.T) {
 				t.Errorf("the %s path stored last_client_os %q, want %q", path, stored.LastClientOS, osName)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// #2031: the stored subdomain-style preference, honoured at registration.
+// ---------------------------------------------------------------------------------------------
+
+// subdomainStyleShapes describes each generator well enough to tell it from the others. They are
+// mutually exclusive on purpose: a granted name that matches the wrong one is a style that was not
+// honoured, which is precisely the defect, and "it generated something" would be satisfied by every
+// style alike (§5c rule 1).
+var subdomainStyleShapes = map[string]*regexp.Regexp{
+	"liferay": regexp.MustCompile(`^[a-z]+(-[a-z]+)*-\d{3}$`),
+	"heroku":  regexp.MustCompile(`^[a-z]+(-[a-z]+)*-\d{4}$`),
+	"words":   regexp.MustCompile(`^[a-z]+-[a-z]+-[a-z]+$`),
+	"ngrok":   regexp.MustCompile(`^[0-9a-f]{4}-tunnel$`),
+	"random":  regexp.MustCompile(`^[a-z0-9]{8}$`),
+}
+
+// requireStyle asserts the granted name is one THIS style produces and one no other style could
+// have produced. Without the second half, "liferay was silently used instead" passes whenever the
+// expected style's own pattern is loose.
+func requireStyle(t *testing.T, path, style, granted string) {
+	t.Helper()
+	want, ok := subdomainStyleShapes[style]
+	if !ok {
+		t.Fatalf("no shape described for style %q", style)
+	}
+	if !want.MatchString(granted) {
+		t.Errorf("the %s path granted %q, which is not a %q name -- the user's stored "+
+			"SubdomainStyle was not honoured (#2031)", path, granted, style)
+		return
+	}
+	for other, re := range subdomainStyleShapes {
+		if other != style && re.MatchString(granted) {
+			t.Errorf("the %s path granted %q, which matches both %q and %q -- this test cannot "+
+				"tell the two styles apart, so it would not notice one being used for the other",
+				path, granted, style, other)
+		}
+	}
+}
+
+func TestBothRegistrationPathsHonourTheUsersSubdomainStyle(t *testing.T) {
+	// Every style the account settings screens offer. The point of #2031 is that a user who
+	// picks one of these gets it on the CLI, which is what that setting's own help text promises.
+	for _, style := range []string{"liferay", "words", "heroku", "ngrok", "random"} {
+		t.Run(style, func(t *testing.T) {
+			f := newPolicyFleet(t,
+				func(c *config.ServerConfig) { c.DefaultMaxActiveTunnels = 0 },
+				func(u *db.User) { u.SubdomainStyle = style })
+
+			// The generator seam from #2020 is deliberately NOT installed here: it replaces
+			// generateRandomSubdomainPrefix outright, so a stubbed candidate stream would
+			// bypass the very style resolution under test and every case would pass (§5c).
+			direct := f.grantRandomDirect(t)
+			if direct.status != http.StatusOK {
+				t.Fatalf("direct registration was refused with %s", direct.outcome)
+			}
+			requireStyle(t, "direct", style, direct.subdomain)
+
+			viaEdge := f.grantRandomViaEdge(t)
+			if viaEdge.status != http.StatusOK {
+				t.Fatalf("edge registration was refused with %s", viaEdge.outcome)
+			}
+			requireStyle(t, "edge", style, viaEdge.subdomain)
+		})
+	}
+}
+
+func TestAnUnusableSubdomainStyleFallsBackToLiferay(t *testing.T) {
+	cases := []struct {
+		name  string
+		style string
+	}{
+		{"a style nothing recognises", "hieroglyphics"},
+		{"an empty style", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPolicyFleet(t,
+				func(c *config.ServerConfig) { c.DefaultMaxActiveTunnels = 0 },
+				func(u *db.User) { u.SubdomainStyle = tc.style })
+
+			got := f.grantRandomDirect(t)
+			if got.status != http.StatusOK {
+				t.Fatalf("registration was refused with %s -- an unusable preference must fall "+
+					"back, not refuse: the name is the service's to choose", got.outcome)
+			}
+			// Specifically liferay, not merely "something": generateRandomSubdomainPrefix's
+			// default branch is the "random" style, so a typo reaching it would silently grant
+			// a different REAL style rather than the intended fallback.
+			requireStyle(t, "direct", defaultSubdomainStyle, got.subdomain)
+		})
+	}
+}
+
+// TestSubdomainStyleForIgnoresAnAbsentUserRecord pins the nil case directly: userRec is nil when
+// there is no database or the row could not be read, and an unavailable record is not evidence of
+// a preference.
+func TestSubdomainStyleForIgnoresAnAbsentUserRecord(t *testing.T) {
+	if got := subdomainStyleFor(nil); got != defaultSubdomainStyle {
+		t.Errorf("subdomainStyleFor(nil) = %q, want %q", got, defaultSubdomainStyle)
+	}
+}
+
+// TestEveryStyleThePortalOffersIsOneTheServerHonours is the class-level half of #2031.
+//
+// The defect was not that one style was missed, it was that the column had a writer and no reader:
+// the portal offered choices the server never consulted. Fixing only the reading leaves the same
+// shape available to anyone who adds a sixth option. This reads the actual account-settings
+// markup -- both portals, since either can write the column -- and requires every value offered to
+// be one subdomainStyles recognises.
+func TestEveryStyleThePortalOffersIsOneTheServerHonours(t *testing.T) {
+	sources := []struct {
+		path string
+		// selectID is the element whose options write db.User.SubdomainStyle.
+		marker string
+	}{
+		{path: "dashboard.html", marker: `id="acc-subdomain-style"`},
+		{path: filepath.Join("..", "..", "ui", "src", "pages", "AccountSettings.tsx"), marker: `id="default-subdomain-style"`},
+	}
+
+	optionValue := regexp.MustCompile(`value="([a-z]+)"`)
+	total := 0
+
+	for _, src := range sources {
+		raw, err := os.ReadFile(src.path)
+		if err != nil {
+			// Loud rather than skipped: a moved file must fail this test, not silently
+			// shrink its corpus to nothing (§5c rule 5).
+			t.Fatalf("reading %s: %v -- if this screen moved, point this test at its new home "+
+				"rather than dropping it, or the portal can drift away from the server again", src.path, err)
+		}
+		body := string(raw)
+		idx := strings.Index(body, src.marker)
+		if idx < 0 {
+			t.Fatalf("could not find %s in %s -- this test is looking at the wrong element and "+
+				"would pass over any mismatch at all", src.marker, src.path)
+		}
+		// The <select> ends at the first closing tag after it.
+		rest := body[idx:]
+		if end := strings.Index(rest, "</select>"); end >= 0 {
+			rest = rest[:end]
+		}
+
+		found := 0
+		for _, m := range optionValue.FindAllStringSubmatch(rest, -1) {
+			style := m[1]
+			found++
+			total++
+			if !subdomainStyles[style] {
+				t.Errorf("%s offers the subdomain style %q, which subdomainStyles does not "+
+					"recognise -- a user choosing it would silently get %q instead. Either teach "+
+					"generateRandomSubdomainPrefix that style and add it to subdomainStyles, or "+
+					"remove the option (#2031).", src.path, style, defaultSubdomainStyle)
+			}
+		}
+		if found == 0 {
+			t.Errorf("found no <option value=...> under %s in %s -- the markup changed shape, so "+
+				"this test is now checking nothing", src.marker, src.path)
+		}
+	}
+
+	if total < 4 {
+		t.Errorf("only %d style option(s) were checked across both portals, which is fewer than "+
+			"either screen offers -- the scan is not reading what it thinks it is", total)
 	}
 }

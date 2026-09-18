@@ -1,0 +1,973 @@
+{
+  "_comment": [
+    "Real run history of `CI` (workflow id 291989718, .github/workflows/ci.yml) for the two",
+    "consecutive master runs behind #2030, captured from",
+    "GET /repos/peterrichards-lr/lfr-tunnel/actions/runs/{id} and .../{id}/jobs on 2026-09-18.",
+    "Newest first, trimmed to the fields the detector reads. Job and step names, conclusions",
+    "and ordering are verbatim.",
+    "",
+    "  35251731344  c2f702e9  #2022 merged      conclusion: failure",
+    "               `Test Suite (windows-latest)` -> failure, step `Run Tests` -> failure",
+    "  35259669027  05d58a51  #2025, docs only  conclusion: success",
+    "               `Test Suite (windows-latest)` -> SUCCESS, step `Run Tests` -> skipped",
+    "",
+    "The second run is why the run-level view is not enough. ci.yml deliberately generates every",
+    "matrix leg on every run (#1365: three required contexts are named by OS, so a leg that is",
+    "never generated blocks the merge forever), and takes the saving on the INSIDE via RUN_SUITE.",
+    "So the Windows leg does not go missing and does not report `skipped` -- it reports `success`",
+    "with `Checkout Code`, `Set up Go` and `Run Tests` all skipped. Comparing job conclusions",
+    "alone reads that as recovery. Only the step conclusions show master was still red.",
+    "",
+    "Kept as a real fixture rather than a hand-written one for the same reason as",
+    "docs-workflow-runs.json: the logic is proved against the failure it exists to catch."
+  ],
+  "runs": [
+    {
+      "conclusion": "success",
+      "created_at": "2026-09-17T18:34:38Z",
+      "event": "push",
+      "head_sha": "05d58a51060e3c8138c1a13cf968787b1626ded9",
+      "id": 35259669027,
+      "run_number": 3283,
+      "status": "completed",
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "Detect Changed Paths",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Determine which areas changed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Coverage Signal",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Flag functional changes with no test"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Lint & Format Check",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Formatting (gofmt)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check the errcheck suppression ratchet"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check test home isolation"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Vanilla JavaScript Syntax"
+            },
+            {
+              "conclusion": "success",
+              "name": "Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check theme tokens resolve"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Formatting (Prettier)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check React UI Syntax & Types"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Linter (golangci-lint)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Required status checks must always produce a check run"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal V2 BEM modifiers must have a rule"
+            },
+            {
+              "conclusion": "success",
+              "name": "Theme danger colours must meet WCAG AA"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal i18n keys must be defined and translated"
+            },
+            {
+              "conclusion": "success",
+              "name": "HTML documents must have balanced tags"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal user statuses must match the server vocabulary"
+            },
+            {
+              "conclusion": "success",
+              "name": "Every admin alert must have a toggle in both portal arms"
+            },
+            {
+              "conclusion": "success",
+              "name": "Print stylesheets must only target markup that exists"
+            },
+            {
+              "conclusion": "success",
+              "name": "E2E specs must only name data-testids that markup renders"
+            },
+            {
+              "conclusion": "success",
+              "name": "A failed data load must be surfaced, not shown as empty"
+            },
+            {
+              "conclusion": "success",
+              "name": "The served /privacy page must cover every PRIVACY.md category"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Run Linter (golangci-lint)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Documentation Review Check",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check changed markdown files' review footers"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Suite (windows-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Suite (macos-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Suite (ubuntu-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Hook Tests",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "E2E Multi-Region Edge Test",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "E2E Playwright UI Test",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Vulnerability Scan",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Race Detector",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "E2E Docker Integration Test",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Shell Lint",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Documentation Build",
+          "steps": []
+        },
+        {
+          "conclusion": "success",
+          "name": "CI Gate",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Require every job to have succeeded or been skipped"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "conclusion": "failure",
+      "created_at": "2026-09-17T17:16:36Z",
+      "event": "push",
+      "head_sha": "c2f702e94fa744acff9cf4f3411bbe3ca09b9531",
+      "id": 35251731344,
+      "run_number": 3280,
+      "status": "completed",
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "Detect Changed Paths",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Determine which areas changed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Documentation Review Check",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check changed markdown files' review footers"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Lint & Format Check",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Formatting (gofmt)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check the errcheck suppression ratchet"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check test home isolation"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Vanilla JavaScript Syntax"
+            },
+            {
+              "conclusion": "success",
+              "name": "Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check theme tokens resolve"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check Formatting (Prettier)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Check React UI Syntax & Types"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Linter (golangci-lint)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Required status checks must always produce a check run"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal V2 BEM modifiers must have a rule"
+            },
+            {
+              "conclusion": "success",
+              "name": "Theme danger colours must meet WCAG AA"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal i18n keys must be defined and translated"
+            },
+            {
+              "conclusion": "success",
+              "name": "HTML documents must have balanced tags"
+            },
+            {
+              "conclusion": "success",
+              "name": "Portal user statuses must match the server vocabulary"
+            },
+            {
+              "conclusion": "success",
+              "name": "Every admin alert must have a toggle in both portal arms"
+            },
+            {
+              "conclusion": "success",
+              "name": "Print stylesheets must only target markup that exists"
+            },
+            {
+              "conclusion": "success",
+              "name": "E2E specs must only name data-testids that markup renders"
+            },
+            {
+              "conclusion": "success",
+              "name": "A failed data load must be surfaced, not shown as empty"
+            },
+            {
+              "conclusion": "success",
+              "name": "The served /privacy page must cover every PRIVACY.md category"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Run Linter (golangci-lint)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Coverage Signal",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Flag functional changes with no test"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Vulnerability Scan",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run govulncheck"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "failure",
+          "name": "Test Suite (windows-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "failure",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "E2E Docker Integration Test",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run E2E Integration Test"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Suite (macos-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "E2E Playwright UI Test",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Playwright E2E Test"
+            },
+            {
+              "conclusion": "success",
+              "name": "Upload Playwright Report"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Install pnpm"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Node.js"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "E2E Multi-Region Edge Test",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Multi-Region Edge E2E Test"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Test Suite (ubuntu-latest)",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "skipped",
+              "name": "Report why this leg is a no-op"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Tests"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "success",
+          "name": "Race Detector",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "success",
+              "name": "Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Create dummy UI dist for Go embed"
+            },
+            {
+              "conclusion": "success",
+              "name": "Run Tests (race detector)"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Set up Go"
+            },
+            {
+              "conclusion": "success",
+              "name": "Post Checkout Code"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Shell Lint",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Documentation Build",
+          "steps": []
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Hook Tests",
+          "steps": []
+        },
+        {
+          "conclusion": "failure",
+          "name": "CI Gate",
+          "steps": [
+            {
+              "conclusion": "success",
+              "name": "Set up job"
+            },
+            {
+              "conclusion": "failure",
+              "name": "Require every job to have succeeded or been skipped"
+            },
+            {
+              "conclusion": "success",
+              "name": "Complete job"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

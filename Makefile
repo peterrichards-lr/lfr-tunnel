@@ -299,6 +299,7 @@ test-hooks:
 	@./tests/hooks/test-alert-vocabulary.sh
 	@./tests/hooks/test-ci-runs-every-gate.sh
 	@./tests/hooks/test-tap-bucket.sh
+	@./tests/hooks/test-release-completeness.sh
 	@./tests/hooks/test-print-selectors.sh
 	@./tests/hooks/test-spec-testids.sh
 	@./tests/hooks/test-load-failure-gate.sh

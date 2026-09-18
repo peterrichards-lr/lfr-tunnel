@@ -1,4 +1,29 @@
-package geo
+// Package geotest builds real .mmdb files in memory, so a test in ANY package can exercise
+// the geo-IP paths without a vendor database (#2014).
+//
+// The encoder itself landed in #1993 as pkg/geo/mmdb_fixture_test.go. That gave pkg/geo its
+// first decode coverage that runs on every commit -- and, being a _test.go file in package
+// geo, it was unreachable from everywhere else. The tests that needed it most are in
+// pkg/server: the SIGHUP reload tests (#1998) all skip without LFT_GEO_TEST_DB, so deleting
+// `s.geo = candidate` from applyGeoDatabase left all nine of them green in CI. A guard that
+// reports green on a build where the thing it guards has been removed is the defect this
+// package exists to remove.
+//
+// A non-_test.go file in a package whose name says it is test support, after net/http/httptest
+// -- the only shape Go has for sharing a helper like this across packages.
+//
+// What a synthetic file proves and what it does not:
+//
+//   - It proves the WIRING. Which file is open, which vendor the panel credits, whether a
+//     reload swapped the handle or quietly did nothing -- none of that depends on whose data
+//     is inside, because the vendor is DECLARED rather than derived (#1964). Two byte-identical
+//     fixtures declared `dbip` and `ip2location` therefore exercise a swap and its attribution
+//     with neither vendor's data present.
+//   - It does NOT prove a real vendor's schema decodes. Only a downloaded file answers that,
+//     which is what pkg/geo's TestARealDatabaseResolvesKnownAddresses and
+//     TestARealDatabaseIdentifiesItsVendor exist for, and why they stay gated on
+//     LFT_GEO_TEST_DB. This package is additive coverage, never a replacement for them.
+package geotest
 
 import (
 	"encoding/binary"
@@ -7,21 +32,6 @@ import (
 	"testing"
 )
 
-// A real .mmdb file, assembled in memory, so the decode path can be exercised without a
-// vendor database (#1993).
-//
-// Nothing in CI had ever run Country() against an mmdb at all: every test here either
-// stopped at OpenResolver or compared countryPaths against a second copy of itself, and the
-// only tests that decode a record skip unless LFT_GEO_TEST_DB names a file no one may
-// redistribute. So the assertion "this build decodes the schema its vendors use" had no
-// evidence behind it in the one place that runs on every commit.
-//
-// Written by hand rather than pulled in from mmdbwriter: a test-only dependency on a second
-// MaxMind library to prove a four-line decode works is a worse trade than 80 lines of
-// encoder. The file it produces is read back by the SAME reader production uses
-// (maxminddb.Open, via OpenResolver), so a mistake here surfaces as a broken fixture rather
-// than as a passing test over a fake.
-//
 // Layout, per the MaxMind DB 2.0 specification:
 //
 //	[ search tree: 1 node, 24-bit records ][ 16 zero bytes ][ data section ][ marker ][ metadata ]
@@ -38,8 +48,19 @@ const (
 	dataSectionSeparator = 16
 )
 
-// writeTestMMDB writes a one-record database carrying record and returns its path.
-func writeTestMMDB(t *testing.T, record map[string]any) string {
+// WriteMMDB writes a one-record database carrying record into a fresh temporary directory
+// and returns its path.
+//
+// Written by hand rather than pulled in from mmdbwriter: a test-only dependency on a second
+// MaxMind library to prove a four-line decode works is a worse trade than 80 lines of
+// encoder. The file it produces is read back by the SAME reader production uses
+// (maxminddb.Open, via geo.OpenResolver), so a mistake here surfaces as a broken fixture
+// rather than as a passing test over a fake.
+//
+// Each call takes its own t.TempDir(), so two calls in one test yield two DIFFERENT paths --
+// which is what a reload test needs, since "the open file moved" is only observable between
+// distinct paths.
+func WriteMMDB(t testing.TB, record map[string]any) string {
 	t.Helper()
 
 	data := encodeMMDBValue(t, record)
@@ -93,7 +114,7 @@ const (
 // so the encoder refuses them rather than emitting a length it never learned to write. A
 // silently wrong length would surface as an unreadable file, which is a confusing way to be
 // told the fixture outgrew its encoder.
-func encodeMMDBValue(t *testing.T, v any) []byte {
+func encodeMMDBValue(t testing.TB, v any) []byte {
 	t.Helper()
 
 	switch val := v.(type) {
@@ -126,7 +147,7 @@ func encodeMMDBValue(t *testing.T, v any) []byte {
 	}
 }
 
-func controlBytes(t *testing.T, mmdbType, size int) []byte {
+func controlBytes(t testing.TB, mmdbType, size int) []byte {
 	t.Helper()
 
 	if size > 28 {

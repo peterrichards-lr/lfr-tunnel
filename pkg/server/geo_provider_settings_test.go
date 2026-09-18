@@ -406,3 +406,115 @@ func TestTheDatabasePathIsReportedButNotSettable(t *testing.T) {
 		t.Fatalf("setting country_db_path from the portal: want 400, got %d", code)
 	}
 }
+
+// Every message that ENUMERATES the vendors must name all of them (#2008).
+//
+// `geo_provider_not_declared` and `geo_provider_unknown` list the accepted values by hand, in ten
+// locale bundles. Adding a fourth vendor left all twenty strings telling an operator that
+// `ipinfo` was not valid, at the moment it became valid -- and the message a misconfigured
+// operator reads is the worst place to be wrong, because it is the one they will trust over the
+// dropdown.
+//
+// The dropdown itself cannot drift: GeoProviderOptions derives from geo.SelectableProviders.
+// These sentences are the one place the vocabulary is written out, so they are the one place that
+// needs a gate.
+//
+// English only, deliberately. A translated sentence is free to order or join the list differently
+// and a locale bundle that omitted a vendor would be a translation bug, not a vocabulary one --
+// and check-i18n-keys already requires every bundle to carry the key.
+func TestTheVendorListInEveryMessageNamesEverySelectableVendor(t *testing.T) {
+	bundle, err := os.ReadFile(filepath.Join("i18n", "Language.properties"))
+	if err != nil {
+		t.Fatalf("read English bundle: %v", err)
+	}
+	text := string(bundle)
+
+	providers := geo.SelectableProviders()
+	if len(providers) < 2 {
+		t.Fatalf("PREMISE: only %d selectable vendor(s), so a missing one could not be detected",
+			len(providers))
+	}
+
+	for _, key := range []string{"geo_provider_not_declared", "geo_provider_unknown"} {
+		line := ""
+		for _, l := range strings.Split(text, "\n") {
+			if strings.HasPrefix(l, key+"=") {
+				line = l
+				break
+			}
+		}
+		if line == "" {
+			t.Errorf("%s is missing from the English bundle", key)
+			continue
+		}
+		// PREMISE: the sentence really is the enumerating kind. If it is ever reworded to point
+		// at the settings screen instead, this case should be deleted rather than left passing
+		// vacuously over a sentence that lists nothing.
+		if !strings.Contains(line, string(geo.ProviderMaxMind)) {
+			t.Errorf("PREMISE: %s no longer enumerates vendors, so this guard is checking "+
+				"nothing -- delete it or re-aim it", key)
+			continue
+		}
+		for _, p := range providers {
+			if !strings.Contains(line, string(p)) {
+				t.Errorf("%s does not name the selectable vendor %q, so it tells an operator "+
+					"that a valid value is invalid:\n  %s", key, p, line)
+			}
+		}
+	}
+}
+
+// Every portal arm must render a credit for every vendor it offers (#2044).
+//
+// This is the gap that shipped with #2008. Adding IPinfo to geo.SelectableProviders put it in the
+// dropdown and required `geo_attribution_ipinfo` in all ten bundles -- both of which happened --
+// but NOTHING selected that key. Each arm resolves the sentence through a chain of literal
+// comparisons, and a vendor with no branch falls to `geo_attribution_unknown`: "the vendor of
+// this geo-IP database could not be identified". An IPinfo deployment would have published that
+// over IPinfo's data, which is the licence breach the whole design exists to prevent.
+//
+// Neither existing gate could see it. check-i18n-keys proves every key USED resolves, not that
+// every key defined is used. TestEveryOfferedVendorHasALabelAndACredit proves the keys exist in
+// English. The missing link was the component, and only reading the component finds it.
+//
+// Literal comparisons are what make this checkable, and they are required for a separate reason:
+// check-i18n-keys can only see a string literal, so a computed key would be invisible to it.
+func TestEveryPortalArmRendersACreditForEverySelectableVendor(t *testing.T) {
+	arms := map[string]string{
+		"Portal V2": filepath.Join("..", "..", "ui", "src", "components", "GeoAttribution.tsx"),
+		"Portal V1": filepath.Join("static", "dashboard.js"),
+	}
+
+	providers := geo.SelectableProviders()
+	if len(providers) < 2 {
+		t.Fatalf("PREMISE: only %d selectable vendor(s), so a missing branch could not be detected",
+			len(providers))
+	}
+
+	for arm, path := range arms {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("%s: read %s: %v", arm, path, err)
+			continue
+		}
+		text := string(src)
+
+		// PREMISE: this really is the file that resolves the credit. Without it, a rename would
+		// leave every assertion below passing over a file that decides nothing.
+		if !strings.Contains(text, "geo_attribution_unknown") {
+			t.Errorf("PREMISE: %s (%s) does not resolve geo attribution any more -- this guard "+
+				"is reading the wrong file", arm, path)
+			continue
+		}
+
+		for _, p := range providers {
+			key := "geo_attribution_" + string(p)
+			if !strings.Contains(text, key) {
+				t.Errorf("%s does not select %q for the selectable vendor %q, so a deployment "+
+					"using it renders geo_attribution_unknown -- \"the vendor could not be "+
+					"identified\" -- over that vendor's data, leaving their licence unmet (%s)",
+					arm, key, p, path)
+			}
+		}
+	}
+}

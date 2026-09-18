@@ -58,26 +58,34 @@ func TestCountryDecodesTheNestedSchemaFromARealMMDBFile(t *testing.T) {
 	}
 }
 
-// BOUNDING. A record carrying ONLY a top-level `country_code` resolves to nothing, on
-// purpose (#1993).
+// A record carrying ONLY a top-level `country_code` resolves, because IPinfo Lite uses it
+// (#2008). This test replaces the one that asserted the opposite, and the measurement it asked
+// for is below.
 //
-// countryPaths used to carry `country_code` as well, documented as "verified against real
-// databases -- IP2Location's MMDB editions". It was not verified and it is not what
-// IP2Location's MMDB edition does: a real IP2LOCATION-LITE-DB11.MMDB decodes through
-// `country.iso_code`, reports database_type "GeoLite2-City" and MaxMind's eight languages,
-// and is a deliberate drop-in clone. `country_code` is the column name in IP2Location's CSV
-// and BIN editions, which is the likeliest origin of the claim.
+// The history matters, because both states were correct on their evidence. countryPaths once
+// carried `country_code` documented as "verified against real databases -- IP2Location's MMDB
+// editions". That was never verified and is not what IP2Location does: a real
+// IP2LOCATION-LITE-DB11.MMDB decodes through `country.iso_code`, reports database_type
+// "GeoLite2-City" and MaxMind's eight languages, and is a deliberate drop-in clone. `country_code`
+// is the column name in IP2Location's CSV and BIN editions, which is the likeliest origin of the
+// claim. #1993 removed the path as matching no vendor anyone had measured -- right on the
+// evidence then, and its own comment named this test as the place to record a vendor that did.
 //
-// So this pins a decision rather than a defect. If a vendor whose MMDB really does use that
-// key is ever supported -- IPinfo Lite documents exactly this schema, ParseProvider cannot
-// name it today, and #2008 tracks it -- this test goes red and is the place to record the
-// measurement that put the path back.
-func TestATopLevelCountryCodeIsNotDecoded(t *testing.T) {
+// Measured, ipinfo_lite.mmdb, the record for 8.8.8.8:
+//
+//	database_type  "ipinfo bundle_location_lite.mmdb"
+//	country_code   "US"              <- the ISO 3166-1 alpha-2 code
+//	country        "United States"   <- the NAME
+//	continent_code "NA"
+//
+// Through the real resolver that file now yields US / AU / US / US for 8.8.8.8, 1.1.1.1, 9.9.9.9
+// and 2606:4700:4700::1111.
+func TestATopLevelCountryCodeIsDecodedForIPinfo(t *testing.T) {
 	path := geotest.WriteMMDB(t, map[string]any{"country_code": "SE"})
 
 	// CONTROL, first: the fixture must be a readable database whose record really does carry
-	// the key. Without this, "resolved to nothing" is satisfied by a fixture this test
-	// failed to build -- the assertion would hold over an empty file forever.
+	// the key. Without this, a "decoded correctly" result could be satisfied by some other
+	// path, and a "did not decode" result by a fixture this test failed to build.
 	db, err := maxminddb.Open(path)
 	if err != nil {
 		t.Fatalf("CONTROL: the fixture is not a readable database: %v", err)
@@ -93,11 +101,10 @@ func TestATopLevelCountryCodeIsNotDecoded(t *testing.T) {
 	}
 	var raw string
 	if err := res.DecodePath(&raw, "country_code"); err != nil || raw != "SE" {
-		t.Fatalf("CONTROL: the fixture record does not carry country_code=SE (got %q, %v) -- "+
-			"the assertion below would pass against a file with no such key at all", raw, err)
+		t.Fatalf("CONTROL: the fixture record does not carry country_code=SE (got %q, %v)", raw, err)
 	}
 
-	r, err := OpenResolver(path, ProviderMaxMind)
+	r, err := OpenResolver(path, ProviderIPinfo)
 	if err != nil {
 		t.Fatalf("OpenResolver(fixture): %v", err)
 	}
@@ -106,10 +113,53 @@ func TestATopLevelCountryCodeIsNotDecoded(t *testing.T) {
 			t.Errorf("close resolver: %v", err)
 		}
 	})
-	if code, ok := r.Country(netip.MustParseAddr("8.8.8.8")); ok {
-		t.Errorf("a top-level country_code decoded to %q. That schema is back in countryPaths; "+
-			"it belongs there only once a real file from a vendor ParseProvider accepts has "+
-			"been measured using it, and the measurement belongs in this comment", code)
+	code, ok := r.Country(netip.MustParseAddr("8.8.8.8"))
+	if !ok {
+		t.Fatal("a top-level country_code did not resolve, so an IPinfo deployment would " +
+			"report no country at all and the panel would stay empty")
+	}
+	if code != "SE" {
+		t.Errorf("decoded %q, want %q", code, "SE")
+	}
+}
+
+// The country NAME must never be decoded, and this is the hazard IPinfo introduces (#2008).
+//
+// IPinfo is the only supported vendor whose record carries a top-level `country` -- and it holds
+// "United States", not "US". MaxMind and DB-IP put a MAP there, so no earlier vendor could have
+// made this mistake reachable. Adding `{"country"}` to countryPaths would look like a harmless
+// widening and would return a country name everywhere a two-letter code is expected: the
+// aggregator buckets by it, and the panel would grow a row per language rather than per country.
+func TestTheDecodedValueIsACodeNotAName(t *testing.T) {
+	// The real shape: both keys present, exactly as ipinfo_lite.mmdb carries them.
+	path := geotest.WriteMMDB(t, map[string]any{
+		"country_code": "US",
+		"country":      "United States",
+	})
+
+	r, err := OpenResolver(path, ProviderIPinfo)
+	if err != nil {
+		t.Fatalf("OpenResolver(fixture): %v", err)
+	}
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close resolver: %v", err)
+		}
+	})
+
+	code, ok := r.Country(netip.MustParseAddr("8.8.8.8"))
+	if !ok {
+		t.Fatal("PREMISE: the fixture did not resolve at all, so this cannot show WHICH field won")
+	}
+	if code == "United States" {
+		t.Fatal("the country NAME was decoded instead of the code -- every consumer expects an " +
+			"ISO 3166-1 alpha-2 value, so the distribution would bucket by name")
+	}
+	if code != "US" {
+		t.Errorf("decoded %q, want the ISO code %q", code, "US")
+	}
+	if len(code) != 2 {
+		t.Errorf("decoded %q, which is not a two-letter ISO code", code)
 	}
 }
 

@@ -189,6 +189,26 @@ func (r *mmdbResolver) Country(ip netip.Addr) (string, bool) {
 // tell the two apart against a file you have.
 var countryPaths = [][]any{
 	{"country", "iso_code"},
+	// IPinfo Lite, and ONLY IPinfo among the supported vendors (#2008). Measured against
+	// ipinfo_lite.mmdb, whose record for 8.8.8.8 is:
+	//
+	//	country_code   "US"              <- the ISO 3166-1 alpha-2 code
+	//	country        "United States"   <- the NAME, and deliberately not decoded
+	//	continent_code "NA"
+	//
+	// `country` is a top-level STRING here, not the map MaxMind and DB-IP use, so the first
+	// path cannot descend into it and falls through -- which is why order does not matter
+	// between the two and why a file can only satisfy one of them.
+	//
+	// This path was REMOVED in #1993 as matching no vendor anyone had measured. That was true
+	// of every file available at the time, and the removal was right on the evidence then; the
+	// note it replaced claimed IP2Location used it, which measurement disproved. It returns
+	// with a vendor behind it.
+	//
+	// The country NAME is not a path and must never become one: `Country` is documented to
+	// return an ISO code, and "United States" would be silently wrong everywhere a two-letter
+	// code is expected. TestTheDecodedValueIsACodeNotAName pins that.
+	{"country_code"},
 }
 
 // Provider reports the vendor derived from the database's own metadata.

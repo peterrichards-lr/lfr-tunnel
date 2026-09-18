@@ -17,7 +17,7 @@
 # the threshold, open ONE issue. Not a second one while that issue is open. Close it when the
 # workflow goes green again.
 #
-# FOUR DESIGN DECISIONS, each of which has an obvious wrong answer:
+# FIVE DESIGN DECISIONS, each of which has an obvious wrong answer:
 #
 #   1. THRESHOLD (default 3). One failure is usually a flake -- a runner hiccup, a transient
 #      network error, a rate limit -- and alerting on one trains people to ignore the alert.
@@ -44,6 +44,24 @@
 #      them: a sweeper broken so badly it cannot create an issue cannot report that. Complete
 #      self-monitoring needs a second, independent watcher, which is not worth its cost here.
 #
+#   5. A SUCCESS ONLY BREAKS A STREAK IF IT RE-RAN THE THING THAT BROKE (#2030). The verdict
+#      logic in `streak_of` was right from the start -- `cancelled`/`skipped` are deliberately
+#      not verdicts -- but it was fed RUN-level conclusions, and a run whose failing job was
+#      skipped by a path filter still reports `success`. Measured on the history that produced
+#      #2029: `c2f702e9` failed on `Test Suite (windows-latest)`, and the very next master run
+#      `05d58a51` (a docs-only merge) reported `success` with that leg's `Run Tests` step
+#      skipped. Fifteen minutes of red became "recovered" while master was still broken.
+#
+#      So the fix is to the INPUT, not to `streak_of`. When the walk meets its first `success`
+#      after one or more failures, the jobs of both runs are compared; if a job -- or, inside a
+#      job that reports green, the very step -- that failed is absent or skipped in the
+#      successor, that success is rewritten to `skipped` and is therefore not a verdict, exactly
+#      as a cancellation already was. Two things this is deliberately NOT: it is not a rewrite
+#      of `streak_of`, and it is not a job fetch for the whole lookback. The walk stops at its
+#      first genuine verdict, so a healthy workflow (head run green, nothing failing before it)
+#      costs ZERO extra API calls and a freshly broken one costs two. MAX_JOB_PROBES bounds the
+#      pathological case; per-run results are cached so no run is fetched twice.
+#
 # Exit status is 0 whether or not it alerted -- the issue is the output. A non-zero exit is
 # reserved for the script itself failing to do its job, which is what makes decision 4 work.
 #
@@ -54,6 +72,11 @@ set -uo pipefail
 
 THRESHOLD=3
 LOOKBACK=30
+# How many times one workflow may ask "did that success actually re-run the failing job?" in a
+# single sweep. Each probe is at most two API calls and they are cached per run, so the real
+# cost of a broken workflow is two; this only bounds a pathological alternating history from
+# turning a lookback of 30 into 60 calls.
+MAX_JOB_PROBES=3
 FIXTURE=""
 DRY_RUN=0
 REPO="${GITHUB_REPOSITORY:-}"
@@ -68,9 +91,11 @@ Usage: detect-workflow-failure-streak.sh [options]
   --lookback N     how many recent runs to read per workflow (default 30)
   --repo O/R       repository to sweep (default $GITHUB_REPOSITORY, else the gh default)
   --dry-run        report the verdicts, create and close nothing
-  --fixture FILE   read workflows, runs and open alerts from a JSON file instead of the API.
-                   Implies --dry-run. This is how the logic is tested offline, and how it can
-                   be replayed against real history.
+  --fixture FILE   read workflows, runs, per-run jobs and open alerts from a JSON file instead
+                   of the API. Implies --dry-run. This is how the logic is tested offline, and
+                   how it can be replayed against real history. A run may carry `id` and a
+                   `jobs` array ([{name, conclusion, steps:[{name, conclusion}]}]); a run
+                   without them is judged on its run-level conclusion alone.
 
 Prints one tab-separated verdict line per workflow:
 
@@ -124,12 +149,18 @@ fi
 #
 # Only `completed` runs vote. A run still in progress is not yet a verdict, and counting a
 # queued run as anything would make the streak depend on when the sweep happened to fire.
+#
+# Each surviving run is emitted as "<run id><TAB><conclusion>". The id is what decision 5 needs
+# to ask which JOBS voted; `-` where the input carries no id (an older fixture), which the walk
+# reads as "no job data available" and falls back to the run-level answer. It is never the empty
+# string: a leading empty tab-delimited field is swallowed by `read`, because a tab in IFS is
+# IFS-whitespace and gets collapsed.
 RUN_FILTER='map(select(.status == "completed"))
             | map(select(.event != "pull_request" and .event != "pull_request_target"))
-            | .[].conclusion'
+            | .[] | [(.id // "-" | tostring), (.conclusion // "null")] | @tsv'
 
-# Newest-first conclusions for one workflow, one per line.
-conclusions_for() {
+# Newest-first "<run id><TAB><conclusion>" for one workflow, one per line.
+runs_for() {
     if [ -n "$FIXTURE" ]; then
         jq -r --arg id "$1" "(.runs[\$id] // []) | $RUN_FILTER" "$FIXTURE"
     else
@@ -162,6 +193,149 @@ streak_of() {
     '
 }
 
+# ---------------------------------------------------------------------------------------------
+# Decision 5: was that success a verdict on the failure before it?
+# ---------------------------------------------------------------------------------------------
+
+TAB="$(printf '\t')"
+JOBS_DIR=$(mktemp -d -t lft-wf-jobs.XXXXXX) || exit 1
+trap 'rm -rf "$JOBS_DIR"' EXIT
+
+# Jobs of one run, as [{name, conclusion, steps: [{name, conclusion}]}]. Cached per run id, so a
+# run that appears as both "the failure" and "the success" across two probes is fetched once.
+# Returns non-zero when no job data is available, which every caller reads as "do not judge".
+jobs_for_run() {
+    local wf_id="$1" run_id="$2" cache
+    [ -n "$run_id" ] && [ "$run_id" != "-" ] || return 1
+    cache="$JOBS_DIR/$run_id.json"
+    if [ ! -f "$cache" ]; then
+        if [ -n "$FIXTURE" ]; then
+            jq -c --arg id "$wf_id" --arg run "$run_id" \
+                '[(.runs[$id] // [])[] | select((.id // "-" | tostring) == $run) | .jobs // empty]
+                 | first // empty' "$FIXTURE" > "$cache" 2>/dev/null \
+                || { rm -f "$cache"; return 1; }
+        else
+            gh api "/repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+                --jq '[.jobs[] | {name, conclusion, steps: [.steps[]? | {name, conclusion}]}]' \
+                </dev/null > "$cache" 2>/dev/null \
+                || { rm -f "$cache"; return 1; }
+        fi
+    fi
+    [ -s "$cache" ] || return 1
+    cat "$cache"
+}
+
+# True unless something that failed went unproven in the successor.
+#
+# Two levels, because the real defect needed both. A path-filtered leg can vanish at the JOB
+# level (absent, or conclusion `skipped`) -- but this repository's matrix legs are always
+# generated on purpose, so `Test Suite (windows-latest)` reported `success` on the docs-only
+# merge with its `Run Tests` STEP skipped. Comparing job conclusions alone would have called
+# that a recovery, which is the bug (#2030).
+#
+# Empty `$broken` (a run-level failure with no failing job) yields true: the run-level answer
+# stands, because there is nothing job-shaped to disprove it.
+JOB_VERDICT_FILTER='
+    def broke: (. == "failure" or . == "timed_out" or . == "startup_failure");
+    def not_run: (. == null or . == "skipped" or . == "cancelled"
+                  or . == "neutral" or . == "action_required");
+    [$failed[] | select(.conclusion | broke)] as $broken
+    | [ $broken[]
+        | . as $j
+        | ([$after[] | select(.name == $j.name)] | first) as $s
+        | if $s == null then false
+          elif ($s.conclusion | not_run) then false
+          else
+            [$j.steps[]? | select(.conclusion | broke)] as $bad_steps
+            | [ $bad_steps[]
+                | . as $st
+                | ([$s.steps[]? | select(.name == $st.name)] | first) as $ss
+                | ($ss != null) and (($ss.conclusion | not_run) | not)
+              ] | all
+          end
+      ] | all'
+
+# is_recovery <workflow id> <failing run id> <succeeding run id>
+# 0 = a genuine verdict (break the streak). 1 = the success did not re-run what broke.
+#
+# Every "cannot tell" path returns 0, i.e. today's behaviour. Missing job data must not invent
+# an alert: silence is this system's failure mode, but an alerter that fires on a rate limit is
+# how silence gets installed on purpose.
+is_recovery() {
+    local wf_id="$1" fail_run="$2" ok_run="$3" failed_jobs after_jobs answer
+    failed_jobs=$(jobs_for_run "$wf_id" "$fail_run") || return 0
+    after_jobs=$(jobs_for_run "$wf_id" "$ok_run") || return 0
+    [ -n "$failed_jobs" ] && [ "$failed_jobs" != "[]" ] || return 0
+    [ -n "$after_jobs" ] && [ "$after_jobs" != "[]" ] || return 0
+    answer=$(jq -n --argjson failed "$failed_jobs" --argjson after "$after_jobs" \
+        "$JOB_VERDICT_FILTER" 2>/dev/null) || return 0
+    [ "$answer" = "false" ] && return 1
+    return 0
+}
+
+# The conclusion list `streak_of` actually gets: as reported, except that a success which did
+# not re-run the job (or the step) that failed before it is rewritten to `skipped` -- a token
+# `streak_of` already treats as "not a verdict", with no change to `streak_of` itself.
+#
+# The list is newest-first, so the failure a success is a verdict ON is the next DECISIVE run
+# further down, not the one already walked past. Getting that backwards makes the whole thing
+# inert against the real history: in #2030's case the masked success is the head run and the
+# failure it hid is the one after it.
+#
+# Buffered into two indexed arrays -- bash 3.2, so no associative array, and the lookahead rules
+# out a streaming read. `settled` here is only about probing: once a genuine verdict is seen the
+# rest of the history is passed through untouched, because `streak_of` has stopped counting by
+# then anyway.
+effective_conclusions_for() {
+    local wf_id="$1" run_id conclusion
+    local run_ids run_concs
+    run_ids=()
+    run_concs=()
+    local n=0
+    while IFS="$TAB" read -r run_id conclusion; do
+        run_ids[$n]="$run_id"
+        run_concs[$n]="$conclusion"
+        n=$((n + 1))
+    done
+
+    local i=0 j settled=0 probes=0 next_fail
+    while [ "$i" -lt "$n" ]; do
+        conclusion="${run_concs[$i]}"
+        if [ "$settled" -eq 1 ] || [ "$conclusion" != "success" ]; then
+            printf '%s\n' "$conclusion"
+            i=$((i + 1))
+            continue
+        fi
+
+        # The next decisive run below this success. Non-verdicts are walked through for the same
+        # reason `streak_of` ignores them.
+        next_fail=""
+        j=$((i + 1))
+        while [ "$j" -lt "$n" ]; do
+            case "${run_concs[$j]}" in
+                failure|timed_out|startup_failure) next_fail="${run_ids[$j]}"; break ;;
+                ''|null|cancelled|skipped|neutral|action_required) j=$((j + 1)) ;;
+                *) break ;;
+            esac
+        done
+
+        if [ -n "$next_fail" ] && [ "$next_fail" != "-" ] && [ "${run_ids[$i]}" != "-" ] \
+           && [ "$probes" -lt "$MAX_JOB_PROBES" ]; then
+            probes=$((probes + 1))
+            if is_recovery "$wf_id" "$next_fail" "${run_ids[$i]}"; then
+                settled=1
+                printf '%s\n' "$conclusion"
+            else
+                printf 'skipped\n'
+            fi
+        else
+            settled=1
+            printf '%s\n' "$conclusion"
+        fi
+        i=$((i + 1))
+    done
+}
+
 # Dedup state, read once. An open issue carrying a workflow's marker means "already alerted".
 #
 # Read failures are fatal on purpose. If this returned an empty list on error, every workflow
@@ -174,7 +348,7 @@ streak_of() {
 # because it is also the true answer -- nothing can be alerted before the first alert exists,
 # and the workflow creates the label before it ever gets that far.
 ALERTS_FILE=$(mktemp -t lft-wf-alerts.XXXXXX) || exit 1
-trap 'rm -f "$ALERTS_FILE"' EXIT
+trap 'rm -f "$ALERTS_FILE"; rm -rf "$JOBS_DIR"' EXIT
 if [ -n "$FIXTURE" ]; then
     jq '.alerts // []' "$FIXTURE" > "$ALERTS_FILE" || exit 1
 else
@@ -255,7 +429,7 @@ fi
 while IFS="$(printf '\t')" read -r wf_id wf_path wf_name; do
     [ -n "$wf_id" ] || continue
 
-    verdict=$(conclusions_for "$wf_id" | streak_of)
+    verdict=$(runs_for "$wf_id" | effective_conclusions_for "$wf_id" | streak_of)
     streak=${verdict% *}
     latest=${verdict#* }
     existing=$(open_alert_for "$wf_id")

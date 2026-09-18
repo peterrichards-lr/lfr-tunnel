@@ -21,6 +21,9 @@
 #                   this the system alerts exactly once, ever.
 #   COUNTS THE   -- cancellations do not silently reset a live streak; pull_request runs do not
 #     RIGHT RUNS    count at all, because their failures already show on the PR.
+#   COUNTS THE   -- a success only breaks a streak if it actually re-ran the job, and the step,
+#     RIGHT GREEN   that failed. A docs-only merge whose Windows leg was path-filtered is not a
+#                   recovery (#2030). Section 6, in FIRING/BOUNDING vocabulary.
 #   IS WIRED UP  -- the workflow actually runs on a schedule and actually invokes the script
 #                   with the permissions it needs.
 #
@@ -33,13 +36,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DETECT="${REPO_ROOT}/scripts/detect-workflow-failure-streak.sh"
 WORKFLOW="${REPO_ROOT}/.github/workflows/workflow-failure-alert.yml"
 HISTORY="${SCRIPT_DIR}/fixtures/docs-workflow-runs.json"
+CI_HISTORY="${SCRIPT_DIR}/fixtures/ci-windows-skipped-runs.json"
 
 PASS=0
 FAIL=0
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS=$((PASS + 1)); }
 fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL=$((FAIL + 1)); }
 
-for required in "$DETECT" "$WORKFLOW" "$HISTORY"; do
+for required in "$DETECT" "$WORKFLOW" "$HISTORY" "$CI_HISTORY"; do
     [ -f "$required" ] || { echo "FATAL: $required missing"; exit 1; }
 done
 command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required by this test"; exit 1; }
@@ -277,8 +281,156 @@ else
 fi
 
 # ---------------------------------------------------------------------------------------------
-# 6. Wiring. All of the above is inert if the workflow does not run, or runs without the
-#    permissions to open an issue -- and a permissions error fails in the silent direction.
+# 6. A success only counts as recovery if it re-ran what broke (#2030).
+#
+# `streak_of` was never wrong about this -- it has always treated `skipped` as "not a verdict".
+# It was fed RUN-level conclusions, and a run whose failing job was skipped by a path filter
+# still reports `success`. So these cases are about the detector's INPUT, and the CONTROL for
+# each FIRING case is the same fixture with its job data removed: that is exactly the view the
+# detector had before this change, driven through the same code.
+#
+# The fixture is the real thing (see its own header): master run `c2f702e9` failed on
+# `Test Suite (windows-latest)`, and the next master run `05d58a51` -- #2025, docs only --
+# reported `success` with that leg green and its `Run Tests` STEP skipped.
+# ---------------------------------------------------------------------------------------------
+
+# ci_fixture <out> <alerts-json> [jq-transform-of-the-whole-fixture]
+ci_fixture() {
+    local out="$1" alerts="$2" transform="${3:-.}"
+    jq --argjson alerts "$alerts" "{
+          workflows: [{id: 291989718, path: \".github/workflows/ci.yml\", name: \"CI\"}],
+          runs: {\"291989718\": .runs},
+          alerts: \$alerts
+        } | $transform" "$CI_HISTORY" > "$out"
+}
+
+# The Windows leg of the newest (docs-only) run, and the steps inside it that were skipped.
+WIN='.runs["291989718"][0].jobs[] | select(.name == "Test Suite (windows-latest)")'
+WIN_SKIPPED_STEPS="$WIN"' | .steps[] | select(.conclusion == "skipped")'
+RERAN_THE_TESTS="($WIN_SKIPPED_STEPS) |= (.conclusion = \"success\")"
+NO_JOBS='.runs["291989718"] |= map(del(.jobs))'
+
+SKIPPED_LEG="${TMPDIR_TEST}/2030-skipped-leg.json"
+SKIPPED_LEG_RUNLEVEL="${TMPDIR_TEST}/2030-skipped-leg-runlevel.json"
+ci_fixture "$SKIPPED_LEG" "$NO_ALERTS"
+ci_fixture "$SKIPPED_LEG_RUNLEVEL" "$NO_ALERTS" "$NO_JOBS"
+
+# -- FIRING. The incident itself, at the tightest possible threshold. One failure, then a
+#    docs-only merge, and the sweeper called it recovered while master was still red.
+if [ "$(verdict "$SKIPPED_LEG" --threshold 1)" = "ALERT" ] && [ "$(streak "$SKIPPED_LEG")" = "1" ]; then
+    pass "FIRING    c2f702e9 -> 05d58a51: a success whose Windows leg was skipped is not recovery"
+else
+    fail "FIRING    the real #2030 history did not alert -- a red master is still cleared by a docs merge"
+    printf '        got: %s\n' "$("$DETECT" --fixture "$SKIPPED_LEG" --threshold 1 2>/dev/null)"
+fi
+
+# -- CONTROL for the case above. The same two runs judged on their run-level conclusions alone,
+#    which is all the detector could see before this change. If this ever starts alerting, the
+#    case above has stopped being evidence of anything (SKILL 5c rule 3).
+if [ "$(verdict "$SKIPPED_LEG_RUNLEVEL" --threshold 1)" = "OK" ]; then
+    pass "CONTROL   the same history WITHOUT job data reads as recovery -- the run level cannot see it"
+else
+    fail "CONTROL   the run-level-only view alerted, so the FIRING case above proves nothing"
+fi
+
+# -- FIRING. And at the shipped threshold, not only at 1: the masked success must let the streak
+#    keep accumulating through it, exactly as a cancellation does.
+THREE="${TMPDIR_TEST}/2030-three.json"
+THREE_RUNLEVEL="${TMPDIR_TEST}/2030-three-runlevel.json"
+MORE_FAILURES='.runs["291989718"] += [{id: 1, status: "completed", event: "push", conclusion: "failure"},
+                                      {id: 2, status: "completed", event: "push", conclusion: "failure"}]'
+ci_fixture "$THREE" "$NO_ALERTS" "$MORE_FAILURES"
+ci_fixture "$THREE_RUNLEVEL" "$NO_ALERTS" "$MORE_FAILURES | $NO_JOBS"
+
+if [ "$(verdict "$THREE")" = "ALERT" ] && [ "$(streak "$THREE")" = "3" ]; then
+    pass "FIRING    a path-filtered success does not reset a live streak (3 at the default threshold)"
+else
+    fail "FIRING    the streak did not survive a path-filtered success; computed '$(streak "$THREE")'"
+fi
+[ "$(verdict "$THREE_RUNLEVEL")" = "OK" ] \
+    && pass "CONTROL   the same three failures are invisible at the run level" \
+    || fail "CONTROL   the run-level view alerted on the three-failure fixture"
+
+# -- FIRING. The half the issue title is about: the alert must not CLOSE either. A RESOLVE here
+#    closes a live incident and re-arms nothing, because the next sweep sees the same green.
+LIVE_ALERT='[{"number": 4242, "body": "<!-- workflow-failure-alert:291989718 -->"}]'
+STILL_RED="${TMPDIR_TEST}/2030-still-red.json"
+STILL_RED_RUNLEVEL="${TMPDIR_TEST}/2030-still-red-runlevel.json"
+ci_fixture "$STILL_RED" "$LIVE_ALERT"
+ci_fixture "$STILL_RED_RUNLEVEL" "$LIVE_ALERT" "$NO_JOBS"
+
+[ "$(verdict "$STILL_RED")" != "RESOLVE" ] \
+    && pass "FIRING    a skipped-leg green does not close an open alert while master is still red" \
+    || fail "FIRING    the open alert was RESOLVEd by a docs-only merge -- the #2030 headline"
+[ "$(verdict "$STILL_RED_RUNLEVEL")" = "RESOLVE" ] \
+    && pass "CONTROL   the run-level view closes it, which is what happened" \
+    || fail "CONTROL   the run-level view did not RESOLVE, so the case above proves nothing"
+
+# -- FIRING. The job-level shape too. ci.yml generates every matrix leg deliberately (#1365), so
+#    the real defect is a step skip inside a green job -- but a job-level `if:` is used elsewhere
+#    in this repository and produces an absent or `skipped` job, which must read the same way.
+GONE="${TMPDIR_TEST}/2030-job-gone.json"
+JOB_SKIPPED="${TMPDIR_TEST}/2030-job-skipped.json"
+ci_fixture "$GONE" "$NO_ALERTS" \
+    '.runs["291989718"][0].jobs |= map(select(.name != "Test Suite (windows-latest)"))'
+ci_fixture "$JOB_SKIPPED" "$NO_ALERTS" \
+    "($WIN) |= (.conclusion = \"skipped\" | .steps = [])"
+
+[ "$(verdict "$GONE" --threshold 1)" = "ALERT" ] \
+    && pass "FIRING    a failing job that is absent from the next run is not a verdict on it" \
+    || fail "FIRING    a job that vanished counted as recovery"
+[ "$(verdict "$JOB_SKIPPED" --threshold 1)" = "ALERT" ] \
+    && pass "FIRING    a failing job that reports 'skipped' in the next run is not a verdict on it" \
+    || fail "FIRING    a skipped job counted as recovery"
+
+# -- BOUNDING. The one that stops this being worse than the bug. A real recovery -- the same
+#    jobs, the same steps, and the step that failed actually re-run and green -- must break the
+#    streak. Without this the sweeper alerts forever on healthy workflows, and an alerter people
+#    learn to ignore is an alerter that is off.
+#
+#    Derived from the FIRING fixture by changing only the step conclusions that were skipped, so
+#    the two differ in exactly the field under test and nothing else.
+RECOVERED="${TMPDIR_TEST}/2030-recovered.json"
+ci_fixture "$RECOVERED" "$NO_ALERTS" "$RERAN_THE_TESTS"
+
+if [ "$(verdict "$RECOVERED" --threshold 1)" = "OK" ] && [ "$(streak "$RECOVERED")" = "0" ]; then
+    pass "BOUNDING  a genuine recovery -- the failing step re-run and green -- still breaks the streak"
+else
+    fail "BOUNDING  a real recovery did not break the streak; this would alert forever on a healthy workflow"
+    printf '        got: %s\n' "$("$DETECT" --fixture "$RECOVERED" --threshold 1 2>/dev/null)"
+fi
+
+# -- BOUNDING. ...and it closes the alert, which is the re-arming half.
+RECOVERED_ALERTED="${TMPDIR_TEST}/2030-recovered-alerted.json"
+ci_fixture "$RECOVERED_ALERTED" "$LIVE_ALERT" "$RERAN_THE_TESTS"
+[ "$(verdict "$RECOVERED_ALERTED")" = "RESOLVE" ] \
+    && pass "BOUNDING  a genuine recovery still closes the open alert" \
+    || fail "BOUNDING  a genuine recovery left the alert open -- it could only ever alert once"
+
+# -- BOUNDING. Only the immediately-older decisive run is probed. This is what keeps the sweep
+#    cheap: a workflow that is green now costs no job fetch at all, however much red is further
+#    down the lookback. If this case ever goes red, the walk has started fetching jobs for runs
+#    it has already settled past, and the sweep's cost is no longer two calls per broken
+#    workflow.
+SEPARATED="${TMPDIR_TEST}/2030-separated.json"
+ci_fixture "$SEPARATED" "$NO_ALERTS" \
+    '.runs["291989718"] = [.runs["291989718"][0],
+                           {id: 1, status: "completed", event: "push", conclusion: "success"},
+                           .runs["291989718"][1]]'
+[ "$(verdict "$SEPARATED" --threshold 1)" = "OK" ] \
+    && pass "BOUNDING  a failure already settled by an intervening success is not re-litigated" \
+    || fail "BOUNDING  the walk probed past a settled verdict -- the sweep is no longer 2 calls"
+
+# -- BOUNDING. No job data at all is the old answer, unchanged. Every case above section 6 is
+#    written in that shape, so this pins the fallback they all depend on rather than leaving it
+#    to be inferred from their passing.
+[ "$(streak "$SKIPPED_LEG_RUNLEVEL")" = "0" ] \
+    && pass "BOUNDING  a run carrying no job data is still judged on its run-level conclusion" \
+    || fail "BOUNDING  a jobless run changed meaning -- every pre-existing fixture case is affected"
+
+# ---------------------------------------------------------------------------------------------
+#    All of the above is inert if the workflow does not run, or runs without the permissions to
+#    open an issue -- and a permissions error fails in the silent direction.
 # ---------------------------------------------------------------------------------------------
 grep -qE '^\s+- cron:' "$WORKFLOW" \
     && pass "the alert workflow runs on a schedule" \

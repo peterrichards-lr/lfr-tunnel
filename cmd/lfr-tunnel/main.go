@@ -48,7 +48,8 @@ func (i *arrayFlags) Set(value string) error {
 var (
 	configPath         = flag.String("config", "", "Path to client-config.yaml")
 	guiFlag            = flag.Bool("gui", false, "Start client in system tray GUI mode")
-	serverURL          = flag.String("server", "", "PIN this client to one gateway (e.g. https://tunnel.liferay.com) -- no region selection, no failover. Use -gateway to keep both.")
+	serverURL          = flag.String("pin", "", "PIN this client to one gateway (e.g. https://tunnel.liferay.com) -- no region selection, no failover.")
+	serverURLLegacy    = flag.String("server", "", "DEPRECATED: use -pin. Same behaviour; the name did not say that it disables failover (#2061).")
 	token              = flag.String("token", "", "Gateway auth token")
 	subdomain          = flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
 	portsStr           = flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
@@ -72,8 +73,10 @@ var (
 	logDirFlag         = flag.String("log-dir", "", "Directory for the persistent traffic and error logs (default ~/.lfr-tunnel/logs)")
 	passcode           = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP        = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
-	gatewayURL         = flag.String("gateway", "", "Gateway to fetch the region list from, WITHOUT pinning to it -- the client still picks the closest region and fails over (#1694). Use -server instead to pin.")
-	region             = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
+	gatewayURL         = flag.String("bootstrap", "", "Gateway to fetch the region list from, WITHOUT pinning to it -- the client still picks the closest region and fails over (#1694).")
+	gatewayURLLegacy   = flag.String("gateway", "", "DEPRECATED: use -bootstrap. Same behaviour; 'gateway' and 'server' read as synonyms while doing opposite things (#2061).")
+	region             = flag.String("prefer-region", "", "Prefer this region (e.g. eu, us, apac). Falls back to the closest reachable one if it is unavailable, and returns to it when it comes back.")
+	regionLegacy       = flag.String("region", "", "DEPRECATED: use -prefer-region. Same behaviour; the old name did not say it falls back, or that it returns (#2061).")
 	refreshRegion      = flag.Bool("refresh-region", false, "Force re-probing region latencies and refresh the 24h region cache")
 	domain             = flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
 	latency            = flag.Duration("latency", 0, "Simulated network roundtrip latency (e.g. 200ms, 1s)")
@@ -194,8 +197,47 @@ func minVersionPreflight(currentVersion string, info *client.ServerVersionInfo) 
 		currentVersion, info.MinVersion)
 }
 
+// resolveDeprecatedFlag folds an old flag spelling into its replacement.
+//
+// The routing flags were named after what they TAKE rather than what they DO, and it cost real
+// time: -server and -gateway are synonyms in ordinary use while differing on whether failover
+// exists at all, and -region under-promised so badly that the owner asked for a "preferred node"
+// flag that already existed (#2061). Each old name is kept working -- breaking someone's script
+// to fix our vocabulary would be a poor trade -- but says once that it has moved.
+//
+// Refuses rather than guesses when both are given with different values: picking one silently is
+// how -server came to pin a US user to a European gateway for the life of a tunnel (#1691).
+// Returns an error rather than exiting, so the both-given case is testable. Exiting inside a
+// helper is how a rule ends up asserted only by reading it.
+func resolveDeprecatedFlag(newName string, newVal *string, oldName string, oldVal *string) error {
+	if *oldVal == "" {
+		return nil
+	}
+	if *newVal != "" && *newVal != *oldVal {
+		return fmt.Errorf("-%s and -%s are the same setting and you gave both, with different "+
+			"values (%q and %q). -%s is the deprecated spelling; drop it",
+			newName, oldName, *newVal, *oldVal, oldName)
+	}
+	*newVal = *oldVal
+	slog.Warn(fmt.Sprintf("-%s is deprecated and will be removed; use -%s instead. "+
+		"Same behaviour, a name that says what it does.", oldName, newName))
+	return nil
+}
+
 func main() {
 	flag.Parse()
+
+	// Old spellings still work, and say so once (#2061). Merged here rather than at each use
+	// site so the rest of main sees one variable per concept.
+	for _, err := range []error{
+		resolveDeprecatedFlag("pin", serverURL, "server", serverURLLegacy),
+		resolveDeprecatedFlag("bootstrap", gatewayURL, "gateway", gatewayURLLegacy),
+		resolveDeprecatedFlag("prefer-region", region, "region", regionLegacy),
+	} {
+		if err != nil {
+			log.Fatalf("[Error] %v", err)
+		}
+	}
 
 	// Before anything else: a typo must not open a tunnel the user never asked for (#1945).
 	if err := checkBareArgs(os.Args, flag.Args()); err != nil {
@@ -253,8 +295,8 @@ func main() {
 	// Contradictory intents rather than a precedence rule: quietly honouring one of the two is
 	// how the original confusion started, so passing both is refused.
 	if *gatewayURL != "" && *serverURL != "" {
-		log.Fatalf("[Error] -gateway and -server contradict each other: -gateway picks the closest " +
-			"region and fails over, -server pins this client to one gateway. Pass whichever you meant, not both.")
+		log.Fatalf("[Error] -bootstrap and -pin contradict each other: -bootstrap picks the closest " +
+			"region and fails over, -pin fixes this client to one gateway. Pass whichever you meant, not both.")
 	}
 	if *gatewayURL != "" {
 		cfg.ServerURL = *gatewayURL
@@ -292,11 +334,11 @@ func main() {
 		// which -- a US user followed the old wording, named the control plane, and stayed
 		// on it from the US for the life of the tunnel.
 		log.Fatalf("[Error] No tunnel server configured.\n\n" +
-			"  Recommended: -gateway https://your-gateway.example.com\n" +
+			"  Recommended: -bootstrap https://your-gateway.example.com\n" +
 			"  The client fetches the gateway list from there, picks the closest, and fails over.\n\n" +
 			"  To persist it, add the same thing to your client config file --\n" +
 			"      server_url: \"https://your-gateway.example.com\"\n\n" +
-			"  Alternatively: -server <url> (or LFT_SERVER_URL) PINS this client to that one\n" +
+			"  Alternatively: -pin <url> (or LFT_SERVER_URL) FIXES this client to that one\n" +
 			"  gateway -- no region selection, no failover.")
 	}
 

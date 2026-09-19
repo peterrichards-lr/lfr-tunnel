@@ -48,6 +48,7 @@ func (i *arrayFlags) Set(value string) error {
 var (
 	configPath         = flag.String("config", "", "Path to client-config.yaml")
 	guiFlag            = flag.Bool("gui", false, "Start client in system tray GUI mode")
+	noAutoConnect      = flag.Bool("no-autoconnect", false, "GUI mode only: start the tray WITHOUT connecting. The tray connects on startup by default (#2076); use this when you want it purely as a control surface -- notably with Launch on Login, where the default brings a tunnel up as soon as you log in.")
 	serverURL          = flag.String("pin", "", "PIN this client to one gateway (e.g. https://tunnel.liferay.com) -- no region selection, no failover.")
 	serverURLLegacy    = flag.String("server", "", "DEPRECATED: use -pin. Same behaviour; the name did not say that it disables failover (#2061).")
 	token              = flag.String("token", "", "Gateway auth token")
@@ -343,7 +344,7 @@ func main() {
 	}
 
 	if *guiFlag {
-		gui.StartGUI(cfg)
+		gui.StartGUI(cfg, !*noAutoConnect)
 		return
 	}
 

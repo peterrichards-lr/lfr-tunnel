@@ -362,6 +362,28 @@ To configure the headless background tunnel daemon to launch on login:
     ```
 
 #### System Tray GUI Client
+
+Start the tray with:
+
+```bash
+lfr-tunnel -gui
+```
+
+**The tray connects on startup.** It brings the tunnel up with exactly the arguments its
+**Connect** menu item would use -- so every flag you give the GUI applies to the tunnel it
+starts, and `lfr-tunnel -gui -prefer-region apac` lands in `apac` without anyone clicking
+anything. If a client is already running, the tray attaches to that one instead of starting a
+second.
+
+To start the tray as a control surface only, leaving the tunnel down until you ask for it:
+
+```bash
+lfr-tunnel -gui -no-autoconnect
+```
+
+This is worth knowing before you enable the autostart below: with it on, the default means a
+tunnel is up as soon as you log in.
+
 To configure the System Tray / Menu Bar utility to launch on login:
 * **Tray Toggle**: Simply open the system tray menu and click **Launch on Login** (displays a checkmark `✓` when enabled).
 * **CLI Command**: Alternatively, register the autostart items using subcommands:

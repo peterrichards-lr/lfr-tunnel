@@ -42,7 +42,7 @@ set -euo pipefail
 # test checks that the lease it terminates was really registered -- in both cases the
 # suppressed error was the difference between the assertion meaning something and meaning
 # nothing.
-CEILING="${LFT_NOLINT_CEILING:-739}"
+CEILING="${LFT_NOLINT_CEILING:-738}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

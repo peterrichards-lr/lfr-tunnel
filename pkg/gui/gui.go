@@ -468,11 +468,18 @@ func StartGUI(cfg *config.ClientConfig) {
 		}
 	}
 
-	go func() {
-		var lastRunning bool
-		var activeURL string
+	// Built HERE, on the main goroutine, before Run() takes the thread (#2062). The watcher
+	// below only ever updates items in place, which systray dispatches to the main thread.
+	state, _, _ := getRunningState(cfg.Subdomain)
+	var initialURL string
+	if isRunning && state != nil && len(state.PublicURLs) > 0 {
+		initialURL = state.PublicURLs[0]
+	}
+	menu := buildMenu(tray, cfg, isRunning, initialURL)
 
-		updateMenu(tray, cfg, isRunning, activeURL)
+	go func() {
+		lastRunning := isRunning
+		activeURL := initialURL
 
 		for {
 			time.Sleep(1 * time.Second)
@@ -493,7 +500,7 @@ func StartGUI(cfg *config.ClientConfig) {
 				}
 				lastRunning = isRunningNow
 				activeURL = urlStr
-				updateMenu(tray, cfg, isRunningNow, urlStr)
+				menu.refresh(isRunningNow, urlStr)
 			}
 		}
 	}()
@@ -522,40 +529,59 @@ func settingsURL(cfg *config.ClientConfig) string {
 	return ""
 }
 
-func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bool, activeURL string) {
+// trayMenu holds the MenuItem handles created when the menu is built.
+//
+// THE MENU IS BUILT ONCE, ON THE MAIN GOROUTINE, BEFORE tray.Run() (#2062). It used to be
+// rebuilt and re-attached with tray.SetMenu from the watcher goroutine, which crashed the app:
+//
+//	SIGTRAP: trace trap / signal arrived during cgo execution
+//	systray/internal.(*darwinTray).SetMenu -> msgSend    [goroutine 9]
+//	systray/internal.(*darwinTray).Run                   [goroutine 1, locked to thread]
+//
+// AppKit requires UI mutation on the main thread. systray dispatches *item* updates there for
+// you -- SetLabel/SetDisabled/SetChecked go through performSelectorOnMainThread -- but SetMenu
+// and SetIcon call msgSend directly, so calling either off the main thread is a crash waiting
+// for the race to go the wrong way.
+//
+// The rebuild pattern was correct when written (#481): systray v0.1.2's Menu.Add returned *Menu,
+// so there were no item handles and rebuilding was the only way to change anything. v0.3.0
+// (#1911, first shipped in v1.48.32) introduced *MenuItem and in-place updates and made the old
+// pattern unsafe. This moves to the supported one.
+type trayMenu struct {
+	cfg *config.ClientConfig
+
+	status      *systray.MenuItem
+	toggle      *systray.MenuItem
+	copyURL     *systray.MenuItem
+	settings    *systray.MenuItem
+	launchLogin *systray.MenuItem
+}
+
+// buildMenu constructs the menu and attaches it.
+//
+// MUST run on the main goroutine, before tray.Run() -- it calls SetMenu, which systray does not
+// dispatch for you.
+func buildMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bool, activeURL string) *trayMenu {
+	m := &trayMenu{cfg: cfg}
 	menu := systray.NewMenu()
 
-	var statusText string
-	if isRunning {
-		if activeURL != "" {
-			statusText = fmt.Sprintf("Connected: %s", activeURL)
-		} else {
-			statusText = "Liferay Tunnel: Connected"
-		}
-		tray.SetIcon(IconActive)
-	} else {
-		statusText = "Liferay Tunnel: Disconnected"
-		tray.SetIcon(IconInactive)
-	}
-
-	menu.Add(statusText, func() {})
+	m.status = menu.Add(statusLabel(isRunning, activeURL), func() {})
 	menu.AddSeparator()
 
-	var toggleText string
-	if isRunning {
-		toggleText = "Disconnect"
-	} else {
-		toggleText = "Connect"
-	}
-	menu.Add(toggleText, func() {
+	m.toggle = menu.Add(toggleLabel(isRunning), func() {
 		handleToggle(cfg)
 	})
 
-	if isRunning && activeURL != "" {
-		menu.Add("Copy Public URL", func() {
-			handleCopyURLString(activeURL)
-		})
-	}
+	// Always present, disabled when there is nothing to copy. It used to be added only while a
+	// tunnel was up -- but that is a change to the menu's SHAPE, and changing the shape is what
+	// needs the rebuild this type exists to avoid.
+	m.copyURL = menu.Add("Copy Public URL", func() {
+		// Read at click time rather than closing over the value: the item outlives any
+		// particular URL now that it is not rebuilt per state change.
+		if state, _, running := getRunningState(cfg.Subdomain); running && state != nil && len(state.PublicURLs) > 0 {
+			handleCopyURLString(state.PublicURLs[0])
+		}
+	})
 
 	menu.Add("Open Request Inspector", func() {
 		handleOpenInspector(cfg)
@@ -570,27 +596,14 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 	})
 
 	// Whichever server is actually up serves the same page, so ask rather than assume (#2055).
-	// The literal 127.0.0.1:55556 here was wrong in the ordinary connected case: tempServer is
-	// stopped once the tunnel is up, and the Inspector serves /settings instead.
-	settings := menu.Add("Settings...", func() {
+	m.settings = menu.Add("Settings...", func() {
 		if url := settingsURL(cfg); url != "" {
 			openBrowser(url)
 		}
 	})
-	if settingsURL(cfg) == "" {
-		// Neither server is reachable. Disabling says so, where opening a browser at a dead
-		// port looked like the settings screen was simply refusing to save.
-		settings.SetDisabled(true)
-	}
 
-	var startOnLoginText string
-	if client.IsGUIServiceInstalled() {
-		startOnLoginText = "✓ Launch on Login"
-	} else {
-		startOnLoginText = "Launch on Login"
-	}
-	menu.Add(startOnLoginText, func() {
-		handleToggleLaunchOnLogin(tray, cfg, isRunning, activeURL)
+	m.launchLogin = menu.Add(launchOnLoginLabel(), func() {
+		handleToggleLaunchOnLogin(m)
 	})
 
 	menu.AddSeparator()
@@ -609,9 +622,50 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 	})
 
 	tray.SetMenu(menu)
+	m.refresh(isRunning, activeURL)
+	return m
 }
 
-func handleToggleLaunchOnLogin(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bool, activeURL string) {
+// refresh updates the items in place. Safe from any goroutine: every call below is one of the
+// item setters systray dispatches to the main thread for you.
+//
+// It deliberately does NOT touch the tray icon. tray.SetIcon is not dispatched either, so calling
+// it from the watcher is the same crash this type removes, and systray v0.3.0 offers no queued
+// alternative -- pendingUpdates is a chan menuItemSnapshot, menu items only. The connection state
+// is carried by the status line and the Connect/Disconnect label instead.
+func (m *trayMenu) refresh(isRunning bool, activeURL string) {
+	m.status.SetLabel(statusLabel(isRunning, activeURL))
+	m.toggle.SetLabel(toggleLabel(isRunning))
+	m.copyURL.SetDisabled(!isRunning || activeURL == "")
+	m.settings.SetDisabled(settingsURL(m.cfg) == "")
+	m.launchLogin.SetLabel(launchOnLoginLabel())
+}
+
+func statusLabel(isRunning bool, activeURL string) string {
+	if !isRunning {
+		return "Liferay Tunnel: Disconnected"
+	}
+	if activeURL != "" {
+		return fmt.Sprintf("Connected: %s", activeURL)
+	}
+	return "Liferay Tunnel: Connected"
+}
+
+func toggleLabel(isRunning bool) string {
+	if isRunning {
+		return "Disconnect"
+	}
+	return "Connect"
+}
+
+func launchOnLoginLabel() string {
+	if client.IsGUIServiceInstalled() {
+		return "✓ Launch on Login"
+	}
+	return "Launch on Login"
+}
+
+func handleToggleLaunchOnLogin(m *trayMenu) {
 	if client.IsGUIServiceInstalled() {
 		if err := client.UninstallGUIService(); err != nil {
 			slog.Error("Failed to uninstall GUI service", "error", err)
@@ -621,7 +675,10 @@ func handleToggleLaunchOnLogin(tray *systray.SystemTray, cfg *config.ClientConfi
 			slog.Error("Failed to install GUI service", "error", err)
 		}
 	}
-	updateMenu(tray, cfg, isRunning, activeURL)
+	// One label, in place. This used to call updateMenu -- rebuilding and re-attaching the whole
+	// menu from a click handler. That runs on the main thread so it did not crash, but it is the
+	// same unsafe pattern and there is no reason to keep it.
+	m.launchLogin.SetLabel(launchOnLoginLabel())
 }
 
 func handleToggle(cfg *config.ClientConfig) {

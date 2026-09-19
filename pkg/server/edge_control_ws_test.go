@@ -462,8 +462,22 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	idle := 3 * shortDeadline
 	time.Sleep(idle)
 
-	if sent := pings.Load(); sent < int64(idle/pingInterval)-1 {
-		t.Fatalf("only %d keepalive Pings were actually sent in %v, so the connection surviving says nothing about Ping refreshing the deadline", sent, idle)
+	// Derived from the DEADLINE, not from the ping interval.
+	//
+	// This used to require idle/pingInterval-1 pings -- 8 here -- which asserts that the ticker
+	// hit almost every tick, not that the keepalive worked. It failed on a loaded macOS runner
+	// with "only 6 keepalive Pings were actually sent in 450ms", and 6 is fine: 450ms/6 is 75ms
+	// between pings, comfortably inside the 150ms deadline they exist to refresh. The test was
+	// measuring scheduler density and calling it a defect.
+	//
+	// What actually has to hold is that pings arrived often enough to keep refreshing the
+	// deadline across the idle window, which is idle/shortDeadline of them. Below that, the
+	// connection surviving really would prove nothing; above it, jitter is irrelevant.
+	minPings := int64(idle / shortDeadline)
+	if sent := pings.Load(); sent < minPings {
+		t.Fatalf("only %d keepalive Pings were sent in %v, fewer than the %d needed to keep "+
+			"refreshing a %v deadline -- so the connection surviving says nothing about Ping "+
+			"refreshing it", sent, idle, minPings, shortDeadline)
 	}
 
 	controlSrv.edgeClientsMu.RLock()

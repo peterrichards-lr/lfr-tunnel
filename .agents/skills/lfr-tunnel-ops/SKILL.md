@@ -724,6 +724,108 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 ```
 
 
+---
+
+## 8. Exercising failover and failback against a live node
+
+Failover and failback are proven by the edge E2E on every PR, and a **planned** move was captured
+from production for the first time on 2026-09-19 (a client log showing `gateway_shutdown_warning`
+-> `planned_move_started` -> `failover`, `lease_lost: False`). What has never been observed end to
+end is a **completed failback**: production only ever produces declines, because a scheduled edge
+comes back at 08:00 local long after anyone is watching.
+
+This is how to drive the whole cycle deliberately.
+
+### The flag that makes it possible: `-region`, not `-server`
+
+The three routing modes are not interchangeable, and only one of them can be tested this way:
+
+| flag | behaviour |
+| --- | --- |
+| *(nothing)* | latency probe picks the closest reachable region; fails over and back |
+| `-gateway <url>` | fetch the roster from there WITHOUT pinning; still probes, fails over (#1694) |
+| `-server <url>` | **PINS** -- no region selection, **no failover**. Useless for this test (#1691) |
+| `-region <name>` | **targets that region**, falls back to a probe if it is unavailable at startup (#1690), and returns to it when it reappears -- with **no latency threshold**, because a named region is a stated choice rather than a latency question (#1937) |
+
+`-region` is the one to use. `chooseReelectionTarget` captures the *requested* region before
+resolution specifically so it can tell "the user asked for apac" from "a probe chose apac" -- which
+is what lets it move back.
+
+### Choose a node nobody is on, and one the probe would not pick anyway
+
+From the UK, `apac` or `in`: far enough that a latency probe will never elect them, so the move
+away and back is unambiguous. Check what is awake first -- **all four edges are off 00:00-08:00 in
+their own timezone**, and an edge answering nothing is the normal state for a third of the day:
+
+```bash
+for e in us apac sa in; do
+  printf "%-5s %s\n" "$e" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://$e.lfr-demo.se/api/version)"
+done
+```
+
+### Turn the timers down, or the test takes an hour
+
+Three cooldowns govern the cycle. All three are `cooldownFromEnv` **test overrides**, deliberately
+not documented as user configuration -- do not put them in a config file or suggest them to users:
+
+| variable | default | what it delays |
+| --- | --- | --- |
+| `LFT_REGION_FAILOVER_COOLDOWN` | **90s** | failback after a failover |
+| `LFT_REELECTION_MIN_INTERVAL` | **10 min** | floor between topology-driven moves |
+| `LFT_PLANNED_SHUTDOWN_COOLDOWN` | **1 hour** | failback after a *planned* move |
+
+The last one is not theoretical: the production capture above declined failback at `03:55:35` and
+did not retry until `04:55:25` -- an hour to the second.
+
+### The run
+
+```bash
+export LFT_REGION_FAILOVER_COOLDOWN=15s
+export LFT_REELECTION_MIN_INTERVAL=30s
+lfr-tunnel -region apac
+```
+
+Watch two things at once. The console shows the human story; the session log is the evidence:
+
+```bash
+tail -f ~/.lfr-tunnel/logs/error-$(hostname -s).log
+```
+
+Then, in another shell -- **find the instance rather than hardcoding an id, they change**:
+
+```bash
+export AWS_PROFILE=lfr-tunnel     # the default profile is empty; a missing session reports as
+                                  # "no instances found", not as an auth error
+ID=$(aws ec2 describe-instances --region ap-northeast-1       --filters "Name=instance-state-name,Values=stopped,running"       --query "Reservations[].Instances[?contains(Tags[?Key=='Name']|[0].Value,'apac')].InstanceId"       --output text | head -1)
+
+aws ec2 stop-instances  --region ap-northeast-1 --instance-ids "$ID"   # expect FAILOVER
+# wait for the client to move, then:
+aws ec2 start-instances --region ap-northeast-1 --instance-ids "$ID"   # expect FAILBACK
+```
+
+### What proves it, and what does not
+
+Polling the public URL proves nothing -- an edge cross-proxies to the lease holder, so it answers
+200 while the client is still elsewhere. The **events** are the evidence:
+
+| event | means |
+| --- | --- |
+| `failover` with `from`/`to` and `lease_lost: False` | an orderly move, not a recovery from a dropped lease |
+| `failback_declined` `reason: cooldown` | the timer, working -- not a failure |
+| `failback_declined` `reason: unreachable` | the node is genuinely still down |
+| `failback` | **the thing that has never been seen in production** |
+| `node_set_changed` | the roster fingerprint moved (#1937) |
+
+### Testing the tray in the same run
+
+`lfr-tunnel -gui` puts the same session in the menu bar, so one run can cover both. Note what that
+does and does not prove: the tray reads the same engine, so it will show the region change, but
+**the settings-server fix (#2055) is only in a released build once #2057 ships**. A locally built
+binary is not a substitute -- the S1 exclusion is path-based (`*/liferay/lfr-tunnel/lfr-tunnel*`),
+and putting an unsigned build there to test it defeats the point of the exclusion. Test the tray
+fix after the release that carries it, not before.
+
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-18* | *Last Reviewed: 2026-09-18*
+*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*

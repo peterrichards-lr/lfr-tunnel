@@ -182,8 +182,13 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		sub = cfg.Subdomain
 		url = cfg.ServerURL
 	}
-	home, _ := os.UserHomeDir()
-	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
+	// Resolved, not built (#2071). Three call sites in this file constructed the LEGACY path
+	// by hand; all three now go through the helper the Inspector uses, so the tray and the
+	// Inspector cannot disagree about where the logs are.
+	logFile, logErr := client.ResolveClientLogPath(sub)
+	if logErr != nil {
+		logFile = unknownStr
+	}
 
 	serverVer := "n/a"
 	if url != unknownStr {
@@ -235,12 +240,44 @@ func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Subdomain not configured", http.StatusNotFound)
 		return
 	}
-	home, err := os.UserHomeDir()
+	// Resolved by the same helper the Inspector uses, NOT by building the path here.
+	//
+	// This built `~/.lfr-tunnel/client-<sub>.log` directly -- the LEGACY location. The client
+	// writes to `~/.lfr-tunnel/logs/` now (and to wherever `log_dir:` points, which this ignored
+	// entirely), so the view served a file frozen at whenever the layout changed. Observed on a
+	// live machine: the logs tab kept showing three lines from 16 July, including a
+	// TempSettingsServer bind error, for weeks afterwards -- which read as a bug recurring that
+	// had in fact been fixed and could not recur.
+	//
+	// ResolveClientLogPath prefers the current path and falls back to the legacy one only when
+	// the current file does not exist, so an old install still shows its history. The Inspector
+	// serves the SAME page from the same helper; they must not disagree about where the logs are.
+	logFile, err := client.ResolveClientLogPath(sub)
 	if err != nil {
-		http.Error(w, "Home dir not found", http.StatusInternalServerError)
+		http.Error(w, "Log file not found", http.StatusNotFound)
 		return
 	}
-	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
+
+	// A log from a PREVIOUS run is not this session's, and serving it is worse than serving
+	// nothing: it reads as current. This is the whole of the reported confusion -- a background
+	// run in July left a console log, every foreground run since displayed it, and a bind error
+	// fixed weeks ago appeared to be recurring.
+	//
+	// Only the background-mode console log lives at this path; a foreground session writes its
+	// output to the terminal and never creates one. So when a session is running and the file
+	// predates it, say so rather than showing the ghost of an older run.
+	if state, _, running := getRunningState(sub); running && state != nil && state.StartTime != "" {
+		if started, perr := time.Parse(time.RFC3339, state.StartTime); perr == nil {
+			if info, serr := os.Stat(logFile); serr == nil && info.ModTime().Before(started) {
+				http.Error(w, "No console log for this session. The console log is only written "+
+					"in background mode; this session is running in the foreground, where output "+
+					"goes to the terminal. Request logs are in the Inspector.",
+					http.StatusNotFound)
+				return
+			}
+		}
+	}
+
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		http.Error(w, "Failed to read log file", http.StatusInternalServerError)
@@ -742,12 +779,11 @@ func handleOpenLogs(cfg *config.ClientConfig) {
 
 func handleCopyLogsToClipboard(cfg *config.ClientConfig) {
 	_, sub, _ := getRunningState(cfg.Subdomain)
-	home, err := os.UserHomeDir()
+	logFile, err := client.ResolveClientLogPath(sub)
 	if err != nil {
-		slog.Error("Failed to get home dir", "error", err)
+		slog.Error("Failed to resolve the client log path", "error", err)
 		return
 	}
-	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		slog.Error("Failed to read log file", "error", err)

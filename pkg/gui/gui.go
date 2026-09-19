@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,21 +29,29 @@ const (
 )
 
 // TempSettingsServer handles serving /settings when the tunnel is offline.
+//
+// It records the port it ACTUALLY bound rather than assuming the one it was asked for, the same
+// way the Inspector does (client.InterceptorEngine.SetInspectorPort / InspectorPort). A fixed
+// port was the root of #2055: a second tray instance made the bind fail, the failure vanished
+// into a goroutine log, the object still looked started, and the menu went on linking to the
+// port nothing was serving.
 type TempSettingsServer struct {
-	server *http.Server
-	port   int
-	mu     sync.Mutex
+	server   *http.Server
+	listener net.Listener
+	port     int // preferred; 0 means "let the OS choose"
+	bound    int // what we actually got, 0 when not running
+	mu       sync.Mutex
 }
 
 func NewTempSettingsServer(port int) *TempSettingsServer {
 	return &TempSettingsServer{port: port}
 }
 
-func (s *TempSettingsServer) Start() {
+func (s *TempSettingsServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.server != nil {
-		return
+		return nil
 	}
 
 	mux := http.NewServeMux()
@@ -55,8 +64,25 @@ func (s *TempSettingsServer) Start() {
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/logs", s.handleApiLogs)
 
+	// Bind BEFORE starting the goroutine, so a failure is returned to the caller instead of
+	// being logged from a goroutine that nobody is watching (#2055).
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
+	if err != nil {
+		// The preferred port is taken -- in practice a second tray instance. Take whatever the
+		// OS will give us rather than going without a settings UI: the page is served from
+		// whichever port we end up on, and nothing hardcodes it. dashboard.html fetches only
+		// relative URLs, and the menu asks us for the URL rather than constructing one.
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return fmt.Errorf("settings server could not bind any loopback port: %w", err)
+		}
+	}
+
+	s.listener = ln
+	if addr, ok := ln.Addr().(*net.TCPAddr); ok {
+		s.bound = addr.Port
+	}
 	s.server = &http.Server{
-		Addr:    fmt.Sprintf("127.0.0.1:%d", s.port),
 		Handler: mux,
 		// Header reading only (#1372). This is a loopback settings UI, so nothing it serves
 		// needs an unbounded header read, and the other three timeouts are left unset for the
@@ -64,11 +90,34 @@ func (s *TempSettingsServer) Start() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Captured locally: Stop() sets s.server to nil, and a goroutine still reading the field
+	// then calls Serve on a nil *http.Server. The old code had the same shape and never showed
+	// it, because nothing stopped the server quickly enough to lose the race.
+	srv := s.server
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("TempSettingsServer failed to listen", "error", err)
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			slog.Error("TempSettingsServer stopped serving", "error", err)
 		}
 	}()
+	return nil
+}
+
+// Port reports the port the settings server actually bound, or 0 when it is not running.
+// Mirrors client.InterceptorEngine.InspectorPort, and exists for the same reason: a literal
+// port is wrong the moment the requested one is unavailable.
+func (s *TempSettingsServer) Port() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.server == nil {
+		return 0
+	}
+	return s.bound
+}
+
+// IsRunning reports whether the settings UI is actually reachable. The menu gates on this, so
+// "Settings..." can be disabled rather than opening a browser at a dead port.
+func (s *TempSettingsServer) IsRunning() bool {
+	return s.Port() != 0
 }
 
 func (s *TempSettingsServer) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -252,27 +301,78 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
-func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ServerURL          string `json:"server_url"`
-		AuthToken          string `json:"auth_token"`
-		TargetHost         string `json:"target_host"`
-		DestPort           int    `json:"dest_port"`
-		Subdomain          string `json:"subdomain"`
-		PreserveHost       bool   `json:"preserve_host"`
-		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-		// Pointers, so an ABSENT field is distinguishable from one deliberately set empty
-		// (#1793). These two are owned by the Access Control tab, which posts to
-		// /api/access-control; the Settings tab has no control for them and stopped sending
-		// them in #1762. As plain values they decoded to "" and 0 and were written over the
-		// user's passcode -- silently removing the access control from their tunnel.
-		//
-		// #1762 fixed the identical handler in pkg/client/inspector.go and missed this one,
-		// which serves the SAME client.DashboardHTML page. AuthToken above already carries a
-		// guard against the same hazard.
-		Passcode  *string `json:"passcode"`
-		RateLimit *int    `json:"rate_limit"`
+// settingsFormRequest is the Settings form's payload.
+//
+// EVERY field is a pointer, so an ABSENT one is distinguishable from one deliberately set empty
+// (#1793, #1762, #2056). Omitting a field means "leave it alone", never "clear it".
+//
+// This handler and pkg/client/inspector.go's serve the SAME client.DashboardHTML page and must
+// agree about what a partial save means. They have disagreed before: #1762 fixed the inspector
+// and missed this one. Both are pointered in full now.
+//
+// A named type with methods rather than an anonymous struct inside the handler: the nil checks
+// are the bulk of the decoding, and inlining them put handleConfigPost over the gocyclo ceiling
+// at 27. They are behaviour of the payload, not of the HTTP handler.
+type settingsFormRequest struct {
+	ServerURL          *string `json:"server_url"`
+	AuthToken          *string `json:"auth_token"`
+	TargetHost         *string `json:"target_host"`
+	DestPort           *int    `json:"dest_port"`
+	Subdomain          *string `json:"subdomain"`
+	PreserveHost       *bool   `json:"preserve_host"`
+	InsecureSkipVerify *bool   `json:"insecure_skip_verify"`
+	// Owned by the Access Control tab, which posts to /api/access-control; the Settings
+	// tab has no control for them and stopped sending them in #1762.
+	Passcode  *string `json:"passcode"`
+	RateLimit *int    `json:"rate_limit"`
+}
+
+// anyFieldSet reports whether the caller named anything at all. A body naming no field is a
+// malformed or truncated request, not a save (#2056) -- answering 200 to it is how the original
+// defect stayed invisible.
+func (q *settingsFormRequest) anyFieldSet() bool {
+	return q.ServerURL != nil || q.AuthToken != nil || q.TargetHost != nil ||
+		q.DestPort != nil || q.Subdomain != nil || q.PreserveHost != nil ||
+		q.InsecureSkipVerify != nil || q.Passcode != nil || q.RateLimit != nil
+}
+
+// applyTo copies only the fields the caller actually sent onto cfg.
+func (q *settingsFormRequest) applyTo(cfg *config.ClientConfig) {
+	if q.ServerURL != nil {
+		cfg.ServerURL = *q.ServerURL
 	}
+	// SetInlineAuthToken, not a bare assignment: a token whose provenance is not declared is
+	// not written to the config file at all (#1772). The mask is what GET returns, so a form
+	// round-tripping GET->POST sends it back; writing it would replace the real token with
+	// eight asterisks.
+	if q.AuthToken != nil && *q.AuthToken != "********" && *q.AuthToken != "" {
+		cfg.SetInlineAuthToken(*q.AuthToken)
+	}
+	if q.TargetHost != nil {
+		cfg.TargetHost = *q.TargetHost
+	}
+	if q.DestPort != nil {
+		cfg.Ports = []int{*q.DestPort}
+	}
+	if q.Subdomain != nil {
+		cfg.Subdomain = *q.Subdomain
+	}
+	if q.PreserveHost != nil {
+		cfg.PreserveHost = *q.PreserveHost
+	}
+	if q.InsecureSkipVerify != nil {
+		cfg.InsecureSkipVerify = *q.InsecureSkipVerify
+	}
+	if q.Passcode != nil {
+		cfg.Passcode = *q.Passcode
+	}
+	if q.RateLimit != nil {
+		cfg.RateLimit = *q.RateLimit
+	}
+}
+
+func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
+	var req settingsFormRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
@@ -281,35 +381,25 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if !req.anyFieldSet() {
+		w.WriteHeader(http.StatusBadRequest)
+		if _, err := w.Write([]byte(`{"error":"No settings were supplied"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
+		return
+	}
+
 	cfg, cfgErr := loadUIConfig()
 	if cfgErr != nil {
-		// The save below replaces the file rather than updating it, so any key the
-		// settings form does not carry is dropped. Still better than refusing to save --
-		// this form is the user's way out of a config that will not parse -- but it
-		// should not happen silently.
+		// Only the fields the form actually sent are applied now (#2056), but a config that
+		// would not parse starts from defaults, so everything it held is still lost. Still
+		// better than refusing to save -- this form is the user's way out of a config that
+		// will not parse -- but it should not happen silently.
 		slog.Warn("Saving settings over a client config that could not be read",
 			"error", cfgErr)
 	}
 
-	cfg.ServerURL = req.ServerURL
-	// SetInlineAuthToken, not a bare assignment: a token whose provenance is not
-	// declared is not written to the config file at all (#1772).
-	if req.AuthToken != "********" && req.AuthToken != "" {
-		cfg.SetInlineAuthToken(req.AuthToken)
-	}
-	cfg.TargetHost = req.TargetHost
-	cfg.Ports = []int{req.DestPort}
-	cfg.Subdomain = req.Subdomain
-	cfg.PreserveHost = req.PreserveHost
-	cfg.InsecureSkipVerify = req.InsecureSkipVerify
-	// Only when the caller actually sent them. Omitting a field means "leave it alone",
-	// not "clear it".
-	if req.Passcode != nil {
-		cfg.Passcode = *req.Passcode
-	}
-	if req.RateLimit != nil {
-		cfg.RateLimit = *req.RateLimit
-	}
+	req.applyTo(cfg)
 
 	if err := config.SaveClientConfig("", cfg); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -331,6 +421,8 @@ func (s *TempSettingsServer) Stop() {
 	defer cancel()
 	_ = s.server.Shutdown(ctx) //nolint:errcheck
 	s.server = nil
+	s.listener = nil
+	s.bound = 0
 }
 
 var tempServer = NewTempSettingsServer(55556)
@@ -371,7 +463,9 @@ func StartGUI(cfg *config.ClientConfig) {
 
 	_, _, isRunning := getRunningState(cfg.Subdomain)
 	if !isRunning {
-		tempServer.Start()
+		if err := tempServer.Start(); err != nil {
+			slog.Error("settings UI unavailable", "error", err)
+		}
 	}
 
 	go func() {
@@ -393,7 +487,9 @@ func StartGUI(cfg *config.ClientConfig) {
 				if isRunningNow && !lastRunning {
 					tempServer.Stop()
 				} else if !isRunningNow && lastRunning {
-					tempServer.Start()
+					if err := tempServer.Start(); err != nil {
+						slog.Error("settings UI unavailable", "error", err)
+					}
 				}
 				lastRunning = isRunningNow
 				activeURL = urlStr
@@ -407,6 +503,23 @@ func StartGUI(cfg *config.ClientConfig) {
 	if err := tray.Run(); err != nil {
 		slog.Error("systray runner failed", "error", err)
 	}
+}
+
+// settingsURL returns where the settings UI is actually being served, or "" when it is not
+// served anywhere.
+//
+// Two servers can host it and only one runs at a time: the Inspector while a tunnel is up, and
+// TempSettingsServer while it is not. Both serve the same page, and the page fetches only
+// relative URLs, so it works unchanged on either -- which is why this returns a URL rather than
+// the caller hardcoding a port.
+func settingsURL(cfg *config.ClientConfig) string {
+	if state, _, running := getRunningState(cfg.Subdomain); running && state != nil && state.InspectorPort != 0 {
+		return fmt.Sprintf("http://127.0.0.1:%d/settings", state.InspectorPort)
+	}
+	if port := tempServer.Port(); port != 0 {
+		return fmt.Sprintf("http://127.0.0.1:%d/settings", port)
+	}
+	return ""
 }
 
 func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bool, activeURL string) {
@@ -456,9 +569,19 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		handleCopyLogsToClipboard(cfg)
 	})
 
-	menu.Add("Settings...", func() {
-		openBrowser("http://127.0.0.1:55556/settings")
+	// Whichever server is actually up serves the same page, so ask rather than assume (#2055).
+	// The literal 127.0.0.1:55556 here was wrong in the ordinary connected case: tempServer is
+	// stopped once the tunnel is up, and the Inspector serves /settings instead.
+	settings := menu.Add("Settings...", func() {
+		if url := settingsURL(cfg); url != "" {
+			openBrowser(url)
+		}
 	})
+	if settingsURL(cfg) == "" {
+		// Neither server is reachable. Disabling says so, where opening a browser at a dead
+		// port looked like the settings screen was simply refusing to save.
+		settings.SetDisabled(true)
+	}
 
 	var startOnLoginText string
 	if client.IsGUIServiceInstalled() {
@@ -535,12 +658,17 @@ func handleCopyURLString(urlStr string) {
 	_ = cmd.Run() //nolint:errcheck
 }
 
+// These two already asked the running client where it was listening. Only their fallback
+// assumed the settings server had got the port it wanted, which stopped being true once that
+// port became negotiable (#2055) -- and was never true when something else held it.
 func handleOpenInspector(cfg *config.ClientConfig) {
 	state, _, isRunning := getRunningState(cfg.Subdomain)
 	if isRunning && state != nil && state.InspectorURL != "" {
 		openBrowser(state.InspectorURL)
-	} else {
-		openBrowser("http://127.0.0.1:55556")
+		return
+	}
+	if port := tempServer.Port(); port != 0 {
+		openBrowser(fmt.Sprintf("http://127.0.0.1:%d", port))
 	}
 }
 
@@ -548,8 +676,10 @@ func handleOpenLogs(cfg *config.ClientConfig) {
 	state, _, isRunning := getRunningState(cfg.Subdomain)
 	if isRunning && state != nil && state.InspectorURL != "" {
 		openBrowser(state.InspectorURL + "/logs")
-	} else {
-		openBrowser("http://127.0.0.1:55556/logs")
+		return
+	}
+	if port := tempServer.Port(); port != 0 {
+		openBrowser(fmt.Sprintf("http://127.0.0.1:%d/logs", port))
 	}
 }
 

@@ -5,6 +5,21 @@ import (
 	"time"
 )
 
+// recentDay returns midnight UTC `daysAgo` days before today.
+//
+// These fixtures used fixed calendar dates, which made them a rolling time bomb: the queries
+// under test look back a bounded window (GetGlobalAnalytics(30)), so a row dated 2026-08-20
+// silently left that window on 2026-09-19 and the test started failing with "got -1" -- no
+// matching row at all, rather than a wrong count. The remaining fixtures were dated 21-26
+// August, so they would have failed one per day over the following week.
+//
+// Anchored to now, the data is always inside the window and the assertions keep meaning what
+// they were written to mean. Midnight-truncated so a run just after midnight cannot straddle
+// two dates and group differently than the test expects.
+func recentDay(daysAgo int) time.Time {
+	return time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -daysAgo)
+}
+
 // Sessions per gateway per day (#1150).
 //
 // There was no way to see which edges were carrying sessions, so nothing surfaced that a
@@ -57,7 +72,7 @@ func nodeDailyFor(t *testing.T, repo *SQLiteMetricRepo, date, node string) int {
 func TestNodeDailySessionsCountsSessionsNotSamples(t *testing.T) {
 	repo := setupMetricRepo(t)
 
-	day := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	day := recentDay(10)
 	connected := day.Add(9 * time.Hour)
 
 	// One session on `us`, sampled six times across half an hour.
@@ -68,10 +83,10 @@ func TestNodeDailySessionsCountsSessionsNotSamples(t *testing.T) {
 	sample(t, repo, "eu", "beta", connected, connected)
 	sample(t, repo, "eu", "gamma", connected, connected)
 
-	if got := nodeDailyFor(t, repo, "2026-08-20", "us"); got != 1 {
+	if got := nodeDailyFor(t, repo, recentDay(10).Format("2006-01-02"), "us"); got != 1 {
 		t.Errorf("us: expected 1 session from 6 samples, got %d", got)
 	}
-	if got := nodeDailyFor(t, repo, "2026-08-20", "eu"); got != 2 {
+	if got := nodeDailyFor(t, repo, recentDay(10).Format("2006-01-02"), "eu"); got != 2 {
 		t.Errorf("eu: expected 2 sessions, got %d", got)
 	}
 }
@@ -81,7 +96,7 @@ func TestNodeDailySessionsCountsSessionsNotSamples(t *testing.T) {
 func TestNodeDailySessionsCountsAReconnectSeparately(t *testing.T) {
 	repo := setupMetricRepo(t)
 
-	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	day := recentDay(9)
 	first := day.Add(9 * time.Hour)
 	second := day.Add(14 * time.Hour)
 
@@ -89,7 +104,7 @@ func TestNodeDailySessionsCountsAReconnectSeparately(t *testing.T) {
 	sample(t, repo, "us", "alpha", first, first.Add(5*time.Minute))
 	sample(t, repo, "us", "alpha", second, second)
 
-	if got := nodeDailyFor(t, repo, "2026-08-21", "us"); got != 2 {
+	if got := nodeDailyFor(t, repo, recentDay(9).Format("2006-01-02"), "us"); got != 2 {
 		t.Errorf("expected 2 sessions across a reconnect, got %d", got)
 	}
 }
@@ -101,15 +116,15 @@ func TestNodeDailySessionsCountsAReconnectSeparately(t *testing.T) {
 func TestNodeDailySessionsTreatsControlAsANode(t *testing.T) {
 	repo := setupMetricRepo(t)
 
-	day := time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC)
+	day := recentDay(8).Add(10 * time.Hour)
 	sample(t, repo, "", "alpha", day, day)       // empty -> control
 	sample(t, repo, "control", "beta", day, day) // explicit
 	sample(t, repo, "us", "gamma", day, day)
 
-	if got := nodeDailyFor(t, repo, "2026-08-22", "control"); got != 2 {
+	if got := nodeDailyFor(t, repo, recentDay(8).Format("2006-01-02"), "control"); got != 2 {
 		t.Errorf("expected 2 control sessions, got %d", got)
 	}
-	if got := nodeDailyFor(t, repo, "2026-08-22", "us"); got != 1 {
+	if got := nodeDailyFor(t, repo, recentDay(8).Format("2006-01-02"), "us"); got != 1 {
 		t.Errorf("expected 1 us session, got %d", got)
 	}
 }
@@ -119,16 +134,16 @@ func TestNodeDailySessionsTreatsControlAsANode(t *testing.T) {
 func TestNodeDailySessionsSplitsByDay(t *testing.T) {
 	repo := setupMetricRepo(t)
 
-	d1 := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
-	d2 := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	d1 := recentDay(7).Add(10 * time.Hour)
+	d2 := recentDay(6).Add(10 * time.Hour)
 	sample(t, repo, "us", "alpha", d1, d1)
 	sample(t, repo, "us", "beta", d2, d2)
 	sample(t, repo, "us", "gamma", d2, d2)
 
-	if got := nodeDailyFor(t, repo, "2026-08-23", "us"); got != 1 {
+	if got := nodeDailyFor(t, repo, recentDay(7).Format("2006-01-02"), "us"); got != 1 {
 		t.Errorf("day 1: expected 1, got %d", got)
 	}
-	if got := nodeDailyFor(t, repo, "2026-08-24", "us"); got != 2 {
+	if got := nodeDailyFor(t, repo, recentDay(6).Format("2006-01-02"), "us"); got != 2 {
 		t.Errorf("day 2: expected 2, got %d", got)
 	}
 }
@@ -139,16 +154,16 @@ func TestNodeDailySessionsSplitsByDay(t *testing.T) {
 func TestNodeDailySessionsOmitsDaysANodeCarriedNothing(t *testing.T) {
 	repo := setupMetricRepo(t)
 
-	d1 := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
-	d2 := time.Date(2026, 8, 26, 10, 0, 0, 0, time.UTC)
+	d1 := recentDay(5).Add(10 * time.Hour)
+	d2 := recentDay(4).Add(10 * time.Hour)
 	sample(t, repo, "us", "alpha", d1, d1)
 	sample(t, repo, "eu", "beta", d1, d1)
 	sample(t, repo, "eu", "gamma", d2, d2) // us went quiet on d2
 
-	if got := nodeDailyFor(t, repo, "2026-08-26", "us"); got != -1 {
+	if got := nodeDailyFor(t, repo, recentDay(4).Format("2006-01-02"), "us"); got != -1 {
 		t.Errorf("expected no row for a node that carried nothing, got %d", got)
 	}
-	if got := nodeDailyFor(t, repo, "2026-08-26", "eu"); got != 1 {
+	if got := nodeDailyFor(t, repo, recentDay(4).Format("2006-01-02"), "eu"); got != 1 {
 		t.Errorf("eu on day 2: expected 1, got %d", got)
 	}
 }

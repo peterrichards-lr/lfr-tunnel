@@ -23,7 +23,7 @@ func setupProbeRepo(t *testing.T) *SQLiteRegionProbeRepo {
 // country panel counted sessions, so one user reconnecting repeatedly dominated it.
 func TestRegionProbesCountUsersNotSessions(t *testing.T) {
 	repo := setupProbeRepo(t)
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	now := recentDay(3).Add(12 * time.Hour)
 
 	// One user reconnects fifty times, getting slower each time.
 	for i := range 50 {
@@ -55,7 +55,7 @@ func TestRegionProbesCountUsersNotSessions(t *testing.T) {
 // TestRegionProbesPercentiles — the median and p90 have to describe the fleet.
 func TestRegionProbesPercentiles(t *testing.T) {
 	repo := setupProbeRepo(t)
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	now := recentDay(3).Add(12 * time.Hour)
 
 	for i, rtt := range []int{10, 20, 30, 40, 50, 60, 70, 80, 90, 500} {
 		user := string(rune('a'+i)) + "@example.com"
@@ -88,7 +88,7 @@ func TestRegionProbesPercentiles(t *testing.T) {
 // option anywhere -- which is exactly the case that justifies a new edge.
 func TestRegionProbesPoorlyServedUsesBestRegion(t *testing.T) {
 	repo := setupProbeRepo(t)
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	now := recentDay(3).Add(12 * time.Hour)
 
 	// Someone with a good option: slow to one region, fast to another. Not poorly served.
 	if err := repo.RecordRegionProbes("served@example.com", []RegionProbeSample{
@@ -121,7 +121,7 @@ func TestRegionProbesPoorlyServedUsesBestRegion(t *testing.T) {
 // missing data, and it must not be averaged in as though it were fast.
 func TestRegionProbesRecordsUnreachable(t *testing.T) {
 	repo := setupProbeRepo(t)
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	now := recentDay(3).Add(12 * time.Hour)
 
 	if err := repo.RecordRegionProbes("a@example.com", []RegionProbeSample{
 		{Region: "sa"},                // no answer

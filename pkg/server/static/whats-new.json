@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.48.40",
+    "release_date": "2026-09-19",
+    "features": [
+      "feat(gui): the tray connects on startup instead of waiting to be asked (#2076) (#2077)",
+      "fix(gui): the tray's Connect honours the flags the GUI was started with (#2074) (#2075)",
+      "docs(infosec): record the three exclusion rules per platform, not one (#2073)",
+      "fix(gui): serve this session's log, not a previous run's (#2071) (#2072)"
+    ]
+  },
+  {
     "version": "v1.48.39",
     "release_date": "2026-09-19",
     "features": [
@@ -67,22 +77,6 @@
       "test(hooks): make the status-vocabulary anti-vacuity control prove the floor (#1983)",
       "feat(server): notice when an edge stops reporting bandwidth (#1980) (#1982)",
       "feat(ops): turn remembered release steps into checks that tell you (#1978) (#1979)"
-    ]
-  },
-  {
-    "version": "v1.48.35",
-    "release_date": "2026-09-16",
-    "features": [
-      "fix(ci): test the tap credential instead of assuming a clone proved it (#1975) (#1976)",
-      "feat(geo): provider-neutral country_db_path and per-provider attribution (#1921) (#1963)",
-      "fix(server): record bandwidth for edge-served sessions (#1958) (#1970)",
-      "ci: make the tap/bucket update dispatchable, and stop it passing when it did nothing (#1969) (#1971)",
-      "fix(privacy): bring the served /privacy page up to PRIVACY.md, and gate it (#1954) (#1966)",
-      "fix(test): compare the token path as JSON-encoded, unbreaking the Windows suite (#1973)",
-      "fix(portal): tell a broken edge-provisioner token from no sidecar (#1956) (#1965)",
-      "feat(client): move a running client when a closer gateway appears (#1937) (#1962)",
-      "fix(portal): tell a mistyped geolite2_db_path from an unset one (#1938) (#1957)",
-      "docs: disclose the anonymous geographic distribution in PRIVACY.md (#1955)"
     ]
   }
 ]

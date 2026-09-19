@@ -5,7 +5,7 @@ you would otherwise retype on every run: your subdomain, your ports, your gatewa
 controls.
 
 Nothing forces you to have one. But one of its settings has no equivalent anywhere else:
-**`server_url:` names a gateway without pinning the client to it**, while `-server` and the
+**`server_url:` names a gateway without pinning the client to it**, while `-pin` and the
 `LFT_*` server variables pin, silently disabling region election and failover (#1691). If you
 read one section of this page, read [Gateways, regions and
 failover](#gateways-regions-and-failover).
@@ -76,7 +76,7 @@ Resolved in this order, each step overriding the one before it:
    `~/.config/lfr/secrets.ps1`.
 5. **Environment variables** — `LFT_CLIENT_*` is checked first, then the shorter `LFT_*` alias.
 6. **Command-line flags.**
-7. **`-gateway <url>`**, which replaces the gateway after everything above — see below.
+7. **`-bootstrap <url>`**, which replaces the gateway after everything above — see below.
 8. **Region election**, which replaces the gateway again with the closest region's, unless the
    client is pinned or `region:` is set.
 
@@ -113,14 +113,14 @@ Settings not listed here can only be set in the config file.
 
 | Key | Flag | Environment |
 | --- | --- | --- |
-| `server_url` | `-gateway <url>` (no pinning), `-server <url>` (**pins**) | `LFT_CLIENT_SERVER`, `LFT_SERVER_URL`, `LFT_SERVER` (all **pin**) |
+| `server_url` | `-bootstrap <url>` (no pinning), `-pin <url>` (**pins**) | `LFT_CLIENT_SERVER`, `LFT_SERVER_URL`, `LFT_SERVER` (all **pin**) |
 | `auth_token` | `-token` | `LFT_CLIENT_TOKEN`, `LFT_TOKEN` |
 | `token_file` | — | `LFT_TOKEN_FILE` (**moves** the path this key names) |
 | `subdomain` | `-subdomain` | `LFT_CLIENT_SUBDOMAIN`, `LFT_SUBDOMAIN` |
 | `custom_domain` | `-domain` | `LFT_CLIENT_CUSTOM_DOMAIN`, `LFT_CUSTOM_DOMAIN` |
 | `ports` | `-ports 8080,3000` | `LFT_CLIENT_PORTS` |
 | `target_host` | `-target-host` | `LFT_TARGET_HOST` |
-| `region` | `-region` | `LFT_CLIENT_REGION`, `LFT_REGION` |
+| `region` | `-prefer-region` | `LFT_CLIENT_REGION`, `LFT_REGION` |
 | `passcode` | `-passcode` | `LFT_CLIENT_PASSCODE`, `LFT_PASSCODE` |
 | `whitelist_ips` | `-whitelist-ip` | `LFT_CLIENT_WHITELIST_IPS`, `LFT_WHITELIST_IPS` |
 | `latency` | `-latency` | `LFT_CLIENT_LATENCY`, `LFT_LATENCY` |
@@ -144,14 +144,14 @@ wrong continent and stops when that one gateway stops.
 | How you supply it | Elects the closest region | Fails over |
 | --- | --- | --- |
 | `server_url:` in this file | ✅ | ✅ |
-| `-gateway <url>` | ✅ | ✅ |
-| `-server <url>` | ❌ pinned | ❌ |
+| `-bootstrap <url>` | ✅ | ✅ |
+| `-pin <url>` | ❌ pinned | ❌ |
 | `LFT_SERVER_URL` / `LFT_CLIENT_SERVER` / `LFT_SERVER` | ❌ pinned | ❌ |
 
 `server_url:` is a **starting point**: the client asks that gateway for the region list, probes
 each region, moves to whichever answers fastest, and re-registers elsewhere if its gateway goes
-away. Pinning is intended behaviour for `-server` — sometimes one specific gateway is exactly
-what you want — but it is a different intent, so passing `-gateway` and `-server` together is
+away. Pinning is intended behaviour for `-pin` — sometimes one specific gateway is exactly
+what you want — but it is a different intent, so passing `-bootstrap` and `-pin` together is
 refused rather than resolved by a precedence rule.
 
 The client prints a notice when it is pinned and more than one region exists. If you see it, and
@@ -189,7 +189,7 @@ list changes.
 
 Two exceptions, both deliberate:
 
-- A **pinned** client (`-server`, or the `LFT_SERVER*` variables) never moves. You named a
+- A **pinned** client (`-pin`, or the `LFT_SERVER*` variables) never moves. You named a
   gateway; that is the whole point of naming one.
 - A client with `region:` set moves only to **the region it named**, and only once that region is
   available again. It is never sent somewhere it did not ask for.
@@ -329,7 +329,7 @@ through. Set only the one you mean.
 | `bandwidth` | string | *empty* — unthrottled | Simulated bandwidth ceiling. Accepts `bps`, `kbps`, `mbps`, `gbps` and byte-per-second forms such as `kb/s`; a bare number is bytes per second. Example: `"512kbps"`. |
 | `theme` | string | *empty* — your portal preference | Theme for the injected tunnel banner: `light`, `dark`, `system` or `time`. Example: `"dark"`. |
 | `log_dir` | string | `~/.lfr-tunnel/logs` | Where the persistent traffic and error logs are written. A leading `~` is expanded. Changing it applies to the next run: the logs already open cannot be moved. Example: `"~/tunnel-logs"`. |
-| `hooks` | map | *empty* — nothing runs | Shell commands run when the tunnel moves between gateways: `warning_received`, `stopping`, `stopped`, `starting`, `started`. Each is passed to `/bin/sh -c` with `LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION` and `LFT_SUBDOMAIN` set, bounded at 15 seconds, and its exit status is logged but cannot veto the move. A pinned (`-server`) client is never warned off a gateway and never moves, so it fires neither `warning_received` nor `stopping`; since [#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946) it does reconnect to its own gateway after a restart, which fires the other three. See [Client Lifecycle Hooks](getting_started.md#client-lifecycle-hooks-failover-automation) for the full contract. |
+| `hooks` | map | *empty* — nothing runs | Shell commands run when the tunnel moves between gateways: `warning_received`, `stopping`, `stopped`, `starting`, `started`. Each is passed to `/bin/sh -c` with `LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION` and `LFT_SUBDOMAIN` set, bounded at 15 seconds, and its exit status is logged but cannot veto the move. A pinned (`-pin`) client is never warned off a gateway and never moves, so it fires neither `warning_received` nor `stopping`; since [#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946) it does reconnect to its own gateway after a restart, which fires the other three. See [Client Lifecycle Hooks](getting_started.md#client-lifecycle-hooks-failover-automation) for the full contract. |
 
 ---
 
@@ -513,4 +513,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*
+*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*

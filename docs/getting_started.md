@@ -291,24 +291,24 @@ If you do need to name one, **the flag you choose changes the behaviour**:
 
 | How you supply it | Picks the closest | Fails over |
 |---|---|---|
-| `-gateway <url>` | ✅ | ✅ |
+| `-bootstrap <url>` | ✅ | ✅ |
 | `server_url:` in your client config file | ✅ | ✅ |
-| `-server <url>` | ❌ pinned to that gateway | ❌ |
+| `-pin <url>` | ❌ pinned to that gateway | ❌ |
 | `LFT_SERVER_URL` / `LFT_CLIENT_SERVER` / `LFT_SERVER` | ❌ pinned | ❌ |
 
 ```bash
 # Start from this gateway, but still pick the closest and fail over:
-lfr-tunnel -gateway https://your-gateway.example.com -subdomain your-name-se
+lfr-tunnel -bootstrap https://your-gateway.example.com -subdomain your-name-se
 
 # Or persist it, with the same effect:
 #   server_url: "https://your-gateway.example.com"
 ```
 
-`-server` pins deliberately -- use it when you want one specific gateway and nothing else. But
+`-pin` pins deliberately -- use it when you want one specific gateway and nothing else. But
 if you pin a gateway on another continent you stay there however close an edge is, and your
 tunnel drops for the whole window if that gateway is scheduled to stop.
 
-To prefer a region while keeping failover, use `-region <name>`. To re-run the latency probe
+To prefer a region while keeping failover, use `-prefer-region <name>`. To re-run the latency probe
 after a gateway has come back, add `-refresh-region` once -- the election is otherwise cached for
 24 hours.
 
@@ -419,7 +419,7 @@ In a planned migration the full sequence is
 produces the same sequence without `warning_received`. If every candidate region is exhausted,
 `started` does not fire -- there is no new session to report.
 
-A client that has nowhere to fail over to -- pinned with `-server`, or offered no region list --
+A client that has nowhere to fail over to -- pinned with `-pin`, or offered no region list --
 re-registers with the gateway it is already on when its session ends, which is what carries it
 across a gateway restart ([#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946)).
 That fires `stopped` → `starting` → `started`, with no `stopping`: nothing announced the stop,
@@ -430,7 +430,7 @@ Three cases where nothing fires, deliberately:
 * **The first connection and a normal shutdown.** `starting`/`started` are about moving to a
   different gateway; the initial connect prints its URLs and `stopping`/`stopped` on Ctrl+C
   would delay the exit for a hook whose work is already done.
-* **A client pinned with `-server`, for `warning_received` and `stopping`.** A pinned client
+* **A client pinned with `-pin`, for `warning_received` and `stopping`.** A pinned client
   never fails over ([#1275](https://github.com/peterrichards-lr/lfr-tunnel/issues/1275)), so it
   is not warned off a gateway and never moves ahead of one. It does now reconnect to its own
   gateway after a restart ([#1946](https://github.com/peterrichards-lr/lfr-tunnel/issues/1946)),
@@ -516,4 +516,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*
+*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*

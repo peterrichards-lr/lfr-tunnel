@@ -48,7 +48,7 @@ For environments where local native binary execution is completely restricted, r
 docker run -d --name lfr-tunnel \
   -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
   peterjrichards/lfr-tunnel:latest \
-  -server https://tunnel.lfr-demo.se \
+  -pin https://tunnel.lfr-demo.se \
   -subdomain your-name-se \
   -ports 8080
 ```
@@ -177,7 +177,7 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
       -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
       -e LFT_TARGET_HOST="host.docker.internal" \
       peterjrichards/lfr-tunnel:latest \
-      -server https://tunnel.lfr-demo.se \
+      -pin https://tunnel.lfr-demo.se \
       -subdomain dev-tomcat \
       -ports 8080
     ```
@@ -188,7 +188,7 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
       -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
       -e LFT_TARGET_HOST="host.docker.internal" \
       peterjrichards/lfr-tunnel:latest \
-      -server https://tunnel.lfr-demo.se \
+      -pin https://tunnel.lfr-demo.se \
       -subdomain dev-tomcat \
       -ports 8080
     ```
@@ -401,4 +401,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*

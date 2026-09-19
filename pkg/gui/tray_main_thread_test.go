@@ -109,9 +109,14 @@ func TestTheMenuIsBuiltBeforeTheTrayRuns(t *testing.T) {
 			"SetMenu then executes off it, which is the #2062 crash")
 	}
 
-	// And the build must not be inside the watcher goroutine.
-	if g := strings.Index(body, "go func()"); g >= 0 && build > g {
-		t.Error("buildMenu is called from inside the watcher goroutine -- it calls SetMenu, " +
-			"which systray does not dispatch to the main thread")
+	// And the build must not be inside any goroutine StartGUI spawns. The watcher used to be
+	// an inline `go func()` here and is now `go watchRunningState(...)`, so match the spawn
+	// rather than one spelling of it.
+	if g := goSpawn.FindStringIndex(body); g != nil && build > g[0] {
+		t.Error("buildMenu is called from inside a goroutine StartGUI spawns -- it calls " +
+			"SetMenu, which systray does not dispatch to the main thread")
 	}
 }
+
+// Either spelling of a goroutine spawn: `go func()` or `go someNamedFunction(`.
+var goSpawn = regexp.MustCompile(`\bgo\s+\w+\(|\bgo\s+func\(`)

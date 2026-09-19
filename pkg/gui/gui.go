@@ -487,8 +487,49 @@ func acquireGUILock() bool {
 	return true
 }
 
+// watchRunningState keeps the tray in step with the client, which starts and stops
+// independently of it: from the menu, from a terminal, at startup (#2076), or by failing.
+//
+// Lifted out of StartGUI when the startup connect pushed that function past the complexity
+// limit. It is otherwise unchanged, and the constraint on it is unchanged too: this runs on its
+// own goroutine for the life of the process, so it may only update menu items IN PLACE.
+// systray dispatches SetLabel/SetDisabled/SetChecked to the main thread and does not dispatch
+// anything that alters the menu's shape, which is the #2062 crash.
+func watchRunningState(cfg *config.ClientConfig, menu *trayMenu, running bool, url string) {
+	lastRunning := running
+	activeURL := url
+
+	for {
+		time.Sleep(1 * time.Second)
+		state, _, isRunningNow := getRunningState(cfg.Subdomain)
+
+		var urlStr string
+		if isRunningNow && state != nil && len(state.PublicURLs) > 0 {
+			urlStr = state.PublicURLs[0]
+		}
+
+		if isRunningNow != lastRunning || urlStr != activeURL {
+			if isRunningNow && !lastRunning {
+				tempServer.Stop()
+			} else if !isRunningNow && lastRunning {
+				if err := tempServer.Start(); err != nil {
+					slog.Error("settings UI unavailable", "error", err)
+				}
+			}
+			lastRunning = isRunningNow
+			activeURL = urlStr
+			menu.refresh(isRunningNow, urlStr)
+		}
+	}
+}
+
 // StartGUI initializes and runs the system tray UI.
-func StartGUI(cfg *config.ClientConfig) {
+//
+// autoConnect brings the tunnel up at startup rather than waiting for the Connect menu item
+// (#2076). It is the default; -no-autoconnect turns it off, which matters because Launch on
+// Login plus auto-connect means a tunnel appears at login without anyone clicking anything, and
+// that has to be refusable.
+func StartGUI(cfg *config.ClientConfig, autoConnect bool) {
 	if !acquireGUILock() {
 		slog.Warn("Another instance of Liferay Tunnel GUI is already running. Exiting.")
 		return
@@ -505,6 +546,19 @@ func StartGUI(cfg *config.ClientConfig) {
 		}
 	}
 
+	// Connect without being asked (#2076). The settings server above still starts: the client
+	// takes a moment to bind its Inspector, and if it never does, that server is the only place
+	// the settings page is served from. The watcher below stops it once the client is up.
+	//
+	// Failure here is not fatal to the tray. The menu is built disconnected either way, and
+	// Connect still works, so a client that will not start leaves exactly the GUI that existed
+	// before this did.
+	if autoConnectOnStart(autoConnect, isRunning) {
+		if err := startClient(); err != nil {
+			slog.Error("auto-connect failed; use the tray's Connect to retry", "error", err)
+		}
+	}
+
 	// Built HERE, on the main goroutine, before Run() takes the thread (#2062). The watcher
 	// below only ever updates items in place, which systray dispatches to the main thread.
 	state, _, _ := getRunningState(cfg.Subdomain)
@@ -514,33 +568,7 @@ func StartGUI(cfg *config.ClientConfig) {
 	}
 	menu := buildMenu(tray, cfg, isRunning, initialURL)
 
-	go func() {
-		lastRunning := isRunning
-		activeURL := initialURL
-
-		for {
-			time.Sleep(1 * time.Second)
-			state, _, isRunningNow := getRunningState(cfg.Subdomain)
-
-			var urlStr string
-			if isRunningNow && state != nil && len(state.PublicURLs) > 0 {
-				urlStr = state.PublicURLs[0]
-			}
-
-			if isRunningNow != lastRunning || urlStr != activeURL {
-				if isRunningNow && !lastRunning {
-					tempServer.Stop()
-				} else if !isRunningNow && lastRunning {
-					if err := tempServer.Start(); err != nil {
-						slog.Error("settings UI unavailable", "error", err)
-					}
-				}
-				lastRunning = isRunningNow
-				activeURL = urlStr
-				menu.refresh(isRunningNow, urlStr)
-			}
-		}
-	}()
+	go watchRunningState(cfg, menu, isRunning, initialURL)
 
 	tray.Show()
 
@@ -743,30 +771,60 @@ func clientArgsForConnect(guiArgs []string) []string {
 		case a == "-background" || a == "--background" ||
 			strings.HasPrefix(a, "-background=") || strings.HasPrefix(a, "--background="):
 			continue // re-added below, so passing it twice cannot happen
+		case a == "-no-autoconnect" || a == "--no-autoconnect" ||
+			strings.HasPrefix(a, "-no-autoconnect=") || strings.HasPrefix(a, "--no-autoconnect="):
+			continue // describes the tray's startup (#2076); meaningless to the client
 		}
 		out = append(out, a)
 	}
 	return append(out, "-background")
 }
 
+// startClient spawns the background client this tray fronts, with everything the GUI was
+// started with, so the tray honours what the user asked for on the command line (#2074).
+//
+// Both ways of connecting go through here -- the Connect menu item and the startup
+// auto-connect (#2076) -- so the two cannot drift apart. They used to be one call site; the
+// moment there were two, "Connect passes the flags and startup does not" became a bug waiting
+// to be written.
+func startClient() error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable path: %w", err)
+	}
+	cmd := exec.Command(execPath, clientArgsForConnect(os.Args[1:])...) //nolint:gosec
+	return cmd.Start()
+}
+
+// autoConnectOnStart decides whether starting the tray should also bring the tunnel up (#2076).
+//
+// The GUI used to start idle and wait to be asked, so Launch on Login produced an icon and no
+// tunnel, and -- after #2074 -- a tray that knew which region the user had named and did nothing
+// with it until someone opened the menu.
+//
+// An already-running client is not a reason to connect: the tray attaches to it, and a second
+// client would race the first for the same subdomain.
+func autoConnectOnStart(enabled, isRunning bool) bool {
+	return enabled && !isRunning
+}
+
 func handleToggle(cfg *config.ClientConfig) {
 	_, sub, isRunning := getRunningState(cfg.Subdomain)
+
+	if !isRunning {
+		if err := startClient(); err != nil {
+			slog.Error("Failed to start the tunnel client", "error", err)
+		}
+		return
+	}
 
 	execPath, err := os.Executable()
 	if err != nil {
 		slog.Error("Failed to resolve executable path", "error", err)
 		return
 	}
-
-	if isRunning {
-		cmd := exec.Command(execPath, "-stop", "-subdomain", sub)
-		_ = cmd.Run() //nolint:errcheck
-	} else {
-		// Everything the GUI was started with, so the tray honours what the user asked for
-		// on the command line (#2074).
-		cmd := exec.Command(execPath, clientArgsForConnect(os.Args[1:])...) //nolint:gosec
-		_ = cmd.Start()                                                     //nolint:errcheck
-	}
+	cmd := exec.Command(execPath, "-stop", "-subdomain", sub)
+	_ = cmd.Run() //nolint:errcheck
 }
 
 func handleCopyURLString(urlStr string) {

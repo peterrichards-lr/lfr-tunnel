@@ -730,6 +730,62 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 // on; a second is far finer than the minute-granularity warnings it reacts to.
 var shutdownMigrationPollInterval = time.Second
 
+// plannedMoveDrainBudget is how long a planned move waits for in-flight requests to finish
+// before cancelling the session anyway (#2059).
+//
+// The move exists because the gateway warned us it is stopping, and those warnings arrive with
+// minutes to spare -- 282 seconds in the production capture that prompted this. Cancelling
+// within one second of the warning, as this used to, kills whatever is mid-flight: two requests
+// died that way, at 945ms and 357ms against a steady-state 1245ms for the same path.
+//
+// Bounded twice over. This ceiling stops a hung request holding the move open, and the caller
+// additionally refuses to wait past the announced shutdown -- a drain that outlived the gateway
+// would be worse than the abrupt cancel it replaces.
+//
+// A var, and env-overridable, for the same reason plannedShutdownCooldown is (#1374): a test
+// must not have to sit out a real wait. Nothing documents it as user configuration.
+var plannedMoveDrainBudget = cooldownFromEnvClient("LFT_PLANNED_MOVE_DRAIN", 10*time.Second)
+
+// cooldownFromEnvClient reads a test override, falling back to the production value. An
+// unparseable value is ignored rather than fatal: a typo in a harness must not change how the
+// client behaves in a way nobody notices.
+func cooldownFromEnvClient(key string, fallback time.Duration) time.Duration {
+	if raw := os.Getenv(key); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
+			return d
+		}
+	}
+	return fallback
+}
+
+// waitForInFlight blocks until no request is being proxied, or until the budget expires.
+// Returns the number still in flight when it gave up, so the caller can say so.
+//
+// ActiveConnections is incremented at the top of interceptorTransport.RoundTrip and decremented
+// on its way out, so it counts exactly the requests that a cancel would cut off.
+func (e *InterceptorEngine) waitForInFlight(ctx context.Context, budget time.Duration) int32 {
+	if budget <= 0 {
+		return atomic.LoadInt32(&e.ActiveConnections)
+	}
+	deadline := time.After(budget)
+	// Finer than the second-granularity poll around it: the point is to leave as soon as the
+	// last request lands, not to add a second to every move.
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if n := atomic.LoadInt32(&e.ActiveConnections); n <= 0 {
+			return 0
+		}
+		select {
+		case <-ctx.Done():
+			return atomic.LoadInt32(&e.ActiveConnections)
+		case <-deadline:
+			return atomic.LoadInt32(&e.ActiveConnections)
+		case <-tick.C:
+		}
+	}
+}
+
 // StartShutdownMigrator ends the current session when the gateway announces it is stopping,
 // so the client moves while that gateway is still up rather than being dropped by it (#1246).
 //
@@ -768,6 +824,27 @@ func (e *InterceptorEngine) StartShutdownMigrator(ctx context.Context, cancel co
 				at, _, _ := e.ConsumeShutdownMigrationPeek()
 				slog.Info(fmt.Sprintf("[Client] Gateway is stopping in %ds; moving to another gateway now rather than waiting to be dropped.",
 					int(time.Until(time.Unix(at, 0)).Seconds())))
+
+				// Let whatever is mid-flight finish first (#2059). Cancelling immediately
+				// killed in-flight requests for no reason: the gateway is still up -- that is
+				// the whole point of the warning -- and there were 282 seconds left in the
+				// production case this comes from.
+				//
+				// Never wait past the announced shutdown, and never past the ceiling: a drain
+				// that outlives the gateway is worse than the abrupt cancel it replaces.
+				budget := plannedMoveDrainBudget
+				if at > 0 {
+					if remaining := time.Until(time.Unix(at, 0)); remaining < budget {
+						budget = remaining
+					}
+				}
+				if left := e.waitForInFlight(ctx, budget); left > 0 {
+					slog.Info(fmt.Sprintf("[Client] Moving with %d request(s) still in flight; they will not complete.", left))
+					e.LogEvent("info", "planned_move_drain_incomplete", map[string]any{
+						"in_flight": left,
+						"budget":    budget.String(),
+					})
+				}
 				cancel()
 				return
 			}

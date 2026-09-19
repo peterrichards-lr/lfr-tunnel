@@ -112,16 +112,51 @@ Every release binary is covered by a **GitHub Artifact Attestation**—a tamper-
 
 To simplify EDR administration and avoid wide path exclusions, the project enforces **standardized canonical installation paths** rather than random temp paths or multiple package-manager paths:
 
-| Platform | Standard Canonical Path | EDR Console Path Exclusion |
-|---|---|---|
-| **macOS** | `$HOME/liferay/lfr-tunnel/lfr-tunnel` | `*/liferay/lfr-tunnel/lfr-tunnel` |
-| **Linux** | `$HOME/liferay/lfr-tunnel/lfr-tunnel` | `*/liferay/lfr-tunnel/lfr-tunnel` |
-| **Windows** | `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe` | `*\liferay\lfr-tunnel\lfr-tunnel.exe` |
+**Three rules per platform, not one.** The binary alone was not enough: Liferay InfoSec confirmed
+that the behavioural and machine-learning engines were not satisfied by a binary exclusion, and
+the **symlink and the utility had to be excluded as well**.
 
-These are the paths and exclusions **agreed with the S1 team**, and the installers place the
-binary exactly there. The exclusions are wildcards on the leading path only: the final two
-directory segments and the binary name are matched literally, so a client installed anywhere else
-is not covered.
+### macOS — the rules as configured
+
+```
+/Users/*/liferay/lfr-tunnel/lfr-tunnel
+/Users/*/.ldm/bin/lfr-tunnel
+/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel
+```
+
+### Linux — the same shape
+
+```
+/home/*/liferay/lfr-tunnel/lfr-tunnel
+/home/*/.ldm/bin/lfr-tunnel
+/opt/*/bin/lfr-tunnel
+```
+
+### Windows
+
+```
+*\liferay\lfr-tunnel\lfr-tunnel.exe
+```
+
+| What each rule covers | Why it is needed |
+|---|---|
+| `…/liferay/lfr-tunnel/lfr-tunnel` | the installed binary — where `install.sh` / `install.ps1` place it |
+| `…/.ldm/bin/lfr-tunnel` | the **symlink** the installer creates for LDM auto-discovery (`ln -sf "$INSTALL_PATH" "$HOME/.ldm/bin/lfr-tunnel"`, a hardlink on Windows), so LDM does not download an unwhitelisted copy of its own (#1311) |
+| `/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel`, `/opt/*/bin/lfr-tunnel` | a Homebrew or package-manager install, which lands outside `$HOME` |
+
+The username segment is a wildcard (`/Users/*/`, `/home/*/`); everything after it is matched
+literally.
+
+> [!IMPORTANT]
+> **Installing anywhere else defeats all three rules, including the symlink one.** The installers
+> honour `LFT_INSTALL_DIR` (and the per-platform `LFR_TUNNEL_*_INSTALL_DIR` variables), so a
+> developer who sets one installs outside the exclusion — and the `.ldm/bin` symlink then *resolves*
+> to that unexcluded target, so being on a covered path does not help it.
+>
+> Observed in practice: a workstation with `LFT_INSTALL_DIR="$HOME/runningpoc/bin"` in its shell
+> profile had every install and every `--upgrade` redirected there for months. `--upgrade` replaces
+> the binary in place, so it stayed current *and* stayed unexcluded. If a machine is alerting,
+> check `which lfr-tunnel` before anything else.
 
 > [!NOTE]
 > Standardizing client downloads on the gateway ensures that developers use these specific directories instead of homebrew/scoop paths, making a single wildcard rule sufficient.
@@ -188,10 +223,10 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 1. **Verify Binary Authenticity:** Verify the checksum and GitHub OIDC attestation for the downloaded executables using the `gh attestation verify` command.
 2. **Apply Code Signing Exceptions:** Add the Apple Team ID / Developer ID CN and Windows Certificate CN to your EDR's trusted publisher list.
-3. **Apply Wildcard Path Exclusions:** Add the agreed installation path exclusions to the EDR profile -- `*/liferay/lfr-tunnel/lfr-tunnel` on macOS and Linux, `*\liferay\lfr-tunnel\lfr-tunnel.exe` on Windows.
+3. **Apply Wildcard Path Exclusions:** Add **all three** rules per platform from section 3 -- the installed binary, the `.ldm/bin` symlink, and the package-manager path. A binary-only exclusion is not sufficient: the behavioural and ML engines required the symlink and the utility as well.
 4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the audited public image **`your-docker-hub-user/lfr-tunnel`** (or `peterjrichards/lfr-tunnel` as a template) hosted on Docker Hub.
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-30* | *Last Reviewed: 2026-08-30*
+*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*

@@ -1102,6 +1102,23 @@ func SaveClientConfig(path string, cfg *ClientConfig) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+
+	// Keep the previous file before truncating it (#2056). Every save rewrites the whole
+	// document, so a caller that sends a partial one -- a form owning a subset of the fields,
+	// a truncated request -- overwrites settings it never mentioned. Merge semantics in the
+	// handlers are the fix; this is the net underneath them, and it costs one file copy.
+	//
+	// Best effort on purpose: a config that cannot be backed up is still a config the user
+	// asked to save, and failing the save because the BACKUP failed would be a worse outcome
+	// than the risk it guards. Mode 0600, matching the file it copies -- it holds the same
+	// secrets.
+	if existing, err := os.ReadFile(path); err == nil {
+		if err := os.WriteFile(path+".bak", existing, 0600); err != nil {
+			// Deliberately not fatal; see above.
+			_ = err
+		}
+	}
+
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err

@@ -301,27 +301,78 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
-func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ServerURL          string `json:"server_url"`
-		AuthToken          string `json:"auth_token"`
-		TargetHost         string `json:"target_host"`
-		DestPort           int    `json:"dest_port"`
-		Subdomain          string `json:"subdomain"`
-		PreserveHost       bool   `json:"preserve_host"`
-		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-		// Pointers, so an ABSENT field is distinguishable from one deliberately set empty
-		// (#1793). These two are owned by the Access Control tab, which posts to
-		// /api/access-control; the Settings tab has no control for them and stopped sending
-		// them in #1762. As plain values they decoded to "" and 0 and were written over the
-		// user's passcode -- silently removing the access control from their tunnel.
-		//
-		// #1762 fixed the identical handler in pkg/client/inspector.go and missed this one,
-		// which serves the SAME client.DashboardHTML page. AuthToken above already carries a
-		// guard against the same hazard.
-		Passcode  *string `json:"passcode"`
-		RateLimit *int    `json:"rate_limit"`
+// settingsFormRequest is the Settings form's payload.
+//
+// EVERY field is a pointer, so an ABSENT one is distinguishable from one deliberately set empty
+// (#1793, #1762, #2056). Omitting a field means "leave it alone", never "clear it".
+//
+// This handler and pkg/client/inspector.go's serve the SAME client.DashboardHTML page and must
+// agree about what a partial save means. They have disagreed before: #1762 fixed the inspector
+// and missed this one. Both are pointered in full now.
+//
+// A named type with methods rather than an anonymous struct inside the handler: the nil checks
+// are the bulk of the decoding, and inlining them put handleConfigPost over the gocyclo ceiling
+// at 27. They are behaviour of the payload, not of the HTTP handler.
+type settingsFormRequest struct {
+	ServerURL          *string `json:"server_url"`
+	AuthToken          *string `json:"auth_token"`
+	TargetHost         *string `json:"target_host"`
+	DestPort           *int    `json:"dest_port"`
+	Subdomain          *string `json:"subdomain"`
+	PreserveHost       *bool   `json:"preserve_host"`
+	InsecureSkipVerify *bool   `json:"insecure_skip_verify"`
+	// Owned by the Access Control tab, which posts to /api/access-control; the Settings
+	// tab has no control for them and stopped sending them in #1762.
+	Passcode  *string `json:"passcode"`
+	RateLimit *int    `json:"rate_limit"`
+}
+
+// anyFieldSet reports whether the caller named anything at all. A body naming no field is a
+// malformed or truncated request, not a save (#2056) -- answering 200 to it is how the original
+// defect stayed invisible.
+func (q *settingsFormRequest) anyFieldSet() bool {
+	return q.ServerURL != nil || q.AuthToken != nil || q.TargetHost != nil ||
+		q.DestPort != nil || q.Subdomain != nil || q.PreserveHost != nil ||
+		q.InsecureSkipVerify != nil || q.Passcode != nil || q.RateLimit != nil
+}
+
+// applyTo copies only the fields the caller actually sent onto cfg.
+func (q *settingsFormRequest) applyTo(cfg *config.ClientConfig) {
+	if q.ServerURL != nil {
+		cfg.ServerURL = *q.ServerURL
 	}
+	// SetInlineAuthToken, not a bare assignment: a token whose provenance is not declared is
+	// not written to the config file at all (#1772). The mask is what GET returns, so a form
+	// round-tripping GET->POST sends it back; writing it would replace the real token with
+	// eight asterisks.
+	if q.AuthToken != nil && *q.AuthToken != "********" && *q.AuthToken != "" {
+		cfg.SetInlineAuthToken(*q.AuthToken)
+	}
+	if q.TargetHost != nil {
+		cfg.TargetHost = *q.TargetHost
+	}
+	if q.DestPort != nil {
+		cfg.Ports = []int{*q.DestPort}
+	}
+	if q.Subdomain != nil {
+		cfg.Subdomain = *q.Subdomain
+	}
+	if q.PreserveHost != nil {
+		cfg.PreserveHost = *q.PreserveHost
+	}
+	if q.InsecureSkipVerify != nil {
+		cfg.InsecureSkipVerify = *q.InsecureSkipVerify
+	}
+	if q.Passcode != nil {
+		cfg.Passcode = *q.Passcode
+	}
+	if q.RateLimit != nil {
+		cfg.RateLimit = *q.RateLimit
+	}
+}
+
+func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
+	var req settingsFormRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
@@ -330,35 +381,25 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if !req.anyFieldSet() {
+		w.WriteHeader(http.StatusBadRequest)
+		if _, err := w.Write([]byte(`{"error":"No settings were supplied"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
+		return
+	}
+
 	cfg, cfgErr := loadUIConfig()
 	if cfgErr != nil {
-		// The save below replaces the file rather than updating it, so any key the
-		// settings form does not carry is dropped. Still better than refusing to save --
-		// this form is the user's way out of a config that will not parse -- but it
-		// should not happen silently.
+		// Only the fields the form actually sent are applied now (#2056), but a config that
+		// would not parse starts from defaults, so everything it held is still lost. Still
+		// better than refusing to save -- this form is the user's way out of a config that
+		// will not parse -- but it should not happen silently.
 		slog.Warn("Saving settings over a client config that could not be read",
 			"error", cfgErr)
 	}
 
-	cfg.ServerURL = req.ServerURL
-	// SetInlineAuthToken, not a bare assignment: a token whose provenance is not
-	// declared is not written to the config file at all (#1772).
-	if req.AuthToken != "********" && req.AuthToken != "" {
-		cfg.SetInlineAuthToken(req.AuthToken)
-	}
-	cfg.TargetHost = req.TargetHost
-	cfg.Ports = []int{req.DestPort}
-	cfg.Subdomain = req.Subdomain
-	cfg.PreserveHost = req.PreserveHost
-	cfg.InsecureSkipVerify = req.InsecureSkipVerify
-	// Only when the caller actually sent them. Omitting a field means "leave it alone",
-	// not "clear it".
-	if req.Passcode != nil {
-		cfg.Passcode = *req.Passcode
-	}
-	if req.RateLimit != nil {
-		cfg.RateLimit = *req.RateLimit
-	}
+	req.applyTo(cfg)
 
 	if err := config.SaveClientConfig("", cfg); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

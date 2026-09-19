@@ -1,5 +1,19 @@
 [
   {
+    "version": "v1.48.39",
+    "release_date": "2026-09-19",
+    "features": [
+      "fix(test): derive the keepalive threshold from the deadline, not the ping interval (#2068) (#2069)",
+      "feat(client): name the routing flags after what they do, keeping the old spellings (#2061) (#2067)",
+      "fix(client): let in-flight requests finish before a planned move (#2059) (#2066)",
+      "fix(test): anchor the analytics fixtures to now, not to fixed calendar dates (#2064) (#2065)",
+      "fix(gui): build the tray menu once on the main thread instead of rebuilding it from a goroutine (#2062) (#2063)",
+      "docs(skill): how to exercise failover and failback against a live node (#2060)",
+      "fix(client,gui): a partial config save must keep the fields it did not send (#2056) (#2058)",
+      "fix(gui): let the settings server bind a free port, and report whether it did (#2055) (#2057)"
+    ]
+  },
+  {
     "version": "v1.48.38",
     "release_date": "2026-09-18",
     "features": [
@@ -69,20 +83,6 @@
       "feat(client): move a running client when a closer gateway appears (#1937) (#1962)",
       "fix(portal): tell a mistyped geolite2_db_path from an unset one (#1938) (#1957)",
       "docs: disclose the anonymous geographic distribution in PRIVACY.md (#1955)"
-    ]
-  },
-  {
-    "version": "v1.48.34",
-    "release_date": "2026-09-16",
-    "features": [
-      "fix(client): stop the incumbent gateway winning its own latency election (#1947) (#1952)",
-      "fix(client): survive a gateway restart instead of ending every tunnel (#1951)",
-      "fix(portal): wait for a requested diagnostic bundle instead of nothing (#1944) (#1950)",
-      "fix(client): refuse an unknown bare argument instead of silently ignoring it (#1949)",
-      "fix(portal-v1): keep the Node Placement caveat with the table it annotates (#1931) (#1942)",
-      "fix(geo): decode both known country schemas, not just MaxMind's (#1943) (#1935)",
-      "docs(server): document geolite2_db_path setup, providers and licensing (#1917) (#1941)",
-      "fix(portal): print only the report, not everything around it (#1916) (#1936)"
     ]
   }
 ]

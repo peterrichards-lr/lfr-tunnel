@@ -373,29 +373,48 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		if r.Method == http.MethodPost {
+			// EVERY field is a pointer, so an ABSENT one is distinguishable from one
+			// deliberately set empty (#1762, #2056). Omitting a field means "leave it alone",
+			// never "clear it".
+			//
+			// This has now caught three sets of fields in this one struct, each found the same
+			// way -- by something being silently wiped. AuthToken was guarded first;
+			// Passcode/RateLimit were, in the words of the comment this replaces, "simply
+			// missed" and fixed in #1762; the plain-value remainder was missed again and wiped
+			// a live client's server_url, subdomain, target_host, ports and preserve_host in
+			// #2056. Pointering the whole struct ends the class rather than waiting for the
+			// next field to burn someone.
 			var req struct {
-				ServerURL          string `json:"server_url"`
-				AuthToken          string `json:"auth_token"`
-				TargetHost         string `json:"target_host"`
-				DestPort           int    `json:"dest_port"`
-				Subdomain          string `json:"subdomain"`
-				PreserveHost       bool   `json:"preserve_host"`
-				InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-				// Pointers, so an ABSENT field is distinguishable from one deliberately set
-				// empty (#1762). These two are owned by the Access Control tab, which posts
-				// to /api/access-control; the Settings tab does not offer them. As plain
-				// values, a Settings save decoded them to "" and 0 and wrote that over a
-				// passcode the user had set -- silently removing the access control from
-				// their tunnel. AuthToken above already carries a guard against exactly this
-				// hazard; these were simply missed.
-				Passcode        *string `json:"passcode"`
-				RateLimit       *int    `json:"rate_limit"`
-				MaintenancePath string  `json:"maintenance_path"`
-				LogDir          string  `json:"log_dir"`
+				ServerURL          *string `json:"server_url"`
+				AuthToken          *string `json:"auth_token"`
+				TargetHost         *string `json:"target_host"`
+				DestPort           *int    `json:"dest_port"`
+				Subdomain          *string `json:"subdomain"`
+				PreserveHost       *bool   `json:"preserve_host"`
+				InsecureSkipVerify *bool   `json:"insecure_skip_verify"`
+				Passcode           *string `json:"passcode"`
+				RateLimit          *int    `json:"rate_limit"`
+				MaintenancePath    *string `json:"maintenance_path"`
+				LogDir             *string `json:"log_dir"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
+				return
+			}
+
+			// A body that names no field at all is not a save -- it is a malformed or
+			// truncated request, and treating it as "write the config unchanged" would be
+			// generous about something the caller plainly did not mean. Rejecting it also
+			// makes the `{}` case that found #2056 loud instead of a 200.
+			if req.ServerURL == nil && req.AuthToken == nil && req.TargetHost == nil &&
+				req.DestPort == nil && req.Subdomain == nil && req.PreserveHost == nil &&
+				req.InsecureSkipVerify == nil && req.Passcode == nil && req.RateLimit == nil &&
+				req.MaintenancePath == nil && req.LogDir == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				if _, err := w.Write([]byte(`{"error":"No settings were supplied"}`)); err != nil {
 					log.Printf("[Warning] Failed to write response: %v", err)
 				}
 				return
@@ -406,32 +425,47 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				cfg = config.DefaultClientConfig()
 			}
 
-			cfg.ServerURL = req.ServerURL
-			// SetInlineAuthToken, not a bare assignment: a token whose provenance is
-			// not declared is not written to the config file at all (#1772).
-			if req.AuthToken != "********" && req.AuthToken != "" {
-				cfg.SetInlineAuthToken(req.AuthToken)
+			if req.ServerURL != nil {
+				cfg.ServerURL = *req.ServerURL
 			}
-			cfg.TargetHost = req.TargetHost
-			cfg.Ports = []int{req.DestPort}
-			cfg.Subdomain = req.Subdomain
-			cfg.PreserveHost = req.PreserveHost
-			cfg.InsecureSkipVerify = req.InsecureSkipVerify
-			// Only when the caller actually sent them. Omitting a field means "leave it
-			// alone", not "clear it".
+			// SetInlineAuthToken, not a bare assignment: a token whose provenance is
+			// not declared is not written to the config file at all (#1772). The mask is
+			// what GET returns, so a form that round-trips GET->POST sends it back; writing
+			// it would replace the real token with eight asterisks.
+			if req.AuthToken != nil && *req.AuthToken != "********" && *req.AuthToken != "" {
+				cfg.SetInlineAuthToken(*req.AuthToken)
+			}
+			if req.TargetHost != nil {
+				cfg.TargetHost = *req.TargetHost
+			}
+			if req.DestPort != nil {
+				cfg.Ports = []int{*req.DestPort}
+			}
+			if req.Subdomain != nil {
+				cfg.Subdomain = *req.Subdomain
+			}
+			if req.PreserveHost != nil {
+				cfg.PreserveHost = *req.PreserveHost
+			}
+			if req.InsecureSkipVerify != nil {
+				cfg.InsecureSkipVerify = *req.InsecureSkipVerify
+			}
 			if req.Passcode != nil {
 				cfg.Passcode = *req.Passcode
 			}
 			if req.RateLimit != nil {
 				cfg.RateLimit = *req.RateLimit
 			}
-			cfg.MaintenancePath = req.MaintenancePath
+			if req.MaintenancePath != nil {
+				cfg.MaintenancePath = *req.MaintenancePath
+				engine.MaintenancePath = *req.MaintenancePath
+			}
 			// Saved for the next run only. The traffic and error logs are opened once at
 			// startup, so a directory change cannot move an open file handle -- the
 			// Settings tab says as much rather than implying it takes effect now (#1223).
-			cfg.LogDir = strings.TrimSpace(req.LogDir)
-
-			engine.MaintenancePath = req.MaintenancePath
+			if req.LogDir != nil {
+				cfg.LogDir = strings.TrimSpace(*req.LogDir)
+			}
 
 			err = config.SaveClientConfig("", cfg)
 			if err != nil {

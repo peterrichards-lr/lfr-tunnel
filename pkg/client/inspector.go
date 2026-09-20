@@ -283,6 +283,43 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		})
 	}
 
+	// Restarting the client so saved settings take effect (#2088).
+	//
+	// Eight of the nine settings in the panel are read only at startup, so saving them changes
+	// nothing about the session in front of the user. Telling them to do it by hand is a poor
+	// answer when the process knows how.
+	//
+	// POST only: a restart is not something a link preview, a prefetch or a refresh should be
+	// able to cause.
+	mux.HandleFunc("/api/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"status":"restarting"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+			return
+		}
+		// Flushed before the process goes away, or the browser sees a dropped connection and
+		// reports a failure for a restart that is working exactly as asked.
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		// On its own goroutine, after a moment: RestartSelf replaces this process image, and
+		// doing that inside the handler kills the connection mid-response.
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			if err := RestartSelf(); err != nil {
+				log.Printf("[Error] Restart failed, the client is still running with the old "+
+					"settings: %v", err)
+			}
+		}()
+	})
+
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -348,6 +385,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"subdomain":     effSubdomain,
 				"preserve_host": engine.PreserveHost,
 			}
+			// Which settings were claimed at launch, and by what (#2088). The panel renders
+			// these read-only: a restart reuses the same argv, so a flag or exported variable
+			// takes the field again every time and an editable box would be a lie.
+			overrides := make(map[string]string, len(engine.LaunchOverrides))
+			for k, v := range engine.LaunchOverrides {
+				overrides[k] = v
+			}
+			resp["launch_overrides"] = overrides
+			// A running client can be restarted from here; the settings server the GUI runs
+			// when nothing is connected has no process to restart, and says so.
+			resp["can_restart"] = true
 			engine.mu.RUnlock()
 
 			// All three logs the client writes, with their resolved paths (#1423).

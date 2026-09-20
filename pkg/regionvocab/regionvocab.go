@@ -92,10 +92,25 @@ const (
 	// SourceGiven -- the gateway was used as configured with no election, because the
 	// client learned no region list at all. A gateway-side problem, not a user choice.
 	SourceGiven = "given"
+	// SourceFailover -- the gateway the client was on became unusable and it re-elected onto
+	// this one (#2086). Without this token a failover is indistinguishable from a cold start:
+	// the failover path clears cfg.Region and re-resolves, so it reported `probe` or `cache`,
+	// exactly like a client that had just launched and probed its way to the same region.
+	SourceFailover = "failover"
+	// SourceFailback -- the client returned to the region it came from, or to the region the
+	// user named, once that region was reachable again (#2086).
+	//
+	// Separate from SourceFailover because the pair is the thing worth measuring: a failover
+	// with no matching failback is a client that never came home, and until now the server
+	// could not see either half. No completed failback has ever been observed in production.
+	SourceFailback = "failback"
 )
 
 // Sources is the complete vocabulary, in the order a report should present it.
-var Sources = []string{SourceProbe, SourceCache, SourceExplicitRegion, SourceExplicitServer, SourceGiven}
+var Sources = []string{
+	SourceProbe, SourceCache, SourceExplicitRegion, SourceExplicitServer, SourceGiven,
+	SourceFailover, SourceFailback,
+}
 
 // ValidSource reports whether a token is one this gateway understands.
 //

@@ -830,6 +830,8 @@ func main() {
 					cfg.Regions[k] = v
 				}
 
+				client.RecordRegionSource(regionvocab.SourceFailback)
+
 				newResp, failure := attemptRegistration(cfg, regPortMappings, sub, engine.AddedHeaders)
 				if failure == nil {
 					applySession(newResp, "failback")
@@ -874,6 +876,16 @@ func main() {
 					// The roster the decision was made against, which is the point: the
 					// startup list is the one missing the node we are moving to.
 					cfg.Regions = target.Regions
+				}
+
+				// This branch carries two different events. When the destination is the region
+				// the user named, the node-set watcher has just done what the failback prober
+				// would have done -- apac came back, and we are going home -- so it is reported
+				// as a failback. A latency-driven move to some OTHER region is neither a
+				// failover nor a failback, and inventing a token for it is not this issue's
+				// business, so its source is left as the election that chose it (#2086).
+				if requestedRegion != "" && target.Region == requestedRegion {
+					client.RecordRegionSource(regionvocab.SourceFailback)
 				}
 
 				newResp, failure := attemptRegistration(cfg, regPortMappings, sub, engine.AddedHeaders)
@@ -1472,6 +1484,12 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 		if cfg.ServerURL == "" {
 			return nil, false
 		}
+
+		// AFTER resolveServerURL, which records probe/cache for the election it just ran, and
+		// BEFORE the registration that reports it. Getting this order wrong is the whole bug:
+		// a failover used to arrive at the gateway describing itself as an ordinary probe, so
+		// the audit row was identical to a client that had just launched (#2086).
+		client.RecordRegionSource(regionvocab.SourceFailover)
 
 		regResp, failure := attemptRegistration(cfg, portMappings, sub, addedHeaders)
 		if failure == nil {

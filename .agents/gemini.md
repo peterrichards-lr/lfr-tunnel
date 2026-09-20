@@ -1,5 +1,16 @@
 # Project: Liferay Tunnel (lfr-tunnel)
 
+> [!WARNING]
+> **This is a historical record, not current guidance.** Nothing in
+> [`AGENTS.md`](../AGENTS.md) routes here, and the rules below have been superseded by the
+> per-topic skills it does route to -- `.agents/skills/edr-constraints/SKILL.md` for local
+> build and test safety, `.agents/skills/lfr-tunnel-ops/SKILL.md` for operations.
+>
+> Read it for *why* something was done, never for *how to do something now*. The completed-task
+> lists in particular record decisions that have since been reversed: the canonical install path
+> is no longer `~/runningpoc/bin`, and the EDR exclusions are no longer the ones named here --
+> see [`docs/infosec.md`](../docs/infosec.md) §3 for the paths InfoSec actually whitelists.
+
 Persistent state and planning document.
 
 ## Goal
@@ -1060,5 +1071,5 @@ The solution will consist of:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*
 

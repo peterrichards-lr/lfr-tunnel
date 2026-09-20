@@ -312,6 +312,22 @@ To prefer a region while keeping failover, use `-prefer-region <name>`. To re-ru
 after a gateway has come back, add `-refresh-region` once -- the election is otherwise cached for
 24 hours.
 
+> [!NOTE]
+> **These three flags were renamed.** `-pin`, `-bootstrap` and `-prefer-region` used to be
+> `-server`, `-gateway` and `-region` -- names that said where the value came from rather than
+> what it did to routing, which is how `-server` came to pin a US user to a European gateway for
+> the life of a tunnel.
+>
+> | old | new |
+> | --- | --- |
+> | `-server <url>` | `-pin <url>` |
+> | `-gateway <url>` | `-bootstrap <url>` |
+> | `-region <name>` | `-prefer-region <name>` |
+>
+> **The old spellings still work.** They set the same thing and print a deprecation warning, so
+> existing scripts and aliases keep running -- but they will be removed, and giving both
+> spellings of one setting with different values is an error rather than a silent winner.
+
 > [!TIP]
 > `server_url:` above goes in the client config file, `~/.lfr-tunnel/config.yaml`. It is worth
 > knowing that file exists: it holds every setting you would otherwise retype -- subdomain,
@@ -538,4 +554,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*

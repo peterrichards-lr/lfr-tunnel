@@ -555,6 +555,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		token := engine.Token
 		serverURL := engine.ServerURL
 		subdomainAss := engine.SubdomainAss
+		publicURLs := append([]string(nil), engine.PublicURLs...)
 		engine.mu.Unlock()
 
 		if token == "" || serverURL == "" || subdomainAss == "" {
@@ -562,14 +563,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 
-		parts := strings.SplitN(subdomainAss, ".", 2)
-		if len(parts) != 2 {
-			http.Error(w, "Invalid assigned subdomain format", http.StatusBadRequest)
+		prefix, domain, err := splitAssignedHost(subdomainAss, publicURLs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		prefix := parts[0]
-		domain := parts[1]
 
+		// Sent as chosen. The gateway decides which factors the mode applies, so the values
+		// are stored whether or not they are currently enforced -- which is what makes Public
+		// mean "not applied" rather than "discarded", in the portal as well as here (#2098).
 		updatePayload := map[string]string{
 			"subdomain":     prefix,
 			"domain":        domain,
@@ -891,4 +893,42 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 	rec.RespBody = bodyBuf.String()
 
 	return rec, nil
+}
+
+// splitAssignedHost recovers the (prefix, domain) pair the gateway keys a reservation on.
+//
+// It used to be `strings.SplitN(subdomainAss, ".", 2)` with a hard failure when that produced
+// fewer than two parts -- and engine.SubdomainAss is set from regResp.SubdomainPrefix, the
+// PREFIX ALONE. So it was always one part, and every access-control save returned 400 "Invalid
+// assigned subdomain format" before the gateway was ever contacted (#2098).
+//
+// The domain was never missing, only looked for in the wrong place: the engine already holds the
+// public URLs, and the host of one of them is prefix + "." + domain.
+func splitAssignedHost(assigned string, publicURLs []string) (string, string, error) {
+	assigned = strings.TrimSpace(assigned)
+	if assigned == "" {
+		return "", "", fmt.Errorf("the client has no assigned subdomain yet")
+	}
+
+	// Derived from the public URLs, never from the shape of the string.
+	//
+	// The first version of this trusted an assignment that already contained a dot, on the
+	// theory that it was prefix.domain. A test caught what that does to a custom domain:
+	// "vanity.example.com" is dotted, so it split into prefix "vanity" and domain
+	// "example.com" -- a plausible-looking pair addressing a reservation that is not the
+	// user's. Guessing wrong here edits somebody else's access control.
+	for _, raw := range publicURLs {
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Hostname() == "" {
+			continue
+		}
+		host := parsed.Hostname()
+		if rest, ok := strings.CutPrefix(host, assigned+"."); ok && rest != "" {
+			return assigned, rest, nil
+		}
+	}
+
+	return "", "", fmt.Errorf(
+		"cannot determine the domain for subdomain %q from the public URLs %v -- a custom "+
+			"domain has no prefix to strip, and that case is not handled here", assigned, publicURLs)
 }

@@ -17,15 +17,50 @@ import (
 	"lfr-tunnel/pkg/server"
 )
 
+// serverFlags is every flag this daemon accepts, in one value so main() reads the same way it
+// did when they were locals.
+type serverFlags struct {
+	ConfigPath   *string
+	Domains      *string
+	CertFile     *string
+	KeyFile      *string
+	BindAddr     *string
+	HTTPBindAddr *string
+	CheckConfig  *bool
+}
+
+// registerFlags declares them on the given FlagSet.
+//
+// They used to be locals inside main(), which meant nothing outside main() could see them and
+// the only way to list them was to read the source -- the habit that left six CLIENT flags
+// undocumented until a test rendered that parser (#2081). The obvious alternative, running the
+// binary with -h, is not available: executing lfr-tunneld is what triggered the SentinelOne
+// incident on 2026-09-20, and the EDR skill says by name there is no verified-safe way to do it.
+//
+// So the parser is made constructible instead, and TestEveryServerFlagIsDocumented renders it
+// through `make test` without executing anything (#2092).
+func registerFlags(fs *flag.FlagSet) *serverFlags {
+	return &serverFlags{
+		ConfigPath:   fs.String("config", "", "Path to server-config.yaml"),
+		Domains:      fs.String("domains", "", "Comma-separated list of wildcard domains (e.g. liferay.com,tunnel.com)"),
+		CertFile:     fs.String("cert", "", "Wildcard SSL certificate path"),
+		KeyFile:      fs.String("key", "", "Wildcard SSL private key path"),
+		BindAddr:     fs.String("bind", "", "HTTPS gateway bind address (e.g. :443)"),
+		HTTPBindAddr: fs.String("http-bind", "", "HTTP gateway bind address (e.g. :80)"),
+		CheckConfig: fs.Bool("check-config", false,
+			"validate the configuration and exit, without starting the gateway or touching the database"),
+	}
+}
+
 func main() {
-	configPath := flag.String("config", "", "Path to server-config.yaml")
-	domainsFlag := flag.String("domains", "", "Comma-separated list of wildcard domains (e.g. liferay.com,tunnel.com)")
-	certFile := flag.String("cert", "", "Wildcard SSL certificate path")
-	keyFile := flag.String("key", "", "Wildcard SSL private key path")
-	bindAddr := flag.String("bind", "", "HTTPS gateway bind address (e.g. :443)")
-	httpBindAddr := flag.String("http-bind", "", "HTTP gateway bind address (e.g. :80)")
-	checkConfig := flag.Bool("check-config", false,
-		"validate the configuration and exit, without starting the gateway or touching the database")
+	f := registerFlags(flag.CommandLine)
+	configPath := f.ConfigPath
+	domainsFlag := f.Domains
+	certFile := f.CertFile
+	keyFile := f.KeyFile
+	bindAddr := f.BindAddr
+	httpBindAddr := f.HTTPBindAddr
+	checkConfig := f.CheckConfig
 
 	flag.Parse()
 

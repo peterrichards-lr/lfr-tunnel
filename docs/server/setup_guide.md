@@ -383,6 +383,26 @@ sudo /usr/local/bin/lfr-tunneld -check-config -config /etc/lfr-tunneld/server-co
 Exit 0 means it would start. Exit 1 prints the parse error — which is the difference between
 finding out now and finding out during a restart the control plane does not come back from.
 
+### Every flag `lfr-tunneld` accepts
+
+Rendered from the parser rather than transcribed, and kept honest by a test that fails when a
+flag is added without documenting it (#2092):
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `-config <path>` | — | Path to `server-config.yaml`. |
+| `-check-config` | off | Validate the configuration and exit, without starting the gateway or touching the database. |
+| `-domains <list>` | — | Comma-separated wildcard domains, overriding `domains:` in the file. |
+| `-bind <addr>` | — | HTTPS gateway bind address (e.g. `:443`), overriding `bind_addr:`. |
+| `-http-bind <addr>` | — | HTTP gateway bind address (e.g. `:80`), overriding `http_bind_addr:`. |
+| `-cert <path>` | — | Wildcard SSL certificate path, overriding `ssl_cert_file:`. |
+| `-key <path>` | — | Wildcard SSL private key path, overriding `ssl_key_file:`. |
+
+All but `-config` and `-check-config` override a key the configuration file already sets. The
+systemd unit in this guide passes only `-config`, deliberately: a flag in the unit file is a
+setting that is not in `server-config.yaml`, so it is invisible to anyone reading the config and
+to `-check-config`.
+
 > [!NOTE]
 > **Slack & Microsoft Teams Notifications Configuration**
 > Liferay Tunnel supports two secure options for routing gateway notification alerts (user registration requests, rate limit blocks, abuse reports, manual IP bans) directly to your Slack or Teams channels:

@@ -1,8 +1,10 @@
 [
   {
     "version": "v1.48.40",
-    "release_date": "2026-09-19",
+    "release_date": "2026-09-20",
     "features": [
+      "docs: make the published site say what the source says, and guard both classes (#2081) (#2082)",
+      "docs: teach the flag names #2061 actually shipped, and mark the legacy log as legacy (#2079) (#2080)",
       "feat(gui): the tray connects on startup instead of waiting to be asked (#2076) (#2077)",
       "fix(gui): the tray's Connect honours the flags the GUI was started with (#2074) (#2075)",
       "docs(infosec): record the three exclusion rules per platform, not one (#2073)",

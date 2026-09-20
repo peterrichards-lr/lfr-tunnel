@@ -634,6 +634,8 @@ func CheckConfigCommand(args []string) {
 	errors += e
 	warnings += w
 
+	warnings += reportSoftwareIdentityFindings([]byte(configYAML))
+
 	fmt.Println()
 	if errors > 0 {
 		fmt.Printf("FAILED: %d error-severity finding(s).\n", errors)
@@ -774,4 +776,96 @@ func parseDNSSpec(data []byte) (DNSSpec, error) {
 		return DNSSpec{}, fmt.Errorf("parsing the DNS spec: %w", err)
 	}
 	return spec, nil
+}
+
+// softwareIdentityKeys are the config keys that describe lfr-tunnel ITSELF rather than one
+// deployment of it -- where its source, documentation and images live.
+//
+// pkg/config/metadata.go draws this line explicitly: these "are the same for everyone running
+// lfr-tunnel, so they belong in the code", unlike the gateway and portal URLs, which are
+// deliberately vars a distributor bakes in per deployment.
+//
+// Nothing enforced the line. docker_bypass_url was pinned in the live control plane's
+// server-config.yaml, so #2082's correction to the binary default was silently discarded and
+// the portal served a dead anchor at v1.48.40 -- while this very command reported "No drift
+// found" throughout, because it had no opinion about any key but edge_nodes (#2096).
+//
+// The accessor returns the default so a rename cannot leave this list checking a key that no
+// longer exists: it reads the same struct field the server does.
+var softwareIdentityKeys = []struct {
+	Key        string
+	DefaultVal func(*config.ServerConfig) string
+}{
+	{"documentation_url", func(c *config.ServerConfig) string { return c.DocumentationURL }},
+	{"repository_url", func(c *config.ServerConfig) string { return c.RepositoryURL }},
+	{"secure_token_guide_url", func(c *config.ServerConfig) string { return c.SecureTokenGuideURL }},
+	{"docker_hub_url", func(c *config.ServerConfig) string { return c.DockerHubURL }},
+	{"docker_image", func(c *config.ServerConfig) string { return c.DockerImage }},
+	{"docker_bypass_url", func(c *config.ServerConfig) string { return c.DockerBypassURL }},
+}
+
+// CheckSoftwareIdentityDrift reports keys the live config pins to something other than this
+// binary's default.
+//
+// Warning severity, not error: a fork legitimately overrides repository_url and a private
+// registry mirror legitimately overrides docker_image. Pinning the CURRENT default is not
+// reported either -- it is redundant, not wrong, and reporting it would train operators to
+// ignore this section.
+func CheckSoftwareIdentityDrift(configYAML []byte) ([]string, error) {
+	var live map[string]interface{}
+	if err := yaml.Unmarshal(configYAML, &live); err != nil {
+		return nil, fmt.Errorf("parsing live config: %w", err)
+	}
+
+	defaults := config.DefaultServerConfig()
+
+	var findings []string
+	for _, k := range softwareIdentityKeys {
+		raw, present := live[k.Key]
+		if !present {
+			continue
+		}
+		value, ok := raw.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			continue
+		}
+		want := k.DefaultVal(defaults)
+		if value == want {
+			// Pinned to exactly what this build would supply. Harmless TODAY, and precisely
+			// how the defect that prompted this began: docker_bypass_url was pinned to the
+			// then-current default, the default was later corrected, and the pin silently won.
+			// Reported, because removing the line is the only durable fix -- a redundant pin is
+			// a stale pin that has not happened yet.
+			findings = append(findings, fmt.Sprintf(
+				"%s is pinned to the same value this build already supplies.\n"+
+					"    Harmless now, but it will not track the next correction to the default: "+
+					"that is exactly\n    how this key came to serve a dead link. Remove the "+
+					"line and let the binary supply it.",
+				k.Key))
+			continue
+		}
+		findings = append(findings, fmt.Sprintf(
+			"%s is pinned to %q, but this build's default is %q.\n"+
+				"    That key describes the software, not this deployment, so pinning it freezes "+
+				"it at whatever\n    the default was the day it was written and discards every "+
+				"later correction. Remove it\n    unless the override is deliberate.",
+			k.Key, value, want))
+	}
+	return findings, nil
+}
+
+// reportSoftwareIdentityFindings prints them and returns the warning count.
+func reportSoftwareIdentityFindings(configYAML []byte) int {
+	findings, err := CheckSoftwareIdentityDrift(configYAML)
+	CheckFatal(err, "Failed to check software-identity keys")
+
+	if len(findings) == 0 {
+		fmt.Printf("software identity: no key pins a value this build would otherwise supply "+
+			"(%d checked).\n", len(softwareIdentityKeys))
+		return 0
+	}
+	for _, f := range findings {
+		fmt.Printf("WARNING: %s\n", f)
+	}
+	return len(findings)
 }

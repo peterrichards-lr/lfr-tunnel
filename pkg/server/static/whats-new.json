@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.48.41",
+    "release_date": "2026-09-20",
+    "features": [
+      "fix: access control could never be saved, from the client OR either portal (#2098) (#2099)",
+      "feat(ops): check-config compares the deployed config against this build's own defaults (#2096) (#2097)",
+      "test(client): execute the inspector page instead of only grepping it (#2094) (#2095)",
+      "refactor(server): make lfr-tunneld's flags renderable, and document the four nobody could see (#2092) (#2093)",
+      "fix: stop user-visible strings naming the flags #2061 renamed, and guard the class (#2090) (#2091)"
+    ]
+  },
+  {
     "version": "v1.48.40",
     "release_date": "2026-09-20",
     "features": [
@@ -52,33 +63,6 @@
       "test(server): make the geo vendor gate fail in CI, and give it a control that controls (#2019) (#2033)",
       "docs(agents): fix one stale reference, and record four traps the corpus did not warn about (#2024) (#2025)",
       "test(geo): make the SIGHUP geo reload swap able to fail in CI (#2014) (#2022)"
-    ]
-  },
-  {
-    "version": "v1.48.36",
-    "release_date": "2026-09-17",
-    "features": [
-      "feat(portal): choose the geo vendor from a list, and show the credit it will publish (#1995) (#2016)",
-      "feat(server): forward a diagnostics collection request to the edge serving the user (#1991) (#2015)",
-      "refactor(server): resolve the effective rate limit in one place, not once per path (#2005) (#2017)",
-      "feat(geo): reload the country database on SIGHUP, so switching vendor is not a restart (#2013)",
-      "feat(audit): record the client version per session, not just the last one we saw (#2010)",
-      "fix(server): stop publishing a granted rate limit the snapshot does not carry (#2007)",
-      "fix(geo): drop the country_code decode path, which no vendor file uses (#1993) (#2009)",
-      "feat(client): advertise client tuning as a bounded settings block (#2004)",
-      "feat(config): reject unknown keys in the server config (#1997) (#1999)",
-      "feat(quota): enforce a cumulative per-user bandwidth quota, staged throttle then stop (#2003)",
-      "feat(client): opt-in auto-upgrade at start, verified by the same code as -upgrade (#2002)",
-      "feat(server): tell an edge what the node set is, so its clients hear it change (#1960) (#1994)",
-      "feat(server): enforce min_version server-side, on a grace model both deadlines share (#1996)",
-      "feat(geo): require the vendor to be declared, because the file lies (#1964) (#1990)",
-      "feat(portal): give Analytics a period it states, and apply it per gateway (#1992)",
-      "test(client): ping a central that is actually a different gateway (#1961) (#1986)",
-      "fix(portal): stop the admin sidebar clipping its own links (#1984) (#1985)",
-      "feat(ci): make an E2E spec's data-testid prove it exists (#1974) (#1989)",
-      "test(hooks): make the status-vocabulary anti-vacuity control prove the floor (#1983)",
-      "feat(server): notice when an edge stops reporting bandwidth (#1980) (#1982)",
-      "feat(ops): turn remembered release steps into checks that tell you (#1978) (#1979)"
     ]
   }
 ]

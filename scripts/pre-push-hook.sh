@@ -175,6 +175,20 @@ for gate in check-nolint-ratchet.sh check-test-home-isolation.sh check-required-
     fi
 done
 
+# Python gates. Source-level only, so there is nothing to build and nothing to install beyond
+# python3 itself. check-docs-fences.py catches an unclosed fence, which silently turns a heading
+# into a code comment and drops it out of the table of contents (#2081).
+if command -v python3 >/dev/null 2>&1; then
+    for gate in check-docs-fences.py; do
+        if ! python3 "scripts/$gate" >/dev/null; then
+            echo "❌ scripts/$gate failed. Re-run it for the detail:  python3 scripts/$gate"
+            GATE_FAILED=1
+        fi
+    done
+else
+    echo "⚠️ Warning: no python3 found, so the Python gates did NOT run. They will run in CI."
+fi
+
 if [ -n "$NODE_BIN" ]; then
     for gate in $JS_GATES; do
         if ! "$NODE_BIN" "scripts/$gate" >/dev/null; then

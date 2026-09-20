@@ -88,7 +88,13 @@ else
     #
     # check-test-coverage-signal.sh reads coverage on STDIN (CI pipes `go test` output into it),
     # so there is nothing for a hook to hand it.
-    HOOK_EXEMPT="check-test-coverage-signal.sh"
+    #
+    # check-docs-rendered.sh greps a BUILT site, and building it needs mkdocs-material from
+    # requirements-dev.txt -- not a dependency a git hook may assume is installed, and a pip
+    # install is not a 1s fact. Its source-level counterpart, check-docs-fences.py, has no such
+    # requirement and does run pre-push, so the defect class is still caught locally; only the
+    # half that needs a build waits for CI (#2081).
+    HOOK_EXEMPT="check-test-coverage-signal.sh check-docs-rendered.sh"
 
     for g in $(find "${REPO_ROOT}/scripts" -maxdepth 1 -name 'check-*.sh' -exec basename {} \; | sort); do
         grep -qF "scripts/$g" "$CI" || continue   # only gates CI actually runs are in scope

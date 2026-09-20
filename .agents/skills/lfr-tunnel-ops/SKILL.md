@@ -786,8 +786,21 @@ did not retry until `04:55:25` -- an hour to the second.
 ```bash
 export LFT_REGION_FAILOVER_COOLDOWN=15s
 export LFT_REELECTION_MIN_INTERVAL=30s
+export LFT_PLANNED_SHUTDOWN_COOLDOWN=60s
 lfr-tunnel -prefer-region apac
 ```
+
+**The third export is the one this section used to omit, and omitting it makes a working
+failback look broken.** How you stop the node decides which cooldown applies:
+
+| how the node stops | path taken | cooldown before failback |
+| --- | --- | --- |
+| `systemctl stop`, or an AWS stop that lets it shut down cleanly | the gateway announces the shutdown -- a **planned** move | `LFT_PLANNED_SHUTDOWN_COOLDOWN`, **1 hour** by default |
+| the instance is killed, or the network drops | the client notices the gateway is gone -- an **unplanned** failover | `LFT_REGION_FAILOVER_COOLDOWN`, 90s by default |
+
+Stopping a node politely is the natural thing to do, so the hour is the case you will hit
+first. The production capture in this section is exactly that: failback declined at `03:55:35`
+and was not retried until `04:55:25` -- an hour to the second, with nothing wrong.
 
 Watch two things at once. The console shows the human story; the session log is the evidence:
 

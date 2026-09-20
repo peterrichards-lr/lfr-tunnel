@@ -362,6 +362,19 @@ jobs:
       - name: Every docs page must be in the nav or explicitly excluded
         run: node scripts/check-mkdocs-nav.cjs
 
+      # Reading mkdocs.yml would only have said "no markdown_extensions configured". It took
+      # grepping the BUILT HTML to see what that cost readers: 33 alert markers printed as
+      # literal "[!WARNING]" text and every architecture diagram rendered as code. A build
+      # that succeeds is not a build that says what the source meant.
+      - name: Published output must match what the source asks for
+        run: ./scripts/check-docs-rendered.sh _site
+
+      # Source-level, and the other half of the same story: an unclosed fence swallows the
+      # prose below it, so a heading stops being a heading and leaves the table of contents
+      # without anything failing.
+      - name: No code fence may be left open
+        run: python3 scripts/check-docs-fences.py
+
   lint-and-format:
     name: Lint & Format Check
     runs-on: ubuntu-latest

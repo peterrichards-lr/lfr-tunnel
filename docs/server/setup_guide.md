@@ -282,6 +282,8 @@ Enable the Nginx configuration and restart Nginx:
 ```bash
 sudo ln -s /etc/nginx/sites-available/lfr-tunnel /etc/nginx/sites-enabled/
 sudo nginx -t
+sudo systemctl restart nginx
+```
 
 ### 3.4. Configure Nginx Maintenance Mode (Optional but Recommended)
 To prevent `502 Bad Gateway` errors from being displayed to users during database backups restoration or server updates, you can configure Nginx to automatically intercept traffic and serve a beautiful, static maintenance page when the trigger file is present.
@@ -418,6 +420,7 @@ finding out now and finding out during a restart the control plane does not come
 > **Native Multi-Factor Authentication (MFA / TOTP)**  
 > If `enable_user_portal` is set to `true`, users can activate 6-digit Time-Based One-Time Password (TOTP) MFA from their **Account Settings** tab. This secures passwordless portal sessions using two independent factors: possession of email (magic link) + possession of device (authenticator app). Gateway administrators can reset or disable a user's MFA status directly from the Admin Dashboard in case of lost devices.
 
+```yaml
 # Access Control
 allowed_email_domains:
   - "liferay.com"
@@ -1913,4 +1916,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-18* | *Last Reviewed: 2026-09-18*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*

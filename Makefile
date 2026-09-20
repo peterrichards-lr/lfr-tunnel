@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -79,6 +79,8 @@ help:
 	@echo "  make check-load-errors - Portal pages surface a failed data load"
 	@echo "  make check-privacy     - Served /privacy covers every PRIVACY.md category"
 	@echo "  make check-docs-nav    - Every docs page is in mkdocs nav or explicitly excluded"
+	@echo "  make check-docs-fences - No markdown code fence is left open"
+	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
 	@echo "  make check-branches    - Report stale remote branches"
@@ -413,4 +415,16 @@ check-privacy:
 # can be told apart from one that was forgotten.
 check-docs-nav:
 	@node scripts/check-mkdocs-nav.cjs
+
+# An unclosed fence swallows everything below it, so a heading silently stops being a heading:
+# `### 3.4. Configure Nginx Maintenance Mode` rendered as a bash comment and vanished from the
+# table of contents, with every gate green (#2081).
+check-docs-fences:
+	@python3 scripts/check-docs-fences.py
+
+# Checks the BUILT output, so it needs a site to look at. CI builds to _site; locally, point it
+# at whatever you built:  make check-docs-rendered SITE=site
+SITE ?= _site
+check-docs-rendered:
+	@./scripts/check-docs-rendered.sh $(SITE)
 

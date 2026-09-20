@@ -7,7 +7,7 @@ const (
 	DefaultDocumentationURL    = "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs"
 	DefaultSecureTokenGuideURL = "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure"
 	DefaultDockerHubURL        = "https://hub.docker.com/r/peterjrichards/lfr-tunnel"
-	DefaultDockerBypassURL     = "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"
+	DefaultDockerBypassURL     = "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#method-b-standalone-docker-container-edr-immune"
 )
 
 // These describe *one deployment* of it -- which gateway to talk to, and where that
@@ -34,7 +34,7 @@ const (
 // hints are omitted rather than sending anyone somewhere wrong.
 var (
 	// DefaultServerURL is the gateway a client talks to when nothing else says otherwise.
-	// Empty means the user must supply one via -server, LFT_SERVER_URL or their config.
+	// Empty means the user must supply one via -pin, LFT_SERVER_URL or their config.
 	DefaultServerURL = ""
 
 	// DefaultStatusPageURL is where this deployment publishes incident status. Empty means

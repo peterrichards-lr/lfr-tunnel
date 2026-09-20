@@ -175,6 +175,32 @@ for gate in check-nolint-ratchet.sh check-test-home-isolation.sh check-required-
     fi
 done
 
+# Python gates. Source-level only, so there is nothing to build and nothing to install beyond
+# python3 itself -- all three were found by a documentation review and guard what it found
+# (#2081):
+#   check-docs-fences.py   an unclosed fence turns a heading into a code comment and drops it
+#                          out of the table of contents
+#   check-doc-links.py     a docs link printed BY THE BINARY, pointing at a heading that does
+#                          not exist -- the portal served one as a live href
+#   check-docs-routing.py  a page on the site that no landing page names, reachable only by
+#                          search or by knowing the URL
+if command -v python3 >/dev/null 2>&1; then
+    for gate in check-docs-fences.py check-doc-links.py check-docs-routing.py; do
+        # Presence-guarded, exactly like the shell gates above. These inspect the whole
+        # repository, so running them somewhere that has no scripts/ or no docs/ -- a hook test
+        # fixture, a partial checkout -- asks them about a repository that is not there. One of
+        # them refused a docs-only push in the hook suite's synthetic repo before this guard
+        # existed. CI always has the full tree and runs them unconditionally.
+        [ -f "scripts/$gate" ] && [ -d docs ] || continue
+        if ! python3 "scripts/$gate" >/dev/null; then
+            echo "❌ scripts/$gate failed. Re-run it for the detail:  python3 scripts/$gate"
+            GATE_FAILED=1
+        fi
+    done
+else
+    echo "⚠️ Warning: no python3 found, so the Python gates did NOT run. They will run in CI."
+fi
+
 if [ -n "$NODE_BIN" ]; then
     for gate in $JS_GATES; do
         if ! "$NODE_BIN" "scripts/$gate" >/dev/null; then

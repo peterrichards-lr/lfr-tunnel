@@ -12,18 +12,20 @@ Unlike generic tunneling tools, `lfr-tunnel` is built specifically for Liferay:
 
 ## 📖 Documentation Directory
 
-To prevent information overload, our documentation is divided into dedicated, topic-specific guides:
+To prevent information overload, our documentation is divided into dedicated, topic-specific guides. They are also published as a searchable site at **[peterrichards-lr.github.io/lfr-tunnel](https://peterrichards-lr.github.io/lfr-tunnel/)**, whose front door is the [documentation hub](docs/README.md).
 
 ### 🚀 Getting Started & CLI Usage
 *   **[Getting Started Guide](docs/getting_started.md)** — Step-by-step instructions to install the client CLI (`lfr-tunnel`), register for access, claim your Personal Access Token (PAT), and connect your first tunnel.
 *   **[Client Configuration File](docs/client_configuration.md)** — Complete reference for `~/.lfr-tunnel/config.yaml`: every setting with its type, default and flag/environment equivalent, how flags, environment and file interact, and why `server_url:` avoids the pinning that `-pin` applies.
 *   **[Liferay Sales Engineering (SE) Guide](docs/liferay-se-guide.md)** — Team-specific quickstart instructions, Dockerized wrapper scripts, EDR/SentinelOne bypass instructions, and Tomcat/Docker network setups.
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
+*   **[Exposing Any Local HTTP Service](docs/exposing-any-http-service.md)** — The tunnel does not inspect what is listening on the port it publishes, so a Node service, a client extension in dev mode or any other local HTTP server works with `-ports`.
 
 ### 🛠️ Server Administration
 *   **[Server Gateway Setup Guide](docs/server/setup_guide.md)** — Comprehensive setup guide to host your own gateway server (`lfr-tunneld`), configure wildcard DNS, Caddy/Nginx reverse proxies, Postfix secure TLS SMTP relays, and scheduled backups.
 *   **[Edge Gateways Setup Guide](docs/server/edge_setup_guide.md)** — How to configure regional edge server nodes to minimize latency during live demonstrations.
 *   **[SSO & OIDC Integration Guide](docs/server/sso_cloud_guide.md)** — Single Sign-On and multi-tenant OpenID Connect authentication setup (Google Cloud, Azure Entra ID, Keycloak, Liferay Portal).
+*   **[AWS EC2 Provisioning Guide](docs/server/aws_setup_guide.md)** — AWS-specific supplement to the two guides above: instance and AMI choice, security groups, key pairs, and the Elastic IP step other providers do not need.
 
 ### 🔒 Security & Architecture
 *   **[Architecture & Routing Walkthrough](docs/architecture.md)** — Deep dive into the client-server websocket routing engine, data plane metrics, and E2E headless coordination signals.
@@ -53,4 +55,4 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*

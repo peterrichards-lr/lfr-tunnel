@@ -357,6 +357,25 @@ You can launch and manage the client in the background directly from your termin
   ```bash
   lfr-tunnel -stop
   ```
+* **Status as JSON**: The same information as `-status`, machine-readable, for a script or a
+  monitoring check rather than a human:
+  ```bash
+  lfr-tunnel -status-json
+  ```
+
+### Other flags worth knowing
+
+These are defined by the client and were, until now, documented nowhere -- found by rendering
+the flag parser rather than reading the source (#2081):
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `-inspector-port <port>` | `4040` | Local port for the Inspector web UI. Change it when something else already holds 4040 -- the Inspector is how you read request bodies, so losing the port loses the feature. |
+| `-no-tui` | off | Disables the interactive terminal dashboard and prints plain log lines instead. What you want when the client runs under a CI job, a wrapper script, or anything that is not a terminal. |
+| `-status-json` | off | `-status` as JSON. |
+| `-check-version` | off | Asks the gateway what client version it requires and prints the answer as JSON, without starting a tunnel. Use it to find out whether an upgrade is due before one is forced. |
+| `-theme <name>` | unset | Local UI theme: `light`, `dark`, `system` or `time`. |
+| `-log-dir <path>` | `~/.lfr-tunnel/logs` | Where the persistent traffic and error logs are written. |
 
 ### 2. Autostart on Login
 

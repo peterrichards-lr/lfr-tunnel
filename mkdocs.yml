@@ -13,6 +13,32 @@ theme:
 plugins:
   - search
 
+# Without these, the published site silently loses two things the source clearly intends.
+# Measured on the built output before they were added: 33 GitHub alert markers printed to the
+# reader as literal "[!WARNING]" text inside an ordinary blockquote, and 8 mermaid diagrams
+# rendered as code blocks. Reading this file would only have told you the extensions were
+# absent -- it took grepping site/ to see what that cost (#2081).
+markdown_extensions:
+  - admonition          # the target syntax the hook below converts GitHub alerts into
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        # Hands ```mermaid blocks to Material's bundled mermaid.js instead of the code
+        # highlighter. Without it every architecture diagram is a wall of text.
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+# GitHub alerts are native on github.com and unknown to Python-Markdown. The source stays
+# GitHub-native -- that is where contributors read these files -- and the build translates.
+hooks:
+  - scripts/mkdocs_github_alerts.py
+
 # The navigation below is hand-maintained -- `plugins:` is only `search`, so nothing derives it
 # from the docs/ tree. A page added under docs/ and left out of nav: still builds and deploys; it
 # is simply unreachable except by direct URL or site search, and `mkdocs --strict` reports that as

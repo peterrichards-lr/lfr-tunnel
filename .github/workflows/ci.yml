@@ -375,6 +375,16 @@ jobs:
       - name: No code fence may be left open
         run: python3 scripts/check-docs-fences.py
 
+      # A link the BINARY prints is documentation too, and rots faster because nothing treats
+      # it as such: the gateway served a dead anchor to the portal, which made it a live href.
+      - name: Every docs link in source must resolve
+        run: python3 scripts/check-doc-links.py
+
+      # A page nothing links to is reachable only by search. Two guides were on the site and
+      # absent from the repository README, which is where readers actually arrive.
+      - name: Every docs page must be reachable from a landing page
+        run: python3 scripts/check-docs-routing.py
+
   lint-and-format:
     name: Lint & Format Check
     runs-on: ubuntu-latest

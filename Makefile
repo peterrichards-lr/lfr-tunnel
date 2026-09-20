@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -80,6 +80,8 @@ help:
 	@echo "  make check-privacy     - Served /privacy covers every PRIVACY.md category"
 	@echo "  make check-docs-nav    - Every docs page is in mkdocs nav or explicitly excluded"
 	@echo "  make check-docs-fences - No markdown code fence is left open"
+	@echo "  make check-doc-links   - Every docs link in source resolves to a real file/heading"
+	@echo "  make check-docs-routing - Every docs page is reachable from a landing page"
 	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
@@ -421,6 +423,15 @@ check-docs-nav:
 # table of contents, with every gate green (#2081).
 check-docs-fences:
 	@python3 scripts/check-docs-fences.py
+
+# A link printed by the binary is documentation too. pkg/config/metadata.go held an anchor no
+# heading has ever matched, and the gateway serves it to the portal as a live href (#2081).
+check-doc-links:
+	@python3 scripts/check-doc-links.py
+
+# A page no landing page names is reachable only by site search (#2081).
+check-docs-routing:
+	@python3 scripts/check-docs-routing.py
 
 # Checks the BUILT output, so it needs a site to look at. CI builds to _site; locally, point it
 # at whatever you built:  make check-docs-rendered SITE=site

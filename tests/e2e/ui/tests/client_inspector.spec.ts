@@ -43,9 +43,12 @@ test.describe('Client Inspector UI', () => {
     const subdomain = await page.locator('#cfg-subdomain').inputValue();
     expect(subdomain).not.toBe('');
 
-    // Editing a field writes the saved config, which does not change the process already
-    // running, so the panel has to say which value is in force.
-    await expect(page.locator('.runtime-override-note').first()).toBeVisible();
+    // Both fields above are set by flags on this container, so the panel marks them fixed at
+    // launch: a restart reuses the same argv, so editing them here could never take effect
+    // (#2088). The note has to say so, and the field has to be read-only rather than an
+    // editable box that silently does nothing.
+    await expect(page.locator('.setting-note').first()).toBeVisible();
+    await expect(page.locator('#cfg-server-url')).toHaveAttribute('readonly', '');
 
     // The build-time default must still not be baked back in (#1188): the value shown is
     // the flag the client was launched with, not a compiled-in hostname.

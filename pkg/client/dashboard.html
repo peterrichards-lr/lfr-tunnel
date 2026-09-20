@@ -1561,7 +1561,7 @@ function setLanguage(lang) {
                 document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
                 document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
 
-                annotateSettings(cfg, eff, data.launch_overrides || {}, data.can_restart === true);
+                annotateSettings(cfg, eff, cfg.launch_overrides || {}, cfg.can_restart === true);
                 // What the fields held when the page loaded, so a save can tell an actual
                 // change from a re-submission of the same values.
                 loadedSettings = {
@@ -1637,6 +1637,19 @@ function setLanguage(lang) {
 
                 const claimedBy = launchOverrides[key];
                 if (claimedBy) {
+                    // The RUNNING value, not the saved one. A client launched from flags
+                    // usually has no config file at all, so the saved value is empty -- and an
+                    // empty read-only box while the tunnel sits there serving traffic is
+                    // exactly the confusion #1211 fixed. The field cannot be edited here
+                    // anyway, so the only honest thing to show is what is actually in force.
+                    const running = eff[key];
+                    if (running !== undefined && running !== null) {
+                        if (el.type === 'checkbox') {
+                            el.checked = !!running;
+                        } else if (String(running) !== '') {
+                            el.value = running;
+                        }
+                    }
                     // Read-only rather than disabled: a disabled input is skipped by form
                     // reads and screen readers announce it as unavailable, while the value
                     // itself is exactly what the user needs to see.

@@ -127,3 +127,74 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// A launch-claimed field must show the RUNNING value, not the saved one.
+//
+// The two halves of this issue pull in opposite directions and this is where they meet. #2088
+// says an editable field must show what a save writes, or edits appear to revert. #1211 says a
+// field must never sit empty while the tunnel is up -- a client launched from flags usually has
+// no config file, so its saved values are blank.
+//
+// Both are satisfied by splitting on whether the field can be edited at all: claimed fields
+// cannot, so they show what is in force; the rest show what a save would write. The E2E suite
+// caught this by failing on an empty #cfg-server-url, which is exactly the state #1211 fixed.
+func TestLaunchClaimedFieldsShowTheRunningValue(t *testing.T) {
+	page := dashboard(t)
+
+	start := strings.Index(page, "const claimedBy = launchOverrides[key];")
+	if start < 0 {
+		t.Fatal("the claimed-field branch is gone")
+	}
+	branch := page[start:min(len(page), start+1400)]
+
+	if !strings.Contains(branch, "eff[key]") {
+		t.Error("a launch-claimed field does not read the running value, so a client started " +
+			"from flags with no config file shows an empty read-only box while its tunnel is " +
+			"up and serving traffic (#1211)")
+	}
+	assign := regexp.MustCompile(`el\.value = running|el\.checked = !!running`)
+	if !assign.MatchString(branch) {
+		t.Error("the running value is read but never shown")
+	}
+}
+
+// renderSettingsView assigns the /api/config response to `cfg`. Reading a field off any other name
+// throws a ReferenceError, and the surrounding try/catch swallows it into "Failed to load
+// configuration" -- so the whole Settings tab comes up empty and the console is the only place
+// that says why.
+//
+// That shipped in this very change: annotateSettings was called with `data.launch_overrides`
+// when no `data` existed in that scope, and every Go test here passed, because they read the
+// page as TEXT and text cannot throw. The Playwright suite caught it by loading the page.
+func TestLoadConfigReadsTheResponseOffTheNameItAssigned(t *testing.T) {
+	page := dashboard(t)
+
+	start := strings.Index(page, "async function renderSettingsView()")
+	if start < 0 {
+		t.Fatal("renderSettingsView is gone; this test asserts about code that no longer exists")
+	}
+	// From the function start to the next top-level declaration after it. The window has to be
+	// generous: this function builds a large template literal before it fetches anything.
+	body := page[start:]
+	if next := regexp.MustCompile(`\n        (async )?function `).FindStringIndex(body[30:]); next != nil {
+		body = body[:next[0]+30]
+	}
+
+	assigned := regexp.MustCompile(`const (\w+) = await res\.json\(\);`).FindStringSubmatch(body)
+	if assigned == nil {
+		t.Fatal("renderSettingsView no longer assigns the response, so this guard cannot check it")
+	}
+	name := assigned[1]
+
+	for _, field := range []string{"launch_overrides", "can_restart", "effective"} {
+		uses := regexp.MustCompile(`(\w+)\.`+field).FindAllStringSubmatch(body, -1)
+		for _, u := range uses {
+			if u[1] != name {
+				t.Errorf("renderSettingsView reads %s.%s, but the response was assigned to %q.\n"+
+					"That is a ReferenceError at runtime, swallowed by the try/catch into "+
+					"\"Failed to load configuration\" -- the Settings tab comes up blank.",
+					u[1], field, name)
+			}
+		}
+	}
+}

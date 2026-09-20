@@ -261,7 +261,7 @@ func main() {
 	// Determine if subdomain flag was explicitly passed
 	subdomainFlagPassed := false
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "subdomain" {
+		if f.Name == keySubdomain {
 			subdomainFlagPassed = true
 		}
 	})
@@ -396,6 +396,13 @@ func main() {
 
 	// Start Interceptor Engine
 	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	// Computed here, while flag.Visit can still tell a flag that was GIVEN from one sitting at
+	// its default, and handed to the engine so the Settings panel can render the fields that
+	// are spoken for as read-only rather than as editable boxes that never take (#2088).
+	engine.LaunchOverrides = launchOverrides()
+	if described := describeLaunchOverrides(engine.LaunchOverrides); described != "" {
+		slog.Info("[Client] Settings fixed at launch and not editable from the Settings panel: " + described)
+	}
 	engine.MaintenancePath = cfg.MaintenancePath
 	engine.Token = cfg.AuthToken
 	engine.ServerURL = cfg.ServerURL

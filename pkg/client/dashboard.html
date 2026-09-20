@@ -353,6 +353,14 @@ const clientTranslations = {
         "client_req_subdomain_help": "The subdomain prefix for your public URL. If auto-reservation is enabled for your account, leaving this blank will assign a random subdomain.",
         "client_preserve_host": "Preserve incoming Host header",
         "client_runtime_override": "In use now (set at launch). Saving changes the stored config, not this session.",
+        "client_setting_fixed_at_launch": "Fixed at launch by {0}. That is applied on every start, including a restart, so this cannot be changed here.",
+        "client_setting_in_force_now": "In force now: {0}. Saving changes the stored config; restart the client to apply it.",
+        "client_settings_apply_next_start": "Saved. These settings will apply the next time the client starts.",
+        "client_restart_confirm": "Restart the client now to apply these settings? Traffic through the tunnel will be interrupted briefly.",
+        "client_restarting": "Saved. Restarting the client now...",
+        "client_restart_requested": "Saved and restart requested. If this page stops responding, the client is restarting.",
+        "client_settings_group_live": "Applies immediately",
+        "client_settings_group_restart": "Applies when the client restarts",
         "client_preserve_host_help": "If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.",
         "client_insecure_ssl": "Allow insecure local SSL (Skip TLS Verification)",
         "client_insecure_ssl_help": "If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.",
@@ -1409,7 +1417,8 @@ function setLanguage(lang) {
                             
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
                                 <!-- Column 1: Connection & Authentication -->
-                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                <div class="settings-group-heading" style="grid-column: 1 / -1; margin: 4px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);" data-i18n="client_settings_group_restart">Applies when the client restarts</div>
+                                    <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
                                     
                                     <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -1427,16 +1436,7 @@ function setLanguage(lang) {
                                         <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
                                     </div>
 
-                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
-                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
-                                        <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
-                                            <option value="">Server Default</option>
-                                            <option value="system">Follow System</option>
-                                            <option value="light">Light Mode</option>
-                                            <option value="dark">Dark Mode</option>
-                                            <option value="time">Time of Day (8am-8pm Light)</option>
-                                        </select>
-                                    </div>
+                                    
                                 </div>
                                 
                                 <!-- Column 2: Local Target Configuration -->
@@ -1465,16 +1465,28 @@ function setLanguage(lang) {
                                     </div>
 
                                     <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
-                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
-                                        <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
-                                    </div>
-                                    </div>
-
-                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
                                         <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Log Directory <span class="help-icon" title="Where the traffic and error logs are written. Leave blank for the default (~/.lfr-tunnel/logs). Applies the next time the client starts.">?</span></label>
                                         <input type="text" id="cfg-log-dir" placeholder="~/.lfr-tunnel/logs" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
                                         <span id="cfg-log-dir-effective" style="color: var(--text-muted); font-size: 11px;"></span>
                                 </div>
+                                    <div class="settings-group-heading" style="grid-column: 1 / -1; margin: 18px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);" data-i18n="client_settings_group_live">Applies immediately</div>
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
+                                        <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
+                                        <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
+                                            <option value="">Server Default</option>
+                                            <option value="system">Follow System</option>
+                                            <option value="light">Light Mode</option>
+                                            <option value="dark">Dark Mode</option>
+                                            <option value="time">Time of Day (8am-8pm Light)</option>
+                                        </select>
+                                    </div>
+                                    </div>
+
+                                    
                             </div>
 
                             <div style="border-top: 1px solid var(--border); padding-top: 20px; text-align: right;">
@@ -1496,21 +1508,32 @@ function setLanguage(lang) {
                 // log_dir_effective note just below. Fall back to the saved value where the
                 // engine has nothing.
                 const eff = cfg.effective || {};
-                const pick = (name, fallback) =>
-                    (eff[name] !== undefined && eff[name] !== null && eff[name] !== '')
-                        ? eff[name] : fallback;
+                // The SAVED value, deliberately -- this input is what a save writes, so what
+                // you typed has to still be here after a refresh. It used to show the RUNNING
+                // value via pick(), so every edit to these six appeared to revert the moment
+                // the page reloaded, and the save looked broken when it had worked (#2088).
+                // The running value has not gone anywhere: annotateSettings puts it beside the
+                // field, where it reads as information instead of as a silent correction.
+                document.getElementById('cfg-server-url').value = cfg.server_url || '';
+                document.getElementById('cfg-auth-token').value = cfg.auth_token || '';
+                document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
+                document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
+                document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
+                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
 
-                document.getElementById('cfg-server-url').value = pick('server_url', cfg.server_url || '');
-                document.getElementById('cfg-auth-token').value = pick('auth_token', cfg.auth_token || '');
-                document.getElementById('cfg-dest-port').value = pick('dest_port', cfg.dest_port || 8080);
-                document.getElementById('cfg-target-host').value = pick('target_host', cfg.target_host || 'localhost');
-                document.getElementById('cfg-subdomain').value = pick('subdomain', cfg.subdomain || '');
-                document.getElementById('cfg-preserve-host').checked = !!pick('preserve_host', cfg.preserve_host);
-
-                // Where the running value and the saved one disagree, say so: editing a
-                // field here writes the saved config and does not touch the process that is
-                // already running.
-                markRuntimeOverrides(cfg, eff);
+                annotateSettings(cfg, eff, data.launch_overrides || {}, data.can_restart === true);
+                // What the fields held when the page loaded, so a save can tell an actual
+                // change from a re-submission of the same values.
+                loadedSettings = {
+                    server_url: cfg.server_url || '',
+                    auth_token: cfg.auth_token || '',
+                    dest_port: cfg.dest_port || 8080,
+                    target_host: cfg.target_host || 'localhost',
+                    subdomain: cfg.subdomain || '',
+                    preserve_host: !!cfg.preserve_host,
+                    insecure_skip_verify: !!cfg.insecure_skip_verify,
+                    log_dir: cfg.log_dir || '',
+                };
                 document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
                 document.getElementById('cfg-maintenance-path').value = cfg.maintenance_path || '';
                 document.getElementById('cfg-log-dir').value = cfg.log_dir || '';
@@ -1532,10 +1555,25 @@ function setLanguage(lang) {
             }
         }
 
-        // Flags and environment variables win over the saved config for a process that is
-        // already running (#1211). Marking the fields where the two disagree keeps the panel
-        // honest about which value is in force and which one editing would change.
-        function markRuntimeOverrides(saved, eff) {
+        // Three things can be true of a setting, and the panel has to say which (#2088).
+        //
+        //   applied live      -- the handler writes it into the running engine, so it is
+        //                        already in force. Access control and the maintenance page.
+        //   needs a restart   -- written to config.yaml and read only at startup.
+        //   fixed at launch   -- a flag or an environment variable set it, and the restart
+        //                        reuses the same argv, so it will be set again on EVERY start.
+        //
+        // The third is the one that used to mislead. Such a field can never be changed from
+        // this panel while that flag is used, so it is made read-only and says what claimed
+        // it. Offering an editable box there is a promise the panel cannot keep.
+        let restartNeededFields = [];
+        let restartAvailable = false;
+        let loadedSettings = {};
+
+        function annotateSettings(saved, eff, launchOverrides, canRestart) {
+            restartAvailable = canRestart;
+            restartNeededFields = [];
+
             const fields = [
                 ['cfg-server-url', 'server_url'],
                 ['cfg-auth-token', 'auth_token'],
@@ -1543,23 +1581,72 @@ function setLanguage(lang) {
                 ['cfg-target-host', 'target_host'],
                 ['cfg-subdomain', 'subdomain'],
                 ['cfg-preserve-host', 'preserve_host'],
+                ['cfg-insecure-skip-verify', 'insecure_skip_verify'],
+                ['cfg-log-dir', 'log_dir'],
             ];
+
             for (const [id, key] of fields) {
                 const el = document.getElementById(id);
                 if (!el) continue;
-                const existing = el.parentElement.querySelector('.runtime-override-note');
-                if (existing) existing.remove();
+
+                const existing = el.parentElement.querySelectorAll('.setting-note');
+                existing.forEach((n) => n.remove());
+                el.readOnly = false;
+                el.disabled = false;
+                el.style.opacity = '';
+
+                const claimedBy = launchOverrides[key];
+                if (claimedBy) {
+                    // Read-only rather than disabled: a disabled input is skipped by form
+                    // reads and screen readers announce it as unavailable, while the value
+                    // itself is exactly what the user needs to see.
+                    if (el.type === 'checkbox') {
+                        el.disabled = true;
+                    } else {
+                        el.readOnly = true;
+                    }
+                    el.style.opacity = '0.6';
+                    el.parentElement.appendChild(
+                        note(t('client_setting_fixed_at_launch').replace('{0}', claimedBy)));
+                    continue;
+                }
+
+                restartNeededFields.push(key);
 
                 const effVal = eff[key];
                 if (effVal === undefined || effVal === null || effVal === '') continue;
                 const savedVal = (saved[key] === undefined || saved[key] === null) ? '' : saved[key];
                 if (String(effVal) === String(savedVal)) continue;
 
-                const note = document.createElement('div');
-                note.className = 'runtime-override-note';
-                note.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;';
-                note.textContent = t('client_runtime_override');
-                el.parentElement.appendChild(note);
+                el.parentElement.appendChild(
+                    note(t('client_setting_in_force_now').replace('{0}', String(effVal))));
+            }
+        }
+
+        function note(text) {
+            const el = document.createElement('div');
+            el.className = 'setting-note';
+            el.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;';
+            el.textContent = text;
+            return el;
+        }
+
+        // Asked, never assumed. A restart drops every live connection through the tunnel, so
+        // it is not something to do because a form was submitted.
+        async function offerRestart() {
+            if (!restartAvailable) {
+                return t('client_settings_apply_next_start');
+            }
+            if (!confirm(t('client_restart_confirm'))) {
+                return t('client_settings_apply_next_start');
+            }
+            try {
+                await fetch('/api/restart', {method: 'POST'});
+                return t('client_restarting');
+            } catch (e) {
+                // The client may well have restarted and taken the connection with it, which
+                // is indistinguishable from here. Say what is known rather than guessing.
+                return t('client_restart_requested');
             }
         }
 
@@ -1581,6 +1668,16 @@ function setLanguage(lang) {
                 const maintenancePath = document.getElementById('cfg-maintenance-path').value;
                 const logDir = document.getElementById('cfg-log-dir').value;
                 
+                // Restart-needing fields only, and only those not fixed at launch -- a field
+                // a flag owns cannot be changed by this save whatever the user typed.
+                const sent = {
+                    server_url: serverUrl, auth_token: authToken, dest_port: destPort,
+                    target_host: targetHost, subdomain: subdomain, preserve_host: preserveHost,
+                    insecure_skip_verify: insecureSkipVerify, log_dir: logDir,
+                };
+                const changedRestartField = restartNeededFields.some(
+                    (k) => String(sent[k]) !== String(loadedSettings[k]));
+
                 if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
                     throw new Error('Server URL must start with http:// or https://');
                 }
@@ -1612,6 +1709,12 @@ function setLanguage(lang) {
                 
                 if (res.ok) {
                     succEl.style.display = 'block';
+                    // Only when something that needs one actually changed. A save that
+                    // touched only live settings has nothing to restart for, and asking
+                    // anyway teaches people to dismiss the prompt (#2088).
+                    if (restartNeededFields.length > 0 && changedRestartField) {
+                        succEl.innerText = await offerRestart();
+                    }
                     setTimeout(() => { succEl.style.display = 'none'; }, 3000);
                 } else {
                     const data = await res.json();

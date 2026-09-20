@@ -194,6 +194,15 @@ type InterceptorEngine struct {
 	RateLimitKBPS   int64
 	IsCustomDomain  bool
 	MaintenancePath string
+
+	// LaunchOverrides maps a settings key to whatever claimed it at launch -- "-subdomain",
+	// "LFT_TOKEN" -- for the keys where something did (#2088).
+	//
+	// The Settings panel renders those fields read-only. A restart reuses the same argv, so a
+	// flag or an exported variable wins again on every start: editing such a field is not
+	// "applies at next start", it is "never applies while that is set", and an editable box
+	// would be claiming otherwise. Nil or empty means nothing is spoken for.
+	LaunchOverrides map[string]string
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.

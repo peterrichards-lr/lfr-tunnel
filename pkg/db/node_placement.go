@@ -264,7 +264,7 @@ func placementCaveats(r *NodePlacementReport) []string {
 		"A session is compared against what that user measured on the day it started, not against a fleet average.",
 		"Unverifiable is not a failure. A client that reused its cached election, or that was pinned with -server or -region, runs no probe, so there is nothing that day to compare against.",
 		"region_probes holds one row per user per region per DAY, so a user who changed network mid-day has one blended measurement.",
-		"An explicitly pinned region (-region or -server) is indistinguishable here from an unprobed choice.",
+		"An explicitly pinned region (-prefer-region or -pin) is indistinguishable here from an unprobed choice.",
 	}
 	if len(r.UnknownNodes) > 0 {
 		c = append(c, "Some sessions ran on a node that matches no probed region: "+

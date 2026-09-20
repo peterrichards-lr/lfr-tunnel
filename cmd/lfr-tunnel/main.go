@@ -2364,7 +2364,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	regionLower := strings.TrimSpace(strings.ToLower(cfg.Region))
 	if url, ok := cfg.Regions[regionLower]; ok {
 		cfg.ServerURL = url
-		facts.regionSource = "named explicitly (-region), no latency probe"
+		facts.regionSource = "named explicitly (-prefer-region), no latency probe"
 		client.RecordRegionSource(regionvocab.SourceExplicitRegion)
 		facts.advertised = len(cfg.Regions)
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))

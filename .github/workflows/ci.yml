@@ -515,6 +515,12 @@ jobs:
       - name: HTML documents must have balanced tags
         run: node scripts/check-html-balance.mjs
 
+      # dashboard.html's other gates read it as TEXT, and text cannot throw. A ReferenceError
+      # in it blanks the whole Settings tab and reached CI twice before anything but the
+      # 16-minute Playwright suite could see it (#2094).
+      - name: Inspector page behaviour
+        run: node scripts/check-inspector-behaviour.cjs
+
       # The four gates below existed, had hook tests, and ran NOWHERE (#1929): not in any CI
       # job and not in either git hook, so they fired only when someone typed the make target
       # by hand. A gate nobody runs is documentation with a shebang -- and two of these were

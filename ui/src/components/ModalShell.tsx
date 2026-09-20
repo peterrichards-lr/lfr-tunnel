@@ -53,6 +53,15 @@ export default function ModalShell({
   // send a keyboard user to the top of the document and make them navigate back each time.
   const openerRef = useRef<HTMLElement | null>(null);
 
+  // The LATEST onClose, without it being a dependency.
+  //
+  // Every caller passes an inline arrow, so onClose has a new identity on every render. With it
+  // in the dependency list below, each keystroke tore this effect down and re-ran it --
+  // refocusing the card and bouncing focus off whatever input was being typed into. One
+  // character per attempt, in every modal in the portal (#2102).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -62,7 +71,7 @@ export default function ModalShell({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -75,7 +84,9 @@ export default function ModalShell({
       document.body.style.overflow = 'unset';
       openerRef.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+    // isOpen only. Adding onClose back re-runs everything above on each render, which is the
+    // focus-stealing bug; the ref keeps the handler current without making it a trigger.
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

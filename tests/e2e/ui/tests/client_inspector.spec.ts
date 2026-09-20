@@ -48,7 +48,10 @@ test.describe('Client Inspector UI', () => {
     // (#2088). The note has to say so, and the field has to be read-only rather than an
     // editable box that silently does nothing.
     await expect(page.locator('.setting-note').first()).toBeVisible();
-    await expect(page.locator('#cfg-server-url')).toHaveAttribute('readonly', '');
+    await expect(page.locator('#cfg-server-url')).toHaveAttribute(
+      'readonly',
+      '',
+    );
 
     // The build-time default must still not be baked back in (#1188): the value shown is
     // the flag the client was launched with, not a compiled-in hostname.

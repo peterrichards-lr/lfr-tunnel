@@ -40,8 +40,25 @@ test.describe('Client Inspector UI', () => {
     // subdomain, so the exact value depends on test ordering. What matters for #1211 is
     // that the field reports the running client's value at all -- it was empty before,
     // because the panel read the saved config and this container has no subdomain in it.
-    const subdomain = await page.locator('#cfg-subdomain').inputValue();
-    expect(subdomain).not.toBe('');
+    // #1211 requires the panel to say which value is in force. It used to satisfy that by
+    // putting the running value IN the box, which is what made saves look broken (#2088): the
+    // box is what a save writes, so it has to show the saved value.
+    //
+    // Both are satisfied by where the value appears, not whether it appears. A field claimed by
+    // a flag is read-only and shows the running value, because it can never be edited here. An
+    // unclaimed field is editable, shows the saved value -- empty in this container, which has
+    // no config file -- and puts the running value in the note beside it.
+    //
+    // Which case #cfg-subdomain is depends on how the client holding port 4040 was started, and
+    // the analytics spec starts its own. So assert the requirement itself: the running value is
+    // visible, in one place or the other.
+    const subdomainBox = page.locator('#cfg-subdomain');
+    const subdomainValue = await subdomainBox.inputValue();
+    if (subdomainValue === '') {
+      const note = subdomainBox.locator('xpath=..').locator('.setting-note');
+      await expect(note).toBeVisible();
+      await expect(note).not.toHaveText('');
+    }
 
     // Both fields above are set by flags on this container, so the panel marks them fixed at
     // launch: a restart reuses the same argv, so editing them here could never take effect

@@ -371,7 +371,7 @@ you do not need; nothing here is required.
 # --- Gateway and region ---
 
 # Start from this gateway but still elect the closest region and fail over.
-# Not the same as -server, which would pin this client here.
+# Not the same as -pin, which would pin this client here.
 server_url: "https://tunnel.example.com"
 
 # Leave empty to elect by latency. Setting it skips the probe entirely.
@@ -513,4 +513,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*

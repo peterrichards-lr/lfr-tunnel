@@ -736,18 +736,22 @@ comes back at 08:00 local long after anyone is watching.
 
 This is how to drive the whole cycle deliberately.
 
-### The flag that makes it possible: `-region`, not `-server`
+### The flag that makes it possible: `-prefer-region`, not `-pin`
 
 The three routing modes are not interchangeable, and only one of them can be tested this way:
 
 | flag | behaviour |
 | --- | --- |
 | *(nothing)* | latency probe picks the closest reachable region; fails over and back |
-| `-gateway <url>` | fetch the roster from there WITHOUT pinning; still probes, fails over (#1694) |
-| `-server <url>` | **PINS** -- no region selection, **no failover**. Useless for this test (#1691) |
-| `-region <name>` | **targets that region**, falls back to a probe if it is unavailable at startup (#1690), and returns to it when it reappears -- with **no latency threshold**, because a named region is a stated choice rather than a latency question (#1937) |
+| `-bootstrap <url>` | fetch the roster from there WITHOUT pinning; still probes, fails over (#1694) |
+| `-pin <url>` | **PINS** -- no region selection, **no failover**. Useless for this test (#1691) |
+| `-prefer-region <name>` | **targets that region**, falls back to a probe if it is unavailable at startup (#1690), and returns to it when it reappears -- with **no latency threshold**, because a named region is a stated choice rather than a latency question (#1937) |
 
-`-region` is the one to use. `chooseReelectionTarget` captures the *requested* region before
+These were renamed in #2061 -- they used to be `-gateway`, `-server` and `-region`, names that
+described where the value came from rather than what it did to routing. The old spellings still
+work and print a deprecation warning, so a copy-pasted older command will run; write the new ones.
+
+`-prefer-region` is the one to use. `chooseReelectionTarget` captures the *requested* region before
 resolution specifically so it can tell "the user asked for apac" from "a probe chose apac" -- which
 is what lets it move back.
 
@@ -782,7 +786,7 @@ did not retry until `04:55:25` -- an hour to the second.
 ```bash
 export LFT_REGION_FAILOVER_COOLDOWN=15s
 export LFT_REELECTION_MIN_INTERVAL=30s
-lfr-tunnel -region apac
+lfr-tunnel -prefer-region apac
 ```
 
 Watch two things at once. The console shows the human story; the session log is the evidence:
@@ -828,4 +832,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*

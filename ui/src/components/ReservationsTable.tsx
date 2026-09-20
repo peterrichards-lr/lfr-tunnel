@@ -166,9 +166,15 @@ export default function ReservationsTable({
                   const host = r.subdomain
                     ? `${r.subdomain}.${r.domain}`
                     : r.domain;
+                  // -bootstrap, deliberately. The other spelling this line used to carry
+                  // also PINS the client to the gateway it names, so the command the portal
+                  // hands a user switched off region selection and failover for the life of
+                  // their tunnel -- #1691, the defect that kept a US user on a European
+                  // gateway. -bootstrap fetches the roster from here and still elects the
+                  // closest one.
                   const cliCommand = r.subdomain
-                    ? `lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`
-                    : `lfr-tunnel -domain ${r.domain} -server ${window.location.origin}`;
+                    ? `lfr-tunnel -subdomain ${r.subdomain} -bootstrap ${window.location.origin}`
+                    : `lfr-tunnel -domain ${r.domain} -bootstrap ${window.location.origin}`;
                   const isExpired =
                     r.expires_at && new Date(r.expires_at) < new Date();
                   const canExtend = !!(

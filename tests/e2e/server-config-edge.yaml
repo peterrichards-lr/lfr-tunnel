@@ -17,4 +17,4 @@ edge_token: "edge-us-token"
 # the first one. Production leaves this unset.
 edge_metrics_interval_seconds: 2
 docker_image: "peterjrichards/lfr-tunnel:latest"
-docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"
+docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#method-b-standalone-docker-container-edr-immune"

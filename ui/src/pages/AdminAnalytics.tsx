@@ -996,7 +996,7 @@ export default function AdminAnalytics() {
                     <p className="text-muted text-sm mt-md mb-0">
                       {t(
                         'node_placement_pinned',
-                        '{0} user(s) pinned their client with -server, so it cannot move between gateways and never probes.',
+                        '{0} user(s) pinned their client with -pin, so it cannot move between gateways and never probes.',
                       ).replace('{0}', String(total))}
                     </p>
                   );

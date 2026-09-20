@@ -27,7 +27,9 @@ BLOB = re.compile(
     r"(?:\#(?P<anchor>[\w-]+))?"
 )
 
-SOURCE_SUFFIXES = (".go", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".html", ".sh", ".ps1", ".yml")
+SOURCE_SUFFIXES = (
+    ".go", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".html", ".sh", ".ps1", ".yml", ".yaml"
+)
 
 
 def github_slug(heading):

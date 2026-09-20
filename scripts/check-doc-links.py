@@ -55,7 +55,16 @@ def main():
     sources = [
         p
         for p in listed
-        if p.endswith(SOURCE_SUFFIXES) and "node_modules" not in p and "/vendor/" not in p
+        if p.endswith(SOURCE_SUFFIXES)
+        and "node_modules" not in p
+        and "/vendor/" not in p
+        # Test files are excluded, for the same reason check-deprecated-flag-strings.py excludes
+        # them: a fixture may carry a broken link ON PURPOSE, because detecting one is what it
+        # tests. pkg/ops/software_identity_drift_test.go reproduces the exact dead anchor that
+        # served a dead portal link at v1.48.40 (#2096), and this guard flagged it -- correctly
+        # by its own rule, and uselessly, since nothing prints a link from a test.
+        and not p.endswith("_test.go")
+        and "/tests/" not in p
     ]
 
     issues = 0

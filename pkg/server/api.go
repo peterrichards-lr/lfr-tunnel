@@ -1964,8 +1964,15 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 		return
 	}
 
-	if req.AccessMode != "and" && req.AccessMode != "or" && req.AccessMode != "" {
-		http.Error(w, `{"error":"Access mode must be 'and' or 'or'"}`, http.StatusBadRequest)
+	// Every mode the UIs offer. They all sent public/passcode/whitelist and were all rejected,
+	// so access control could not be set from the client Inspector or from either portal
+	// (#2098). The API now speaks the same vocabulary as the things calling it.
+	switch req.AccessMode {
+	case "", "and", "or", "public", "passcode", "whitelist":
+	default:
+		http.Error(w,
+			`{"error":"Access mode must be one of: public, passcode, whitelist, or, and"}`,
+			http.StatusBadRequest)
 		return
 	}
 

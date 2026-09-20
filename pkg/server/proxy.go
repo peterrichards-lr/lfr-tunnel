@@ -821,6 +821,22 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 	hasPasscode := passcodeRequired != ""
 	hasIPWhitelist := ipWhitelist != ""
 
+	// The mode decides WHICH factors apply. Before this, enforcement was driven purely by
+	// whether a passcode or whitelist was non-empty, and the mode only chose AND vs OR -- so
+	// there was no way to express "keep these, do not apply them", and every UI offering
+	// Public/Passcode/Whitelist was sending a value the API rejected outright (#2098).
+	//
+	// Public returns here with the values still stored: selecting it stops enforcement without
+	// discarding the passcode, so switching back re-applies it without retyping.
+	switch accessMode {
+	case "public":
+		return true
+	case "passcode":
+		hasIPWhitelist = false
+	case "whitelist":
+		hasPasscode = false
+	}
+
 	if !hasPasscode && !hasIPWhitelist {
 		return true
 	}

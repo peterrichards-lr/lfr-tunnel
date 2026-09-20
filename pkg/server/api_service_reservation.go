@@ -292,6 +292,9 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		res.Passcode = ""
 	}
 	res.WhitelistIPs = whitelistIPs
+	// Stored as chosen. "or" remains the fallback for a caller that says nothing, which is the
+	// historic behaviour, but an explicit public/passcode/whitelist must survive -- it is what
+	// decides which factors the proxy applies (#2098).
 	if accessMode != "" {
 		res.AccessMode = accessMode
 	} else {

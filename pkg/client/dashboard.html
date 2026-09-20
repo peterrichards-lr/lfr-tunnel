@@ -263,7 +263,7 @@
             </div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Access Mode</label>
-                <select id="ac-mode" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
+                <select id="ac-mode" onchange="updatePublicNotice()" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
                     <option value="public">🌐 Public (Anyone can access)</option>
                     <option value="passcode">🔑 Passcode (Requires secret code)</option>
                     <option value="whitelist">🛡️ Whitelist (Restrict by IP)</option>
@@ -271,6 +271,7 @@
                     <option value="and">🔒 Passcode AND Whitelist</option>
                 </select>
             </div>
+            <div id="ac-public-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 10px; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);" data-i18n="client_access_public_notice">This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.</div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
         </div>
         <div class="public-urls-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;">
@@ -295,6 +296,7 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_access_public_notice": "This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.",
         "client_logs_truncated": "Showing the most recent part of this log -- earlier lines are in the file on disk.",
         "client_logs_files_title": "Log files on this machine",
         "client_logs_files_note": "All three logs are viewable above -- pick one from the selector. The traffic log records every proxied request, and includes bodies when the client is run with body logging on. Paths are listed so you can grep, ship or rotate them outside the Inspector.",
@@ -368,6 +370,7 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_access_public_notice": "Este túnel está abierto a todo el tráfico: cualquiera con la URL puede acceder. El código o la lista de IP de abajo se conservan para cuando vuelvas a cambiar, y no se están aplicando.",
         "client_setting_fixed_at_launch": "Fijado al iniciar mediante {0}. Se aplica en cada arranque, incluido un reinicio, por lo que no puede cambiarse aquí.",
         "client_setting_in_force_now": "En vigor ahora: {0}. Guardar cambia la configuración almacenada; reinicie el cliente para aplicarla.",
         "client_settings_apply_next_start": "Guardado. Estos ajustes se aplicarán la próxima vez que se inicie el cliente.",
@@ -441,6 +444,7 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_access_public_notice": "Dieser Tunnel ist für allen Datenverkehr offen — wer die URL hat, kommt hinein. Passcode und IP-Liste unten bleiben für später erhalten und werden derzeit nicht angewendet.",
         "client_setting_fixed_at_launch": "Beim Start durch {0} festgelegt. Das wird bei jedem Start angewendet, auch bei einem Neustart, daher kann es hier nicht geändert werden.",
         "client_setting_in_force_now": "Aktuell aktiv: {0}. Speichern ändert die gespeicherte Konfiguration; starten Sie den Client neu, um sie anzuwenden.",
         "client_settings_apply_next_start": "Gespeichert. Diese Einstellungen werden beim nächsten Start des Clients angewendet.",
@@ -514,6 +518,7 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_access_public_notice": "Ce tunnel est ouvert à tout le trafic : toute personne disposant de l'URL peut y accéder. Le code et la liste d'IP ci-dessous sont conservés pour plus tard et ne sont pas appliqués.",
         "client_setting_fixed_at_launch": "Défini au démarrage par {0}. Cela s'applique à chaque démarrage, y compris après un redémarrage, et ne peut donc pas être modifié ici.",
         "client_setting_in_force_now": "En vigueur actuellement : {0}. Enregistrer modifie la configuration stockée ; redémarrez le client pour l'appliquer.",
         "client_settings_apply_next_start": "Enregistré. Ces paramètres s'appliqueront au prochain démarrage du client.",
@@ -587,6 +592,7 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_access_public_notice": "Este túnel está aberto a todo o tráfego — qualquer pessoa com o URL consegue aceder. O código e a lista de IP abaixo são mantidos para quando voltar a mudar e não estão a ser aplicados.",
         "client_setting_fixed_at_launch": "Fixado no arranque por {0}. Isso é aplicado em todos os arranques, incluindo um reinício, pelo que não pode ser alterado aqui.",
         "client_setting_in_force_now": "Em vigor agora: {0}. Guardar altera a configuração guardada; reinicie o cliente para a aplicar.",
         "client_settings_apply_next_start": "Guardado. Estas definições serão aplicadas no próximo arranque do cliente.",
@@ -660,6 +666,7 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_access_public_notice": "このトンネルはすべてのトラフィックに開かれています。URL を知っていれば誰でもアクセスできます。下のパスコードと IP リストは切り替え時のために保持され、現在は適用されていません。",
         "client_setting_fixed_at_launch": "{0} により起動時に固定されています。再起動を含むすべての起動で適用されるため、ここでは変更できません。",
         "client_setting_in_force_now": "現在有効: {0}。保存すると保存済み設定が変更されます。適用するにはクライアントを再起動してください。",
         "client_settings_apply_next_start": "保存しました。これらの設定は次回クライアント起動時に適用されます。",
@@ -915,6 +922,7 @@ function setLanguage(lang) {
                     }
                     if (document.activeElement !== modeEl) {
                         modeEl.value = state.access_control.mode || state.access_mode || 'public';
+                        updatePublicNotice();
                     }
                 } else {
                     if (document.activeElement !== passcodeEl) {
@@ -925,6 +933,7 @@ function setLanguage(lang) {
                     }
                     if (document.activeElement !== modeEl) {
                         modeEl.value = state.access_mode || 'public';
+                        updatePublicNotice();
                     }
                 }
 
@@ -956,6 +965,16 @@ function setLanguage(lang) {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({enabled: isChecked})
             });
+        }
+
+        // Public means the gateway is given nothing to enforce, while the passcode and IP list
+        // you typed stay put for when you switch back (#2098). A full passcode box above an open
+        // tunnel is the one state worth narrating, so it is narrated.
+        function updatePublicNotice() {
+            const modeEl = document.getElementById('ac-mode');
+            const notice = document.getElementById('ac-public-notice');
+            if (!modeEl || !notice) return;
+            notice.style.display = modeEl.value === 'public' ? 'block' : 'none';
         }
 
         async function saveAccessControl() {

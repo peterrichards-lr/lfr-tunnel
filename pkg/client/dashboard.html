@@ -1541,7 +1541,7 @@ function setLanguage(lang) {
                 const res = await fetch('/api/config');
                 const cfg = await res.json();
                 // Show what the running client is ACTUALLY using, not only what was saved
-                // (#1211). Started with -server/-subdomain and no config file, this panel
+                // (#1211). Started from flags with no config file at all, this panel
                 // used to render empty boxes while the client sat connected and serving
                 // traffic -- the one screen someone opens to ask "am I on the right
                 // gateway?" was the one that could not say. Same reasoning as the

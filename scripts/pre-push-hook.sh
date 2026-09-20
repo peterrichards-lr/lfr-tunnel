@@ -185,7 +185,7 @@ done
 #   check-docs-routing.py  a page on the site that no landing page names, reachable only by
 #                          search or by knowing the URL
 if command -v python3 >/dev/null 2>&1; then
-    for gate in check-docs-fences.py check-doc-links.py check-docs-routing.py; do
+    for gate in check-docs-fences.py check-doc-links.py check-docs-routing.py check-deprecated-flag-strings.py; do
         # Presence-guarded, exactly like the shell gates above. These inspect the whole
         # repository, so running them somewhere that has no scripts/ or no docs/ -- a hook test
         # fixture, a partial checkout -- asks them about a repository that is not there. One of

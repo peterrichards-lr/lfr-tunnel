@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/config/configtest"
 )
 
 // docker_bypass_url was pinned in the live control plane's server-config.yaml, so #2082's
@@ -39,7 +40,7 @@ docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/d
 // the then-current default, the default was later corrected by #2082, and the pin silently won.
 // A redundant pin is a stale pin that has not happened yet, so the line has to come out.
 func TestPinningTheCurrentDefaultIsAlsoReported(t *testing.T) {
-	live := []byte("docker_bypass_url: \"" + config.DefaultDockerBypassURL + "\"\n")
+	live := []byte("docker_bypass_url: " + configtest.SingleQuoted(config.DefaultDockerBypassURL) + "\n")
 
 	findings, err := CheckSoftwareIdentityDrift(live)
 	if err != nil {

@@ -198,3 +198,63 @@ func TestLoadConfigReadsTheResponseOffTheNameItAssigned(t *testing.T) {
 		}
 	}
 }
+
+// Every settings field must sit inside exactly one of the two sections (#2110).
+//
+// #2088 established the distinction and labelled it with a muted caption inside the same grid,
+// which is what prompted "I do not believe it is very intuitive which settings require a restart
+// and which don't". A caption does not bound anything, so a field could sit visually between the
+// two groups and belong to neither.
+//
+// Asserts the GROUPING rather than the wording: the headings can be reworded freely, but a field
+// that falls outside both sections fails.
+func TestEverySettingsFieldSitsInOneOfTheTwoSections(t *testing.T) {
+	page := dashboard(t)
+
+	restartAt := strings.Index(page, `data-i18n="client_settings_group_restart"`)
+	liveAt := strings.Index(page, `data-i18n="client_settings_group_live"`)
+	saveAt := strings.Index(page, `onclick="saveSettings()"`)
+
+	if restartAt < 0 || liveAt < 0 || saveAt < 0 {
+		t.Fatal("the two section headings and the save button no longer all exist; this test " +
+			"is asserting about a layout that has changed")
+	}
+	if restartAt >= liveAt || liveAt >= saveAt {
+		t.Fatalf("sections are out of order: restart=%d live=%d save=%d", restartAt, liveAt, saveAt)
+	}
+
+	restartFields := regexp.MustCompile(`id="(cfg-[a-z-]+)"`).
+		FindAllStringSubmatch(page[restartAt:liveAt], -1)
+	liveFields := regexp.MustCompile(`id="(cfg-[a-z-]+)"`).
+		FindAllStringSubmatch(page[liveAt:saveAt], -1)
+
+	found := map[string]string{}
+	for _, m := range restartFields {
+		found[m[1]] = "restart"
+	}
+	for _, m := range liveFields {
+		found[m[1]] = "live"
+	}
+
+	// The fields whose group is decided by behaviour, not taste: these are written to
+	// config.yaml and read only at startup, so they cannot be anywhere but the restart section.
+	for _, id := range []string{
+		"cfg-server-url", "cfg-auth-token", "cfg-subdomain", "cfg-target-host",
+		"cfg-dest-port", "cfg-preserve-host", "cfg-insecure-skip-verify", "cfg-log-dir",
+	} {
+		switch found[id] {
+		case "restart":
+		case "":
+			t.Errorf("%s is in neither section -- a field outside both groups tells the user "+
+				"nothing about when their change takes effect", id)
+		default:
+			t.Errorf("%s is in the %q section, but it is only read at startup", id, found[id])
+		}
+	}
+
+	// ...and the one the handler applies to the running engine.
+	if found["cfg-maintenance-path"] != "live" {
+		t.Errorf("cfg-maintenance-path is in %q; the handler writes engine.MaintenancePath, so "+
+			"it applies without a restart", found["cfg-maintenance-path"])
+	}
+}

@@ -298,6 +298,8 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_settings_group_restart_hint": "Saved now, in force the next time the client starts. Saving offers to restart it.",
+        "client_settings_group_live_hint": "Takes effect on the running client as soon as you save.",
         "client_passcode_confirm": "Confirm passcode",
         "client_passcode_mismatch": "The two passcodes do not match.",
         "client_access_public_notice": "This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.",
@@ -374,6 +376,8 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_settings_group_restart_hint": "Se guarda ahora y se aplica la próxima vez que se inicie el cliente. Al guardar se ofrece reiniciarlo.",
+        "client_settings_group_live_hint": "Se aplica al cliente en ejecución en cuanto guardas.",
         "client_passcode_confirm": "Confirmar código",
         "client_passcode_mismatch": "Los dos códigos no coinciden.",
         "client_access_public_notice": "Este túnel está abierto a todo el tráfico: cualquiera con la URL puede acceder. El código o la lista de IP de abajo se conservan para cuando vuelvas a cambiar, y no se están aplicando.",
@@ -450,6 +454,8 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_settings_group_restart_hint": "Jetzt gespeichert, wirksam beim nächsten Start des Clients. Beim Speichern wird ein Neustart angeboten.",
+        "client_settings_group_live_hint": "Wird sofort beim Speichern auf den laufenden Client angewendet.",
         "client_passcode_confirm": "Passcode bestätigen",
         "client_passcode_mismatch": "Die beiden Passcodes stimmen nicht überein.",
         "client_access_public_notice": "Dieser Tunnel ist für allen Datenverkehr offen — wer die URL hat, kommt hinein. Passcode und IP-Liste unten bleiben für später erhalten und werden derzeit nicht angewendet.",
@@ -526,6 +532,8 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_settings_group_restart_hint": "Enregistré maintenant, appliqué au prochain démarrage du client. L'enregistrement propose de le redémarrer.",
+        "client_settings_group_live_hint": "Prend effet sur le client en cours dès l'enregistrement.",
         "client_passcode_confirm": "Confirmer le code",
         "client_passcode_mismatch": "Les deux codes ne correspondent pas.",
         "client_access_public_notice": "Ce tunnel est ouvert à tout le trafic : toute personne disposant de l'URL peut y accéder. Le code et la liste d'IP ci-dessous sont conservés pour plus tard et ne sont pas appliqués.",
@@ -602,6 +610,8 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_settings_group_restart_hint": "Guardado agora, em vigor no próximo arranque do cliente. Ao guardar é oferecido reiniciá-lo.",
+        "client_settings_group_live_hint": "Aplica-se ao cliente em execução assim que guardar.",
         "client_passcode_confirm": "Confirmar código",
         "client_passcode_mismatch": "Os dois códigos não coincidem.",
         "client_access_public_notice": "Este túnel está aberto a todo o tráfego — qualquer pessoa com o URL consegue aceder. O código e a lista de IP abaixo são mantidos para quando voltar a mudar e não estão a ser aplicados.",
@@ -678,6 +688,8 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_settings_group_restart_hint": "今すぐ保存され、次回クライアント起動時に有効になります。保存時に再起動を提案します。",
+        "client_settings_group_live_hint": "保存するとすぐに実行中のクライアントに反映されます。",
         "client_passcode_confirm": "パスコードの確認",
         "client_passcode_mismatch": "2 つのパスコードが一致しません。",
         "client_access_public_notice": "このトンネルはすべてのトラフィックに開かれています。URL を知っていれば誰でもアクセスできます。下のパスコードと IP リストは切り替え時のために保持され、現在は適用されていません。",
@@ -1499,7 +1511,10 @@ function setLanguage(lang) {
                             
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
                                 <!-- Column 1: Connection & Authentication -->
-                                <div style="grid-column: 1 / -1; margin: 4px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);" data-i18n="client_settings_group_restart">Applies when the client restarts</div>
+                                <div style="grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 18px; background: rgba(255,255,255,0.02);">
+                                    <h4 style="margin: 0 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--text-main);" data-i18n="client_settings_group_restart">Applies when the client restarts</h4>
+                                    <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-muted);" data-i18n="client_settings_group_restart_hint">Saved now, in force the next time the client starts. Saving offers to restart it.</p>
+                                    <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
                                     
@@ -1551,7 +1566,12 @@ function setLanguage(lang) {
                                         <input type="text" id="cfg-log-dir" placeholder="~/.lfr-tunnel/logs" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
                                         <span id="cfg-log-dir-effective" style="color: var(--text-muted); font-size: 11px;"></span>
                                 </div>
-                                    <div style="grid-column: 1 / -1; margin: 18px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);" data-i18n="client_settings_group_live">Applies immediately</div>
+                                    </div>
+                                    </div>
+                                    <div style="grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 18px; background: rgba(255,255,255,0.02);">
+                                    <h4 style="margin: 0 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--text-main);" data-i18n="client_settings_group_live">Applies immediately</h4>
+                                    <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-muted);" data-i18n="client_settings_group_live_hint">Takes effect on the running client as soon as you save.</p>
+                                    <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
                                         <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
                                         <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">

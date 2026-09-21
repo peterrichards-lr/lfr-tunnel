@@ -674,6 +674,8 @@ func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request,
 	values := map[string]string{
 		"{{.Host}}":        host,
 		"{{.RedirectURI}}": redirectURI,
+		// Absolute, so the injected <base href> cannot re-point it at the portal.
+		"{{.VerifyURL}}": p.requestOrigin(r, host) + "/lfr-tunnel-verify",
 	}
 	if errStr != "" {
 		tmpl = strings.ReplaceAll(tmpl, "{{if .Error}}", "")
@@ -917,6 +919,23 @@ func interpolateHeaderValue(val, clientIP, host, proto string) string {
 	val = strings.ReplaceAll(val, "$host", host)
 	val = strings.ReplaceAll(val, "$proto", proto)
 	return val
+}
+
+// requestOrigin is the scheme and host the visitor is actually on.
+//
+// Needed because injectBaseTag rewrites every proxied page with <base href> pointing at the
+// PORTAL, so that shared assets load from one place. A <base> also re-points root-relative URLs:
+// the passcode form's action="/lfr-tunnel-verify" resolved against the control plane, which does
+// not route it, so submitting a passcode landed on a 404 and no passcode could ever be entered.
+//
+// The verification endpoint is intercepted inside the proxy path, per tunnel host, so the form
+// has to post to the host the visitor came in on.
+func (p *ProxyHandler) requestOrigin(r *http.Request, host string) string {
+	scheme := "https"
+	if r != nil && r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	return scheme + "://" + host
 }
 
 func (p *ProxyHandler) getPortalBaseURL(r *http.Request, host string) string {

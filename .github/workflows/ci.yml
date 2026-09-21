@@ -527,6 +527,9 @@ jobs:
       - name: Portal capability parity
         run: node scripts/check-portal-parity.cjs
 
+      - name: Both portal arms group a client's tunnels the same way
+        run: node scripts/check-tunnel-grouping.cjs
+
       # The four gates below existed, had hook tests, and ran NOWHERE (#1929): not in any CI
       # job and not in either git hook, so they fired only when someone typed the make target
       # by hand. A gate nobody runs is documentation with a shebang -- and two of these were

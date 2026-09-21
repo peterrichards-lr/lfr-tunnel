@@ -152,7 +152,13 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 						domain := parts[1]
 						res, err := s.db.GetSubdomainReservationByName(l.SubdomainPrefix, domain)
 						if err == nil && res != nil {
-							passcode = res.Passcode
+							// MASKED. res.Passcode is the stored bcrypt hash, and this map
+							// goes over a WebSocket to the browser -- for every tunnel on the
+							// system when the viewer is an admin or owner (#2135). The
+							// reservations API has masked it since #2101; this path was
+							// missed. Nothing renders the field today, which is why it went
+							// unnoticed, and is not a reason to keep sending it.
+							passcode = MaskPasscode(res.Passcode)
 							whitelistIPs = res.WhitelistIPs
 							accessMode = res.AccessMode
 						}
@@ -190,7 +196,12 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 						domain := parts[1]
 						res, err := s.db.GetSubdomainReservationByName(el.Subdomain, domain)
 						if err == nil && res != nil {
-							passcode = res.Passcode
+							// Masked, exactly as the local-lease block above. This is the
+							// EDGE-hosted copy of the same payload, and it leaked the same
+							// bcrypt hash (#2135). Found by the guard after the first one was
+							// fixed -- the two blocks are duplicated, so a fix applied to one
+							// reads as complete while half the fleet still leaks.
+							passcode = MaskPasscode(res.Passcode)
 							whitelistIPs = res.WhitelistIPs
 							accessMode = res.AccessMode
 						}

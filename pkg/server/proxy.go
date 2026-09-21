@@ -745,7 +745,23 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 		// sends the visitor to any origin the caller names (#1324).
 		redirectURI := safeRedirectPath(r.FormValue("redirect_uri"))
 
-		passcodeRequired := ""
+		// THE VALUE THAT DECIDED TO CHALLENGE IS THE VALUE THAT IS CHECKED (#2125).
+		//
+		// This used to read the reservation out of the database, while the enforcement path
+		// below reads lease.AccessControls(). On an edge -- no database at all -- that left
+		// passcodeRequired empty, the comparison below could never be true, and every correct
+		// passcode was answered with "Incorrect passcode. Please try again." The edge locked
+		// the door and held no key.
+		//
+		// #1367 moved enforcement onto the lease precisely so an edge could enforce; this half
+		// was left behind, and the two have been diverged since. Each is defensible read on its
+		// own, which is why nobody noticed: only the pairing is wrong.
+		passcodeRequired, _, _ := lease.AccessControls()
+
+		// The database is still consulted, for the one thing that genuinely needs it: upgrading
+		// a legacy hash in place once the plaintext has been proven correct. That is an
+		// optimisation and already best-effort, so an edge simply skips it -- letting a valid
+		// visitor in does not depend on it.
 		var passcodeRes *db.SubdomainReservation
 		if p.db != nil {
 			parts := strings.SplitN(host, ".", 2)
@@ -753,7 +769,6 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 				domain := parts[1]
 				res, err := p.db.GetSubdomainReservationByName(lease.SubdomainPrefix, domain)
 				if err == nil && res != nil {
-					passcodeRequired = res.Passcode
 					passcodeRes = res
 				}
 			}

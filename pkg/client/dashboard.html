@@ -1544,7 +1544,7 @@ function setLanguage(lang) {
                                 <div style="grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 18px; background: rgba(255,255,255,0.02);">
                                     <h4 style="margin: 0 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--text-main);" data-i18n="client_settings_group_restart">Applies when the client restarts</h4>
                                     <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-muted);" data-i18n="client_settings_group_restart_hint">Saved now, in force the next time the client starts. Saving offers to restart it.</p>
-                                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
                                     <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
                                     
@@ -1595,13 +1595,15 @@ function setLanguage(lang) {
                                         <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Log Directory <span class="help-icon" title="Where the traffic and error logs are written. Leave blank for the default (~/.lfr-tunnel/logs). Applies the next time the client starts.">?</span></label>
                                         <input type="text" id="cfg-log-dir" placeholder="~/.lfr-tunnel/logs" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
                                         <span id="cfg-log-dir-effective" style="color: var(--text-muted); font-size: 11px;"></span>
-                                </div>
-                                    </div>
-                                    </div>
-                                    <div style="grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 18px; background: rgba(255,255,255,0.02);">
+                                        </div>
+                                    </div><!-- /Local Target column -->
+                                    </div><!-- /columns -->
+                                </div><!-- /group: applies when the client restarts -->
+
+                                <div style="grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 18px; background: rgba(255,255,255,0.02);">
                                     <h4 style="margin: 0 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--text-main);" data-i18n="client_settings_group_live">Applies immediately</h4>
                                     <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-muted);" data-i18n="client_settings_group_live_hint">Takes effect on the running client as soon as you save.</p>
-                                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
                                     <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
                                         <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
                                         <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
@@ -1616,10 +1618,9 @@ function setLanguage(lang) {
                                             <option value="time">Time of Day (8am-8pm Light)</option>
                                         </select>
                                     </div>
-                                    </div>
-
-                                    
-                            </div>
+                                    </div><!-- /fields -->
+                                </div><!-- /group: applies immediately -->
+                            </div><!-- /settings groups -->
 
                             <div style="border-top: 1px solid var(--border); padding-top: 20px; text-align: right;">
                                 <button onclick="saveSettings()" style="background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" data-i18n="client_save_config">Save Configuration</button>

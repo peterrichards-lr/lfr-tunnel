@@ -223,6 +223,67 @@ console.log('Executing inspector functions against a DOM stub...\n');
   );
 }
 
+// The Settings groups must be SIBLINGS, and the template that draws them must balance.
+//
+// #2112 split "Applies when the client restarts" from "Applies immediately" because it was not
+// intuitive which settings needed one. They shipped NESTED -- the live group was a child of the
+// restart group -- so the markup said the opposite of the intent: restart-required settings, and
+// inside them, a few that apply at once (#2119). The template also left two divs unclosed, which
+// a browser repairs in silence.
+//
+// No text guard can catch this. Every string one would grep for is present and correct; only the
+// shape of the tree is wrong. So this parses.
+{
+  const template = (() => {
+    const start = page.indexOf('async function renderSettingsView()');
+    const marker = page.indexOf('main.innerHTML = `', start);
+    const from = marker + 'main.innerHTML = `'.length;
+    return page.slice(from, page.indexOf('`;', from));
+  })();
+
+  const VOID = new Set(['input', 'img', 'br', 'hr', 'meta', 'link']);
+  const stack = [];
+  const depths = [];
+  const tagRe = /<(\/?)([a-zA-Z0-9]+)([^>]*)>/g;
+  let m;
+  while ((m = tagRe.exec(template)) !== null) {
+    const [, closing, tag, attrs] = m;
+    const name = tag.toLowerCase();
+    if (VOID.has(name) || attrs.endsWith('/')) continue;
+    if (closing) {
+      for (let i = stack.length - 1; i >= 0; i -= 1) {
+        if (stack[i].tag === name) {
+          stack.length = i;
+          break;
+        }
+      }
+      continue;
+    }
+    // A settings GROUP is the bordered full-width box carrying one of the two headings.
+    const isGroup = name === 'div' && attrs.includes('grid-column: 1 / -1');
+    stack.push({ tag: name, group: isGroup });
+    if (isGroup) depths.push(stack.filter((e) => e.group).length);
+  }
+
+  check(
+    'both Settings groups exist',
+    depths.length === 2,
+    `found ${depths.length} group box(es); the split in #2112 needs exactly two`,
+  );
+  check(
+    'the Settings groups are siblings, not nested',
+    depths.every((d) => d === 1),
+    'a group inside another group tells the reader that the inner settings are a SUBSET of the ' +
+      'outer ones -- the opposite of what splitting them was for',
+  );
+  check(
+    'the settings template closes every tag it opens',
+    stack.length === 0,
+    `left open: ${stack.map((e) => e.tag).join(', ')} -- the browser repairs this silently, so ` +
+      'the only symptom is a layout nobody can explain',
+  );
+}
+
 console.log(
   failures === 0
     ? `✅ ${checks} behavioural check(s) passed against the real page.`

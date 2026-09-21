@@ -274,6 +274,7 @@
                 </select>
             </div>
             <div id="ac-public-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 10px; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);" data-i18n="client_access_public_notice">This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.</div>
+            <div id="ac-locked-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 0; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);"></div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
         </div>
         <div class="public-urls-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;">
@@ -963,6 +964,8 @@ function setLanguage(lang) {
                     }
                 }
 
+                applyAccessControlEditability(state.access_control);
+
                 // Update requests if changed
                 if (JSON.stringify(requests.map(r => r.id)) !== JSON.stringify(state.history.map(r => r.id))) {
                     requests = state.history || [];
@@ -1001,6 +1004,33 @@ function setLanguage(lang) {
             const notice = document.getElementById('ac-public-notice');
             if (!modeEl || !notice) return;
             notice.style.display = modeEl.value === 'public' ? 'block' : 'none';
+        }
+
+        // A control that cannot be applied is disabled and says why, rather than accepting input
+        // and failing on submit (#2116). The client decides this with the same function the save
+        // endpoint uses, so the form cannot offer what the endpoint would refuse.
+        function applyAccessControlEditability(ac) {
+            const notice = document.getElementById('ac-locked-notice');
+            const btn = document.getElementById('ac-save-btn');
+            const fields = ['ac-passcode', 'ac-passcode-confirm', 'ac-whitelist', 'ac-mode']
+                .map(id => document.getElementById(id))
+                .filter(Boolean);
+
+            // Absent means an older client or a payload that predates the field: leave the form
+            // alone rather than disabling it on a guess.
+            const editable = !ac || ac.editable !== false;
+            const reason = (ac && ac.editable_reason) || '';
+
+            fields.forEach(el => { el.disabled = !editable; });
+            if (btn) {
+                btn.disabled = !editable;
+                btn.style.opacity = editable ? '1' : '0.5';
+                btn.style.cursor = editable ? 'pointer' : 'not-allowed';
+            }
+            if (notice) {
+                notice.style.display = editable ? 'none' : 'block';
+                if (!editable && notice.innerText !== reason) notice.innerText = reason;
+            }
         }
 
         async function saveAccessControl() {

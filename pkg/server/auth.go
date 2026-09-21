@@ -27,10 +27,22 @@ type TunnelLease struct {
 	UserID          string `json:"user_id"`
 	SubdomainPrefix string `json:"subdomain_prefix"`
 	FullHost        string `json:"full_host"`
-	SessionToken    string `json:"session_token"`
-	LocalPort       int    `json:"local_port"`
-	TargetPort      int    `json:"target_port"`
-	RateLimit       int    `json:"rate_limit"`
+	// json:"-" because this struct reaches a browser: the admin users list embeds whole
+	// leases as active_tunnels, so the tag published every active tunnel's session token to
+	// any admin or owner loading that page (#2137).
+	//
+	// The token is not a hash of a credential, it IS one, and a directly actionable one:
+	// /api/deregister authenticates on nothing else, so anyone holding it can tear down that
+	// session's tunnels. Nothing needs it marshalled -- the registry keys sessionLeases by
+	// token as a Go map, nothing persists a lease as JSON, and the edge control channel does
+	// not send this struct.
+	//
+	// Same reasoning as BaseRateLimit below, which has carried json:"-" since #2006. This
+	// file already knew the distinction; the token was simply never revisited.
+	SessionToken string `json:"-"`
+	LocalPort    int    `json:"local_port"`
+	TargetPort   int    `json:"target_port"`
+	RateLimit    int    `json:"rate_limit"`
 	// BaseRateLimit is the limit this lease was granted at registration, kept so a
 	// bandwidth-quota throttle can be lifted again (#1959).
 	//
@@ -53,7 +65,14 @@ type TunnelLease struct {
 	// RateLimit the portal already shows is the number an operator acts on.
 	BaseRateLimit int    `json:"-"`
 	ClientIP      string `json:"client_ip"`
-	BasicAuth     string `json:"basic_auth"`
+	// json:"-" for the same reason as SessionToken above (#2137). This is the tunnel's HTTP
+	// Basic Auth credential stored as PLAINTEXT "user:password" -- proxy.go compares the
+	// decoded Authorization header against it byte for byte -- so publishing it in
+	// active_tunnels handed every admin a working login for every protected tunnel.
+	//
+	// Of the three fields in this struct that should never have been public, this is the most
+	// directly usable: no derivation, no replay endpoint needed, just paste it into a browser.
+	BasicAuth string `json:"-"`
 	// Access control carried on the lease rather than read from the database per request
 	// (#1329), which also makes it available on an edge, where there is no database to read
 	// (#1367).

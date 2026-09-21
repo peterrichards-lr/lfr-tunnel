@@ -6562,6 +6562,8 @@ async function loadReservations() {
     if (res.ok) {
       const data = await res.json();
       const list = data.reservations || [];
+      // Kept so the Access Control dialog can find a row by id without refetching (#2101).
+      window.__reservationsCache = list;
       const limit =
         data.limit !== undefined && data.limit !== null ? data.limit : 0;
       const used = data.used || 0;
@@ -6661,6 +6663,7 @@ async function loadReservations() {
                                         <button class="action-menu-btn" onclick="toggleActionMenu('menu-reservation-${item.id}', event)">⋮</button>
                                         <div id="menu-reservation-${item.id}" class="action-menu-dropdown">
                                             ${canExtend ? `<button class="action-menu-item" onclick="requestExtension('${item.id}')">Extend</button>` : ''}
+                                            <button class="action-menu-item" onclick="openReservationAcModal('${item.id}')" data-i18n="access_control">🔒 Access Control</button>
                                             <button class="action-menu-item danger" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}')">Release</button>
                                         </div>
                                     </div>
@@ -8011,6 +8014,100 @@ window.openEdgeScheduleModal = async function (nodeId) {
   }
 
   document.getElementById('edge-schedule-modal').style.display = 'flex';
+};
+
+// Access Control for a reservation (#2101).
+//
+// V1 could only DISPLAY the mode and whitelist -- one read-only line in a tunnel detail view --
+// while V2 offered the full dialog. The portals are an A/B test and are meant to be functionally
+// identical, so a capability in one arm and not the other is a defect rather than a backlog item.
+let reservationAcTarget = null;
+
+window.openReservationAcModal = function (id) {
+  const res = (window.__reservationsCache || []).find(
+    (r) => String(r.id) === String(id),
+  );
+  if (!res) return;
+  reservationAcTarget = res;
+
+  document.getElementById('reservation-ac-host').textContent = res.subdomain
+    ? `${res.subdomain}.${res.domain}`
+    : res.domain;
+  document.getElementById('reservation-ac-mode').value =
+    res.access_mode || 'public';
+
+  // Never pre-filled. The API returns a mask rather than the stored bcrypt hash, and putting
+  // even the mask in the box invites saving it back -- which is exactly what re-hashed and
+  // destroyed people's passcodes (#2103). Empty means "leave the passcode alone".
+  document.getElementById('reservation-ac-passcode').value = '';
+  document.getElementById('reservation-ac-passcode-confirm').value = '';
+  document.getElementById('reservation-ac-passcode').placeholder = res.passcode
+    ? t('passcode_set_placeholder')
+    : '';
+
+  document.getElementById('reservation-ac-whitelist').value =
+    res.whitelist_ips || '';
+  document.getElementById('reservation-ac-error').style.display = 'none';
+  window.updateReservationAcNotice();
+  document.getElementById('reservation-ac-modal').style.display = 'flex';
+};
+
+window.closeReservationAcModal = function () {
+  document.getElementById('reservation-ac-modal').style.display = 'none';
+  reservationAcTarget = null;
+};
+
+// Public keeps the values and stops applying them, so that state is narrated rather than left to
+// be inferred from a full passcode box sitting above an open tunnel.
+window.updateReservationAcNotice = function () {
+  const mode = document.getElementById('reservation-ac-mode').value;
+  document.getElementById('reservation-ac-public-notice').style.display =
+    mode === 'public' ? 'block' : 'none';
+};
+
+window.submitReservationAccessControl = async function () {
+  if (!reservationAcTarget) return;
+
+  const passcode = document.getElementById('reservation-ac-passcode').value;
+  const confirmValue = document.getElementById(
+    'reservation-ac-passcode-confirm',
+  ).value;
+  const errEl = document.getElementById('reservation-ac-error');
+
+  // Obscured input needs confirming: you cannot see what you typed, and a passcode with a typo
+  // in it locks out the people it was meant to admit (#2103).
+  if (passcode !== '' && passcode !== confirmValue) {
+    errEl.textContent = t('passcode_mismatch');
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/portal/reservations/access-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subdomain: reservationAcTarget.subdomain,
+        domain: reservationAcTarget.domain,
+        access_mode: document.getElementById('reservation-ac-mode').value,
+        // The mask when untouched, so the gateway leaves the stored passcode alone.
+        passcode: passcode === '' ? '********' : passcode,
+        whitelist_ips: document.getElementById('reservation-ac-whitelist')
+          .value,
+      }),
+    });
+    if (!res.ok) {
+      errEl.textContent = await res.text();
+      errEl.style.display = 'block';
+      return;
+    }
+    window.closeReservationAcModal();
+    loadReservations();
+  } catch (e) {
+    errEl.textContent = String(e);
+    errEl.style.display = 'block';
+  }
 };
 
 window.closeEdgeScheduleModal = function () {

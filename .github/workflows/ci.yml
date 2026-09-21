@@ -521,6 +521,12 @@ jobs:
       - name: Inspector page behaviour
         run: node scripts/check-inspector-behaviour.cjs
 
+      # V1 and V2 are an A/B test: the same person may be served either arm, so a capability in
+      # one of them is not a capability. Access control lived only in V2 and nobody noticed,
+      # because each arm was only ever checked against itself (#2101).
+      - name: Portal capability parity
+        run: node scripts/check-portal-parity.cjs
+
       # The four gates below existed, had hook tests, and ran NOWHERE (#1929): not in any CI
       # job and not in either git hook, so they fired only when someone typed the make target
       # by hand. A gate nobody runs is documentation with a shebang -- and two of these were

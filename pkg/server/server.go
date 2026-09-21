@@ -1278,6 +1278,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// An Edge cannot answer a control-plane question, and must say THAT rather than
+		// refusing the credential (#2123).
+		//
+		// Reservations, users and audit live in central's database. An Edge has none, so
+		// validatePAT returns false on `s.db == nil` before it reads the token at all, and
+		// every one of these routes answered `401 Unauthorized` about a credential that was
+		// perfectly good -- the same PAT that had registered the tunnel through that very
+		// node seconds earlier, because registration is the one path taught to forward.
+		//
+		// "Unauthorized" sends whoever reads it to check tokens, permissions, expiry and
+		// revocation, none of which is wrong. It cost a live debugging session with a broken
+		// tunnel to find, when the status code could have answered it immediately.
+		//
+		// It is reachable precisely because an Edge's nginx sends every /api/ path straight
+		// here -- only `location /` redirects browsers to the control plane.
+		//
+		// NOT fixed by forwarding: that would have Edges relaying users' personal access
+		// tokens on paths with no need to see them. See .agents/skills/edge-sync/SKILL.md.
+		if s.holdsNoControlPlaneData() && isControlPlanePath(r.URL.Path) {
+			s.respondMisdirected(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/telemetry/ws" {
 			s.handleTelemetryWS(w, r)
 			return

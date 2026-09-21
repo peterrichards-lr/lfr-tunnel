@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.48.45",
+    "release_date": "2026-09-21",
+    "features": [
+      "fix(proxy): an edge verifies the passcode from the lease it enforces from (#2125) (#2126)",
+      "fix(server): an edge says it is the wrong node, instead of refusing a valid credential (#2123) (#2124)",
+      "fix(client): access control follows the control plane, and says so when it cannot (#2121) (#2122)",
+      "fix(inspector): the two Settings groups are siblings, not one inside the other (#2119) (#2120)"
+    ]
+  },
+  {
     "version": "v1.48.44",
     "release_date": "2026-09-21",
     "features": [
@@ -34,18 +44,6 @@
       "test(client): execute the inspector page instead of only grepping it (#2094) (#2095)",
       "refactor(server): make lfr-tunneld's flags renderable, and document the four nobody could see (#2092) (#2093)",
       "fix: stop user-visible strings naming the flags #2061 renamed, and guard the class (#2090) (#2091)"
-    ]
-  },
-  {
-    "version": "v1.48.40",
-    "release_date": "2026-09-20",
-    "features": [
-      "docs: make the published site say what the source says, and guard both classes (#2081) (#2082)",
-      "docs: teach the flag names #2061 actually shipped, and mark the legacy log as legacy (#2079) (#2080)",
-      "feat(gui): the tray connects on startup instead of waiting to be asked (#2076) (#2077)",
-      "fix(gui): the tray's Connect honours the flags the GUI was started with (#2074) (#2075)",
-      "docs(infosec): record the three exclusion rules per platform, not one (#2073)",
-      "fix(gui): serve this session's log, not a previous run's (#2071) (#2072)"
     ]
   }
 ]

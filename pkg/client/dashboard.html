@@ -256,6 +256,8 @@
             <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_passcode">Passcode Protection</label>
                 <input type="password" id="ac-passcode" placeholder="No passcode set (Public)" data-i18n="client_passcode_placeholder" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
+                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px; display: block; margin-top: 8px;" for="ac-passcode-confirm" data-i18n="client_passcode_confirm">Confirm passcode</label>
+                <input type="password" id="ac-passcode-confirm" data-i18n-placeholder="client_passcode_confirm" placeholder="Confirm passcode" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%; margin-top: 4px;">
             </div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_ip_whitelist">IP Address Whitelist</label>
@@ -296,6 +298,8 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_passcode_confirm": "Confirm passcode",
+        "client_passcode_mismatch": "The two passcodes do not match.",
         "client_access_public_notice": "This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.",
         "client_logs_truncated": "Showing the most recent part of this log -- earlier lines are in the file on disk.",
         "client_logs_files_title": "Log files on this machine",
@@ -370,6 +374,8 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_passcode_confirm": "Confirmar código",
+        "client_passcode_mismatch": "Los dos códigos no coinciden.",
         "client_access_public_notice": "Este túnel está abierto a todo el tráfico: cualquiera con la URL puede acceder. El código o la lista de IP de abajo se conservan para cuando vuelvas a cambiar, y no se están aplicando.",
         "client_setting_fixed_at_launch": "Fijado al iniciar mediante {0}. Se aplica en cada arranque, incluido un reinicio, por lo que no puede cambiarse aquí.",
         "client_setting_in_force_now": "En vigor ahora: {0}. Guardar cambia la configuración almacenada; reinicie el cliente para aplicarla.",
@@ -444,6 +450,8 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_passcode_confirm": "Passcode bestätigen",
+        "client_passcode_mismatch": "Die beiden Passcodes stimmen nicht überein.",
         "client_access_public_notice": "Dieser Tunnel ist für allen Datenverkehr offen — wer die URL hat, kommt hinein. Passcode und IP-Liste unten bleiben für später erhalten und werden derzeit nicht angewendet.",
         "client_setting_fixed_at_launch": "Beim Start durch {0} festgelegt. Das wird bei jedem Start angewendet, auch bei einem Neustart, daher kann es hier nicht geändert werden.",
         "client_setting_in_force_now": "Aktuell aktiv: {0}. Speichern ändert die gespeicherte Konfiguration; starten Sie den Client neu, um sie anzuwenden.",
@@ -518,6 +526,8 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_passcode_confirm": "Confirmer le code",
+        "client_passcode_mismatch": "Les deux codes ne correspondent pas.",
         "client_access_public_notice": "Ce tunnel est ouvert à tout le trafic : toute personne disposant de l'URL peut y accéder. Le code et la liste d'IP ci-dessous sont conservés pour plus tard et ne sont pas appliqués.",
         "client_setting_fixed_at_launch": "Défini au démarrage par {0}. Cela s'applique à chaque démarrage, y compris après un redémarrage, et ne peut donc pas être modifié ici.",
         "client_setting_in_force_now": "En vigueur actuellement : {0}. Enregistrer modifie la configuration stockée ; redémarrez le client pour l'appliquer.",
@@ -592,6 +602,8 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_passcode_confirm": "Confirmar código",
+        "client_passcode_mismatch": "Os dois códigos não coincidem.",
         "client_access_public_notice": "Este túnel está aberto a todo o tráfego — qualquer pessoa com o URL consegue aceder. O código e a lista de IP abaixo são mantidos para quando voltar a mudar e não estão a ser aplicados.",
         "client_setting_fixed_at_launch": "Fixado no arranque por {0}. Isso é aplicado em todos os arranques, incluindo um reinício, pelo que não pode ser alterado aqui.",
         "client_setting_in_force_now": "Em vigor agora: {0}. Guardar altera a configuração guardada; reinicie o cliente para a aplicar.",
@@ -666,6 +678,8 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_passcode_confirm": "パスコードの確認",
+        "client_passcode_mismatch": "2 つのパスコードが一致しません。",
         "client_access_public_notice": "このトンネルはすべてのトラフィックに開かれています。URL を知っていれば誰でもアクセスできます。下のパスコードと IP リストは切り替え時のために保持され、現在は適用されていません。",
         "client_setting_fixed_at_launch": "{0} により起動時に固定されています。再起動を含むすべての起動で適用されるため、ここでは変更できません。",
         "client_setting_in_force_now": "現在有効: {0}。保存すると保存済み設定が変更されます。適用するにはクライアントを再起動してください。",
@@ -985,8 +999,17 @@ function setLanguage(lang) {
             }
             try {
                 const passcode = document.getElementById('ac-passcode').value;
+                const confirmEl = document.getElementById('ac-passcode-confirm');
                 const whitelist = document.getElementById('ac-whitelist').value;
                 const mode = document.getElementById('ac-mode').value;
+
+                // Obscured input needs confirming: you cannot see what you typed, and a
+                // passcode with a typo locks out the people it was meant to admit (#2103).
+                if (passcode !== '' && confirmEl && passcode !== confirmEl.value) {
+                    alert(t('client_passcode_mismatch'));
+                    if (btn) { btn.innerText = 'Save Access Control'; btn.disabled = false; }
+                    return;
+                }
                 
                 const res = await fetch('/api/access-control', {
                     method: 'POST',

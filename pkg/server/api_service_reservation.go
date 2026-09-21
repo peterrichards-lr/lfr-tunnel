@@ -286,10 +286,20 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		return ErrForbidden
 	}
 
-	if passcode != "" {
-		res.Passcode = HashPasscode(passcode)
-	} else {
+	switch passcode {
+	case PasscodeMask:
+		// The field was not touched. Leaving res.Passcode alone is the whole point of the mask:
+		// the API hands out PasscodeMask rather than the stored bcrypt hash, so a form that
+		// round-trips GET -> POST cannot re-hash it.
+		//
+		// It could: the portal pre-filled the input with the hash, so saving the dialog to
+		// change the whitelist or the MODE silently stored HashPasscode(hash) and the passcode
+		// the user chose stopped working -- with no error, and no way back to a value anyone
+		// knows (#2103). Same treatment the client's auth token already gets (#1772).
+	case "":
 		res.Passcode = ""
+	default:
+		res.Passcode = HashPasscode(passcode)
 	}
 	res.WhitelistIPs = whitelistIPs
 	// Stored as chosen. "or" remains the fallback for a caller that says nothing, which is the
@@ -468,4 +478,29 @@ func (s *portalService) getUserSubdomainExpiry(u *db.User) *time.Time {
 	}
 	t := time.Now().AddDate(0, 0, days)
 	return &t
+}
+
+// PasscodeMask stands in for a passcode that is set, wherever one would otherwise be sent to a
+// client.
+//
+// The stored value is a bcrypt hash, and the reservations API used to return it verbatim. The
+// portal put it straight into an editable text box, so the user saw `$2a$10$…` instead of what
+// they typed -- and saving the dialog again submitted the hash as the new passcode, storing
+// HashPasscode(hash). The passcode they chose stopped working and the replacement was a value
+// nobody could type (#2103).
+//
+// Eight asterisks rather than a bespoke sentinel: the client's auth token already uses exactly
+// this, so there is one convention to know rather than two (#1772).
+const PasscodeMask = "********"
+
+// MaskPasscode reports whether a passcode is set, without disclosing anything about it.
+//
+// Credential material has no reason to leave the server. A hash is not a plaintext passcode,
+// but it is offline-crackable, and it was being handed to every caller who could list
+// reservations.
+func MaskPasscode(stored string) string {
+	if stored == "" {
+		return ""
+	}
+	return PasscodeMask
 }

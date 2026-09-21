@@ -61,13 +61,21 @@ test.describe('Portal V1 dashboard shell nesting', () => {
     expect(modalsInShell).toEqual(['edge-schedule-modal']);
 
     // ...and they are body's children, rather than having escaped somewhere else entirely.
+    // reservation-ac-modal is listed because it got this wrong on its first attempt: it was
+    // added beside #edge-schedule-modal, inside #tab-network-health, and so inherited the
+    // shell's display:none until sign-in. This spec caught it; naming it keeps it caught.
     const parents = await page.evaluate(() =>
-      ['toast-container', 'toast-live-a', 'token-modal'].map(
+      [
+        'toast-container',
+        'toast-live-a',
+        'token-modal',
+        'reservation-ac-modal',
+      ].map(
         (id) =>
           document.getElementById(id)?.parentElement?.tagName ?? 'MISSING',
       ),
     );
-    expect(parents).toEqual(['BODY', 'BODY', 'BODY']);
+    expect(parents).toEqual(['BODY', 'BODY', 'BODY', 'BODY']);
 
     // The shell still wraps what it is for: the banners and the sidebar+content row (#1289).
     // Closing it correctly must not empty it out.

@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.48.46",
+    "release_date": "2026-09-21",
+    "features": [
+      "fix(server): an edge relays the reservation's access control to the client (#2139) (#2140)",
+      "security(server): the telemetry feed no longer sends stored passcode hashes to the browser (#2135) (#2136)",
+      "security(server): a lease no longer publishes its session token or Basic Auth credential (#2137) (#2138)",
+      "fix(client): the Inspector shows the access control the gateway holds, not a hardcoded guess (#2130) (#2134)",
+      "fix(client): --upgrade looked for a pid file nothing writes, and -stop ignored the tray (#2128) (#2133)",
+      "fix(inspector): the state poll no longer wipes what you typed into Access Control (#2131) (#2132)"
+    ]
+  },
+  {
     "version": "v1.48.45",
     "release_date": "2026-09-21",
     "features": [
@@ -33,17 +45,6 @@
     "features": [
       "fix: stop the portal showing the passcode hash and re-hashing it on the next save (#2103) (#2105)",
       "fix(portal-v2): stop every modal stealing focus from its own text inputs (#2102) (#2104)"
-    ]
-  },
-  {
-    "version": "v1.48.41",
-    "release_date": "2026-09-20",
-    "features": [
-      "fix: access control could never be saved, from the client OR either portal (#2098) (#2099)",
-      "feat(ops): check-config compares the deployed config against this build's own defaults (#2096) (#2097)",
-      "test(client): execute the inspector page instead of only grepping it (#2094) (#2095)",
-      "refactor(server): make lfr-tunneld's flags renderable, and document the four nobody could see (#2092) (#2093)",
-      "fix: stop user-visible strings naming the flags #2061 renamed, and guard the class (#2090) (#2091)"
     ]
   }
 ]

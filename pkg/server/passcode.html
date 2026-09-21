@@ -251,7 +251,7 @@
             </div>
             {{end}}
 
-            <form method="POST" action="/lfr-tunnel-verify">
+            <form method="POST" action="{{.VerifyURL}}">
                 <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
                 <div class="form-group">
                     <label for="passcode">Subdomain Passcode</label>

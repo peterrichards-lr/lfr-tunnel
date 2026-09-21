@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -29,15 +30,22 @@ const apiHost = "lfr-demo.se"
 // edgeServer is a gateway with no database, which is what makes it unable to answer.
 func edgeServer(t *testing.T) *Server {
 	t.Helper()
+	// No DBPath: having no database is the whole point.
+	//
+	// And deliberately NO EdgeToken. NewServer starts the edge control channel when
+	// ControlPlaneURL and EdgeToken are both set, so a fixture carrying both opens a
+	// WebSocket to the real production control plane every time the suite runs. It also
+	// makes this a stronger test: isEdgeNode() would say this node is NOT an edge, and the
+	// refusal still fires -- which is precisely why it is keyed on having no database rather
+	// than on the role.
 	s, err := NewServer(&config.ServerConfig{
 		ControlPlaneURL: "https://tunnel.lfr-demo.se",
-		EdgeToken:       "edge-token",
 		Domains:         []string{"lfr-demo.se"},
-		// No DBPath: this is the whole point.
 	})
 	if err != nil {
 		t.Fatalf("building an edge server: %v", err)
 	}
+	t.Cleanup(s.Stop)
 	return s
 }
 
@@ -133,12 +141,22 @@ func TestAnEdgeStillServesWhatItIsFor(t *testing.T) {
 func TestTheControlPlaneNeverRefusesItsOwnRoutes(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewServer(&config.ServerConfig{
-		DBPath:  dir + "/test.db",
+		DBPath:  filepath.Join(dir, "test.db"),
 		Domains: []string{"lfr-demo.se"},
 	})
 	if err != nil {
 		t.Fatalf("building a control plane: %v", err)
 	}
+	// Stop it before t.TempDir's cleanup runs, or the SQLite handle is still open when the
+	// directory is removed. POSIX unlinks an open file happily; Windows refuses, and the
+	// failure surfaces as a cleanup error on a test whose assertions all passed:
+	//
+	//   TempDir RemoveAll cleanup: unlinkat ...\test.db: The process cannot access the file
+	//   because it is being used by another process.
+	//
+	// Cleanup functions run last-registered-first, so registering here puts Stop ahead of the
+	// directory removal t.TempDir already queued.
+	t.Cleanup(s.Stop)
 	req := httptest.NewRequest(http.MethodGet, "/api/portal/reservations", nil)
 	req.Host = apiHost
 	rec := httptest.NewRecorder()

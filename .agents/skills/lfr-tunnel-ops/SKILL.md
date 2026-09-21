@@ -56,6 +56,29 @@ of work, not a wrapper.
 
 Remember that deploying an edge restarts it, which drops its control channel to central and will trigger a client failover. Deploy before a failover test, not during one.
 
+### Which nodes a change has to reach
+
+The skill said how to deploy an edge and never said WHEN you must. That gap cost a release:
+#2109 fixed the passcode challenge page in `pkg/server/proxy.go`, central was deployed, the fix
+was announced as live -- and the owner's tunnel was served by `apac`, still running the old
+binary, so the passcode gate stayed broken. `in` turned out to be four versions behind.
+
+Decide by asking **which process executes the changed code**, not by habit:
+
+| Changed | Reaches users via | Deploy |
+| --- | --- | --- |
+| `pkg/server/proxy.go`, `passcode.html`, anything serving tunnelled traffic or its error pages | the gateway holding the **lease** -- usually an EDGE | **every node** |
+| the portals (`dashboard.html`, `static/dashboard.js`, `ui/`), `pkg/server/api*.go`, the DB | the control plane only | `central` |
+| `cmd/lfr-tunnel`, `pkg/client` | the signed client binaries | `central` + `deploy-clients` |
+
+**The data plane is not central.** `peters.lfr-demo.se` resolves to whichever edge holds the
+lease, and that node renders the passcode page, the 502 page and every proxied response. A
+central-only deploy changes none of them.
+
+When in doubt, deploy the fleet: an edge restart costs one failover, and a gateway left on an old
+binary costs a defect that looks fixed and is not.
+
+
 **Managing more than one environment** (e.g. staging/production) from the same checkout: use `lfr-tunnel-ops.yaml`'s multi-target shape (a `targets:` map of named entries, see the commented-out block in `lfr-tunnel-ops.yaml.example`) instead of the flat `central:`/`nginx:` shape. Select which one a command uses with `-target <name>` or the `LFT_OPS_TARGET` env var (same flag-wins-over-env precedence as everything else). If the file defines exactly one target, it's used automatically; if it defines more than one and neither is set, every command errors out listing the available names.
 
 ---
@@ -845,4 +868,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*
+*Last Updated: 2026-09-21* | *Last Reviewed: 2026-09-21*

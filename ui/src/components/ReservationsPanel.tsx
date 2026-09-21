@@ -271,16 +271,31 @@ export default function ReservationsPanel() {
   const [acMode, setAcMode] = useState('public');
   const [acPasscode, setAcPasscode] = useState('');
   const [acWhitelist, setAcWhitelist] = useState('');
+  const [acPasscodeConfirm, setAcPasscodeConfirm] = useState('');
+  const [acError, setAcError] = useState('');
   const [acSaving, setAcSaving] = useState(false);
 
   const openAcModal = (res: Reservation) => {
     setAcModalReservation(res);
     setAcMode(res.access_mode || 'public');
-    setAcPasscode(res.passcode || '');
+    // Deliberately NOT res.passcode. The API now returns a mask rather than the stored bcrypt
+    // hash, and putting even the mask in the box invites saving it back. Empty means "leave the
+    // passcode alone"; the hint below says whether one is set (#2103).
+    setAcPasscode('');
+    setAcPasscodeConfirm('');
+    setAcError('');
     setAcWhitelist(res.whitelist_ips || '');
   };
 
   const handleUpdateAccessControl = async () => {
+    // Obscured input needs confirming: you cannot see what you typed, and a passcode with a
+    // typo in it locks out the people it was meant to admit (#2103).
+    if (acPasscode !== '' && acPasscode !== acPasscodeConfirm) {
+      setAcError(t('passcode_mismatch', 'The two passcodes do not match.'));
+      return;
+    }
+    setAcError('');
+
     if (!acModalReservation) return;
     setAcSaving(true);
     try {
@@ -288,7 +303,8 @@ export default function ReservationsPanel() {
         subdomain: acModalReservation.subdomain,
         domain: acModalReservation.domain,
         access_mode: acMode,
-        passcode: acPasscode,
+        // The mask when untouched, so the gateway leaves the stored passcode alone.
+        passcode: acPasscode === '' ? '********' : acPasscode,
         whitelist_ips: acWhitelist,
       });
       fetchData();
@@ -698,15 +714,35 @@ export default function ReservationsPanel() {
               </label>
               <input
                 id="passcode"
-                type="text"
+                type="password"
+                autoComplete="new-password"
                 className="input-field"
                 value={acPasscode}
                 onChange={(e) => setAcPasscode(e.target.value)}
-                placeholder={t(
-                  'passcode_placeholder',
-                  'Enter a secret passcode...',
-                )}
+                placeholder={
+                  acModalReservation.passcode
+                    ? t(
+                        'passcode_set_placeholder',
+                        'A passcode is set — leave blank to keep it',
+                      )
+                    : t('passcode_placeholder', 'Enter a secret passcode...')
+                }
               />
+              <label className="form-label mt-sm" htmlFor="passcode-confirm">
+                {t('passcode_confirm', 'Confirm passcode')}
+              </label>
+              <input
+                id="passcode-confirm"
+                type="password"
+                autoComplete="new-password"
+                className="input-field"
+                value={acPasscodeConfirm}
+                onChange={(e) => setAcPasscodeConfirm(e.target.value)}
+                placeholder={t('passcode_confirm', 'Confirm passcode')}
+              />
+              {acError && (
+                <p className="text-danger text-sm mt-sm mb-0">{acError}</p>
+              )}
             </div>
           )}
 

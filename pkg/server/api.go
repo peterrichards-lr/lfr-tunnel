@@ -1577,7 +1577,7 @@ func (s *Server) handleAdminListSubdomains(w http.ResponseWriter, r *http.Reques
 			Domain:             res.Domain,
 			ExpiresAt:          res.ExpiresAt,
 			ExtensionRequested: res.ExtensionRequested,
-			Passcode:           res.Passcode,
+			Passcode:           MaskPasscode(res.Passcode),
 			WhitelistIPs:       res.WhitelistIPs,
 			AccessMode:         res.AccessMode,
 			CreatedAt:          res.CreatedAt,

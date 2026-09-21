@@ -6589,6 +6589,26 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
 	}
 
+	// Relayed onward to the CLIENT, not only applied to the lease (#2139). #2130 added these
+	// to the registration response so the Inspector could show the reservation's real access
+	// control -- but this function rebuilds the response from a narrow struct, so the fields
+	// central sent were dropped and an edge-served client fell back to its own config file and
+	// a hardcoded mode. That is most clients.
+	//
+	// Nothing new is fetched: edgeAccess is the map this function already built to enforce
+	// with. The passcode is MASKED on the way out. Central sends the real hash to an edge
+	// deliberately, over the authenticated /api/internal/edge-register, because the edge needs
+	// it to verify a passcode (#2125) -- relaying that to a client would be the leak #2135
+	// closed on the telemetry path.
+	var acMode, acWhitelist, acPasscode string
+	if len(activeDomains) > 0 {
+		if ac, ok := edgeAccess[activeDomains[0]]; ok {
+			acPasscode = MaskPasscode(ac[0])
+			acWhitelist = ac[1]
+			acMode = ac[2]
+		}
+	}
+
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:          "success",
 		SessionToken:    sessionToken,
@@ -6597,6 +6617,9 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		Domains:         activeDomains,
 		Warning:         warning,
 		ServerVersion:   config.Version,
+		AccessMode:      acMode,
+		WhitelistIPs:    acWhitelist,
+		Passcode:        acPasscode,
 		PolicyConsent:   valResp.PolicyConsent,
 		MinVersion:      valResp.MinVersion,
 	})

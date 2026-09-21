@@ -941,25 +941,15 @@ function setLanguage(lang) {
                         }
                     }
 
-                    if (document.activeElement !== passcodeEl) {
-                        passcodeEl.value = state.access_control.passcode || state.passcode || '';
-                    }
-                    if (document.activeElement !== whitelistEl) {
-                        whitelistEl.value = state.access_control.whitelist_ips || state.whitelist_ips || '';
-                    }
-                    if (document.activeElement !== modeEl) {
-                        modeEl.value = state.access_control.mode || state.access_mode || 'public';
+                    setUnlessEdited(passcodeEl, state.access_control.passcode || state.passcode || '');
+                    setUnlessEdited(whitelistEl, state.access_control.whitelist_ips || state.whitelist_ips || '');
+                    if (setUnlessEdited(modeEl, state.access_control.mode || state.access_mode || 'public')) {
                         updatePublicNotice();
                     }
                 } else {
-                    if (document.activeElement !== passcodeEl) {
-                        passcodeEl.value = state.passcode || '';
-                    }
-                    if (document.activeElement !== whitelistEl) {
-                        whitelistEl.value = state.whitelist_ips || '';
-                    }
-                    if (document.activeElement !== modeEl) {
-                        modeEl.value = state.access_mode || 'public';
+                    setUnlessEdited(passcodeEl, state.passcode || '');
+                    setUnlessEdited(whitelistEl, state.whitelist_ips || '');
+                    if (setUnlessEdited(modeEl, state.access_mode || 'public')) {
                         updatePublicNotice();
                     }
                 }
@@ -1004,6 +994,48 @@ function setLanguage(lang) {
             const notice = document.getElementById('ac-public-notice');
             if (!modeEl || !notice) return;
             notice.style.display = modeEl.value === 'public' ? 'block' : 'none';
+        }
+
+        // A field the user is editing belongs to the user until they save it.
+        //
+        // The state poll runs every 1500ms and used to rewrite every Access Control input whose
+        // element was not document.activeElement. Tab from Passcode Protection to Confirm and the
+        // passcode field is no longer focused, so the next tick wiped it -- with '', because the
+        // engine's access control is a local-config value and a hardcoded default that no gateway
+        // populates (#2130). Confirm survived only because it was added later and was never wired
+        // into that block; whitelist and mode had the identical bug (#2131).
+        //
+        // Checking activeElement protects only the field the cursor is in. Everything already
+        // typed was fair game on the next tick.
+        //
+        // Returns whether it actually wrote, so a caller can react to a real change without
+        // reacting to one it was not allowed to make.
+        function setUnlessEdited(el, value) {
+            if (!el) return false;
+            if (el.dataset.userEdited === '1') return false;
+            if (document.activeElement === el) return false;
+            if (el.value === value) return false;
+            el.value = value;
+            return true;
+        }
+
+        // Marked on first edit, cleared only by a SUCCESSFUL save -- a rejected save must not
+        // discard what the user typed and make them type it again.
+        function markAccessControlEdited() {
+            ['ac-passcode', 'ac-passcode-confirm', 'ac-whitelist', 'ac-mode'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || el.dataset.acWatched === '1') return;
+                el.dataset.acWatched = '1';
+                ['input', 'change'].forEach(evt =>
+                    el.addEventListener(evt, () => { el.dataset.userEdited = '1'; }));
+            });
+        }
+
+        function clearAccessControlEdited() {
+            ['ac-passcode', 'ac-passcode-confirm', 'ac-whitelist', 'ac-mode'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) delete el.dataset.userEdited;
+            });
         }
 
         // A control that cannot be applied is disabled and says why, rather than accepting input
@@ -1064,6 +1096,10 @@ function setLanguage(lang) {
                 });
                 
                 if (res.ok) {
+                    // Only now. A rejected save must keep what the user typed, or they get to
+                    // type it again -- and a rejected save is exactly when they are most likely
+                    // to have typed something long (#2131).
+                    clearAccessControlEdited();
                     if (btn) {
                         btn.style.background = 'var(--success)';
                         btn.innerText = 'Saved!';
@@ -1902,6 +1938,7 @@ function setLanguage(lang) {
         initRouter();
 
         // Poll every 1.5 seconds
+        markAccessControlEdited();
         setInterval(fetchState, 1500);
         fetchState();
     </script>

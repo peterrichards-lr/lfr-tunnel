@@ -223,6 +223,111 @@ console.log('Executing inspector functions against a DOM stub...\n');
   );
 }
 
+// A field the user is editing must survive the state poll.
+//
+// The poll runs every 1500ms and used to rewrite every Access Control input whose element was not
+// document.activeElement. Tab from Passcode Protection to Confirm passcode and the passcode field
+// is no longer focused, so the next tick wiped it -- with '', because the engine's access control
+// is a local-config value and a hardcoded default no gateway populates (#2130). The owner could
+// not save a passcode at all (#2131).
+//
+// Asserted by RUNNING setUnlessEdited rather than reading it, because the bug was never in the
+// words: the old code said `if (document.activeElement !== el)`, which is perfectly sensible and
+// protects exactly one field.
+{
+  const src = extractFunction(page, 'function setUnlessEdited(');
+  // Same mechanism annotateSettings is exercised with: build it as a real function and call it.
+  const doc = { activeElement: null };
+  const setUnlessEdited = new Function(
+    'document',
+    src + '\nreturn setUnlessEdited;',
+  )(doc);
+
+  const field = (edited) => ({
+    value: 'what-the-user-typed',
+    dataset: edited ? { userEdited: '1' } : {},
+  });
+
+  const dirty = field(true);
+  setUnlessEdited(dirty, '');
+  check(
+    'a poll tick cannot wipe a field the user has edited',
+    dirty.value === 'what-the-user-typed',
+    `the poll overwrote it with ${JSON.stringify(dirty.value)}; 1500ms after leaving the field, ` +
+      'everything typed was gone',
+  );
+
+  const untouched = field(false);
+  const wrote = setUnlessEdited(untouched, 'from-the-gateway');
+  check(
+    'an untouched field still follows the gateway',
+    untouched.value === 'from-the-gateway' && wrote === true,
+    'refusing to ever repopulate would freeze the panel at whatever was last typed',
+  );
+
+  const focused = field(false);
+  doc.activeElement = focused;
+  setUnlessEdited(focused, 'clobber');
+  check(
+    'the focused field is still protected',
+    focused.value === 'what-the-user-typed',
+    'the original guard was not wrong, only insufficient -- it must not be lost',
+  );
+  doc.activeElement = null;
+}
+
+// Every Access Control input must be watched, not just the one that was reported.
+//
+// The owner reported the passcode field. Confirm passcode survived only because it was added
+// later and was never wired into the poll; whitelist and mode had the identical bug. A fix
+// covering only the reported symptom would leave most of the defect in place.
+{
+  // Scoped to the function BODY. The first version of this asked whether the id appeared
+  // anywhere on the page and whether a regex matched across it -- both stayed true with
+  // ac-whitelist deleted from the watch list, so the check passed against the defect. Caught by
+  // running the control; a guard that cannot go red is not a guard.
+  const watchBody = extractFunction(page, 'function markAccessControlEdited(');
+  const clearBody = extractFunction(page, 'function clearAccessControlEdited(');
+  for (const id of [
+    'ac-passcode',
+    'ac-passcode-confirm',
+    'ac-whitelist',
+    'ac-mode',
+  ]) {
+    check(
+      `${id} is watched for edits`,
+      watchBody.includes(`'${id}'`),
+      'a field nothing watches is a field the poll is free to wipe 1500ms later',
+    );
+    check(
+      `${id} is released again after a save`,
+      clearBody.includes(`'${id}'`),
+      'a field marked edited and never cleared freezes at whatever was last typed',
+    );
+  }
+  // Located by SLICING the branch rather than by a proximity regex: a character window is a
+  // guess about formatting, and the first version of this check failed on a comment.
+  // Anchored inside saveAccessControl: the page has several `if (res.ok) {`, and the first one
+  // belongs to a different handler entirely.
+  const saveAt = page.indexOf('async function saveAccessControl(');
+  const okAt = page.indexOf('if (res.ok) {', saveAt);
+  const elseAt = page.indexOf('} else {', okAt);
+  const successBranch =
+    saveAt >= 0 && okAt > saveAt && elseAt > okAt
+      ? page.slice(okAt, elseAt)
+      : '';
+  // The definition line matches the bare name too, so calls are counted by excluding it.
+  const calls = (
+    page.match(/(?<!function )clearAccessControlEdited\(\)/g) || []
+  ).length;
+  check(
+    'the edited flags are cleared only after a successful save',
+    successBranch.includes('clearAccessControlEdited()') && calls === 1,
+    'clearing them on a REJECTED save discards what the user typed, exactly when they are most ' +
+      'likely to have typed something long',
+  );
+}
+
 // The Settings groups must be SIBLINGS, and the template that draws them must balance.
 //
 // #2112 split "Applies when the client restarts" from "Applies immediately" because it was not

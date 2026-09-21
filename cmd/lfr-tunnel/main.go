@@ -460,7 +460,11 @@ func main() {
 	engine.PreserveHost = cfg.PreserveHost
 	engine.ClientSubdomain = sub
 	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
-	engine.AccessMode = "or"
+	// Deliberately NOT a default here any more. It used to be the literal "or", which the
+	// Inspector then displayed as the tunnel's access mode and posted back on save -- silently
+	// rewriting a reservation set to "and" and widening access for anyone who only meant to
+	// change the passcode (#2130). What it actually is arrives on the registration response;
+	// until then the panel has nothing to claim.
 	engine.Latency = cfg.Latency
 	if cfg.Bandwidth != "" {
 		bwLimit, err := client.ParseBandwidth(cfg.Bandwidth)
@@ -513,6 +517,11 @@ func main() {
 	defer cancel()
 
 	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+
+	// The FIRST registration, not only the reconnects applySession covers. Without this the
+	// Inspector would show the real access control from the second gateway onwards and a
+	// hardcoded default on the one someone actually opens it on (#2130).
+	applyGatewayAccessControl(engine, regResp)
 
 	// A gateway named with -server is used and nothing else -- the failover path is gated on
 	// !isExplicitServer. That is the right contract, but it was never disclosed: a pinned
@@ -690,6 +699,10 @@ func main() {
 		// than keeping whatever central was advertised at startup.
 		engine.SetCentralURL(centralControlPlaneURL(cfg))
 		engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+		// A failover lands on a different gateway but the same reservation, so the access
+		// control comes back with it and must be re-applied -- otherwise the Inspector would
+		// show the truth until the first reconnect and a stale copy afterwards (#2130).
+		applyGatewayAccessControl(engine, newResp)
 		state.Region = cfg.Region
 		state.ServerURL = cfg.ServerURL
 		state.PublicURLs = publicURLs
@@ -1746,6 +1759,26 @@ func readPID(subdomain string) (int, error) {
 
 func isPIDRunning(pid int) bool {
 	return client.IsPIDRunning(pid)
+}
+
+// applyGatewayAccessControl copies the reservation's access control, as the GATEWAY holds it,
+// onto the engine -- which is what the Inspector displays.
+//
+// Before this the engine carried cfg.Passcode, cfg.WhitelistIPs and a hardcoded "or": the local
+// config file and a constant, describing the machine rather than the tunnel. A gateway that
+// predates this sends nothing and the previous values stand, so an older gateway behaves exactly
+// as it did.
+//
+// The passcode arrives as PasscodeMask when one is set, never the stored hash. Sending the mask
+// back means "unchanged", so the panel can show that a passcode exists without ever holding it.
+func applyGatewayAccessControl(engine *client.InterceptorEngine, resp *client.RegisterResponse) {
+	if engine == nil || resp == nil {
+		return
+	}
+	if resp.AccessMode == "" && resp.WhitelistIPs == "" && resp.Passcode == "" {
+		return
+	}
+	engine.SetAccessControlFromGateway(resp.Passcode, resp.WhitelistIPs, resp.AccessMode)
 }
 
 func getActiveSubdomains() ([]string, error) {

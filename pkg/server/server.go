@@ -132,6 +132,20 @@ type RegisterResponse struct {
 	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
 	NodeStopTime       string           `json:"node_stop_time,omitempty"`
 	NodeTimezone       string           `json:"node_timezone,omitempty"`
+	// The reservation's access control, so the client can SHOW it (#2130).
+	//
+	// It could not before. The client set AccessMode to the literal "or" at startup and read
+	// the passcode and whitelist out of its own config file, so the Inspector's Access Control
+	// panel described the local machine and a constant -- never the tunnel. Saving from that
+	// panel then posted the constant, silently rewriting a reservation set to "and" into "or"
+	// and widening access for someone who only meant to change the passcode.
+	//
+	// Passcode is the MASK, never the stored hash. PasscodeMask already means "unchanged" on
+	// the way back in, so a panel that round-trips it cannot re-hash a hash -- the defect
+	// #2103 fixed on the portal side, not reintroduced here.
+	AccessMode   string `json:"access_mode,omitempty"`
+	WhitelistIPs string `json:"whitelist_ips,omitempty"`
+	Passcode     string `json:"passcode,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -2150,6 +2164,20 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// two tunnel starts stops being warned without needing a special "cleared" signal.
 	consentForResp := consent
 	minVersionForResp := minVersion
+
+	// What this reservation's access control actually is, so the client can show it rather
+	// than describing its own config file and a hardcoded "or" (#2130). The passcode is
+	// reduced to PasscodeMask on the way out -- the stored value is a bcrypt hash and nothing
+	// outside this process needs it.
+	var acMode, acWhitelist, acPasscode string
+	if len(activeDomains) > 0 {
+		if stored, ok := s.reservationAccessControls(req.SubdomainPrefix, activeDomains[0]); ok {
+			acPasscode = MaskPasscode(stored[0])
+			acWhitelist = stored[1]
+			acMode = stored[2]
+		}
+	}
+
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:             "success",
 		SessionToken:       sessionToken,
@@ -2162,6 +2190,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		ServerVersion:      config.Version,
 		PolicyConsent:      &consentForResp,
 		MinVersion:         &minVersionForResp,
+		AccessMode:         acMode,
+		WhitelistIPs:       acWhitelist,
+		Passcode:           acPasscode,
 	})
 }
 

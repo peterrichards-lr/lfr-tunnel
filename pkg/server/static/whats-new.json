@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.43",
+    "release_date": "2026-09-21",
+    "features": [
+      "fix(client): make the two settings groups actual sections, not captions (#2110) (#2111)",
+      "feat(portal-v1): give V1 the access control it could only ever display (#2101) (#2107)",
+      "fix(proxy): make the passcode form post to the tunnel host, not the control plane (#2108) (#2109)"
+    ]
+  },
+  {
     "version": "v1.48.42",
     "release_date": "2026-09-21",
     "features": [
@@ -42,15 +51,6 @@
       "docs(skill): how to exercise failover and failback against a live node (#2060)",
       "fix(client,gui): a partial config save must keep the fields it did not send (#2056) (#2058)",
       "fix(gui): let the settings server bind a free port, and report whether it did (#2055) (#2057)"
-    ]
-  },
-  {
-    "version": "v1.48.38",
-    "release_date": "2026-09-18",
-    "features": [
-      "fix(portal): give V1's geo credit a fallback sentence, and retranslate it (#2052) (#2053)",
-      "docs(skill): record that an edge deploy has one entry point and one node per run (#2051)",
-      "chore(scripts): delete the second edge-deploy entry point (#2048) (#2049)"
     ]
   }
 ]

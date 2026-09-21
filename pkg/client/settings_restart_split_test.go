@@ -219,7 +219,7 @@ func TestEverySettingsFieldSitsInOneOfTheTwoSections(t *testing.T) {
 		t.Fatal("the two section headings and the save button no longer all exist; this test " +
 			"is asserting about a layout that has changed")
 	}
-	if !(restartAt < liveAt && liveAt < saveAt) {
+	if restartAt >= liveAt || liveAt >= saveAt {
 		t.Fatalf("sections are out of order: restart=%d live=%d save=%d", restartAt, liveAt, saveAt)
 	}
 

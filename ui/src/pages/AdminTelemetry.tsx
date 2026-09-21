@@ -5,6 +5,7 @@ import { useTableSort } from '../hooks/useTableSort';
 import { useUI } from '../contexts/UIContext';
 
 interface Tunnel {
+  user_id?: string;
   subdomain_prefix: string;
   full_host: string;
   status: string;
@@ -14,6 +15,67 @@ interface Tunnel {
   node_id: string;
   visitor_ips: string[];
 }
+
+// One client's tunnels, as one group.
+//
+// A client that maps several ports gets one lease per port -- Registry.Register gives the first
+// the bare subdomain and every one after it "<subdomain>-<localPort>" -- so a three-port client
+// occupies three rows repeating everything that describes the CLIENT rather than the port
+// (#2129).
+//
+// Keyed on user, prefix and node rather than on a session identifier. Register already sets
+// every lease in a session to the shared base prefix, so this needs nothing the payload does not
+// already carry -- and the session token, which would have been the obvious key, is a credential
+// that must never reach a browser (#2137).
+type TunnelGroup = {
+  key: string;
+  subdomain: string;
+  nodeId: string;
+  clientIp: string;
+  status: string;
+  bytesIn: number;
+  bytesOut: number;
+  visitors: number;
+  members: Tunnel[];
+};
+
+// No prefix, no grouping. An empty subdomain_prefix is not a value to group ON -- treating it as
+// one collapsed every lease sharing a node into a single bogus group, including clients with
+// different IPs that have nothing to do with each other.
+const groupKeyFor = (t: Tunnel, index: number) =>
+  t.subdomain_prefix
+    ? `${t.user_id || ''}|${t.subdomain_prefix}|${t.node_id || ''}`
+    : `ungrouped:${index}`;
+
+const groupTunnels = (list: Tunnel[]): TunnelGroup[] => {
+  const byKey = new Map<string, TunnelGroup>();
+  list.forEach((t, index) => {
+    const key = groupKeyFor(t, index);
+    let g = byKey.get(key);
+    if (!g) {
+      g = {
+        key,
+        subdomain: t.subdomain_prefix,
+        nodeId: t.node_id,
+        clientIp: t.client_ip,
+        // One value for the whole session: the client dials every target port and reports
+        // "down" if ANY of them fails, so this describes the client, not the port. Shown once
+        // on the group rather than repeated onto rows it is not true of.
+        status: t.status,
+        bytesIn: 0,
+        bytesOut: 0,
+        visitors: 0,
+        members: [],
+      };
+      byKey.set(key, g);
+    }
+    g.bytesIn += t.bytes_in || 0;
+    g.bytesOut += t.bytes_out || 0;
+    g.visitors += t.visitor_ips?.length || 0;
+    g.members.push(t);
+  });
+  return Array.from(byKey.values());
+};
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!+bytes) return '0 Bytes';
@@ -31,6 +93,9 @@ export default function AdminTelemetry() {
   const [status, setStatus] = useState<
     'connecting' | 'connected' | 'disconnected'
   >('connecting');
+  // Which groups are open. Collapsed by default -- except a group that is not up, which is
+  // opened below: hiding the row someone needs to see defeats the point of the table.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
 
@@ -287,67 +352,192 @@ export default function AdminTelemetry() {
                 </tr>
               </thead>
               <tbody>
-                {sortedTunnels.map((tItem, idx) => (
-                  <tr key={idx} className="border-b">
-                    <td className="td-cell fw-semibold text-sm">
-                      {tItem.subdomain_prefix}
-                    </td>
-                    <td className="td-cell text-sm">
-                      <a
-                        href={`https://${tItem.full_host}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary no-underline fw-medium"
-                      >
-                        {tItem.full_host}
-                      </a>
-                    </td>
-                    <td className="td-cell">
-                      {tItem.node_id && tItem.node_id !== 'control' ? (
-                        <span className="badge badge-node">
-                          🌍 {tItem.node_id}
-                        </span>
-                      ) : (
-                        <span className="badge badge-control">
-                          🇬🇧 {t('control_node', 'Control')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="td-cell--mono text-sm">
-                      {tItem.client_ip || '-'}
-                    </td>
-                    <td className="td-cell text-sm">
-                      {formatBytes(tItem.bytes_in || 0)}
-                    </td>
-                    <td className="td-cell text-sm">
-                      {formatBytes(tItem.bytes_out || 0)}
-                    </td>
-                    <td className="td-cell text-sm">
-                      <span
-                        className={
-                          tItem.visitor_ips?.length > 0
-                            ? 'text-primary fw-bold'
-                            : 'text-muted fw-bold'
-                        }
-                      >
-                        {tItem.visitor_ips?.length || 0}
+                {groupTunnels(sortedTunnels).flatMap((group) => {
+                  // A single-port client is not a group. Rendering a parent plus one child
+                  // would repeat itself and hand the common case an expander that reveals
+                  // nothing, so it stays the plain row it is today.
+                  const isGroup = group.members.length > 1;
+                  const unhealthy =
+                    (group.status || 'up').toLowerCase() !== 'up';
+                  const isOpen = expanded.has(group.key) || unhealthy;
+
+                  const toggle = () =>
+                    setExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.key)) next.delete(group.key);
+                      else next.add(group.key);
+                      return next;
+                    });
+
+                  const nodeBadge =
+                    group.nodeId && group.nodeId !== 'control' ? (
+                      <span className="badge badge-node">
+                        🌍 {group.nodeId}
                       </span>
-                    </td>
-                    <td className="td-cell">
-                      <span className="badge badge-success">
-                        {tItem.status ? tItem.status.toUpperCase() : 'UP'}
+                    ) : (
+                      <span className="badge badge-control">
+                        🇬🇧 {t('control_node', 'Control')}
                       </span>
-                    </td>
-                    <td className="td-cell text-right">
-                      <button
-                        className="btn btn-danger py-xs px-md text-xs w-auto"
-                        onClick={() => handleKick(tItem.subdomain_prefix)}
-                      >
-                        {t('kick', 'Kick')}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                    );
+
+                  if (!isGroup) {
+                    const only = group.members[0];
+                    return [
+                      <tr key={group.key} className="border-b">
+                        <td className="td-cell fw-semibold text-sm">
+                          {group.subdomain}
+                        </td>
+                        <td className="td-cell text-sm">
+                          <a
+                            href={`https://${only.full_host}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary no-underline fw-medium"
+                          >
+                            {only.full_host}
+                          </a>
+                        </td>
+                        <td className="td-cell">{nodeBadge}</td>
+                        <td className="td-cell--mono text-sm">
+                          {group.clientIp || '-'}
+                        </td>
+                        <td className="td-cell text-sm">
+                          {formatBytes(group.bytesIn)}
+                        </td>
+                        <td className="td-cell text-sm">
+                          {formatBytes(group.bytesOut)}
+                        </td>
+                        <td className="td-cell text-sm">
+                          <span
+                            className={
+                              group.visitors > 0
+                                ? 'text-primary fw-bold'
+                                : 'text-muted fw-bold'
+                            }
+                          >
+                            {group.visitors}
+                          </span>
+                        </td>
+                        <td className="td-cell">
+                          <span className="badge badge-success">
+                            {(group.status || 'up').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="td-cell text-right">
+                          <button
+                            className="btn btn-danger py-xs px-md text-xs w-auto"
+                            onClick={() => handleKick(group.subdomain)}
+                          >
+                            {t('kick', 'Kick')}
+                          </button>
+                        </td>
+                      </tr>,
+                    ];
+                  }
+
+                  const parent = (
+                    <tr key={group.key} className="border-b">
+                      <td className="td-cell fw-semibold text-sm">
+                        <button
+                          type="button"
+                          onClick={toggle}
+                          aria-expanded={isOpen}
+                          className="btn btn-secondary py-xs px-sm text-xs whitespace-nowrap"
+                        >
+                          {isOpen ? '▾' : '▸'} {group.subdomain}
+                        </button>
+                        <span className="text-muted text-xs ml-sm">
+                          {group.members.length} {t('tunnels', 'tunnels')}
+                        </span>
+                      </td>
+                      <td className="td-cell text-sm text-muted">—</td>
+                      <td className="td-cell">{nodeBadge}</td>
+                      <td className="td-cell--mono text-sm">
+                        {group.clientIp || '-'}
+                      </td>
+                      <td className="td-cell text-sm fw-semibold">
+                        {formatBytes(group.bytesIn)}
+                      </td>
+                      <td className="td-cell text-sm fw-semibold">
+                        {formatBytes(group.bytesOut)}
+                      </td>
+                      <td className="td-cell text-sm">
+                        <span
+                          className={
+                            group.visitors > 0
+                              ? 'text-primary fw-bold'
+                              : 'text-muted fw-bold'
+                          }
+                        >
+                          {group.visitors}
+                        </span>
+                      </td>
+                      <td className="td-cell">
+                        <span className="badge badge-success">
+                          {(group.status || 'up').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="td-cell text-right">
+                        {/* Kick resolves a session token and drops EVERY port of this client,
+                            whichever row it is clicked on -- so it belongs here, where its
+                            blast radius matches where the button sits (#2129). */}
+                        <button
+                          className="btn btn-danger py-xs px-md text-xs w-auto"
+                          onClick={() => handleKick(group.subdomain)}
+                        >
+                          {t('kick', 'Kick')}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+
+                  if (!isOpen) return [parent];
+
+                  // Node, client IP and status are absent from a child, not repeated in a
+                  // lighter shade. Repeating them is the duplication this removes, and status
+                  // in particular would be reprinted onto rows it is not true of.
+                  const children = group.members.map((m, i) => (
+                    <tr
+                      key={`${group.key}|${m.full_host}|${i}`}
+                      className="border-b"
+                    >
+                      <td className="td-cell" />
+                      <td className="td-cell text-sm pl-lg">
+                        <a
+                          href={`https://${m.full_host}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary no-underline fw-medium"
+                        >
+                          {m.full_host}
+                        </a>
+                      </td>
+                      <td className="td-cell" />
+                      <td className="td-cell" />
+                      <td className="td-cell text-sm">
+                        {formatBytes(m.bytes_in || 0)}
+                      </td>
+                      <td className="td-cell text-sm">
+                        {formatBytes(m.bytes_out || 0)}
+                      </td>
+                      <td className="td-cell text-sm">
+                        <span
+                          className={
+                            m.visitor_ips?.length > 0
+                              ? 'text-primary fw-bold'
+                              : 'text-muted fw-bold'
+                          }
+                        >
+                          {m.visitor_ips?.length || 0}
+                        </span>
+                      </td>
+                      <td className="td-cell" />
+                      <td className="td-cell" />
+                    </tr>
+                  ));
+
+                  return [parent, ...children];
+                })}
               </tbody>
             </table>
           </div>

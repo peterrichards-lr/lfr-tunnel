@@ -1559,17 +1559,54 @@ function renderTelemetry() {
     return;
   }
 
-  renderTable('telemetry-table-body', tunnels, (t) => {
-    const visitors = Array.isArray(t.visitor_ips) ? t.visitor_ips.length : 0;
-    return `<tr>
-                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(t.full_host || t.subdomain_prefix || '')}</td>
-                    <td>${escapeHTML(t.node_id || '')}</td>
-                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(t.client_ip || '')}</td>
-                    <td>${formatBytes(t.bytes_in || 0)}</td>
-                    <td>${formatBytes(t.bytes_out || 0)}</td>
+  // Grouped the same way as Active Tunnels above and as V2's Telemetry, so the two arms cannot
+  // disagree about what a client's tunnels look like (#2129).
+  renderTable('telemetry-table-body', groupTunnelsBySession(tunnels), (g) => {
+    if (!tunnelGroupIsExpandable(g)) {
+      const only = g.members[0];
+      const visitors = Array.isArray(only.visitor_ips)
+        ? only.visitor_ips.length
+        : 0;
+      return `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(only.full_host || g.subdomain_prefix || '')}</td>
+                    <td>${escapeHTML(g.node_id || '')}</td>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(g.client_ip || '')}</td>
+                    <td>${formatBytes(only.bytes_in || 0)}</td>
+                    <td>${formatBytes(only.bytes_out || 0)}</td>
                     <td>${visitors}</td>
-                    <td>${escapeHTML(t.status || '')}</td>
+                    <td>${escapeHTML(g.status || '')}</td>
                 </tr>`;
+    }
+
+    let html = `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${tunnelGroupToggle(g)}${escapeHTML(g.subdomain_prefix)} <span style="opacity:0.6;">${g.members.length} ${escapeHTML(t('tunnels', 'tunnels'))}</span></td>
+                    <td>${escapeHTML(g.node_id || '')}</td>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(g.client_ip || '')}</td>
+                    <td style="font-weight:600;">${formatBytes(g.bytes_in)}</td>
+                    <td style="font-weight:600;">${formatBytes(g.bytes_out)}</td>
+                    <td>${g.visitors}</td>
+                    <td>${escapeHTML(g.status || '')}</td>
+                </tr>`;
+
+    if (tunnelGroupIsOpen(g)) {
+      html += g.members
+        .map((m) => {
+          const visitors = Array.isArray(m.visitor_ips)
+            ? m.visitor_ips.length
+            : 0;
+          return `<tr>
+                    <td style="font-family:monospace; font-size:0.85em; padding-left:28px;">${escapeHTML(m.full_host || '')}</td>
+                    <td></td>
+                    <td></td>
+                    <td>${formatBytes(m.bytes_in || 0)}</td>
+                    <td>${formatBytes(m.bytes_out || 0)}</td>
+                    <td>${visitors}</td>
+                    <td></td>
+                </tr>`;
+        })
+        .join('');
+    }
+    return html;
   });
 }
 
@@ -2371,6 +2408,87 @@ async function kickAdminSubdomain(subdomain) {
   loadAdminSubdomains();
 }
 
+// One client's tunnels, as one group (#2129).
+//
+// A client that maps several ports gets one lease per port: Registry.Register gives the first the
+// bare subdomain and every one after it "<subdomain>-<localPort>". So a three-port client -- the
+// normal shape for a Liferay setup with client extensions -- occupied three rows repeating
+// everything that describes the CLIENT rather than the port.
+//
+// Keyed on user, prefix and node. Register already sets every lease in a session to the shared
+// base prefix, so nothing new is needed in the payload -- and the session token, which would have
+// been the obvious key, is a credential that must never reach a browser (#2137).
+//
+// searchText exists because renderTable filters on Object.values(item): without it, searching for
+// a child host like "dxplive-8222" would match nothing, since that string lives only inside the
+// members array.
+function groupTunnelsBySession(tunnels) {
+  const byKey = new Map();
+  (tunnels || []).forEach((t, index) => {
+    // No prefix, no grouping. An empty subdomain_prefix is not a value to group ON -- treating
+    // it as one collapsed every lease sharing a node into a single bogus group, including
+    // clients with different IPs that have nothing to do with each other. Caught by
+    // telemetry_parity.spec.ts, whose fixture carries full_host and node_id only.
+    const key = t.subdomain_prefix
+      ? `${t.user_id || ''}|${t.subdomain_prefix}|${t.node_id || ''}`
+      : `ungrouped:${index}`;
+    let g = byKey.get(key);
+    if (!g) {
+      g = {
+        key: key,
+        subdomain_prefix: t.subdomain_prefix || '',
+        node_id: t.node_id || '',
+        client_ip: t.client_ip || '',
+        // One value for the whole session: the client dials every target port and reports
+        // "down" if ANY of them fails, so it describes the client, not the port. Shown once on
+        // the group rather than repeated onto rows it is not true of.
+        status: t.status || '',
+        bytes_in: 0,
+        bytes_out: 0,
+        visitors: 0,
+        members: [],
+        searchText: '',
+      };
+      byKey.set(key, g);
+    }
+    g.bytes_in += t.bytes_in || 0;
+    g.bytes_out += t.bytes_out || 0;
+    g.visitors += Array.isArray(t.visitor_ips) ? t.visitor_ips.length : 0;
+    g.members.push(t);
+    g.searchText += ' ' + (t.full_host || '');
+  });
+  return Array.from(byKey.values());
+}
+
+// Which groups are open. A group that is not up is forced open wherever it is rendered: hiding
+// the row someone needs to see defeats the point of the table.
+const expandedTunnelGroups = new Set();
+
+window.toggleTunnelGroup = function (encodedKey) {
+  const key = decodeURIComponent(encodedKey);
+  if (expandedTunnelGroups.has(key)) expandedTunnelGroups.delete(key);
+  else expandedTunnelGroups.add(key);
+  loadTunnels();
+  renderTelemetry();
+};
+
+// A single-port client is not a group: a parent plus one child repeats itself and hands the
+// common case an expander that reveals nothing.
+function tunnelGroupIsExpandable(group) {
+  return group.members.length > 1;
+}
+
+function tunnelGroupIsOpen(group) {
+  if (!tunnelGroupIsExpandable(group)) return false;
+  if ((group.status || 'up').toLowerCase() !== 'up') return true;
+  return expandedTunnelGroups.has(group.key);
+}
+
+function tunnelGroupToggle(group) {
+  const open = tunnelGroupIsOpen(group);
+  return `<button class="action-menu-btn" style="margin-right:6px;" aria-expanded="${open}" onclick="toggleTunnelGroup('${encodeURIComponent(group.key)}')">${open ? '▾' : '▸'}</button>`;
+}
+
 async function loadTunnels() {
   const isAdmin =
     currentUser &&
@@ -2385,35 +2503,76 @@ async function loadTunnels() {
                 `;
   }
 
-  // Already fetched in /api/me
-  const tunnels = currentUser.tunnels || [];
-  renderTable('tunnels-table-body', tunnels, (t) => {
-    const tunnelJsonEncoded = encodeURIComponent(JSON.stringify(t));
-    let serverBadge = '';
-    if (t.node_id && t.node_id !== 'control') {
-      serverBadge = `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 10px; margin-left: 6px;">🌍 ${escapeHTML(t.node_id)}</span>`;
-    } else {
-      serverBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; margin-left: 6px;">🇬🇧 Control</span>`;
-    }
-    return `
-                    <tr>
-                        <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
-                        <td>
-                            <a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a>
-                            ${serverBadge}
-                        </td>
-                        <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
-                        <td>
+  // Already fetched in /api/me, then replaced by every telemetry frame -- see
+  // handleTelemetryPayload, which assigns the socket's payload to currentUser. So this and V2's
+  // Telemetry table render the same array.
+  const groups = groupTunnelsBySession(currentUser.tunnels || []);
+  renderTable('tunnels-table-body', groups, (g) => {
+    const badge =
+      g.node_id && g.node_id !== 'control'
+        ? `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 10px; margin-left: 6px;">🌍 ${escapeHTML(g.node_id)}</span>`
+        : `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; margin-left: 6px;">🇬🇧 Control</span>`;
+
+    const statusCell = `<td><span class="badge ${g.status === 'up' ? 'success' : ''}">${escapeHTML(g.status)}</span></td>`;
+
+    // Kick resolves a session token and drops EVERY port of this client, whichever row it is
+    // clicked on. On the parent its blast radius matches where the button sits (#2129).
+    const actions = (t) => {
+      const encoded = encodeURIComponent(JSON.stringify(t));
+      const id = `menu-tunnel-${escapeHTML(g.subdomain_prefix)}`;
+      return `<td>
                             <div class="action-menu">
-                                <button class="action-menu-btn" onclick="toggleActionMenu('menu-tunnel-${escapeHTML(t.subdomain_prefix)}', event)">⋮</button>
-                                <div id="menu-tunnel-${escapeHTML(t.subdomain_prefix)}" class="action-menu-dropdown">
-                                    <button class="action-menu-item" onclick="openTunnelDetailsModal('${tunnelJsonEncoded}')">Details</button>
-                                    ${isAdmin ? `<button class="action-menu-item danger" onclick="kickActiveTunnel('${escapeHTML(t.subdomain_prefix)}')">Kick</button>` : ''}
+                                <button class="action-menu-btn" onclick="toggleActionMenu('${id}', event)">⋮</button>
+                                <div id="${id}" class="action-menu-dropdown">
+                                    <button class="action-menu-item" onclick="openTunnelDetailsModal('${encoded}')">Details</button>
+                                    ${isAdmin ? `<button class="action-menu-item danger" onclick="kickActiveTunnel('${escapeHTML(g.subdomain_prefix)}')">Kick</button>` : ''}
                                 </div>
                             </div>
-                        </td>
+                        </td>`;
+    };
+
+    const hostLink = (host) =>
+      `<a href="https://${escapeHTML(host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(host)}</a>`;
+
+    if (!tunnelGroupIsExpandable(g)) {
+      const only = g.members[0];
+      return `
+                    <tr>
+                        <td style="font-weight: 500;">${escapeHTML(g.subdomain_prefix)}</td>
+                        <td>${hostLink(only.full_host)}${badge}</td>
+                        ${statusCell}
+                        ${actions(only)}
                     </tr>
                 `;
+    }
+
+    const open = tunnelGroupIsOpen(g);
+    let html = `
+                    <tr>
+                        <td style="font-weight: 500;">${tunnelGroupToggle(g)}${escapeHTML(g.subdomain_prefix)} <span style="opacity:0.6; font-size:0.85em;">${g.members.length} ${escapeHTML(t('tunnels', 'tunnels'))}</span></td>
+                        <td>${badge}</td>
+                        ${statusCell}
+                        ${actions(g.members[0])}
+                    </tr>
+                `;
+    if (open) {
+      // Node and status are absent from a child, not repeated in a lighter shade. Repeating
+      // them is the duplication this removes -- and status in particular would be reprinted
+      // onto rows it is not true of, since one down port marks the whole session down.
+      html += g.members
+        .map(
+          (m) => `
+                    <tr>
+                        <td></td>
+                        <td style="padding-left: 28px;">${hostLink(m.full_host)}</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                `,
+        )
+        .join('');
+    }
+    return html;
   });
 }
 

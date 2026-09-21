@@ -101,6 +101,21 @@ check(
   'collapsing a broken group hides the row someone opened the table to find',
 );
 
+// An empty prefix must never be a grouping value. Treating it as one collapsed every lease
+// sharing a node into a single bogus group -- including unrelated clients on different IPs.
+// Caught by telemetry_parity.spec.ts, whose fixture carries full_host and node_id only.
+for (const [arm, src] of [
+  ['V1', V1],
+  ['V2', V2],
+]) {
+  check(
+    `${arm} refuses to group a lease with no subdomain prefix`,
+    /ungrouped:/.test(src),
+    'with no prefix there is nothing to group BY, so each such lease must stand alone rather ' +
+      'than joining everything else that happens to share a node',
+  );
+}
+
 // renderTable filters on Object.values(item), so a group must carry its member hosts or a
 // search for a child host would match nothing.
 check(

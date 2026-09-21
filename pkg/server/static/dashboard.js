@@ -2424,8 +2424,14 @@ async function kickAdminSubdomain(subdomain) {
 // members array.
 function groupTunnelsBySession(tunnels) {
   const byKey = new Map();
-  (tunnels || []).forEach((t) => {
-    const key = `${t.user_id || ''}|${t.subdomain_prefix || ''}|${t.node_id || ''}`;
+  (tunnels || []).forEach((t, index) => {
+    // No prefix, no grouping. An empty subdomain_prefix is not a value to group ON -- treating
+    // it as one collapsed every lease sharing a node into a single bogus group, including
+    // clients with different IPs that have nothing to do with each other. Caught by
+    // telemetry_parity.spec.ts, whose fixture carries full_host and node_id only.
+    const key = t.subdomain_prefix
+      ? `${t.user_id || ''}|${t.subdomain_prefix}|${t.node_id || ''}`
+      : `ungrouped:${index}`;
     let g = byKey.get(key);
     if (!g) {
       g = {

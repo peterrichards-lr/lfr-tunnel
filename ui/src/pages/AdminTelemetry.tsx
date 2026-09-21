@@ -39,13 +39,18 @@ type TunnelGroup = {
   members: Tunnel[];
 };
 
-const groupKeyFor = (t: Tunnel) =>
-  `${t.user_id || ''}|${t.subdomain_prefix}|${t.node_id || ''}`;
+// No prefix, no grouping. An empty subdomain_prefix is not a value to group ON -- treating it as
+// one collapsed every lease sharing a node into a single bogus group, including clients with
+// different IPs that have nothing to do with each other.
+const groupKeyFor = (t: Tunnel, index: number) =>
+  t.subdomain_prefix
+    ? `${t.user_id || ''}|${t.subdomain_prefix}|${t.node_id || ''}`
+    : `ungrouped:${index}`;
 
 const groupTunnels = (list: Tunnel[]): TunnelGroup[] => {
   const byKey = new Map<string, TunnelGroup>();
-  for (const t of list) {
-    const key = groupKeyFor(t);
+  list.forEach((t, index) => {
+    const key = groupKeyFor(t, index);
     let g = byKey.get(key);
     if (!g) {
       g = {
@@ -68,7 +73,7 @@ const groupTunnels = (list: Tunnel[]): TunnelGroup[] => {
     g.bytesOut += t.bytes_out || 0;
     g.visitors += t.visitor_ips?.length || 0;
     g.members.push(t);
-  }
+  });
   return Array.from(byKey.values());
 };
 

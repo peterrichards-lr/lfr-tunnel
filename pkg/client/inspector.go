@@ -158,6 +158,8 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			logFile, _ = ResolveClientLogPath(engine.ClientSubdomain) //nolint:errcheck
 		}
 
+		acEditable, acReason := accessControlEditability(engine.SubdomainAss, engine.PublicURLs)
+
 		info := map[string]interface{}{
 			"status":           status,
 			"version":          config.Version,
@@ -205,6 +207,12 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"passcode":         engine.Passcode,
 				"whitelist_ips":    engine.WhitelistIPs,
 				"is_custom_domain": engine.IsCustomDomain,
+				// Whether a save could succeed at all, decided by the SAME function the save
+				// itself uses, so the form and the endpoint cannot disagree about it. A field
+				// that can never be applied is disabled rather than left to fail on submit
+				// (#2116) -- the rule the Settings tab already follows.
+				"editable":        acEditable,
+				"editable_reason": acReason,
 			},
 		}
 
@@ -548,15 +556,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 
-		engine.mu.Lock()
-		engine.Passcode = req.Passcode
-		engine.WhitelistIPs = req.WhitelistIPs
-		engine.AccessMode = req.AccessMode
+		// Read only. The engine is updated after the gateway has accepted the change, not
+		// before: writing first left it holding values the gateway had refused, and
+		// registration sends them, so a rejected save applied itself at the next
+		// re-registration while the dialog reported failure (#2116).
+		engine.mu.RLock()
 		token := engine.Token
 		serverURL := engine.ServerURL
+		centralURL := engine.centralURL
 		subdomainAss := engine.SubdomainAss
 		publicURLs := append([]string(nil), engine.PublicURLs...)
-		engine.mu.Unlock()
+		engine.mu.RUnlock()
 
 		if token == "" || serverURL == "" || subdomainAss == "" {
 			http.Error(w, "Client connection state is not fully initialized", http.StatusBadRequest)
@@ -581,7 +591,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		bodyBytes, _ := json.Marshal(updatePayload)
-		gatewayURL := fmt.Sprintf("%s/api/portal/reservations/access-control", serverURL)
+
+		// Addressed to the CONTROL PLANE, never to the gateway serving this tunnel. Reservations
+		// live in central's database and an edge has none, so validatePAT returns false on
+		// `s.db == nil` before it even looks at the token -- every save from an edge-served
+		// session was refused 401, whatever the mode (#2116). The client is told central's
+		// address by the gateway and already pairs the two this way for status reports.
+		controlPlaneURL := centralURL
+		if controlPlaneURL == "" {
+			controlPlaneURL = serverURL
+		}
+		gatewayURL := fmt.Sprintf("%s/api/portal/reservations/access-control", controlPlaneURL)
 
 		reqHTTP, err := http.NewRequest(http.MethodPost, gatewayURL, bytes.NewReader(bodyBytes))
 		if err != nil {
@@ -605,6 +625,14 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			http.Error(w, fmt.Sprintf("Gateway rejected update (HTTP %d): %s", resp.StatusCode, string(respBody)), http.StatusBadRequest)
 			return
 		}
+
+		// Accepted, so the engine may now hold it. Registration sends these, which is how the
+		// change survives a reconnect.
+		engine.mu.Lock()
+		engine.Passcode = req.Passcode
+		engine.WhitelistIPs = req.WhitelistIPs
+		engine.AccessMode = req.AccessMode
+		engine.mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
@@ -904,6 +932,25 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 //
 // The domain was never missing, only looked for in the wrong place: the engine already holds the
 // public URLs, and the host of one of them is prefix + "." + domain.
+// accessControlEditability reports whether the Inspector can save access control for this
+// session, and if not, why -- in words meant for the person reading the panel.
+//
+// It asks splitAssignedHost, which is what the save path calls, so the form and the endpoint
+// cannot drift into disagreeing. Two states can never be saved from here however long you wait:
+// a session with no assignment yet, and a custom domain, which splitAssignedHost refuses on
+// purpose because guessing a (prefix, domain) pair for one would address somebody else's
+// reservation. Letting either be typed into and fail on submit is the behaviour this replaces.
+func accessControlEditability(assigned string, publicURLs []string) (bool, string) {
+	if strings.TrimSpace(assigned) == "" {
+		return false, "Access control can be set once the tunnel is connected and has a public URL."
+	}
+	if _, _, err := splitAssignedHost(assigned, publicURLs); err != nil {
+		return false, "This tunnel is served on a custom domain, whose access control is managed " +
+			"from the portal rather than here."
+	}
+	return true, ""
+}
+
 func splitAssignedHost(assigned string, publicURLs []string) (string, string, error) {
 	assigned = strings.TrimSpace(assigned)
 	if assigned == "" {

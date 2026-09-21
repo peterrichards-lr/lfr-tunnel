@@ -149,6 +149,16 @@ type RegisterResponse struct {
 	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
 	NodeStopTime       string           `json:"node_stop_time,omitempty"`
 	NodeTimezone       string           `json:"node_timezone,omitempty"`
+	// The reservation's access control as the GATEWAY holds it (#2130). Empty from a gateway
+	// that predates this, which reads as "nothing to say" -- and the Inspector then falls back
+	// to what it always showed.
+	//
+	// Passcode is PasscodeMask ("********") when one is set, never the stored hash. Sending the
+	// mask back means "unchanged", which is how a panel can display that a passcode exists
+	// without ever handling it.
+	AccessMode   string `json:"access_mode,omitempty"`
+	WhitelistIPs string `json:"whitelist_ips,omitempty"`
+	Passcode     string `json:"passcode,omitempty"`
 }
 
 // PinnedShutdownNotice returns the warning a client pinned to a specific gateway should be

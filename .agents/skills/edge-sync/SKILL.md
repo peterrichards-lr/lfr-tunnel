@@ -17,8 +17,30 @@ description: Architectural rules for state synchronization between the Control P
   way `/api/internal/edge-audit-log` already does. **Size decides the transport; the control
   channel decides the protocol.**
 - **Every Edge is powered off nightly (00:00-08:00 local).** Anything held only in an Edge's memory is gone at that point unless it was flushed. A new accumulator needs a flush on the graceful stop AND on the two "I am going away" signals -- the drain announcement (`handleLocalDrain`) and the scheduled-shutdown warning -- and a stated bound on what an ungraceful stop still loses.
+- **Configuration central stores is configuration central must CHANGE (#2121).** A write that
+  lands in central's database goes to central, always -- never to whichever gateway happens to
+  hold the lease. An Edge has no database, so `validatePAT` refuses the token on `s.db == nil`
+  before it is even read, and the caller is told `401 Unauthorized` about a credential that is
+  perfectly good. That misdirection cost a live session to diagnose: registration on the same
+  Edge, with the same token, succeeds -- because registration is the one path that was taught to
+  forward (`handleEdgeRegisterProxy`).
+  - **Do not fix this by forwarding more.** Proxying control-plane calls through an Edge would
+    have it relaying users' personal access tokens on paths that have no need to see them, and
+    every endpoint added later would inherit that by default. The client already knows central's
+    address -- it is told it by the gateway and reports status to it every tick -- so it can
+    simply ask central itself.
+  - **Unreachable means "cannot be changed", not "is now unset".** The Edge goes on enforcing what
+    it was last told: access control lives on the live lease (`SetAccessControlsForSubdomain`),
+    not fetched per request. So an outage must DISABLE the control that writes it, never clear
+    the value and never fail on submit -- and the message has to say the tunnel is still
+    protected, or a disabled panel reads as an open tunnel.
+  - **A temporary refusal must not outrank a permanent one.** A custom domain can never be edited
+    from the client Inspector; reporting that as a control-plane outage tells someone to wait for
+    something that will not help.
+  - **"Not asked yet" is not "down".** A freshly started client has probed nothing. Disabling on
+    that basis flashes the control off and on at every launch, so carry the two states separately.
 - **Telemetry must never be able to drop a tunnel.** The control channel also carries kicks, schedules and blacklist pushes. Parse inbound frames best-effort and keep the connection on a failure, and keep frames well inside the read limit -- gorilla closes a connection that exceeds it.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-21* | *Last Reviewed: 2026-09-21*

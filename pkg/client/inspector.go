@@ -158,7 +158,10 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			logFile, _ = ResolveClientLogPath(engine.ClientSubdomain) //nolint:errcheck
 		}
 
-		acEditable, acReason := accessControlEditability(engine.SubdomainAss, engine.PublicURLs)
+		acEditable, acReason := accessControlEditability(
+			engine.SubdomainAss, engine.PublicURLs,
+			engine.controlPlaneReachable, engine.controlPlaneKnown,
+		)
 
 		info := map[string]interface{}{
 			"status":           status,
@@ -940,13 +943,26 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 // a session with no assignment yet, and a custom domain, which splitAssignedHost refuses on
 // purpose because guessing a (prefix, domain) pair for one would address somebody else's
 // reservation. Letting either be typed into and fail on submit is the behaviour this replaces.
-func accessControlEditability(assigned string, publicURLs []string) (bool, string) {
+//
+// The third is temporary and follows the owner's rule: configuration central stores must be
+// changed at central, so when central cannot be reached it cannot be changed -- and the edge
+// carries on enforcing what it was last told. Ordered after the permanent two deliberately: a
+// custom domain is not reported as a passing outage that will clear on its own.
+func accessControlEditability(assigned string, publicURLs []string, controlPlaneUp, controlPlaneKnown bool) (bool, string) {
 	if strings.TrimSpace(assigned) == "" {
 		return false, "Access control can be set once the tunnel is connected and has a public URL."
 	}
 	if _, _, err := splitAssignedHost(assigned, publicURLs); err != nil {
 		return false, "This tunnel is served on a custom domain, whose access control is managed " +
 			"from the portal rather than here."
+	}
+	// The only TEMPORARY refusal of the three, and the reason this returns a sentence rather
+	// than a flag: a disabled access-control panel must not read as "your tunnel is now open".
+	// It is still enforcing exactly what it was last told, on the lease the edge holds.
+	if controlPlaneKnown && !controlPlaneUp {
+		return false, "The control plane is unreachable, so access control cannot be changed " +
+			"right now. Your tunnel is still enforcing the settings it already has, and these " +
+			"fields return by themselves once the control plane is back."
 	}
 	return true, ""
 }

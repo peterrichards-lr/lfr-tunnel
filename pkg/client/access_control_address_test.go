@@ -120,17 +120,25 @@ func TestAccessControlEditabilityMatchesWhatTheSaveWouldAccept(t *testing.T) {
 		name     string
 		assigned string
 		urls     []string
+		cpUp     bool
+		cpKnown  bool
 		editable bool
 		mentions string
 	}{
-		{"connected to a normal subdomain", "peters", []string{"https://peters.lfr-demo.se"}, true, ""},
-		{"not connected yet", "", nil, false, "connected"},
-		{"a custom domain", "vanity.example.com", []string{"https://vanity.example.com"}, false, "portal"},
+		{"connected to a normal subdomain", "peters", []string{"https://peters.lfr-demo.se"}, true, true, true, ""},
+		{"not connected yet", "", nil, true, true, false, "connected"},
+		{"a custom domain", "vanity.example.com", []string{"https://vanity.example.com"}, true, true, false, "portal"},
+		// Configuration central stores must be changed at central. While central is
+		// unreachable it cannot be changed -- and the edge keeps enforcing what it holds.
+		{"control plane down", "peters", []string{"https://peters.lfr-demo.se"}, false, true, false, "unreachable"},
+		// Not asked yet is not the same as down. A client that has just started has pinged
+		// nothing, and disabling on that basis flashes the panel off and on at every launch.
+		{"control plane not probed yet", "peters", []string{"https://peters.lfr-demo.se"}, false, false, true, ""},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			editable, reason := accessControlEditability(tc.assigned, tc.urls)
+			editable, reason := accessControlEditability(tc.assigned, tc.urls, tc.cpUp, tc.cpKnown)
 			if editable != tc.editable {
 				t.Fatalf("editable=%v, want %v (reason %q)", editable, tc.editable, reason)
 			}
@@ -144,11 +152,39 @@ func TestAccessControlEditabilityMatchesWhatTheSaveWouldAccept(t *testing.T) {
 				t.Errorf("reason %q does not tell the reader about %q", reason, tc.mentions)
 			}
 			// The disabled state must agree with the endpoint, or the form forbids something
-			// that would have worked.
-			if _, _, err := splitAssignedHost(tc.assigned, tc.urls); err == nil && strings.TrimSpace(tc.assigned) != "" {
-				t.Error("the form is disabled for an assignment the save path would have accepted")
+			// that would have worked -- except while the control plane is down, which is a
+			// refusal about reachability rather than about the assignment.
+			if tc.cpUp || !tc.cpKnown {
+				if _, _, err := splitAssignedHost(tc.assigned, tc.urls); err == nil && strings.TrimSpace(tc.assigned) != "" {
+					t.Error("the form is disabled for an assignment the save path would have accepted")
+				}
 			}
 		})
+	}
+}
+
+// A disabled panel must never read as "your tunnel is now open to everyone". The edge goes on
+// enforcing the access control it holds on the lease, and the sentence has to say so -- this is
+// the difference between a reassuring message and an alarming one.
+func TestTheControlPlaneOutageMessageSaysTheTunnelIsStillProtected(t *testing.T) {
+	_, reason := accessControlEditability("peters", []string{"https://peters.lfr-demo.se"}, false, true)
+	lower := strings.ToLower(reason)
+	for _, want := range []string{"still", "back"} {
+		if !strings.Contains(lower, want) {
+			t.Errorf("the outage message %q does not say %q; a reader has to be told the tunnel "+
+				"is still enforcing its settings and that the fields come back", reason, want)
+		}
+	}
+}
+
+// A permanent refusal must not be reported as a passing outage. A custom domain is never
+// editable here, control plane or no control plane, and telling someone to wait for central
+// would have them waiting forever.
+func TestAPermanentRefusalOutranksAnOutage(t *testing.T) {
+	_, reason := accessControlEditability("vanity.example.com", []string{"https://vanity.example.com"}, false, true)
+	if strings.Contains(strings.ToLower(reason), "unreachable") {
+		t.Errorf("a custom domain was reported as a control-plane outage (%q); it will still be "+
+			"a custom domain when the outage clears", reason)
 	}
 }
 

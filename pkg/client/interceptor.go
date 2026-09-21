@@ -142,6 +142,17 @@ type InterceptorEngine struct {
 	// gateway". Unexported so it cannot be read without the lock.
 	centralURL string
 
+	// controlPlaneReachable is what the last status report to the control plane saw, and
+	// controlPlaneKnown whether one has been sent yet.
+	//
+	// Configuration that central stores must be CHANGED at central; when central cannot be
+	// reached it cannot be changed, and the edge goes on serving the values it was last told.
+	// The Inspector reads this to disable those controls rather than offer an edit that
+	// cannot land (#2121). The second field keeps "not asked yet" distinct from "down", so a
+	// freshly started client does not flash its panel off and on again.
+	controlPlaneReachable bool
+	controlPlaneKnown     bool
+
 	// sessionLog persists proxied requests and diagnostic events. Nil is valid and
 	// discards, so no call site needs a nil check.
 	sessionLog *SessionLogger
@@ -275,6 +286,26 @@ func (e *InterceptorEngine) CentralURL() string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.centralURL
+}
+
+// noteControlPlaneReachable records what the last status report to the control plane saw.
+func (e *InterceptorEngine) noteControlPlaneReachable(ok bool) {
+	e.mu.Lock()
+	e.controlPlaneReachable = ok
+	e.controlPlaneKnown = true
+	e.mu.Unlock()
+}
+
+// ControlPlaneReachable reports whether the control plane answered the last status report, and
+// whether it has been asked at all yet.
+//
+// The second return exists so that "not asked yet" is never mistaken for "down". A client that
+// has just started has pinged nothing, and disabling a control on that basis would flash the
+// panel off and on at every launch.
+func (e *InterceptorEngine) ControlPlaneReachable() (reachable bool, known bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.controlPlaneReachable, e.controlPlaneKnown
 }
 
 // SetCentralURL records the central control-plane URL that regional edge sessions
@@ -615,7 +646,18 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 
 				urlsToPing := statusReportTargets(serverURL, e.CentralURL())
 
+				// Which of these URLs IS the control plane. Access control is stored there and
+				// nowhere else, so whether it answers decides whether the Inspector may offer
+				// to change it -- while the edge goes on enforcing the values it already
+				// holds on the lease (#2121).
+				controlPlaneURL := e.CentralURL()
+				if controlPlaneURL == "" {
+					controlPlaneURL = serverURL
+				}
+
 				for _, pingURL := range urlsToPing {
+					isControlPlane := sameGatewayHost(pingURL, controlPlaneURL)
+
 					// Only the gateway actually serving this session can say the lease is
 					// gone. The same reasoning the 200 path below already applies, applied
 					// here: central legitimately knows nothing about an edge-hosted session,
@@ -640,6 +682,9 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 										"reported_by": pingURL,
 										"status_code": resp.StatusCode,
 									})
+									if isControlPlane {
+										e.noteControlPlaneReachable(false)
+									}
 									_ = resp.Body.Close() //nolint:errcheck
 									continue
 								}
@@ -724,7 +769,16 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 								}
 								return
 							}
+							if isControlPlane {
+								e.noteControlPlaneReachable(true)
+							}
 							_ = resp.Body.Close() //nolint:errcheck
+						} else if isControlPlane {
+							// Could not be reached at all -- refused, timed out, DNS. This
+							// branch used to swallow the error entirely, which is why nothing
+							// downstream could tell a control plane that was down from one
+							// nobody had asked yet.
+							e.noteControlPlaneReachable(false)
 						}
 					}
 				}

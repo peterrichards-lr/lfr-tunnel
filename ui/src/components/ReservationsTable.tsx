@@ -263,12 +263,10 @@ export default function ReservationsTable({
                           )}
                           <button
                             type="button"
-                            className="btn btn-secondary py-xs px-sm text-xs"
-                            title={t('access_control', 'Access Control')}
-                            aria-label={t('access_control', 'Access Control')}
+                            className="btn btn-secondary py-xs px-sm text-xs whitespace-nowrap"
                             onClick={() => openAcModal(r)}
                           >
-                            🔒
+                            🔒 {t('access_control', 'Access Control')}
                           </button>
                           <button
                             type="button"

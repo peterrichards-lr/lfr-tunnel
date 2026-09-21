@@ -466,11 +466,13 @@ var tempServer = NewTempSettingsServer(55556)
 var lockPath string
 
 func acquireGUILock() bool {
-	home, err := os.UserHomeDir()
+	// Shared with the upgrade and stop paths, which both need to find this file (#2128).
+	// GUIPIDPath resolves the home directory itself, so this no longer does it twice.
+	guiPath, err := client.GUIPIDPath()
 	if err != nil {
 		return false
 	}
-	lockPath = filepath.Join(home, ".lfr-tunnel", "gui.pid")
+	lockPath = guiPath
 
 	// Read existing PID
 	if data, err := os.ReadFile(lockPath); err == nil {

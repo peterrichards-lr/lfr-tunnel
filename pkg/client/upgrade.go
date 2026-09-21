@@ -565,8 +565,11 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 	}
 
 	// 3. Terminate active GUI PID
-	guiLock := filepath.Join(home, ".lfr-tunnel", "gui.pid")
-	if data, err := os.ReadFile(guiLock); err == nil {
+	guiLock, guiLockErr := GUIPIDPath()
+	if guiLockErr != nil {
+		fmt.Printf("[Update] Could not resolve the GUI lock file, skipping that step: %v\n", guiLockErr)
+	}
+	if data, err := os.ReadFile(guiLock); guiLockErr == nil && err == nil {
 		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
 			if IsPIDRunning(pid) {
 				fmt.Printf("[Update] Terminating active GUI process (PID: %d)...\n", pid)
@@ -582,7 +585,11 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 	logDir := filepath.Join(home, ".lfr-tunnel")
 	if entries, err := os.ReadDir(logDir); err == nil {
 		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "client-") && strings.HasSuffix(entry.Name(), ".pid") {
+			// Was `strings.HasPrefix(entry.Name(), "client-")`, which is the LOG file's
+			// prefix. Tunnel pid files are named lfr-tunnel-<sub>.pid, so this loop matched
+			// nothing and terminated no background tunnel, ever (#2128). Both sides of the
+			// name now come from pidfiles.go so they cannot disagree again.
+			if _, isTunnelPID := TunnelPIDFileSubdomain(entry.Name()); !entry.IsDir() && isTunnelPID {
 				pidPath := filepath.Join(logDir, entry.Name())
 				if data, err := os.ReadFile(pidPath); err == nil {
 					if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {

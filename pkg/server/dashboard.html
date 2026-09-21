@@ -1095,38 +1095,6 @@
             </div>
 
             <!-- Edit Edge Schedule Modal -->
-            <!-- Access Control for a reservation. V1 could only DISPLAY the mode and whitelist,
-                 never set them, while V2 offered the full dialog -- a capability in one arm of
-                 the A/B test and absent from the other (#2101). -->
-            <div id="reservation-ac-modal" class="modal-overlay">
-                <div class="glass modal">
-                    <h3 data-i18n="access_control">Access Control</h3>
-                    <p id="reservation-ac-host" style="opacity: 0.8; margin-top: -12px; margin-bottom: 16px; font-family: monospace;"></p>
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="access_mode" for="reservation-ac-mode">Access Mode</label>
-                    <select id="reservation-ac-mode" class="input-field" onchange="updateReservationAcNotice()">
-                        <option value="public" data-i18n="access_public">🌐 Public — Anyone can access</option>
-                        <option value="passcode" data-i18n="access_passcode">🔑 Passcode — Requires a secret code</option>
-                        <option value="whitelist" data-i18n="access_whitelist">🛡 IP Whitelist — Restrict by IP address</option>
-                        <option value="or" data-i18n="access_or">🔑/🛡 Passcode OR Whitelist</option>
-                        <option value="and" data-i18n="access_and">🔒 Passcode AND Whitelist</option>
-                    </select>
-                    <p id="reservation-ac-public-notice" style="display: none; font-size: 12px; opacity: 0.7; margin-top: 8px;" data-i18n="access_public_notice">This tunnel is open to all traffic. Any passcode or IP list is kept for when you switch back, and is not being applied.</p>
-
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="passcode" for="reservation-ac-passcode">Passcode</label>
-                    <input type="password" id="reservation-ac-passcode" class="input-field" autocomplete="new-password">
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="passcode_confirm" for="reservation-ac-passcode-confirm">Confirm passcode</label>
-                    <input type="password" id="reservation-ac-passcode-confirm" class="input-field" autocomplete="new-password">
-
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="whitelist_ips" for="reservation-ac-whitelist">IP Whitelist</label>
-                    <input type="text" id="reservation-ac-whitelist" class="input-field" placeholder="e.g. 192.168.1.1, 10.0.0.0/24">
-
-                    <p id="reservation-ac-error" style="display: none; color: var(--danger); font-size: 12px; margin-top: 8px;"></p>
-
-                    <button class="btn btn-primary" onclick="submitReservationAccessControl()" data-i18n="save">Save</button>
-                    <button class="btn" onclick="closeReservationAcModal()" data-i18n="cancel">Cancel</button>
-                </div>
-            </div>
-
             <div id="edge-schedule-modal" class="modal-overlay">
                 <div class="glass modal">
                     <h3 data-i18n="edge_schedule_modal_title">Edit Stop/Start Schedule</h3>
@@ -1390,6 +1358,43 @@
     </div><!-- /#dashboard-shell -->
 
     <!-- NEW TOKEN MODAL -->
+    <!-- Outside #dashboard-shell, with the other body-level modals.
+         The shell carries display:none until sign-in, so a modal inside it inherits that
+         (#1791). This first went in beside #edge-schedule-modal, which sits inside
+         #tab-network-health -- wrong on both counts: a reservations dialog does not belong in
+         the Network Health tab, and portal_v1_shell_nesting caught the nesting at once. -->
+    <!-- Access Control for a reservation. V1 could only DISPLAY the mode and whitelist,
+         never set them, while V2 offered the full dialog -- a capability in one arm of
+         the A/B test and absent from the other (#2101). -->
+    <div id="reservation-ac-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3 data-i18n="access_control">Access Control</h3>
+            <p id="reservation-ac-host" style="opacity: 0.8; margin-top: -12px; margin-bottom: 16px; font-family: monospace;"></p>
+            <label style="font-size: 13px; opacity: 0.8;" data-i18n="access_mode" for="reservation-ac-mode">Access Mode</label>
+            <select id="reservation-ac-mode" class="input-field" onchange="updateReservationAcNotice()">
+                <option value="public" data-i18n="access_public">🌐 Public — Anyone can access</option>
+                <option value="passcode" data-i18n="access_passcode">🔑 Passcode — Requires a secret code</option>
+                <option value="whitelist" data-i18n="access_whitelist">🛡 IP Whitelist — Restrict by IP address</option>
+                <option value="or" data-i18n="access_or">🔑/🛡 Passcode OR Whitelist</option>
+                <option value="and" data-i18n="access_and">🔒 Passcode AND Whitelist</option>
+            </select>
+            <p id="reservation-ac-public-notice" style="display: none; font-size: 12px; opacity: 0.7; margin-top: 8px;" data-i18n="access_public_notice">This tunnel is open to all traffic. Any passcode or IP list is kept for when you switch back, and is not being applied.</p>
+
+            <label style="font-size: 13px; opacity: 0.8;" data-i18n="passcode" for="reservation-ac-passcode">Passcode</label>
+            <input type="password" id="reservation-ac-passcode" class="input-field" autocomplete="new-password">
+            <label style="font-size: 13px; opacity: 0.8;" data-i18n="passcode_confirm" for="reservation-ac-passcode-confirm">Confirm passcode</label>
+            <input type="password" id="reservation-ac-passcode-confirm" class="input-field" autocomplete="new-password">
+
+            <label style="font-size: 13px; opacity: 0.8;" data-i18n="whitelist_ips" for="reservation-ac-whitelist">IP Whitelist</label>
+            <input type="text" id="reservation-ac-whitelist" class="input-field" placeholder="e.g. 192.168.1.1, 10.0.0.0/24">
+
+            <p id="reservation-ac-error" style="display: none; color: var(--danger); font-size: 12px; margin-top: 8px;"></p>
+
+            <button class="btn btn-primary" onclick="submitReservationAccessControl()" data-i18n="save">Save</button>
+            <button class="btn" onclick="closeReservationAcModal()" data-i18n="cancel">Cancel</button>
+        </div>
+    </div>
+
     <div id="token-modal" class="modal-overlay">
         <div class="glass modal">
             <h3 id="modal-title">Generate New Token</h3>

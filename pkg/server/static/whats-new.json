@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.48.42",
+    "release_date": "2026-09-21",
+    "features": [
+      "fix: stop the portal showing the passcode hash and re-hashing it on the next save (#2103) (#2105)",
+      "fix(portal-v2): stop every modal stealing focus from its own text inputs (#2102) (#2104)"
+    ]
+  },
+  {
     "version": "v1.48.41",
     "release_date": "2026-09-20",
     "features": [
@@ -43,26 +51,6 @@
       "fix(portal): give V1's geo credit a fallback sentence, and retranslate it (#2052) (#2053)",
       "docs(skill): record that an edge deploy has one entry point and one node per run (#2051)",
       "chore(scripts): delete the second edge-deploy entry point (#2048) (#2049)"
-    ]
-  },
-  {
-    "version": "v1.48.37",
-    "release_date": "2026-09-18",
-    "features": [
-      "feat(portal): publish the geo vendor credit where every user can see it (#2044) (#2046)",
-      "test: answer the sleep question for all 25, and fix the 8 that fail green (#2045)",
-      "feat(geo): support IPinfo Lite, the vendor that uses a top-level country_code (#2008) (#2043)",
-      "fix(release): stop a release looking shipped while missing assets (#2041) (#2042)",
-      "feat(server): honour the user's subdomain style when the CLI asks for a generated name (#2031) (#2040)",
-      "test(server): gate the per-registration duplication class instead of enumerating it by hand (#2032) (#2039)",
-      "feat(hooks): run the static gates before the push, not thirteen minutes after it (#2027) (#2028)",
-      "test(server,client): stop two tests racing the clock, and split the assertions they conflated (#2037)",
-      "fix(ci): a green run is only a recovery if it re-ran what broke (#2030) (#2036)",
-      "refactor(server): close out the per-registration class, and fix the one member that had diverged (#2020) (#2034)",
-      "fix(test): one YAML-path helper, and a guard that reads the whole tree (#2035)",
-      "test(server): make the geo vendor gate fail in CI, and give it a control that controls (#2019) (#2033)",
-      "docs(agents): fix one stale reference, and record four traps the corpus did not warn about (#2024) (#2025)",
-      "test(geo): make the SIGHUP geo reload swap able to fail in CI (#2014) (#2022)"
     ]
   }
 ]

@@ -1719,3 +1719,22 @@ func ParseBandwidth(bwStr string) (int64, error) {
 	}
 	return bytesPerSec, nil
 }
+
+// SetAccessControlFromGateway records the reservation's access control as the gateway reports
+// it, which is what the Inspector displays.
+//
+// Separate from the Inspector's own setter so the two intents stay distinguishable: this one is
+// "the gateway told us", the other is "the user asked for this and the gateway accepted it".
+// Collapsing them would make it impossible to tell a stale local value from a confirmed one --
+// the confusion that let a hardcoded "or" masquerade as a reservation's mode (#2130).
+//
+// The passcode arrives as the gateway's mask when one is set, never the stored hash. This stores
+// whatever arrives without interpreting it: the gateway reads its own mask as "unchanged" on the
+// way back, and teaching the client that meaning would be a second place to get it wrong.
+func (e *InterceptorEngine) SetAccessControlFromGateway(passcode, whitelistIPs, accessMode string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.Passcode = passcode
+	e.WhitelistIPs = whitelistIPs
+	e.AccessMode = accessMode
+}

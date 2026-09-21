@@ -460,7 +460,11 @@ func main() {
 	engine.PreserveHost = cfg.PreserveHost
 	engine.ClientSubdomain = sub
 	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
-	engine.AccessMode = "or"
+	// Deliberately NOT a default here any more. It used to be the literal "or", which the
+	// Inspector then displayed as the tunnel's access mode and posted back on save -- silently
+	// rewriting a reservation set to "and" and widening access for anyone who only meant to
+	// change the passcode (#2130). What it actually is arrives on the registration response;
+	// until then the panel has nothing to claim.
 	engine.Latency = cfg.Latency
 	if cfg.Bandwidth != "" {
 		bwLimit, err := client.ParseBandwidth(cfg.Bandwidth)
@@ -513,6 +517,11 @@ func main() {
 	defer cancel()
 
 	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+
+	// The FIRST registration, not only the reconnects applySession covers. Without this the
+	// Inspector would show the real access control from the second gateway onwards and a
+	// hardcoded default on the one someone actually opens it on (#2130).
+	applyGatewayAccessControl(engine, regResp)
 
 	// A gateway named with -server is used and nothing else -- the failover path is gated on
 	// !isExplicitServer. That is the right contract, but it was never disclosed: a pinned
@@ -690,6 +699,10 @@ func main() {
 		// than keeping whatever central was advertised at startup.
 		engine.SetCentralURL(centralControlPlaneURL(cfg))
 		engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+		// A failover lands on a different gateway but the same reservation, so the access
+		// control comes back with it and must be re-applied -- otherwise the Inspector would
+		// show the truth until the first reconnect and a stale copy afterwards (#2130).
+		applyGatewayAccessControl(engine, newResp)
 		state.Region = cfg.Region
 		state.ServerURL = cfg.ServerURL
 		state.PublicURLs = publicURLs
@@ -1720,9 +1733,7 @@ func getPIDFilePath(subdomain string) (string, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	safeSub := strings.ReplaceAll(subdomain, "/", "-")
-	safeSub = strings.ReplaceAll(safeSub, "\\", "-")
-	return filepath.Join(dir, fmt.Sprintf("lfr-tunnel-%s.pid", safeSub)), nil
+	return filepath.Join(dir, client.TunnelPIDFileName(subdomain)), nil
 }
 
 func writePID(subdomain string, pid int) error {
@@ -1750,6 +1761,26 @@ func isPIDRunning(pid int) bool {
 	return client.IsPIDRunning(pid)
 }
 
+// applyGatewayAccessControl copies the reservation's access control, as the GATEWAY holds it,
+// onto the engine -- which is what the Inspector displays.
+//
+// Before this the engine carried cfg.Passcode, cfg.WhitelistIPs and a hardcoded "or": the local
+// config file and a constant, describing the machine rather than the tunnel. A gateway that
+// predates this sends nothing and the previous values stand, so an older gateway behaves exactly
+// as it did.
+//
+// The passcode arrives as PasscodeMask when one is set, never the stored hash. Sending the mask
+// back means "unchanged", so the panel can show that a passcode exists without ever holding it.
+func applyGatewayAccessControl(engine *client.InterceptorEngine, resp *client.RegisterResponse) {
+	if engine == nil || resp == nil {
+		return
+	}
+	if resp.AccessMode == "" && resp.WhitelistIPs == "" && resp.Passcode == "" {
+		return
+	}
+	engine.SetAccessControlFromGateway(resp.Passcode, resp.WhitelistIPs, resp.AccessMode)
+}
+
 func getActiveSubdomains() ([]string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -1765,9 +1796,12 @@ func getActiveSubdomains() ([]string, error) {
 	}
 	var subs []string
 	for _, f := range files {
-		if !f.IsDir() && strings.HasPrefix(f.Name(), "lfr-tunnel-") && strings.HasSuffix(f.Name(), ".pid") {
-			sub := strings.TrimPrefix(f.Name(), "lfr-tunnel-")
-			sub = strings.TrimSuffix(sub, ".pid")
+		if f.IsDir() {
+			continue
+		}
+		// Same helper the writer and the upgrade path use, so all three agree by
+		// construction rather than by three people spelling it the same way (#2128).
+		if sub, ok := client.TunnelPIDFileSubdomain(f.Name()); ok {
 			subs = append(subs, sub)
 		}
 	}
@@ -1905,6 +1939,77 @@ func handleStop(sub string, targetSpecific bool) {
 		_ = os.Remove(pidPath) //nolint:errcheck
 		client.DeleteState(s)
 		slog.Info(fmt.Sprintf("[Client] Tunnel for subdomain '%s' stopped.\n", s))
+	}
+
+	stopTray()
+}
+
+// stopTray closes the menu-bar app, if one is running.
+//
+// -stop used to walk tunnel pid files only and never look at gui.pid, so a tray survived it and
+// could not be closed from the CLI at all -- the only command that terminated it was --upgrade,
+// which is not a reasonable way to ask (#2128). The pairing was backwards in both directions:
+// -stop left the tray, --upgrade left the tunnel.
+//
+// "Stop" is read as "stop what this tool started". The tray is not useful without the tunnel it
+// manages, and it does not respawn one on its own -- watchRunningState only refreshes the menu --
+// so leaving it behind strands an icon with nothing behind it.
+//
+// Silent when there is no tray, and explicit when there is: a command that closes a window
+// should say that it did.
+func stopTray() {
+	path, err := client.GUIPIDPath()
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not resolve the menu-bar app's lock file: %v", err))
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// No tray running, which is the common case and not worth a line.
+		return
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		removeStaleTrayLock(path, "it does not contain a usable process id")
+		return
+	}
+	if !isPIDRunning(pid) {
+		removeStaleTrayLock(path, fmt.Sprintf("process %d is not running", pid))
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not address the menu-bar app (PID %d): %v", pid, err))
+		return
+	}
+
+	slog.Info(fmt.Sprintf("[Client] Closing the menu-bar app (PID: %d)...", pid))
+	if err := proc.Signal(syscall.SIGINT); err != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not signal the menu-bar app: %v", err))
+	}
+	for i := 0; i < 20 && isPIDRunning(pid); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if isPIDRunning(pid) {
+		slog.Info("[Client] The menu-bar app did not respond to SIGINT. Force terminating...")
+		if err := proc.Kill(); err != nil {
+			slog.Info(fmt.Sprintf("[Warning] Could not terminate the menu-bar app: %v", err))
+			return
+		}
+	}
+	removeStaleTrayLock(path, "")
+}
+
+// removeStaleTrayLock deletes the tray's lock file, saying why it was stale when it was.
+//
+// Reported rather than discarded: a lock file that cannot be removed makes the NEXT tray refuse
+// to start, and a silent failure here surfaces much later as "the tray will not open".
+func removeStaleTrayLock(path, because string) {
+	if because != "" {
+		slog.Info(fmt.Sprintf("[Client] Clearing the menu-bar app's lock file: %s.", because))
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		slog.Info(fmt.Sprintf("[Warning] Could not remove %s: %v -- the next tray may refuse to start", path, err))
 	}
 }
 

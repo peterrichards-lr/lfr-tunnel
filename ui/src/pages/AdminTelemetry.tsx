@@ -74,7 +74,22 @@ const groupTunnels = (list: Tunnel[]): TunnelGroup[] => {
     g.visitors += t.visitor_ips?.length || 0;
     g.members.push(t);
   });
-  return Array.from(byKey.values());
+  // Alphabetical, and members alphabetical within a group. The server now returns leases in a
+  // stable order too (#2143), but stable is not the same as MEANINGFUL.
+  const groups = Array.from(byKey.values());
+  groups.forEach((g) =>
+    g.members.sort((a, b) =>
+      (a.full_host || '').localeCompare(b.full_host || ''),
+    ),
+  );
+  groups.sort(
+    (a, b) =>
+      a.subdomain.localeCompare(b.subdomain) ||
+      (a.members[0].full_host || '').localeCompare(
+        b.members[0].full_host || '',
+      ),
+  );
+  return groups;
 };
 
 const formatBytes = (bytes: number, decimals = 2) => {

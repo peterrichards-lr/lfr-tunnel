@@ -1018,6 +1018,30 @@ html[dir='rtl'] th {
   display: inline-block;
 }
 
+/* The expand/collapse prefix on a grouped tunnel row (#2143).
+ *
+ * Its own class rather than .action-menu-btn, which is built for the round ⋮ menu and carries
+ * display:flex -- block-level, so the button took the whole row and pushed the subdomain onto
+ * the line below it. This sits inline, before the name, as a prefix.
+ */
+.tunnel-group-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px 0 0;
+  margin: 0;
+  display: inline;
+  vertical-align: baseline;
+}
+
+.tunnel-group-toggle:hover,
+.tunnel-group-toggle:focus-visible {
+  color: var(--text-main);
+}
+
 .action-menu-btn {
   background: none;
   border: none;

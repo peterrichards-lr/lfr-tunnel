@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -228,6 +229,16 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 		}
 	}
 	s.edgeLeasesMu.Unlock()
+
+	// Both sources above are maps, and Go randomises map iteration deliberately -- so without
+	// this the portal tables reshuffled on every frame, with no sort key anyone could name
+	// (#2143). Sorted here, once, so local and edge leases interleave by host rather than
+	// arriving as two arbitrary blocks.
+	sort.Slice(activeLeases, func(i, j int) bool {
+		hostI, _ := activeLeases[i]["full_host"].(string)
+		hostJ, _ := activeLeases[j]["full_host"].(string)
+		return hostI < hostJ
+	})
 
 	resp := map[string]interface{}{
 		"id":                  user.ID,

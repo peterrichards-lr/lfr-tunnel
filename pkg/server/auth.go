@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -886,6 +887,16 @@ func (r *Registry) ListLeases() []*TunnelLease {
 		}
 		snapshot = append(snapshot, lCopy)
 	}
+	// Sorted, because the loop above walks a MAP and Go randomises map iteration on purpose.
+	// Every caller got a different order each time, so the portal tables reshuffled on every
+	// telemetry frame with no sort key anyone could name -- the order was entropy (#2143).
+	//
+	// Done here rather than in each renderer so every consumer is deterministic, including the
+	// next one. FullHost is unique per lease, which makes this a total order with no ties to
+	// break.
+	sort.Slice(snapshot, func(i, j int) bool {
+		return snapshot[i].FullHost < snapshot[j].FullHost
+	})
 	return snapshot
 }
 

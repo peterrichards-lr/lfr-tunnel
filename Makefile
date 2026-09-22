@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -86,6 +86,7 @@ help:
 	@echo "  make check-inspector   - Inspector page functions behave (executed, not grepped)"
 	@echo "  make check-portal-parity - No capability exists in only one portal arm"
 	@echo "  make check-tunnel-grouping - Both arms group a client's tunnels the same way"
+	@echo "  make check-access-mode-parity - Every access-control form and the server agree"
 	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
@@ -458,6 +459,9 @@ check-portal-parity:
 # (#2129). Both arms render the same telemetry payload, so they must group it the same way.
 check-tunnel-grouping:
 	@node scripts/check-tunnel-grouping.cjs
+
+check-access-mode-parity:
+	@node scripts/check-access-mode-parity.cjs
 
 # Checks the BUILT output, so it needs a site to look at. CI builds to _site; locally, point it
 # at whatever you built:  make check-docs-rendered SITE=site

@@ -145,6 +145,14 @@ export INSPECTOR_URL="http://localhost:${E2E_PROXY_PORT}"
 # node_modules lives in a named volume rather than the bind mount: the host tree is macOS/arm64
 # and the container is linux, so sharing one directory means platform-specific packages built for
 # the wrong OS. The volume also survives between runs, which is what makes the install fast.
+# PLAYWRIGHT_ARGS passes filters through to the runner, so one spec can be iterated on without
+# paying for the whole suite -- e.g.
+#
+#   PLAYWRIGHT_ARGS="tunnel_details_parity.spec.ts" make e2e-ui
+#
+# Unset, everything runs, which is what CI does. tests/e2e/run-ui.sh has had this for a while
+# and documents it; `make e2e-ui` runs THIS script, which did not, so the documented flag was
+# silently ignored by the command anyone would actually type. A full run is over thirty minutes.
 docker run --rm \
     --network host \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -155,4 +163,4 @@ docker run --rm \
     -e E2E_PROJECT_NAME="$E2E_PROJECT_NAME" \
     -e CI="${CI:-}" \
     "$PLAYWRIGHT_IMAGE" \
-    /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test"
+    /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test ${PLAYWRIGHT_ARGS}"

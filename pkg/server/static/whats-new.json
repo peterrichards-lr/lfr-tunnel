@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.48",
+    "release_date": "2026-09-22",
+    "features": [
+      "feat(portal): V2 gains a tunnel details view, and both arms report launch context (#2150) (#2153)",
+      "fix(i18n): the Arabic privacy page said PATs are encrypted, not hashed (#2151) (#2152)",
+      "feat: report how the client was launched, so the portal can say why a tunnel is where it is (#2148) (#2149)"
+    ]
+  },
+  {
     "version": "v1.48.47",
     "release_date": "2026-09-22",
     "features": [
@@ -37,15 +46,6 @@
       "fix(client): the Inspector saves access control to the control plane, and disables what it cannot save (#2116) (#2117)",
       "fix(portal): V2's Access Control button says what it does (#2114) (#2115)",
       "docs(skill): say WHICH nodes a change has to reach, not just how to deploy one (#2113)"
-    ]
-  },
-  {
-    "version": "v1.48.43",
-    "release_date": "2026-09-21",
-    "features": [
-      "fix(client): make the two settings groups actual sections, not captions (#2110) (#2111)",
-      "feat(portal-v1): give V1 the access control it could only ever display (#2101) (#2107)",
-      "fix(proxy): make the passcode form post to the tunnel host, not the control plane (#2108) (#2109)"
     ]
   }
 ]

@@ -596,6 +596,29 @@ tr:hover td {
 /* Node type (#1383). AdminTelemetry and AdminSubdomains mark a row with the gateway it
    landed on -- an edge, or the control plane -- and both modifiers were missing, so every
    badge rendered in the default success green regardless of which it was. */
+/* The expand/collapse prefix on a grouped tunnel row (#2143).
+ *
+ * Inline on purpose: V1's first attempt reused a class carrying display:flex, which is
+ * block-level, so the control took the whole row and pushed the subdomain onto the line below.
+ */
+.tunnel-group-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px 0 0;
+  margin: 0;
+  display: inline;
+  vertical-align: baseline;
+}
+
+.tunnel-group-toggle:hover,
+.tunnel-group-toggle:focus-visible {
+  color: var(--text-main, #111);
+}
+
 .badge-node {
   background: var(--status-info-bg);
   color: var(--status-info-text);

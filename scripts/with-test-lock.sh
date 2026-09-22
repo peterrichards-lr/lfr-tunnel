@@ -72,6 +72,25 @@ while :; do
             rmdir "$LOCK_DIR" 2>/dev/null || true
             continue
         fi
+    elif [ -z "$owner" ]; then
+        # No pid at all. The lock is taken by mkdir and the pid written as a SEPARATE step, so a
+        # process killed between the two leaves a directory nothing can ever break: the branch
+        # above needs a pid to test, so it never fires, and the lock outlives every later run
+        # (#2145). Observed after SentinelOne killed the terminal mid-suite -- the directory sat
+        # there empty and `make test` queued the full timeout on every invocation afterwards.
+        #
+        # The comment above already anticipated this window and guarded it with STALE_AFTER --
+        # but only INSIDE the branch that requires a pid, so the protection never reached the
+        # case it was written for.
+        #
+        # Same terms as a dead owner: waited out, so a run that has this moment created the
+        # directory and not yet written its pid keeps its lock.
+        if [ "$waited" -ge "$STALE_AFTER" ]; then
+            echo "make test: breaking a lock with no owner recorded, held for ${waited}s." >&2
+            echo "  A process killed between mkdir and writing its pid leaves one of these." >&2
+            rmdir "$LOCK_DIR" 2>/dev/null || true
+            continue
+        fi
     fi
 
     if [ "$announced" -eq 0 ]; then

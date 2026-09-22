@@ -105,6 +105,38 @@ else
 fi
 rm -rf "$WORK/.lfr-tunnel-test.lock"
 
+# A lock with NO pid recorded must also be broken. The lock is taken by mkdir and the pid
+# written as a separate step, so a process killed between the two leaves a directory the
+# dead-owner check above cannot touch -- it needs a pid to test, so it never fires (#2145).
+#
+# Not hypothetical: SentinelOne killed the terminal mid-suite on 2026-09-22 and left exactly
+# this. Every later `make test` queued the full timeout and gave up, and the lock had to be
+# removed by hand.
+#
+# Asserted with a REAL hang budget: if the fix regresses, this times out and fails rather than
+# passing on a technicality.
+mkdir -p "$WORK/.lfr-tunnel-test.lock"              # no pid file, on purpose
+if LFT_TEST_LOCK_STALE_AFTER=1 LFT_TEST_LOCK_TIMEOUT=20 \
+        "$LOCK_SCRIPT" sh -c 'exit 0' >/dev/null 2>&1; then
+    pass "a lock with no owner recorded is broken"
+else
+    fail "a pid-less lock was not broken -- a process killed between mkdir and writing its pid wedges every later run"
+fi
+rm -rf "$WORK/.lfr-tunnel-test.lock"
+
+# ...and it must still be waited out, so a run that has this instant taken the lock and not yet
+# written its pid does not have it stolen. STALE_AFTER high, timeout low: the wrapper must give
+# up rather than break a lock that might belong to a live starter.
+mkdir -p "$WORK/.lfr-tunnel-test.lock"
+out=$(LFT_TEST_LOCK_STALE_AFTER=999 LFT_TEST_LOCK_TIMEOUT=2 \
+        "$LOCK_SCRIPT" sh -c 'exit 0' 2>&1 || true)
+if echo "$out" | grep -q "timed out"; then
+    pass "a pid-less lock is waited out, not stolen from a run that just started"
+else
+    fail "a lock with no pid was broken immediately -- that races a process mid-acquisition: $out"
+fi
+rm -rf "$WORK/.lfr-tunnel-test.lock"
+
 # Waiting must be bounded, and must say what to do rather than hanging silently.
 mkdir -p "$WORK/.lfr-tunnel-test.lock"
 echo $$ > "$WORK/.lfr-tunnel-test.lock/pid"        # a live pid: this test itself

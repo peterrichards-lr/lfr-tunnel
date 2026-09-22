@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/provisioner"
@@ -168,6 +170,15 @@ func jsonQuoteString(s string) string {
 	return string(b)
 }
 
+// edgePortalStopWarningSeconds is how long the portal's stop button warns a node's clients
+// before the instance is actually stopped (#2167).
+//
+// Long enough to ride several heartbeats -- they arrive about every five seconds -- so a client
+// hears the warning and moves under plannedShutdownCooldown rather than discovering the
+// gateway is gone and treating it as a fault. Short enough that an operator who pressed Stop
+// does not think it was ignored.
+const edgePortalStopWarningSeconds = 15
+
 func (s *Server) handleAdminEdgeStart(w http.ResponseWriter, r *http.Request, actor string) {
 	client, ok := s.requireProvisioner(w)
 	if !ok {
@@ -192,22 +203,74 @@ func (s *Server) handleAdminEdgeStop(w http.ResponseWriter, r *http.Request, act
 	}
 	nodeID := edgeProvisionerNodeID(r.URL.Path, "/stop")
 
-	if err := client.Stop(r.Context(), nodeID); err != nil {
-		writeProvisionerError(w, err)
-		return
-	}
-	_ = s.SendEdgeKickAll(nodeID) //nolint:errcheck
-	s.CloseEdgeControlConn(nodeID)
+	// Warn the node's clients BEFORE the instance goes away (#2167).
+	//
+	// This path used to call client.Stop() first and kick the sessions afterwards, so there was
+	// no moment at which a warning could reach anyone. Clients therefore experienced an
+	// administrative stop as an ordinary failure and applied regionFailoverCooldown -- 90
+	// seconds -- rather than plannedShutdownCooldown, which is an hour and exists precisely
+	// because "this gateway is about to be deliberately unreachable".
+	//
+	// On 2026-09-22 that was harmless: edge-us came back in three minutes and the short
+	// cooldown made the failback quick. On the overnight schedule it is not: a client re-elects
+	// a powered-off gateway every 90 seconds, fails to register, and churns until morning. The
+	// hour-long cooldown was written for exactly that and this path never triggered it.
+	//
+	// The machinery was already here. BroadcastNodeShutdownWarning has carried this to edges
+	// since #1238; the scheduled-stop sweep uses it, the deploy script announces its own drain,
+	// and only the portal button skipped it.
+	reason := "Administrative stop requested from the portal"
+	s.BroadcastNodeShutdownWarning(nodeID, edgePortalStopWarningSeconds, reason)
+
+	// Recorded before the wait, so the audit shows when the operator asked rather than when the
+	// instance finally went down.
+	s.writeAudit(actor, "edge.power.stop", "node", nodeID, "Edge node stop requested via portal", r)
+
 	s.setEdgeAdminDisabled(nodeID, true)
 	s.edgeHealthMu.Lock()
 	if h, exists := s.edgeHealth[nodeID]; exists {
-		h.Status = "Offline"
-		h.ErrorMessage = "Administrative stop requested"
+		h.Status = "Stopping"
+		h.ErrorMessage = fmt.Sprintf("Administrative stop requested; warning clients for %ds", edgePortalStopWarningSeconds)
 		s.edgeHealth[nodeID] = h
 	}
 	s.edgeHealthMu.Unlock()
-	s.writeAudit(actor, "edge.power.stop", "node", nodeID, "Edge node stop requested via portal", r)
-	s.triggerEdgeHealthRecheck(nodeID)
+
+	// 202 Accepted, and meant literally: the stop happens after the warning window rather than
+	// during this request. Blocking an admin HTTP call for the whole window would be the
+	// alternative, and a proxy timing out mid-wait would leave the node warned but not stopped.
+	s.goTracked(func() {
+		time.Sleep(edgePortalStopWarningSeconds * time.Second)
+
+		if err := client.Stop(context.Background(), nodeID); err != nil {
+			slog.Error(fmt.Sprintf("[Edge] Stopping %s after its warning window failed: %v", nodeID, err))
+			s.edgeHealthMu.Lock()
+			if h, exists := s.edgeHealth[nodeID]; exists {
+				h.Status = "Online"
+				h.ErrorMessage = fmt.Sprintf("Administrative stop failed: %v", err)
+				s.edgeHealth[nodeID] = h
+			}
+			s.edgeHealthMu.Unlock()
+			s.setEdgeAdminDisabled(nodeID, false)
+			s.triggerEdgeHealthRecheck(nodeID)
+			return
+		}
+
+		// Kick and close AFTER the instance is going, as before -- but now every client has
+		// had the warning window to move of its own accord, so this reaps stragglers rather
+		// than being the first anyone hears of it.
+		_ = s.SendEdgeKickAll(nodeID) //nolint:errcheck
+		s.CloseEdgeControlConn(nodeID)
+
+		s.edgeHealthMu.Lock()
+		if h, exists := s.edgeHealth[nodeID]; exists {
+			h.Status = "Offline"
+			h.ErrorMessage = "Administrative stop requested"
+			s.edgeHealth[nodeID] = h
+		}
+		s.edgeHealthMu.Unlock()
+		s.triggerEdgeHealthRecheck(nodeID)
+	})
+
 	w.WriteHeader(http.StatusAccepted)
 }
 

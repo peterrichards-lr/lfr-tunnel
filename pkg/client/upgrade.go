@@ -18,6 +18,7 @@ import (
 	"github.com/jedisct1/go-minisign"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/osutil"
 )
 
 var (
@@ -384,7 +385,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	fmt.Println("[Update] Binary integrity verified successfully.")
 
 	// Pre-upgrade: stop all active processes and services running the binary to release file handles and prevent EDR quarantine
-	plistToReload, restartSystemd := stopActiveProcessesAndServices()
+	plistToReload, restartSystemd, relaunch := stopActiveProcessesAndServices()
 
 	migrated := false
 	// Check for environment variable install directory overrides if targetExecPath was not explicitly specified by caller/test
@@ -486,7 +487,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	// Post-upgrade: restart previously active processes and services
-	restartActiveProcessesAndServices(plistToReload, restartSystemd)
+	restartActiveProcessesAndServices(plistToReload, restartSystemd, relaunch)
 
 	if swapErr != nil {
 		return swapErr
@@ -526,12 +527,36 @@ func replaceBinary(tempPath, execPath string) error {
 	return out.Sync()
 }
 
-func stopActiveProcessesAndServices() ([]string, bool) {
+// appendRelaunchTarget records how a process was started, so the upgrade can start it again.
+//
+// Called immediately BEFORE the process is killed, because that is the only moment the
+// information exists: once it is gone the kernel has nothing left to ask, and it is
+// deliberately never persisted. argv carries -passcode, -basic-auth and -token values, so a
+// file holding it would put credentials at rest -- the leak closed in #2137, and the reason
+// #2148 records flag NAMES only. Held in memory for the seconds between stopping and starting,
+// and it is already visible to this user through `ps` anyway.
+//
+// A process whose command line cannot be read is NOT relaunched, and says so. Guessing at the
+// arguments would start a tunnel configured differently from the one the user had -- a
+// different subdomain, or no passcode -- which is worse than leaving it down, because it looks
+// like it worked.
+func appendRelaunchTarget(relaunch [][]string, pid int, kind string) [][]string {
+	argv, err := processArgv(pid)
+	if err != nil {
+		fmt.Printf("[Update] Could not read how the %s process (PID: %d) was started, so it "+
+			"will not be restarted automatically: %v\n", kind, pid, err)
+		return relaunch
+	}
+	return append(relaunch, argv)
+}
+
+func stopActiveProcessesAndServices() ([]string, bool, [][]string) {
 	var plistToReload []string
 	var restartSystemd bool
+	var relaunch [][]string
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, false
+		return nil, false, nil
 	}
 
 	// 1. Unload LaunchAgents on macOS
@@ -572,6 +597,10 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 	if data, err := os.ReadFile(guiLock); guiLockErr == nil && err == nil {
 		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
 			if IsPIDRunning(pid) {
+				// Read how it was started BEFORE killing it. Once the process is gone the
+				// kernel has nothing left to ask, and this is the only moment the information
+				// exists anywhere -- it is deliberately never written to disk (#2164).
+				relaunch = appendRelaunchTarget(relaunch, pid, "GUI")
 				fmt.Printf("[Update] Terminating active GUI process (PID: %d)...\n", pid)
 				if proc, err := os.FindProcess(pid); err == nil {
 					_ = proc.Kill()        //nolint:errcheck
@@ -594,6 +623,7 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 				if data, err := os.ReadFile(pidPath); err == nil {
 					if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
 						if IsPIDRunning(pid) {
+							relaunch = appendRelaunchTarget(relaunch, pid, "background tunnel")
 							fmt.Printf("[Update] Terminating active background tunnel process (PID: %d)...\n", pid)
 							if proc, err := os.FindProcess(pid); err == nil {
 								_ = proc.Kill()        //nolint:errcheck
@@ -609,10 +639,10 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 	// Wait briefly for all processes to fully die and release binary file handles
 	time.Sleep(500 * time.Millisecond)
 
-	return plistToReload, restartSystemd
+	return plistToReload, restartSystemd, relaunch
 }
 
-func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bool) {
+func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bool, relaunch [][]string) {
 	// 1. Reload LaunchAgents on macOS
 	if runtime.GOOS == "darwin" {
 		for _, plist := range plistToReload {
@@ -625,6 +655,29 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 	if runtime.GOOS == "linux" && restartSystemd {
 		fmt.Println("[Update] Restarting Linux systemd user service...")
 		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run() //nolint:errcheck
+	}
+
+	// 3. Restart the processes this upgrade killed directly (#2164).
+	//
+	// stopActiveProcessesAndServices stops four kinds of thing -- launchd plists, the systemd
+	// service, the GUI process and background tunnels -- and until now restarted only the first
+	// two. So whether a client survived an upgrade depended on how it had been started: a
+	// service came back, a `-background` or `-gui` client was killed and left down, with the
+	// upgrade reporting success either way.
+	//
+	// Launched detached, exactly as handleBackground does. The captured argv is the CHILD's,
+	// which has already had -background stripped from it, so re-running it verbatim in the
+	// foreground would attach the tunnel to this upgrade process and kill it again on exit.
+	for _, argv := range relaunch {
+		if len(argv) == 0 {
+			continue
+		}
+		fmt.Printf("[Update] Restarting %s...\n", filepath.Base(argv[0]))
+		cmd := osutil.BackgroundCommand(argv[0], argv[1:]...)
+		cmd.Dir = "."
+		if err := cmd.Start(); err != nil {
+			fmt.Printf("[Update] Failed to restart %s: %v\n", filepath.Base(argv[0]), err)
+		}
 	}
 }
 

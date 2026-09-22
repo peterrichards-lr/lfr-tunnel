@@ -187,6 +187,13 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
     await stubTunnels(page);
     await page.reload();
 
+    // Active Tunnels is its own screen in V1, not part of Dashboard Overview. Without this the
+    // row is in the DOM and its menu button is invisible, which reads as a broken locator and
+    // is really a missing navigation -- the failure said "element is not visible", not "not
+    // found", and that distinction is the whole diagnosis.
+    await page.locator('#nav-tunnels').click();
+    await expect(page.locator('#tab-tunnels')).toBeVisible();
+
     const row = page.locator('#tunnels-table-body tr', { hasText: 'locked' });
     await row.locator('.action-menu-btn').click();
     await row.getByRole('button', { name: 'Details' }).click();

@@ -530,6 +530,13 @@ jobs:
       - name: Both portal arms group a client's tunnels the same way
         run: node scripts/check-tunnel-grouping.cjs
 
+      # One access-control rule, four implementations -- the Inspector, both portals and the
+      # server that refuses the save. They had already drifted: V2 offered three modes to the
+      # others' five, so a reservation in `or` or `and` opened there with nothing selected and
+      # no fields at all (#2155).
+      - name: The access-control forms and the server agree on every mode
+        run: node scripts/check-access-mode-parity.cjs
+
       # The four gates below existed, had hook tests, and ran NOWHERE (#1929): not in any CI
       # job and not in either git hook, so they fired only when someone typed the make target
       # by hand. A gate nobody runs is documentation with a shebang -- and two of these were

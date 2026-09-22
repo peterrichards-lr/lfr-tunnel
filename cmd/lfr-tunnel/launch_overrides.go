@@ -102,3 +102,24 @@ func describeLaunchOverrides(overrides map[string]string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// launchFlagNames reports the NAMES of the flags actually given on the command line, sorted.
+//
+// Names, never values. `-passcode`, `-basic-auth` and `-token` all arrive as flags, so a record
+// carrying values would be a credential leak of exactly the kind #2135 and #2137 just closed. A
+// flag's name is not a secret; what was passed to it is.
+//
+// flag.Visit walks only the flags that were SET, which is the whole point: "-prefer-region was
+// given" and "no routing flag was given" are different answers, and the second is what tells you
+// a client's region came from a latency probe.
+//
+// Reported alongside launchOverrides rather than folded into it: that map answers "what claimed
+// this config key", including env vars, and is what the Inspector locks fields on. This answers
+// "how was the process started", which includes flags that are not config settings at all --
+// -gui, -background, -prefer-region.
+func launchFlagNames() []string {
+	var names []string
+	flag.Visit(func(f *flag.Flag) { names = append(names, f.Name) })
+	sort.Strings(names)
+	return names
+}

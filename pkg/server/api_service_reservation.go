@@ -273,6 +273,39 @@ func (s *portalService) PromoteReservation(user *db.User, subdomain, domain, ip 
 }
 
 // UpdateReservationAccessControl updates access controls for a reservation.
+
+// missingAccessControlValue names what a mode claims and the reservation does not have, or ""
+// when the two agree (#2156).
+//
+// Takes the values as they will be STORED -- a bcrypt hash or empty for the passcode -- because
+// that is what the proxy reads. It never sees a plaintext passcode and must not: this answers
+// "is one set", nothing more.
+func missingAccessControlValue(accessMode, passcode, whitelistIPs string) string {
+	hasPasscode := passcode != ""
+	hasWhitelist := whitelistIPs != ""
+
+	switch accessMode {
+	case "and":
+		switch {
+		case !hasPasscode && !hasWhitelist:
+			return "a passcode and an IP whitelist; neither is set"
+		case !hasPasscode:
+			return "a passcode; only the IP whitelist is set"
+		case !hasWhitelist:
+			return "an IP whitelist; only the passcode is set"
+		}
+	case "passcode":
+		if !hasPasscode {
+			return "a passcode; none is set"
+		}
+	case "whitelist":
+		if !hasWhitelist {
+			return "an IP whitelist; none is set"
+		}
+	}
+	return ""
+}
+
 func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain, domain, accessMode, passcode, whitelistIPs, ip string) error {
 	res, err := s.db.GetSubdomainReservationByName(subdomain, domain)
 	if err != nil {
@@ -309,6 +342,32 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		res.AccessMode = accessMode
 	} else {
 		res.AccessMode = "or"
+	}
+
+	// A mode must not name a factor that is not there (#2156).
+	//
+	// The proxy decides what to enforce from whether each VALUE is non-empty, not from the
+	// mode: `hasIPWhitelist := ipWhitelist != ""`, and the "and" branch then skips the
+	// whitelist check entirely when there is no whitelist. So saving "and" with the IP field
+	// empty stored the strictest label in the product against passcode-only enforcement, with
+	// no error and nothing to see. Found in production on a reservation in exactly that state.
+	//
+	// Checked HERE, after the mask has been resolved above, so the question asked is "what will
+	// this reservation hold once saved" and not "what did the request body contain".
+	//
+	// The difference matters in the UNSAFE direction. PasscodeMask is the non-empty string
+	// "********", so a request carrying it looks like a passcode to anything inspecting the
+	// body. For a reservation that has no stored passcode, the mask resolves to no passcode at
+	// all -- and request-body validation would wave through "and" on a tunnel with one factor,
+	// which is the exact state this function exists to refuse. Resolved state cannot lie about
+	// it; the request can.
+	//
+	// "or" is deliberately not validated. An unset mode defaults to it a few lines above, so
+	// every reservation nobody has configured is "or" with neither value -- rejecting that
+	// would make untouched reservations unsaveable. "or" with one factor is also meaningful:
+	// either satisfies it, so with one, that one is required.
+	if missing := missingAccessControlValue(res.AccessMode, res.Passcode, res.WhitelistIPs); missing != "" {
+		return fmt.Errorf("%w: access mode %s requires %s", ErrInvalidRequest, res.AccessMode, missing)
 	}
 
 	if err := s.db.UpdateSubdomainReservation(res); err != nil {

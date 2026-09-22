@@ -254,6 +254,17 @@
         <div class="access-control-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_access_control">Access Control</div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Access Mode</label>
+                <select id="ac-mode" onchange="onAccessModeChanged()" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
+                    <option value="public">🌐 Public (Anyone can access)</option>
+                    <option value="passcode">🔑 Passcode (Requires secret code)</option>
+                    <option value="whitelist">🛡️ Whitelist (Restrict by IP)</option>
+                    <option value="or">🔑/🛡️ Passcode OR Whitelist</option>
+                    <option value="and">🔒 Passcode AND Whitelist</option>
+                </select>
+            </div>
+            <div id="ac-public-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 10px; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);" data-i18n="client_access_public_notice">This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_passcode">Passcode Protection</label>
                 <input type="password" id="ac-passcode" placeholder="No passcode set (Public)" data-i18n="client_passcode_placeholder" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
                 <label style="font-weight: 500; color: var(--text-muted); font-size: 11px; display: block; margin-top: 8px;" for="ac-passcode-confirm" data-i18n="client_passcode_confirm">Confirm passcode</label>
@@ -263,17 +274,6 @@
                 <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_ip_whitelist">IP Address Whitelist</label>
                 <input type="text" id="ac-whitelist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" data-i18n="client_ip_placeholder" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
             </div>
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Access Mode</label>
-                <select id="ac-mode" onchange="updatePublicNotice()" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
-                    <option value="public">🌐 Public (Anyone can access)</option>
-                    <option value="passcode">🔑 Passcode (Requires secret code)</option>
-                    <option value="whitelist">🛡️ Whitelist (Restrict by IP)</option>
-                    <option value="or">🔑/🛡️ Passcode OR Whitelist</option>
-                    <option value="and">🔒 Passcode AND Whitelist</option>
-                </select>
-            </div>
-            <div id="ac-public-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 10px; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);" data-i18n="client_access_public_notice">This tunnel is open to all traffic — anyone with the URL can reach it. Any passcode or IP list below is kept for when you switch back, and is not being applied.</div>
             <div id="ac-locked-notice" style="display: none; font-size: 11px; color: var(--text-muted); margin: 6px 0 0; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);"></div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
         </div>
@@ -1041,19 +1041,83 @@ function setLanguage(lang) {
         // A control that cannot be applied is disabled and says why, rather than accepting input
         // and failing on submit (#2116). The client decides this with the same function the save
         // endpoint uses, so the form cannot offer what the endpoint would refuse.
+        // Which factors a mode actually applies (#2155).
+        //
+        // The same vocabulary the server enforces in missingAccessControlValue (#2156): a mode
+        // that does not use a field leaves it unsettable, and a mode that DOES use one refuses
+        // to save without it. Keeping the two in step is the point -- the owner set "and" with
+        // an empty IP list and it saved, giving a tunnel that displayed the strictest setting
+        // in the product and enforced the passcode alone.
+        function accessControlFieldsForMode(mode) {
+            switch (mode) {
+                case 'passcode':
+                    return { passcode: true, whitelist: false };
+                case 'whitelist':
+                    return { passcode: false, whitelist: true };
+                case 'or':
+                case 'and':
+                    return { passcode: true, whitelist: true };
+                // '' cannot come out of the select -- the state fallback below is 'public' --
+                // so it is grouped with public rather than with the server's "unset means or".
+                case 'public':
+                default:
+                    return { passcode: false, whitelist: false };
+            }
+        }
+
+        // Disabled, never hidden (#2155).
+        //
+        // The public notice promises "Any passcode or IP list below is kept for when you switch
+        // back". A hidden field gives no evidence of that; a greyed one still showing its value
+        // is the honest version -- you can see exactly what comes back when you switch.
+        function setAccessControlFieldEnabled(id, enabled) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !enabled;
+            el.style.opacity = enabled ? '1' : '0.5';
+            el.style.cursor = enabled ? '' : 'not-allowed';
+        }
+
+        // The last payload seen, so a mode change can re-apply the lock without waiting for the
+        // next poll. Without it, switching mode would briefly re-enable fields on a tunnel whose
+        // control plane is unreachable.
+        let lastAccessControlPayload = null;
+
+        function onAccessModeChanged() {
+            updatePublicNotice();
+            applyAccessControlState();
+        }
+
         function applyAccessControlEditability(ac) {
+            lastAccessControlPayload = ac;
+            applyAccessControlState();
+        }
+
+        function applyAccessControlState() {
+            const ac = lastAccessControlPayload;
             const notice = document.getElementById('ac-locked-notice');
             const btn = document.getElementById('ac-save-btn');
-            const fields = ['ac-passcode', 'ac-passcode-confirm', 'ac-whitelist', 'ac-mode']
-                .map(id => document.getElementById(id))
-                .filter(Boolean);
+            const modeEl = document.getElementById('ac-mode');
 
             // Absent means an older client or a payload that predates the field: leave the form
             // alone rather than disabling it on a guess.
             const editable = !ac || ac.editable !== false;
             const reason = (ac && ac.editable_reason) || '';
 
-            fields.forEach(el => { el.disabled = !editable; });
+            // The mode selector answers only to the control-plane lock. It is the control that
+            // decides every other field, so it must stay reachable whenever anything here is.
+            if (modeEl) modeEl.disabled = !editable;
+
+            const applies = accessControlFieldsForMode(modeEl ? modeEl.value : 'public');
+
+            // Two independent reasons a field is not settable, and they COMPOSE. Control-plane
+            // locked wins: configuration that belongs to central goes via central, and the edge
+            // keeps doing what it was last told (#2130). A field must never become editable
+            // because the mode allows it while the panel is locked.
+            setAccessControlFieldEnabled('ac-passcode', editable && applies.passcode);
+            setAccessControlFieldEnabled('ac-passcode-confirm', editable && applies.passcode);
+            setAccessControlFieldEnabled('ac-whitelist', editable && applies.whitelist);
+
             if (btn) {
                 btn.disabled = !editable;
                 btn.style.opacity = editable ? '1' : '0.5';

@@ -22,6 +22,29 @@ interface Reservation {
   whitelist_ips?: string;
 }
 
+// Which factors a mode actually applies (#2155).
+//
+// The same vocabulary the server enforces in missingAccessControlValue (#2156) and the same
+// table the Inspector and V1 use. A mode that does not use a field leaves it unsettable; a mode
+// that does use one refuses to save without it.
+function accessControlFieldsForMode(mode: string): {
+  passcode: boolean;
+  whitelist: boolean;
+} {
+  switch (mode) {
+    case 'passcode':
+      return { passcode: true, whitelist: false };
+    case 'whitelist':
+      return { passcode: false, whitelist: true };
+    case 'or':
+    case 'and':
+      return { passcode: true, whitelist: true };
+    case 'public':
+    default:
+      return { passcode: false, whitelist: false };
+  }
+}
+
 export default function ReservationsPanel() {
   const { t } = useI18n();
   const { showToast, showConfirm } = useUI();
@@ -269,6 +292,9 @@ export default function ReservationsPanel() {
   const [acModalReservation, setAcModalReservation] =
     useState<Reservation | null>(null);
   const [acMode, setAcMode] = useState('public');
+  // Which fields the selected mode actually uses. Drives `disabled`, never whether a field is
+  // rendered -- see the note by the passcode group.
+  const acFields = accessControlFieldsForMode(acMode);
   const [acPasscode, setAcPasscode] = useState('');
   const [acWhitelist, setAcWhitelist] = useState('');
   const [acPasscodeConfirm, setAcPasscodeConfirm] = useState('');
@@ -686,6 +712,13 @@ export default function ReservationsPanel() {
                       'IP Whitelist — Restrict by IP address',
                     ),
                   ],
+                  // V2 offered only the three above, so a reservation in `or` or `and` opened
+                  // with NO radio selected and, because each field rendered only under its own
+                  // exact mode, no passcode or whitelist field either -- an empty dialog on the
+                  // two strictest settings in the product. Picking any radio to make the form
+                  // usable silently downgraded the tunnel (#2155).
+                  ['or', '🔑/🛡', t('access_or', 'Passcode OR Whitelist')],
+                  ['and', '🔒', t('access_and', 'Passcode AND Whitelist')],
                 ] as [string, string, string][]
               ).map(([val, icon, label]) => (
                 <label
@@ -707,7 +740,20 @@ export default function ReservationsPanel() {
             </div>
           </div>
 
-          {acMode === 'passcode' && (
+          {/* Rendered whichever mode is selected, and disabled when the mode does not use
+              it (#2155). Hiding gave no evidence that the value is retained, while the public
+              notice promises exactly that -- a greyed field still showing its value is the
+              honest version. */}
+          {acMode === 'public' && (
+            <p className="form-hint mb-md">
+              {t(
+                'access_public_notice',
+                'This tunnel is open to all traffic. Any passcode or IP list is kept for when you switch back, and is not being applied.',
+              )}
+            </p>
+          )}
+
+          {
             <div className="form-group">
               <label className="form-label--bold" htmlFor="passcode">
                 {t('passcode', 'Passcode')}
@@ -717,6 +763,7 @@ export default function ReservationsPanel() {
                 type="password"
                 autoComplete="new-password"
                 className="input-field"
+                disabled={!acFields.passcode}
                 value={acPasscode}
                 onChange={(e) => setAcPasscode(e.target.value)}
                 placeholder={
@@ -736,6 +783,7 @@ export default function ReservationsPanel() {
                 type="password"
                 autoComplete="new-password"
                 className="input-field"
+                disabled={!acFields.passcode}
                 value={acPasscodeConfirm}
                 onChange={(e) => setAcPasscodeConfirm(e.target.value)}
                 placeholder={t('passcode_confirm', 'Confirm passcode')}
@@ -744,9 +792,9 @@ export default function ReservationsPanel() {
                 <p className="text-danger text-sm mt-sm mb-0">{acError}</p>
               )}
             </div>
-          )}
+          }
 
-          {acMode === 'whitelist' && (
+          {
             <div className="form-group">
               <label className="form-label--bold" htmlFor="allowed-ips">
                 {t('allowed_ips', 'Allowed IPs')}
@@ -754,6 +802,7 @@ export default function ReservationsPanel() {
               <textarea
                 id="allowed-ips"
                 className="input-field font-mono text-sm resize-y"
+                disabled={!acFields.whitelist}
                 value={acWhitelist}
                 onChange={(e) => setAcWhitelist(e.target.value)}
                 placeholder={
@@ -768,7 +817,7 @@ export default function ReservationsPanel() {
                 )}
               </p>
             </div>
-          )}
+          }
 
           <div className="flex gap-sm justify-end">
             <button

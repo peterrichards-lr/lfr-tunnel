@@ -8325,12 +8325,52 @@ window.closeReservationAcModal = function () {
   reservationAcTarget = null;
 };
 
+// Which factors a mode actually applies (#2155).
+//
+// The same vocabulary the server enforces in missingAccessControlValue (#2156), and the same
+// table the Inspector uses. A mode that does not use a field leaves it unsettable; a mode that
+// does use one refuses to save without it. The two staying in step is the point -- "and" with an
+// empty IP list saved happily and produced a tunnel that displayed the strictest setting in the
+// product while enforcing the passcode alone.
+function accessControlFieldsForMode(mode) {
+  switch (mode) {
+    case 'passcode':
+      return { passcode: true, whitelist: false };
+    case 'whitelist':
+      return { passcode: false, whitelist: true };
+    case 'or':
+    case 'and':
+      return { passcode: true, whitelist: true };
+    case 'public':
+    default:
+      return { passcode: false, whitelist: false };
+  }
+}
+
+// Disabled, never hidden. The public notice promises the values are "kept for when you switch
+// back"; a hidden field is no evidence of that, and a greyed one still showing its value is.
+function setReservationAcFieldEnabled(id, enabled) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.disabled = !enabled;
+  el.style.opacity = enabled ? '1' : '0.5';
+  el.style.cursor = enabled ? '' : 'not-allowed';
+}
+
 // Public keeps the values and stops applying them, so that state is narrated rather than left to
 // be inferred from a full passcode box sitting above an open tunnel.
 window.updateReservationAcNotice = function () {
   const mode = document.getElementById('reservation-ac-mode').value;
   document.getElementById('reservation-ac-public-notice').style.display =
     mode === 'public' ? 'block' : 'none';
+
+  const applies = accessControlFieldsForMode(mode);
+  setReservationAcFieldEnabled('reservation-ac-passcode', applies.passcode);
+  setReservationAcFieldEnabled(
+    'reservation-ac-passcode-confirm',
+    applies.passcode,
+  );
+  setReservationAcFieldEnabled('reservation-ac-whitelist', applies.whitelist);
 };
 
 window.submitReservationAccessControl = async function () {
@@ -8366,7 +8406,17 @@ window.submitReservationAccessControl = async function () {
       }),
     });
     if (!res.ok) {
-      errEl.textContent = await res.text();
+      // The body is JSON, so printing it raw showed the user {"error":"..."} braces and all.
+      // It matters more now that the server refuses a mode naming a factor that is not there
+      // (#2156): that message names which value is missing, and it is the thing to act on.
+      const raw = await res.text();
+      let message = raw;
+      try {
+        message = JSON.parse(raw).error || raw;
+      } catch {
+        // Not JSON -- a proxy error page or a truncated response. Show it as it came.
+      }
+      errEl.textContent = message;
       errEl.style.display = 'block';
       return;
     }

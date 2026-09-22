@@ -195,8 +195,20 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
     await expect(page.locator('#tab-tunnels')).toBeVisible();
 
     const row = page.locator('#tunnels-table-body tr', { hasText: 'locked' });
-    await row.locator('.action-menu-btn').click();
-    await row.getByRole('button', { name: 'Details' }).click();
+    const menuBtn = row.locator('.action-menu-btn');
+    await menuBtn.click();
+
+    // The same selector analytics.spec.ts uses, rather than a row-scoped getByRole. The menu is
+    // only in the accessibility tree once toggleActionMenu has added .show, and waiting on the
+    // `.show` class is what makes that explicit -- a role locator simply reports "not found"
+    // while the menu is still closed, which looks like a missing button.
+    const detailsItem = page
+      .locator(
+        '.action-menu-dropdown.show .action-menu-item:has-text("Details")',
+      )
+      .first();
+    await expect(detailsItem).toBeVisible();
+    await detailsItem.click();
 
     const modal = page.locator('#tunnel-details-modal');
     await expect(modal).toBeVisible();

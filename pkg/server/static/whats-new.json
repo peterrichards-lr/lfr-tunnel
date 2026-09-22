@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.50",
+    "release_date": "2026-09-22",
+    "features": [
+      "fix(client): a cancelled request is no longer logged as a proxy error (#2165) (#2172)",
+      "fix(server): the portal's stop button warns a node's clients first (#2167) (#2168)",
+      "fix(client): the upgrade restarts the processes it stopped (#2164) (#2166)"
+    ]
+  },
+  {
     "version": "v1.48.49",
     "release_date": "2026-09-22",
     "features": [
@@ -37,16 +46,6 @@
       "fix(client): the Inspector shows the access control the gateway holds, not a hardcoded guess (#2130) (#2134)",
       "fix(client): --upgrade looked for a pid file nothing writes, and -stop ignored the tray (#2128) (#2133)",
       "fix(inspector): the state poll no longer wipes what you typed into Access Control (#2131) (#2132)"
-    ]
-  },
-  {
-    "version": "v1.48.45",
-    "release_date": "2026-09-21",
-    "features": [
-      "fix(proxy): an edge verifies the passcode from the lease it enforces from (#2125) (#2126)",
-      "fix(server): an edge says it is the wrong node, instead of refusing a valid credential (#2123) (#2124)",
-      "fix(client): access control follows the control plane, and says so when it cannot (#2121) (#2122)",
-      "fix(inspector): the two Settings groups are siblings, not one inside the other (#2119) (#2120)"
     ]
   }
 ]

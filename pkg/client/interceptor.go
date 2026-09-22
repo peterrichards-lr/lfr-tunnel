@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -1313,7 +1314,26 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	// replicated here rather than dropped (the TUI's SYSTEM LOGS panel captures it via
 	// log.SetOutput, same as before).
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("http: proxy error: %v", err)
+		// context.Canceled is not a proxy error worth printing (#2165).
+		//
+		// It means the request went away -- the session was torn down for a region move, or
+		// the visitor closed the tab. Both are ordinary, and one of them happens in a BURST
+		// precisely when the client is moving between gateways.
+		//
+		// That burst was drowning the line that explains the move. The session loop logs
+		// "Connection to region 'x' lost. Performing dynamic region failover..." exactly once,
+		// and the TUI's SYSTEM LOGS panel is a few lines tall; a handful of "http: proxy
+		// error: context canceled" immediately afterwards pushes it out of view. A user then
+		// sees only the noise and reports the tunnel going down "out of nowhere" -- which is
+		// what happened during the fleet deploy on 2026-09-22, and why this is a defect in
+		// what gets said rather than in what gets done.
+		//
+		// Every other error still prints. A dial failure means nothing is listening on the
+		// local port, which is the case this handler was written for (#980) and is genuinely
+		// worth seeing.
+		if !errors.Is(err, context.Canceled) {
+			log.Printf("http: proxy error: %v", err)
+		}
 		serveDialFailurePage(w, e.TargetHost, targetPort)
 	}
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -114,4 +115,81 @@ func sessionContextDetail(clientVersion, clientOS, nodeID, regionSource string) 
 	}
 
 	return fmt.Sprintf("[%s; node %s; region source %s]", client, nodeID, regionSource)
+}
+
+// launchContextDetail renders how the client was started, for the same audit line (#2148).
+//
+// Answers the question "why is this tunnel HERE", which region source alone cannot: it says a
+// region was probed, not whether a routing flag was given at all. A client started with no
+// routing flag and one pinned with -pin both differ from one that named a region, and the
+// failback prober only ever watches the region resolved at STARTUP.
+//
+// Empty for a client that predates this, so the line is unchanged for them rather than carrying
+// an "unknown" nobody can act on.
+//
+// Every value here is a flag or environment-variable NAME. The client sends no flag values, and
+// this must never start printing any: -passcode, -basic-auth and -token are all flags.
+func launchContextDetail(flags []string, overrides map[string]string) string {
+	var parts []string
+
+	if len(flags) > 0 {
+		safe := make([]string, 0, len(flags))
+		for _, f := range flags {
+			// Rejected outright, not sanitised. A flag name is [a-z0-9-] and nothing else, so
+			// anything containing other characters is not a flag this binary defines and has no
+			// business in an audit row. sanitizeSessionContextField only neutralises the field
+			// SEPARATORS, which stops a forged field but still prints the attacker's text --
+			// misleading to whoever reads the row, and needless when the alphabet is this narrow.
+			if isPlausibleFlagName(f) {
+				safe = append(safe, "-"+f)
+			}
+		}
+		if len(safe) > 0 {
+			parts = append(parts, "flags "+strings.Join(safe, " "))
+		}
+	}
+
+	// Only the settings an ENV VAR claimed. A flag-claimed setting is already in the list above,
+	// and repeating it would double the length of the line for no new information.
+	var fromEnv []string
+	for key, source := range overrides {
+		if strings.HasPrefix(source, "-") {
+			continue
+		}
+		k := sanitizeSessionContextField(key)
+		v := sanitizeSessionContextField(source)
+		if k != "" && v != "" {
+			fromEnv = append(fromEnv, k+"="+v)
+		}
+	}
+	if len(fromEnv) > 0 {
+		sort.Strings(fromEnv)
+		parts = append(parts, "env "+strings.Join(fromEnv, " "))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(parts, "; ") + "]"
+}
+
+// isPlausibleFlagName reports whether a reported flag name could be a flag this binary defines.
+//
+// The client sends these, and a client is not trusted: it can send any string it likes. Rather
+// than mangle a hostile one into something that still reads as text, anything outside a flag's
+// actual alphabet is dropped.
+func isPlausibleFlagName(name string) bool {
+	if name == "" || len(name) > 40 {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }

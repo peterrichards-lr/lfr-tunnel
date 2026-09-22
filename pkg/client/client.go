@@ -92,6 +92,45 @@ func reportableRegionSource() string {
 	return regionSource
 }
 
+// How this process was started, recorded once at launch for every registration to report
+// (#2148). Same idiom as the region source above: set once, read on each registration, so a
+// failover does not have to remember to carry it.
+var (
+	launchContextMu sync.Mutex
+	launchFlags     []string
+	launchOverrides map[string]string
+)
+
+// RecordLaunchContext stores how the client was started.
+//
+// NAMES ONLY, and the caller is responsible for that: -passcode, -basic-auth and -token all
+// arrive as flags, so a record carrying values would be the credential leak #2135 and #2137 just
+// closed. Copied on the way in, so a caller's later mutation cannot change what is reported.
+func RecordLaunchContext(flags []string, overrides map[string]string) {
+	launchContextMu.Lock()
+	defer launchContextMu.Unlock()
+	launchFlags = append([]string(nil), flags...)
+	launchOverrides = make(map[string]string, len(overrides))
+	for k, v := range overrides {
+		launchOverrides[k] = v
+	}
+}
+
+// reportableLaunchContext returns what to attach to a registration.
+func reportableLaunchContext() ([]string, map[string]string) {
+	launchContextMu.Lock()
+	defer launchContextMu.Unlock()
+	if len(launchFlags) == 0 && len(launchOverrides) == 0 {
+		return nil, nil
+	}
+	flags := append([]string(nil), launchFlags...)
+	overrides := make(map[string]string, len(launchOverrides))
+	for k, v := range launchOverrides {
+		overrides[k] = v
+	}
+	return flags, overrides
+}
+
 // reportableRegionProbes returns the probes to attach to a registration.
 func reportableRegionProbes() []RegionProbe {
 	regionProbesMu.Lock()
@@ -117,6 +156,19 @@ type RegisterRequest struct {
 	// an older client sends none, and absent must be read as UNKNOWN rather than folded into
 	// any bucket -- treating it as "elected" would replace one silent wrong answer with another.
 	RegionSource string `json:"region_source,omitempty"`
+
+	// How the client was STARTED, so the portal can say why a tunnel is where it is (#2148).
+	//
+	// LaunchFlags are the names of flags actually given -- never their values. -passcode,
+	// -basic-auth and -token all arrive as flags, so a record carrying values would be the
+	// credential leak #2135 and #2137 just closed. A name is not a secret.
+	//
+	// LaunchOverrides answers a different question: which flag or ENV VAR claimed each config
+	// setting, which flags alone cannot say. Its values are flag and env-var names too.
+	//
+	// Both empty from a client that predates this, which reads as "nothing to say".
+	LaunchFlags     []string          `json:"launch_flags,omitempty"`
+	LaunchOverrides map[string]string `json:"launch_overrides,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -555,6 +607,8 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 		WhitelistIPs:    whitelistIPs,
 		RegionProbes:    reportableRegionProbes(),
 		RegionSource:    reportableRegionSource(),
+		LaunchFlags:     launchFlagsForRequest(),
+		LaunchOverrides: launchOverridesForRequest(),
 	})
 	if err != nil {
 		return nil, err
@@ -1052,4 +1106,16 @@ func ProbeLocalPorts(ports []int) []int {
 		}
 	}
 	return active
+}
+
+// launchFlagsForRequest and launchOverridesForRequest split reportableLaunchContext's pair so
+// each can be used in a struct literal without a temporary.
+func launchFlagsForRequest() []string {
+	flags, _ := reportableLaunchContext()
+	return flags
+}
+
+func launchOverridesForRequest() map[string]string {
+	_, overrides := reportableLaunchContext()
+	return overrides
 }

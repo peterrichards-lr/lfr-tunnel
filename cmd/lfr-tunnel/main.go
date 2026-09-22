@@ -400,6 +400,11 @@ func main() {
 	// its default, and handed to the engine so the Settings panel can render the fields that
 	// are spoken for as read-only rather than as editable boxes that never take (#2088).
 	engine.LaunchOverrides = launchOverrides()
+
+	// Recorded once, reported on every registration including a failover (#2148). Names only:
+	// launchFlagNames walks flag.Visit and takes f.Name, never f.Value -- -passcode and -token
+	// are flags, and their values must not leave the machine.
+	client.RecordLaunchContext(launchFlagNames(), engine.LaunchOverrides)
 	if described := describeLaunchOverrides(engine.LaunchOverrides); described != "" {
 		slog.Info("[Client] Settings fixed at launch and not editable from the Settings panel: " + described)
 	}

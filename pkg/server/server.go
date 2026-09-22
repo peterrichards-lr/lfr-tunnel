@@ -81,6 +81,19 @@ type RegisterRequest struct {
 	// a client with reporting off or one too old to send any. This field is what separates
 	// them. Optional; absent means unknown and must not be counted as anything.
 	RegionSource string `json:"region_source,omitempty"`
+
+	// How the client was STARTED, so the portal can say why a tunnel is where it is (#2148).
+	//
+	// LaunchFlags are the names of flags actually given -- never their values. -passcode,
+	// -basic-auth and -token all arrive as flags, so a record carrying values would be the
+	// credential leak #2135 and #2137 just closed. A name is not a secret.
+	//
+	// LaunchOverrides answers a different question: which flag or ENV VAR claimed each config
+	// setting, which flags alone cannot say. Its values are flag and env-var names too.
+	//
+	// Both empty from a client that predates this, which reads as "nothing to say".
+	LaunchFlags     []string          `json:"launch_flags,omitempty"`
+	LaunchOverrides map[string]string `json:"launch_overrides,omitempty"`
 }
 
 // RegionProbe is one client's measurement of one advertised region (#1151).
@@ -2156,7 +2169,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// record's last_client_version cannot answer the question this one does.
 	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v) %s",
 		req.SubdomainPrefix, activeDomains, remotes,
-		sessionContextDetail(req.ClientVersion, req.ClientOS, s.registry.localNodeID(), req.RegionSource))
+		sessionContextDetail(req.ClientVersion, req.ClientOS, s.registry.localNodeID(), req.RegionSource)+
+			launchContextDetail(req.LaunchFlags, req.LaunchOverrides))
 	s.writeAudit(user.Email, "tunnel.start", "subdomain", req.SubdomainPrefix, auditDetails, r)
 
 	// Attached even when nothing is outstanding: the client uses the absence of a phase to
@@ -6839,7 +6853,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	// so one grep answers the question on both paths.
 	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s) %s",
 		edgeNodeID, finalSubdomain, edgeReq.ClientIP,
-		sessionContextDetail(edgeReq.ClientVersion, edgeReq.ClientOS, edgeNodeID, edgeReq.RegionSource))
+		sessionContextDetail(edgeReq.ClientVersion, edgeReq.ClientOS, edgeNodeID, edgeReq.RegionSource)+
+			launchContextDetail(edgeReq.LaunchFlags, edgeReq.LaunchOverrides))
 	s.writeAudit(actorEmail, "tunnel.start", "subdomain", finalSubdomain, auditDetails, r)
 
 	// access_controls is keyed by domain, because a reservation is keyed on (subdomain, domain)

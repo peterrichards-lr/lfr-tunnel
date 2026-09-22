@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.48.49",
+    "release_date": "2026-09-22",
+    "features": [
+      "fix(server): a deregistration no longer destroys the lease a failback just made (#2161) (#2162)",
+      "fix(portal-v2): the Client Versions count is users, not active tunnels (#2158) (#2160)",
+      "feat(portal): the access mode comes first and decides which fields are settable (#2155) (#2159)",
+      "fix(server): refuse an access mode that names a factor the tunnel does not have (#2156) (#2157)"
+    ]
+  },
+  {
     "version": "v1.48.48",
     "release_date": "2026-09-22",
     "features": [
@@ -37,15 +47,6 @@
       "fix(server): an edge says it is the wrong node, instead of refusing a valid credential (#2123) (#2124)",
       "fix(client): access control follows the control plane, and says so when it cannot (#2121) (#2122)",
       "fix(inspector): the two Settings groups are siblings, not one inside the other (#2119) (#2120)"
-    ]
-  },
-  {
-    "version": "v1.48.44",
-    "release_date": "2026-09-21",
-    "features": [
-      "fix(client): the Inspector saves access control to the control plane, and disables what it cannot save (#2116) (#2117)",
-      "fix(portal): V2's Access Control button says what it does (#2114) (#2115)",
-      "docs(skill): say WHICH nodes a change has to reach, not just how to deploy one (#2113)"
     ]
   }
 ]

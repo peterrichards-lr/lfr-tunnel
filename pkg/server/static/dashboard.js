@@ -6412,52 +6412,62 @@ async function openTunnelDetailsModal(tunnelJsonEncoded) {
   }
 }
 
-function populateTunnelDetails(t) {
-  activeDetailTunnelSubdomain = t.subdomain_prefix;
+// The parameter is `lease`, NOT `t`.
+//
+// `t` is this file's global i18n helper, and this function was written with a parameter of the
+// same name -- so the first translated string looked up inside it invoked the tunnel OBJECT
+// rather than the helper, and threw
+// "t is not a function", blanking the details modal entirely. The shadowing had been harmless
+// for as long as nothing here needed a translated string, which is exactly why it was still
+// here to step on (#2150). Caught by the E2E suite, in a spec that has nothing to do with this
+// change: the modal simply stopped opening.
+function populateTunnelDetails(lease) {
+  activeDetailTunnelSubdomain = lease.subdomain_prefix;
 
   // Set Host Link
   const hostEl = document.getElementById('detail-tunnel-host');
-  hostEl.innerText = t.full_host;
-  hostEl.href = `https://${t.full_host}`;
+  hostEl.innerText = lease.full_host;
+  hostEl.href = `https://${lease.full_host}`;
 
   // Basic details
   document.getElementById('detail-tunnel-subdomain').innerText =
-    t.subdomain_prefix;
+    lease.subdomain_prefix;
 
   const statusEl = document.getElementById('detail-tunnel-status');
-  statusEl.innerText = t.status;
-  statusEl.className = `badge ${t.status === 'up' ? 'success' : ''}`;
+  statusEl.innerText = lease.status;
+  statusEl.className = `badge ${lease.status === 'up' ? 'success' : ''}`;
 
-  document.getElementById('detail-tunnel-limit').innerText = t.rate_limit
-    ? `${t.rate_limit} RPS`
+  document.getElementById('detail-tunnel-limit').innerText = lease.rate_limit
+    ? `${lease.rate_limit} RPS`
     : 'Unlimited';
   document.getElementById('detail-tunnel-connected').innerHTML =
-    renderTimestamp(t.created_at);
+    renderTimestamp(lease.created_at);
   document.getElementById('detail-tunnel-bytes-in').innerText = formatBytes(
-    t.bytes_in,
+    lease.bytes_in,
   );
   document.getElementById('detail-tunnel-bytes-out').innerText = formatBytes(
-    t.bytes_out,
+    lease.bytes_out,
   );
   document.getElementById('detail-tunnel-client-ip').innerText =
-    t.client_ip || 'N/A';
+    lease.client_ip || 'N/A';
   const nodeVal =
-    t.node_id && t.node_id !== 'control' ? `🌍 ${t.node_id}` : '🇬🇧 Control';
+    lease.node_id && lease.node_id !== 'control'
+      ? `🌍 ${lease.node_id}`
+      : '🇬🇧 Control';
   document.getElementById('detail-tunnel-node-id').innerText = nodeVal;
 
   // Access Control population
   document.getElementById('detail-tunnel-passcode-status').innerHTML =
-    t.passcode
+    lease.passcode
       ? '<span class="badge success" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">Enabled</span>'
       : '<span style="color: var(--text-muted); font-style: italic;">Disabled (Public)</span>';
 
-  document.getElementById('detail-tunnel-access-mode').innerText = t.access_mode
-    ? t.access_mode.toUpperCase()
-    : 'OR';
+  document.getElementById('detail-tunnel-access-mode').innerText =
+    lease.access_mode ? lease.access_mode.toUpperCase() : 'OR';
 
   document.getElementById('detail-tunnel-whitelist-status').innerHTML =
-    t.whitelist_ips
-      ? escapeHTML(t.whitelist_ips)
+    lease.whitelist_ips
+      ? escapeHTML(lease.whitelist_ips)
       : '<span style="color: var(--text-muted); font-style: italic;">None</span>';
 
   // Populate active visitor IPs
@@ -6473,7 +6483,7 @@ function populateTunnelDetails(t) {
     headersContainer.innerHTML = '';
     // added_header_names, not added_headers.
     //
-    // This panel read t.added_headers, and NOTHING has ever set that key: every tunnel
+    // This panel read `added_headers`, and NOTHING has ever set that key: every tunnel
     // object here comes from getUserTelemetryData, whether through /api/me or a telemetry
     // frame, and that payload has never carried it. So the panel has always rendered "No
     // custom headers injected", including for tunnels that inject several. It looked
@@ -6486,7 +6496,7 @@ function populateTunnelDetails(t) {
     // Sending the map would have fixed the panel by reintroducing exactly what #2137
     // removed from this feed. The name answers what the panel is for; Remove needs only
     // the name, so nothing is lost but the value itself.
-    const names = t.added_header_names || [];
+    const names = lease.added_header_names || [];
     if (names.length === 0) {
       headersContainer.innerHTML =
         '<div style="color: var(--text-muted); font-style: italic;">No custom headers injected.</div>';
@@ -6512,7 +6522,7 @@ function populateTunnelDetails(t) {
 
   if (visitorTbody) {
     visitorTbody.innerHTML = '';
-    const ips = t.visitor_ips || [];
+    const ips = lease.visitor_ips || [];
     if (ips.length === 0) {
       visitorTbody.innerHTML = `<tr><td style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>`;
     } else {
@@ -6536,8 +6546,8 @@ function populateTunnelDetails(t) {
   );
   if (launchContainer) {
     launchContainer.innerHTML = '';
-    const flags = t.launch_flags || [];
-    const overrides = t.launch_overrides || {};
+    const flags = lease.launch_flags || [];
+    const overrides = lease.launch_overrides || {};
     const overrideKeys = Object.keys(overrides).sort();
 
     if (flags.length === 0 && overrideKeys.length === 0) {
@@ -6578,11 +6588,11 @@ function populateTunnelDetails(t) {
   if (isAdmin) {
     ownerContainer.style.display = 'block';
     document.getElementById('detail-tunnel-owner').innerText =
-      t.user_id || 'N/A';
+      lease.user_id || 'N/A';
     overrideBtn.style.display = 'inline-block';
     overrideBtn.onclick = () => {
       closeTunnelDetailsModal();
-      openTunnelOverrideModal(t.full_host, t.rate_limit || 0);
+      openTunnelOverrideModal(lease.full_host, lease.rate_limit || 0);
     };
     kickBtn.style.display = 'block';
   } else {

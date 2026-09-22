@@ -74,6 +74,18 @@ const OPEN = {
   added_header_names: [],
 };
 
+// V1 replaces `currentUser` wholesale on every telemetry frame -- loadTunnels says so in as
+// many words: "Already fetched in /api/me, then replaced by every telemetry frame". So a
+// fixture served from /api/me survives only until the socket's first push, a second or two
+// later, and the row under test disappears mid-test. Held open and never connected to the
+// server, so no frame ever arrives.
+//
+// Only V1 needs this. V2's dashboard reads /api/me and nothing else; its telemetry screen is
+// the one with a socket, and that is not what these exercise.
+async function silenceTelemetrySocket(page: any) {
+  await page.routeWebSocket('**/api/portal/telemetry/ws', () => {});
+}
+
 // The real /api/me with the tunnels replaced, rather than a synthetic user. The portal reads
 // role, status, policy consent and half a dozen other fields off this response, so a
 // hand-written object fails for reasons that have nothing to do with what is under test.
@@ -171,6 +183,7 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
 
   test('V1 shows the launch context and the header name', async ({ page }) => {
     await loginV1(page);
+    await silenceTelemetrySocket(page);
     await stubTunnels(page);
     await page.reload();
 

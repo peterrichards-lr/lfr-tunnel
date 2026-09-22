@@ -1122,21 +1122,33 @@ export default function AdminAnalytics() {
                       onClick={() => requestSort('version')}
                       aria-sort={getAriaSort('version')}
                     >
-                      Version{getSortIndicator('version')}
+                      {t('th_version', 'Version')}
+                      {getSortIndicator('version')}
                     </th>
                     <th
                       className="th-col th-col--sortable"
                       onClick={() => requestSort('os')}
                       aria-sort={getAriaSort('os')}
                     >
-                      OS Platform{getSortIndicator('os')}
+                      {t('th_os', 'OS')}
+                      {getSortIndicator('os')}
                     </th>
                     <th
                       className="th-col th-col--sortable"
                       onClick={() => requestSort('count')}
                       aria-sort={getAriaSort('count')}
                     >
-                      Active Tunnels{getSortIndicator('count')}
+                      {/* NOT tunnels, and not active. GetClientVersionStats is
+                          COUNT(*) FROM users GROUPed by last_client_version, so it counts user
+                          ACCOUNTS by the version each last connected with -- a user with three
+                          tunnels counts once, and someone who last connected weeks ago still
+                          counts under that version until they connect again. That is why every
+                          version shows a figure, which is how the mislabel was spotted.
+
+                          V1 has always called this "User Count" from the same endpoint (#2158).
+                          Same key, so the two arms cannot drift apart again. */}
+                      {t('th_user_count', 'User Count')}
+                      {getSortIndicator('count')}
                     </th>
                   </tr>
                 </thead>

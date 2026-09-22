@@ -173,10 +173,56 @@ for (const cap of CAPABILITIES) {
   }
 }
 
+// Same data, same name.
+//
+// The capabilities above deliberately ignore WORDING, because wording changes without a
+// capability changing. This is a different question: where both arms render the SAME field from
+// the SAME endpoint, they must resolve it through the same i18n key. A key is not wording -- it
+// is the claim that the two arms are naming one thing -- and the wording then follows from the
+// bundle, in every locale, for both.
+//
+// V2's Client Versions table headed a user count "Active Tunnels" while V1 headed the identical
+// column "User Count" from the identical endpoint (#2158). The figure is COUNT(*) FROM users
+// grouped by last_client_version, so V2's header was wrong on both words, and no gate could see
+// it: the string was hardcoded, so check-i18n-keys had no key to find missing.
+const SHARED_LABELS = [
+  {
+    name: 'the Client Versions count column (/api/admin/analytics/clients)',
+    key: 'th_user_count',
+    v1: 'pkg/server/dashboard.html',
+    v2: 'ui/src/pages/AdminAnalytics.tsx',
+  },
+];
+
+for (const label of SHARED_LABELS) {
+  for (const [arm, rel] of [
+    ['V1', label.v1],
+    ['V2', label.v2],
+  ]) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) {
+      failures += 1;
+      console.log(
+        `  \u2717 "${label.name}": ${arm}'s file ${rel} does not exist.`,
+      );
+      continue;
+    }
+    if (!fs.readFileSync(file, 'utf8').includes(label.key)) {
+      failures += 1;
+      console.log(
+        `  \u2717 "${label.name}": ${arm} does not use the '${label.key}' key.\n` +
+          `      Both arms render this column from one endpoint, so both must name it the same ` +
+          `way. A hardcoded header is invisible to check-i18n-keys -- it has no key to report ` +
+          `missing -- and goes untranslated in every locale besides English.`,
+      );
+    }
+  }
+}
+
 console.log(
   failures === 0
     ? `✅ ${CAPABILITIES.length} capability/capabilities present, and named in words, in both ` +
-        `portal arms.`
+        `portal arms; ${SHARED_LABELS.length} shared column label(s) resolve through one key.`
     : `\n❌ ${failures} parity problem(s): a capability is missing from an arm, or its control ` +
         `does not say what it does.`,
 );

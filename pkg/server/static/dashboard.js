@@ -2457,7 +2457,23 @@ function groupTunnelsBySession(tunnels) {
     g.members.push(t);
     g.searchText += ' ' + (t.full_host || '');
   });
-  return Array.from(byKey.values());
+  // Alphabetical, and members alphabetical within a group. The server now returns leases in a
+  // stable order too (#2143), but stable is not the same as MEANINGFUL: the owner asked for
+  // alphabetical, and sorting here also survives any future change to what the payload brings.
+  const groups = Array.from(byKey.values());
+  groups.forEach((g) =>
+    g.members.sort((a, b) =>
+      (a.full_host || '').localeCompare(b.full_host || ''),
+    ),
+  );
+  groups.sort(
+    (a, b) =>
+      (a.subdomain_prefix || '').localeCompare(b.subdomain_prefix || '') ||
+      (a.members[0].full_host || '').localeCompare(
+        b.members[0].full_host || '',
+      ),
+  );
+  return groups;
 }
 
 // Which groups are open. A group that is not up is forced open wherever it is rendered: hiding
@@ -2486,7 +2502,9 @@ function tunnelGroupIsOpen(group) {
 
 function tunnelGroupToggle(group) {
   const open = tunnelGroupIsOpen(group);
-  return `<button class="action-menu-btn" style="margin-right:6px;" aria-expanded="${open}" onclick="toggleTunnelGroup('${encodeURIComponent(group.key)}')">${open ? '▾' : '▸'}</button>`;
+  // Inline prefix on the same line as the name. .action-menu-btn is display:flex, which put
+  // the control on its own line and dropped the subdomain beneath it (#2143).
+  return `<button class="tunnel-group-toggle" aria-expanded="${open}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeHTML(group.subdomain_prefix)}" onclick="toggleTunnelGroup('${encodeURIComponent(group.key)}')">${open ? '▾' : '▸'}</button>`;
 }
 
 async function loadTunnels() {

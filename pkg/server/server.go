@@ -6927,6 +6927,40 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// partitionEdgeLeasesForDeregister splits a user's edge leases into those that survive a
+// deregistration and those it removes.
+//
+// Matched on subdomain AND node. Matching on the subdomain alone destroyed the lease a FAILBACK
+// had just created: the client registers on the returning edge, the old gateway's session then
+// deregisters the same subdomain, and both were dropped (#2161). The client stayed connected
+// and the edge kept its own lease; central simply forgot, so the host served 404 with nothing
+// to attribute it to.
+//
+// Observed in production on 2026-09-22. Two of three clients lost their tunnel and the third
+// did not -- the only difference being that it happened to deregister before re-registering,
+// which is why the failure looks intermittent rather than total. One of the two was a
+// three-port client, so a single deregistration took three leases with it.
+//
+// The race was already known about here. The DNS release at the call site is guarded with
+// "only if nothing has claimed the name since -- a client that moved to another gateway has
+// already re-published it" (#1247). That reasoning applies word for word to the lease, and was
+// not applied to it.
+//
+// No compatibility fallback, and none should be added: EdgeLease.NodeID is assigned from this
+// same node.ID at registration, so the two always agree, including when a misconfigured node
+// leaves both empty. A "treat an empty node as matching anything" clause would reinstate
+// exactly the behaviour being removed.
+func partitionEdgeLeasesForDeregister(leases []EdgeLease, subdomain, nodeID string) (kept, dropped []EdgeLease) {
+	for _, l := range leases {
+		if l.Subdomain != subdomain || l.NodeID != nodeID {
+			kept = append(kept, l)
+		} else {
+			dropped = append(dropped, l)
+		}
+	}
+	return kept, dropped
+}
+
 func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 	edgeToken := r.Header.Get("X-Edge-Token")
 	if edgeToken == "" {
@@ -6934,7 +6968,9 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, authorized := s.authorisedEdgeNode(edgeToken)
+	// The node, not just "is it a node". The token identifies WHICH edge is calling, and this
+	// handler threw that away -- see the filter below for what it cost (#2161).
+	node, authorized := s.authorisedEdgeNode(edgeToken)
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
 		return
@@ -6957,12 +6993,10 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		var newLeases []EdgeLease
 		var released []struct{ host, nodeID string }
-		for _, l := range leases {
-			if l.Subdomain != edgeReq.Subdomain {
-				newLeases = append(newLeases, l)
-			} else {
-				released = append(released, struct{ host, nodeID string }{l.FullHost, l.NodeID})
-			}
+		kept, dropped := partitionEdgeLeasesForDeregister(leases, edgeReq.Subdomain, node.ID)
+		newLeases = kept
+		for _, l := range dropped {
+			released = append(released, struct{ host, nodeID string }{l.FullHost, l.NodeID})
 		}
 		if len(newLeases) == 0 {
 			delete(s.edgeLeases, edgeReq.UserID)

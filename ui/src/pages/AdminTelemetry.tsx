@@ -3,10 +3,14 @@ import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
 import { useUI } from '../contexts/UIContext';
+import TunnelDetailsModal, {
+  type TunnelDetailFields,
+} from '../components/TunnelDetailsModal';
 
-interface Tunnel {
-  user_id?: string;
-  subdomain_prefix: string;
+// Extends the modal's shape rather than redeclaring a subset. This interface named nine fields
+// while the payload carried access control, launch context and custom-header names besides --
+// so those were invisible to V2 no matter what the server sent (#2150).
+interface Tunnel extends TunnelDetailFields {
   full_host: string;
   status: string;
   bytes_in: number;
@@ -111,6 +115,7 @@ export default function AdminTelemetry() {
   // Which groups are open. Collapsed by default -- except a group that is not up, which is
   // opened below: hiding the row someone needs to see defeats the point of the table.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [detailsFor, setDetailsFor] = useState<TunnelGroup | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
 
@@ -438,7 +443,13 @@ export default function AdminTelemetry() {
                             {(group.status || 'up').toUpperCase()}
                           </span>
                         </td>
-                        <td className="td-cell text-right">
+                        <td className="td-cell text-right whitespace-nowrap">
+                          <button
+                            className="btn btn-secondary py-xs px-md text-xs w-auto mr-sm"
+                            onClick={() => setDetailsFor(group)}
+                          >
+                            {t('details', 'Details')}
+                          </button>
                           <button
                             className="btn btn-danger py-xs px-md text-xs w-auto"
                             onClick={() => handleKick(group.subdomain)}
@@ -492,7 +503,16 @@ export default function AdminTelemetry() {
                           {(group.status || 'up').toUpperCase()}
                         </span>
                       </td>
-                      <td className="td-cell text-right">
+                      <td className="td-cell text-right whitespace-nowrap">
+                        {/* Details describes the SESSION -- access control, launch context and
+                            client IP are per-client, not per-port -- so like Kick below it
+                            belongs on the parent rather than repeated on every child. */}
+                        <button
+                          className="btn btn-secondary py-xs px-md text-xs w-auto mr-sm"
+                          onClick={() => setDetailsFor(group)}
+                        >
+                          {t('details', 'Details')}
+                        </button>
                         {/* Kick resolves a session token and drops EVERY port of this client,
                             whichever row it is clicked on -- so it belongs here, where its
                             blast radius matches where the button sits (#2129). */}
@@ -558,6 +578,31 @@ export default function AdminTelemetry() {
           </div>
         )}
       </div>
+
+      {detailsFor && (
+        <TunnelDetailsModal
+          // The group's aggregates over the first member's per-session fields. Access control,
+          // launch context and the client IP are properties of the CLIENT, identical on every
+          // lease in the session, so taking them from members[0] is exact rather than a sample;
+          // the byte counters are per-port, so those come from the group's sums.
+          tunnel={{
+            ...detailsFor.members[0],
+            subdomain_prefix: detailsFor.subdomain,
+            status: detailsFor.status,
+            node_id: detailsFor.nodeId,
+            client_ip: detailsFor.clientIp,
+            bytes_in: detailsFor.bytesIn,
+            bytes_out: detailsFor.bytesOut,
+          }}
+          members={detailsFor.members}
+          isAdmin
+          onKick={() => {
+            setDetailsFor(null);
+            handleKick(detailsFor.subdomain);
+          }}
+          onClose={() => setDetailsFor(null)}
+        />
+      )}
     </div>
   );
 }

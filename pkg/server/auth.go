@@ -99,6 +99,19 @@ type TunnelLease struct {
 	NodeID       string               `json:"node_id,omitempty"`
 	VisitorIPsMu sync.Mutex           `json:"-"`
 	VisitorIPs   map[string]time.Time `json:"-"`
+	// How the client was launched (#2148), carried so the portal can say WHY a tunnel is
+	// where it is rather than leaving an operator to guess whether a flag, an env var or a
+	// config file chose its region, subdomain or ports.
+	//
+	// Names only, never values -- LaunchFlags is flag NAMES and LaunchOverrides maps a
+	// settings key to the NAME of whatever claimed it ("-subdomain", "LFR_TUNNEL_REGION").
+	// The client builds both that way on purpose: -passcode and -basic-auth are flags like
+	// any other, so a version carrying values would publish a credential to every admin
+	// loading the portal. This struct is exactly where that happened before -- the session
+	// token and the Basic Auth credential were serialised into active_tunnels until #2137 --
+	// so the rule is enforced at the source rather than at each renderer.
+	LaunchFlags     []string          `json:"launch_flags,omitempty"`
+	LaunchOverrides map[string]string `json:"launch_overrides,omitempty"`
 }
 
 // SetAccessControlsForHost applies rules to one lease. Per host rather than per session because
@@ -140,6 +153,28 @@ func (r *Registry) SetAccessControlsForSession(sessionToken, passcode, whitelist
 	defer r.RUnlock()
 	for _, lease := range r.sessionLeases[sessionToken] {
 		lease.SetAccessControls(passcode, whitelistIPs, accessMode)
+	}
+}
+
+// SetLaunchContextForSession records how the client was launched against every lease in the
+// session (#2148).
+//
+// A setter rather than two more parameters on Register, which already takes eight: this is
+// display-only provenance, nothing in the request path reads it, and Register's signature is
+// the one place a mistake would be silent. SetAccessControlsForSession above has the same
+// shape for the same reason.
+//
+// Written under the read lock because it assigns to the lease, not to the registry's maps --
+// identical to SetAccessControlsForSession, whose per-lease write is guarded by the lease's
+// own mutex. These two fields are set once at registration and never mutated afterwards, so
+// there is no second writer to race with; a reader that gets a nil slice sees a tunnel with
+// no launch context, which is exactly what a pre-#2148 client reports.
+func (r *Registry) SetLaunchContextForSession(sessionToken string, flags []string, overrides map[string]string) {
+	r.RLock()
+	defer r.RUnlock()
+	for _, lease := range r.sessionLeases[sessionToken] {
+		lease.LaunchFlags = flags
+		lease.LaunchOverrides = overrides
 	}
 }
 
@@ -884,6 +919,8 @@ func (r *Registry) ListLeases() []*TunnelLease {
 			BytesOut:        atomic.LoadUint64(&lease.BytesOut),
 			CreatedAt:       lease.CreatedAt,
 			NodeID:          lease.NodeID,
+			LaunchFlags:     lease.LaunchFlags,
+			LaunchOverrides: lease.LaunchOverrides,
 		}
 		snapshot = append(snapshot, lCopy)
 	}

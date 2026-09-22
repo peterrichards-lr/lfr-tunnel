@@ -1618,9 +1618,7 @@ function handleTelemetryPayload(data) {
   renderTelemetry();
 
   if (activeDetailTunnelSubdomain) {
-    const freshTunnel = (currentUser.tunnels || []).find(
-      (t) => t.subdomain_prefix === activeDetailTunnelSubdomain,
-    );
+    const freshTunnel = findTunnelDetailSubject(activeDetailTunnelSubdomain);
     if (freshTunnel) {
       populateTunnelDetails(freshTunnel);
     } else {
@@ -2422,6 +2420,39 @@ async function kickAdminSubdomain(subdomain) {
 // searchText exists because renderTable filters on Object.values(item): without it, searching for
 // a child host like "dxplive-8222" would match nothing, since that string lives only inside the
 // members array.
+// The SESSION behind a details modal, not its first port (#2150).
+//
+// Every field the modal shows other than the byte counters is a property of the CLIENT --
+// access control, launch context, client IP, node, owner, rate limit -- and is identical on
+// every lease in the session. The counters are per-port, and the modal was handed members[0],
+// so a client mapping three ports had one port's traffic reported under the session's name
+// with no indication that was happening.
+//
+// Visitors are per-lease too, and de-duplicated here: one visitor hitting two ports of the
+// same client is one visitor, and counting it twice would overstate what an operator reads.
+function tunnelDetailSubject(group) {
+  const seen = new Set();
+  group.members.forEach((m) =>
+    (m.visitor_ips || []).forEach((ip) => seen.add(ip)),
+  );
+  return Object.assign({}, group.members[0], {
+    bytes_in: group.bytes_in,
+    bytes_out: group.bytes_out,
+    visitor_ips: Array.from(seen).sort(),
+  });
+}
+
+// Finds that subject again by subdomain, for the refresh paths. They previously re-read a raw
+// lease out of currentUser.tunnels, which undid the aggregation above on the very next
+// telemetry frame -- the modal would open with session totals and silently drop to one port's
+// a few seconds later.
+function findTunnelDetailSubject(subdomainPrefix) {
+  const group = groupTunnelsBySession(currentUser.tunnels || []).find(
+    (g) => g.subdomain_prefix === subdomainPrefix,
+  );
+  return group ? tunnelDetailSubject(group) : null;
+}
+
 function groupTunnelsBySession(tunnels) {
   const byKey = new Map();
   (tunnels || []).forEach((t, index) => {
@@ -2559,7 +2590,7 @@ async function loadTunnels() {
                         <td style="font-weight: 500;">${escapeHTML(g.subdomain_prefix)}</td>
                         <td>${hostLink(only.full_host)}${badge}</td>
                         ${statusCell}
-                        ${actions(only)}
+                        ${actions(tunnelDetailSubject(g))}
                     </tr>
                 `;
     }
@@ -2570,7 +2601,7 @@ async function loadTunnels() {
                         <td style="font-weight: 500;">${tunnelGroupToggle(g)}${escapeHTML(g.subdomain_prefix)} <span style="opacity:0.6; font-size:0.85em;">${g.members.length} ${escapeHTML(t('tunnels', 'tunnels'))}</span></td>
                         <td>${badge}</td>
                         ${statusCell}
-                        ${actions(g.members[0])}
+                        ${actions(tunnelDetailSubject(g))}
                     </tr>
                 `;
     if (open) {
@@ -6371,9 +6402,7 @@ async function openTunnelDetailsModal(tunnelJsonEncoded) {
     if (meRes.ok) {
       currentUser = await meRes.json();
       loadTunnels(); // Keep table in sync
-      const freshTunnel = (currentUser.tunnels || []).find(
-        (x) => x.subdomain_prefix === t.subdomain_prefix,
-      );
+      const freshTunnel = findTunnelDetailSubject(t.subdomain_prefix);
       if (freshTunnel) {
         populateTunnelDetails(freshTunnel);
       }
@@ -6442,21 +6471,35 @@ function populateTunnelDetails(t) {
   );
   if (headersContainer) {
     headersContainer.innerHTML = '';
-    const headers = t.added_headers || {};
-    const keys = Object.keys(headers);
-    if (keys.length === 0) {
+    // added_header_names, not added_headers.
+    //
+    // This panel read t.added_headers, and NOTHING has ever set that key: every tunnel
+    // object here comes from getUserTelemetryData, whether through /api/me or a telemetry
+    // frame, and that payload has never carried it. So the panel has always rendered "No
+    // custom headers injected", including for tunnels that inject several. It looked
+    // correct, which is why it survived -- an empty state and a broken read are the same
+    // pixels (#2150).
+    //
+    // Fixed by publishing the NAMES rather than the map. A custom header's value is chosen
+    // by the user and is routinely a credential -- `-header "Authorization=Bearer ..."` is
+    // an ordinary use -- and this payload goes to every admin, not only the tunnel's owner.
+    // Sending the map would have fixed the panel by reintroducing exactly what #2137
+    // removed from this feed. The name answers what the panel is for; Remove needs only
+    // the name, so nothing is lost but the value itself.
+    const names = t.added_header_names || [];
+    if (names.length === 0) {
       headersContainer.innerHTML =
         '<div style="color: var(--text-muted); font-style: italic;">No custom headers injected.</div>';
     } else {
       const table = document.createElement('table');
       table.style.width = '100%';
       table.style.borderCollapse = 'collapse';
-      keys.forEach((k) => {
+      names.forEach((k) => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
         tr.innerHTML = `
                             <td style="padding: 4px 0; font-family: monospace; color: var(--primary);">${escapeHTML(k)}</td>
-                            <td style="padding: 4px 0; word-break: break-all;">${escapeHTML(headers[k])}</td>
+                            <td style="padding: 4px 0; color: var(--text-muted); font-style: italic;">${escapeHTML(t('value_hidden', 'value hidden'))}</td>
                             <td style="padding: 4px 0; text-align: right;">
                                 <button class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; min-width: auto; color: var(--danger); border-color: var(--danger);" onclick="removeTunnelHeader('${escapeHTML(k)}')">Remove</button>
                             </td>
@@ -6478,6 +6521,46 @@ function populateTunnelDetails(t) {
         tr.innerHTML = `<td style="font-family: monospace; padding: 4px 0;"><span style="color: #10b981; margin-right: 6px;">●</span>${escapeHTML(ip)}</td>`;
         visitorTbody.appendChild(tr);
       });
+    }
+  }
+
+  // How the client was launched (#2148/#2150). Answers "why is this tunnel HERE" -- whether a
+  // flag, an environment variable or the config file chose its region, subdomain or ports --
+  // which previously only existed in an audit row nobody reads while looking at a tunnel.
+  //
+  // Names only. launch_flags is flag NAMES and launch_overrides maps a settings key to the
+  // NAME of whatever claimed it; the server builds both that way so that -passcode and
+  // -basic-auth cannot publish a credential here.
+  const launchContainer = document.getElementById(
+    'detail-tunnel-launch-container',
+  );
+  if (launchContainer) {
+    launchContainer.innerHTML = '';
+    const flags = t.launch_flags || [];
+    const overrides = t.launch_overrides || {};
+    const overrideKeys = Object.keys(overrides).sort();
+
+    if (flags.length === 0 && overrideKeys.length === 0) {
+      // Absent for two different reasons, and the distinction matters to whoever is looking:
+      // a client older than #2148 never sends this, and a client started with no flags at all
+      // has nothing to send. Neither is an error, so this says "not reported" rather than
+      // implying the tunnel was launched bare.
+      launchContainer.innerHTML = `<div style="color: var(--text-muted); font-style: italic;">${escapeHTML(t('launch_not_reported', 'Not reported by this client.'))}</div>`;
+    } else {
+      let html = '';
+      if (flags.length > 0) {
+        html += `<div style="margin-bottom: 8px;"><span style="color: var(--text-muted); font-size: 11px; display: block;">${escapeHTML(t('flags_given', 'Flags given'))}</span><span style="font-family: monospace; font-size: 12px; word-break: break-all;">${flags
+          .map((f) => escapeHTML(f))
+          .join(' ')}</span></div>`;
+      }
+      if (overrideKeys.length > 0) {
+        html += `<div><span style="color: var(--text-muted); font-size: 11px; display: block; margin-bottom: 4px;">${escapeHTML(t('launch_settings_claimed', 'Settings claimed at launch'))}</span><table style="width: 100%; border-collapse: collapse; font-size: 12px;">`;
+        overrideKeys.forEach((k) => {
+          html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 4px 0;">${escapeHTML(k)}</td><td style="padding: 4px 0; text-align: right; font-family: monospace; color: var(--primary);">${escapeHTML(overrides[k])}</td></tr>`;
+        });
+        html += '</table></div>';
+      }
+      launchContainer.innerHTML = html;
     }
   }
 
@@ -6536,9 +6619,7 @@ async function refreshTunnelDetails(silent = false) {
     loadTunnels(); // Refresh main view table
 
     // Find matching active tunnel to update the modal
-    const freshTunnel = (currentUser.tunnels || []).find(
-      (t) => t.subdomain_prefix === activeDetailTunnelSubdomain,
-    );
+    const freshTunnel = findTunnelDetailSubject(activeDetailTunnelSubdomain);
     if (freshTunnel) {
       populateTunnelDetails(freshTunnel);
       if (!silent) showToast('Tunnel metrics refreshed!', 'success');

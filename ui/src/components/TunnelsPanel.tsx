@@ -5,17 +5,16 @@ import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import { useSettings } from '../contexts/SettingsContext';
 import SectionHeading from './SectionHeading';
+import TunnelDetailsModal, {
+  type TunnelDetailFields,
+} from './TunnelDetailsModal';
 
-interface Tunnel {
-  subdomain_prefix: string;
-  full_host: string;
-  status: string;
-  node_id?: string;
-  client_ip?: string;
+// Extends the modal's shape rather than redeclaring a subset. The panel's own interface listed
+// eight fields and the payload carries far more -- access control, visitor IPs, launch context
+// -- so anything absent from the interface was invisible to this arm no matter what the server
+// sent (#2150). Adding a field to the payload now reaches this table by declaring it once.
+interface Tunnel extends TunnelDetailFields {
   local_port?: number;
-  bytes_in?: number;
-  bytes_out?: number;
-  created_at?: string;
 }
 
 interface Props {
@@ -113,6 +112,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
   const grouped = useMemo(() => groupTunnels(tunnels), [tunnels]);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [detailsFor, setDetailsFor] = useState<TunnelGroup | null>(null);
 
   const {
     paginatedItems,
@@ -263,6 +263,11 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                       {getSortIndicator('created_at')}
                     </th>
                   )}
+                  {/* Outside `columns` on purpose: a hideable Details control is a capability
+                      the user can switch off by accident and then not find again. */}
+                  <th className="th-col text-right">
+                    {t('actions', 'Actions')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -324,6 +329,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                             {isColumnVisible('created_at') && (
                               <td className="td-cell" />
                             )}
+                            <td className="td-cell" />
                           </tr>
                         ))
                       : [];
@@ -397,6 +403,15 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                             : '—'}
                         </td>
                       )}
+                      <td className="td-cell text-right">
+                        <button
+                          type="button"
+                          className="btn btn-secondary py-xs px-md text-xs w-auto"
+                          onClick={() => setDetailsFor(tItem)}
+                        >
+                          {t('details', 'Details')}
+                        </button>
+                      </td>
                     </tr>,
                     ...children,
                   ];
@@ -412,6 +427,15 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
             onPageChange={setCurrentPage}
           />
         </>
+      )}
+
+      {detailsFor && (
+        <TunnelDetailsModal
+          tunnel={detailsFor}
+          members={detailsFor.members}
+          isAdmin={user?.role === 'admin' || user?.role === 'owner'}
+          onClose={() => setDetailsFor(null)}
+        />
       )}
     </div>
   );

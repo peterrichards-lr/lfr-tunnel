@@ -140,6 +140,29 @@ func (s *Server) handleTelemetryWS(w http.ResponseWriter, r *http.Request) {
 	s.pushUserTelemetry(client)
 }
 
+// sortedHeaderNames reduces a custom-header map to its NAMES, in a stable order.
+//
+// The portal's tunnel details panel asks "is anything being injected into this tunnel's
+// requests?", and the names answer it. The values do not belong in this payload: the user
+// chooses them, "-header Authorization=Bearer ..." is an ordinary use, and an admin or owner
+// receives every tunnel on the system here, not only their own. That is precisely the shape of
+// #2137, where this same feed carried session tokens and Basic Auth credentials.
+//
+// Sorted because it is built from a map and Go randomises map iteration deliberately -- the
+// defect that made every portal table reshuffle on each frame (#2143). Nil in, nil out, so a
+// tunnel with no custom headers omits the key rather than sending an empty array.
+func sortedHeaderNames(headers map[string]string) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, systemWide bool) map[string]interface{} {
 	var activeLeases []map[string]interface{}
 	if s.registry != nil {
@@ -167,20 +190,23 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 				}
 
 				activeLeases = append(activeLeases, map[string]interface{}{
-					"subdomain_prefix": l.SubdomainPrefix,
-					"full_host":        l.FullHost,
-					"status":           l.Status,
-					"bytes_in":         atomic.LoadUint64(&l.BytesIn),
-					"bytes_out":        atomic.LoadUint64(&l.BytesOut),
-					"rate_limit":       l.RateLimit,
-					"user_id":          l.UserID,
-					"client_ip":        l.ClientIP,
-					"created_at":       l.CreatedAt,
-					"node_id":          l.NodeID,
-					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
-					"passcode":         passcode,
-					"whitelist_ips":    whitelistIPs,
-					"access_mode":      accessMode,
+					"launch_flags":       l.LaunchFlags,
+					"launch_overrides":   l.LaunchOverrides,
+					"added_header_names": sortedHeaderNames(l.AddedHeaders),
+					"subdomain_prefix":   l.SubdomainPrefix,
+					"full_host":          l.FullHost,
+					"status":             l.Status,
+					"bytes_in":           atomic.LoadUint64(&l.BytesIn),
+					"bytes_out":          atomic.LoadUint64(&l.BytesOut),
+					"rate_limit":         l.RateLimit,
+					"user_id":            l.UserID,
+					"client_ip":          l.ClientIP,
+					"created_at":         l.CreatedAt,
+					"node_id":            l.NodeID,
+					"visitor_ips":        l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
+					"passcode":           passcode,
+					"whitelist_ips":      whitelistIPs,
+					"access_mode":        accessMode,
 				})
 			}
 		}
@@ -210,20 +236,23 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 				}
 
 				activeLeases = append(activeLeases, map[string]interface{}{
-					"subdomain_prefix": el.Subdomain,
-					"full_host":        el.FullHost,
-					"status":           "up",
-					"bytes_in":         el.BytesIn,
-					"bytes_out":        el.BytesOut,
-					"rate_limit":       0,
-					"user_id":          el.UserID,
-					"client_ip":        el.ClientIP,
-					"created_at":       el.CreatedAt,
-					"node_id":          el.NodeID,
-					"visitor_ips":      []string{},
-					"passcode":         passcode,
-					"whitelist_ips":    whitelistIPs,
-					"access_mode":      accessMode,
+					"launch_flags":       el.LaunchFlags,
+					"launch_overrides":   el.LaunchOverrides,
+					"added_header_names": el.AddedHeaderNames,
+					"subdomain_prefix":   el.Subdomain,
+					"full_host":          el.FullHost,
+					"status":             "up",
+					"bytes_in":           el.BytesIn,
+					"bytes_out":          el.BytesOut,
+					"rate_limit":         0,
+					"user_id":            el.UserID,
+					"client_ip":          el.ClientIP,
+					"created_at":         el.CreatedAt,
+					"node_id":            el.NodeID,
+					"visitor_ips":        []string{},
+					"passcode":           passcode,
+					"whitelist_ips":      whitelistIPs,
+					"access_mode":        accessMode,
 				})
 			}
 		}

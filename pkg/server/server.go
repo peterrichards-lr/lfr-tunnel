@@ -2118,6 +2118,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// How this client was launched, onto the leases it just created (#2150). Set here and at
+	// the edge's own Register below, because a client reaching an edge never executes this
+	// function -- the same duplication that made #2130 land on central and nowhere else.
+	s.registry.SetLaunchContextForSession(sessionToken, req.LaunchFlags, req.LaunchOverrides)
+
 	// A throttled user must not be able to shed the throttle by reconnecting.
 	s.applyQuotaToNewLeases(user.ID)
 
@@ -6211,6 +6216,20 @@ type EdgeLease struct {
 	BytesIn       uint64    `json:"bytes_in"`
 	BytesOut      uint64    `json:"bytes_out"`
 	CreatedAt     time.Time `json:"created_at"`
+	// Central's copy of the edge tunnel's launch context (#2150). The lease itself lives on
+	// the edge and central never sees it, so without these the portal -- which central
+	// serves -- could say how a control-plane tunnel was started and nothing at all about
+	// an edge-hosted one.
+	//
+	// Names only, for the reason spelled out on TunnelLease.
+	LaunchFlags     []string          `json:"launch_flags,omitempty"`
+	LaunchOverrides map[string]string `json:"launch_overrides,omitempty"`
+	// Header NAMES, not the header map. A custom header's value is chosen by the user and
+	// routinely IS a credential -- "-header Authorization=Bearer ..." is the obvious case --
+	// and this payload goes to every admin, not only the tunnel's owner. Names answer the
+	// question the panel exists to answer ("is anything being injected?") without republishing
+	// the class of secret #2137 removed from this same feed.
+	AddedHeaderNames []string `json:"added_header_names,omitempty"`
 }
 
 // resolveRemoteRouteForHost finds the target gateway URL and node ID for a host whose lease
@@ -6583,6 +6602,10 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	// The edge half of the pair above (#2150). Most of the fleet registers through an edge,
+	// so covering only the control plane would leave the portal blank for almost every tunnel.
+	s.registry.SetLaunchContextForSession(sessionToken, req.LaunchFlags, req.LaunchOverrides)
+
 	// Enforcement on an edge depends entirely on this: it has no database to fall back on.
 	edgeAccess := make(map[string][3]string, len(valResp.AccessControls))
 	for d, ac := range valResp.AccessControls {
@@ -6826,6 +6849,10 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		BytesIn:       0,
 		BytesOut:      0,
 		CreatedAt:     time.Now(),
+
+		LaunchFlags:      edgeReq.LaunchFlags,
+		LaunchOverrides:  edgeReq.LaunchOverrides,
+		AddedHeaderNames: sortedHeaderNames(edgeReq.AddedHeaders),
 	})
 	s.edgeLeasesMu.Unlock()
 

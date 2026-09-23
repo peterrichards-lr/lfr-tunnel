@@ -186,6 +186,27 @@ func (p *ProxyHandler) visitorSessionKeys() (visitorSessionKey, []visitorSession
 	return p.sessionCurrent, p.sessionKeys
 }
 
+// VisitorSessionGenerations reports the generation this node MINTS with and every generation it
+// ACCEPTS, read back from the live handler state (#2195).
+//
+// This is what a node acknowledges a rotation with, and reading it back from the handler rather
+// than echoing the frame that arrived is the point: an acknowledgement that repeated what it was
+// sent would be satisfied by a node that received the keys and failed to apply them, which is
+// exactly the node a prepare/commit gate exists to catch.
+//
+// Generation ids only. They are labels, not secrets -- VisitorSessionSecret.String() redacts the
+// key for the reason #2135 and #2137 exist -- and nothing on this path may carry key material
+// back up a channel it never needs to travel.
+func (p *ProxyHandler) VisitorSessionGenerations() (current string, accepted []string) {
+	p.sessionMu.RLock()
+	defer p.sessionMu.RUnlock()
+	accepted = make([]string, 0, len(p.sessionKeys))
+	for _, key := range p.sessionKeys {
+		accepted = append(accepted, key.id)
+	}
+	return p.sessionCurrent.id, accepted
+}
+
 // SetRemoteRouteResolver configures the callback used to locate and proxy traffic to
 // remote gateways during DNS propagation (issue #1249).
 func (p *ProxyHandler) SetRemoteRouteResolver(resolver RemoteRouteResolver) {
@@ -819,7 +840,11 @@ func (p *ProxyHandler) createSessionCookie(subdomain string) (string, bool) {
 		})
 	}
 
-	expiration := time.Now().Add(24 * time.Hour).Unix()
+	// The constant rather than a literal 24h, because the rotation engine's retirement lag is
+	// derived from this number (#2195): a generation must stay VERIFIABLE for at least as long
+	// as the cookies it signed can live, or retiring it logs those visitors out. Two places
+	// spelling the lifetime separately is how that guarantee drifts silently.
+	expiration := time.Now().Add(visitorSessionCookieLifetime).Unix()
 	payload := fmt.Sprintf("%s:%d", subdomain, expiration)
 
 	h := hmac.New(sha256.New, current.key)

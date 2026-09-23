@@ -423,21 +423,30 @@ type Server struct {
 	// (#2181), read once from admin_settings at startup and handed to each edge on its own
 	// handshake. Left empty on an edge, which owns nothing here and waits to be told.
 	visitorSessionSecrets visitorSessionSecretState
-	maintTimer            *time.Timer
-	maintScheduledAt      time.Time
-	maintMutex            sync.RWMutex
-	unsubscribeSecret     string
-	translations          map[string]map[string]string
-	lastPortalActivity    map[string]time.Time
-	portalActivityMu      sync.RWMutex
-	maintReason           string
-	maintAction           string
-	maintDuration         int
-	maintEndTime          time.Time
-	wsClients             map[*wsClient]bool
-	wsMutex               sync.RWMutex
-	edgeClients           map[string]*safeConn
-	edgeVersions          map[string]string // node_id -> version
+	// visitorSessionAcks is what each edge last reported about the generations it holds
+	// (#2195), recorded from the control channel's read pump and read by the rotation runner.
+	// In memory only: it is evidence about a live connection, and a value that survived a
+	// restart would be a claim about a node nobody has spoken to since.
+	visitorSessionAcks visitorSessionAckState
+	// visitorSessionRotationMu serialises rotations. A manual trigger landing on top of the
+	// periodic one would put two runners into the same bounded key set, each gating on the
+	// other's acknowledgements.
+	visitorSessionRotationMu sync.Mutex
+	maintTimer               *time.Timer
+	maintScheduledAt         time.Time
+	maintMutex               sync.RWMutex
+	unsubscribeSecret        string
+	translations             map[string]map[string]string
+	lastPortalActivity       map[string]time.Time
+	portalActivityMu         sync.RWMutex
+	maintReason              string
+	maintAction              string
+	maintDuration            int
+	maintEndTime             time.Time
+	wsClients                map[*wsClient]bool
+	wsMutex                  sync.RWMutex
+	edgeClients              map[string]*safeConn
+	edgeVersions             map[string]string // node_id -> version
 	// edgeMetricsSeen records when each node last delivered a bandwidth frame, so the portal
 	// can tell a quiet edge from one whose reporting has stopped (#1980).
 	edgeMetricsSeen *edgeMetricsTracker
@@ -676,6 +685,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// this one (#2181). A node with no database is an edge: it is told these over the control
 	// channel instead.
 	srv.initVisitorSessionSecrets(database)
+	// And the schedule that CHANGES them (#2195). Anchored here rather than started here: the
+	// first rotation is an interval away, not at startup, because a rotation on every start
+	// would fire on every deploy and central deploys constantly.
+	srv.initVisitorSessionRotation(database)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
 	// Optional and absent by default: no geo-IP database is shipped by any vendor's
@@ -849,6 +862,20 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// unreachable from any arriving request: a request forwarded to an edge is held here
 	// while that user's heartbeats go to the edge, so nothing else would ever expire it.
 	srv.goTracked(func() { srv.watchDiagnosticsExpiry(ctx) })
+	// The periodic session-key rotation, and the retirement sweep that finally invalidates an
+	// old generation (#2195). Tracked, because both write to the database -- the audit entry on
+	// a rotation is the only record that one was attempted, and #1833 is what happens when an
+	// untracked goroutine is still inside SQLite as Stop closes the handle.
+	//
+	// Handed the LOCAL `database`, and gated on it. Only the control plane owns and persists the
+	// visitor session keys; an edge has no database and is told them over the control channel, so
+	// whether this node rotates is settled here, once. The watcher and everything it calls take
+	// the handle as a parameter and read no Server field to decide it -- reading srv.db from a
+	// background goroutine races the tests that null it to stage a "database not configured"
+	// case, which is what CI's Race Detector caught on #2199.
+	if database != nil {
+		srv.goTracked(func() { srv.watchVisitorSessionRotation(ctx, database) })
+	}
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second
@@ -3676,6 +3703,19 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	// everything else dispatched here, and it re-checks the role itself as well.
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/diagnostics/collect" {
 		s.handleAdminDiagnosticsCollect(w, r)
+		return
+	}
+
+	// Visitor session-key rotation (#2195). The GET is the read-back a portal needs so an
+	// aborted rotation is visible; the POST is the manual trigger. The portal UI that calls
+	// them is #2196.
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/session-secrets" {
+		s.handleAdminVisitorSessionRotationStatus(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/session-secrets/rotate" {
+		s.handleAdminVisitorSessionRotate(w, r)
 		return
 	}
 

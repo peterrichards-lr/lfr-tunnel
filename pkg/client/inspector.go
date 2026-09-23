@@ -746,7 +746,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	if !loopbackOnly {
 		slog.Info(fmt.Sprintf("[Inspector] Warning: bound to %s, which is reachable beyond this machine. Cross-origin requests are still rejected, but anything that can reach this port can read captured traffic.", bindIP))
 	}
-	handler := guardLocalOnly(mux, actualPort, loopbackOnly)
+	handler := noStoreByDefault(guardLocalOnly(mux, actualPort, loopbackOnly))
 
 	// A configured server rather than http.Serve, which cannot set timeouts (#1372). Only
 	// ReadHeaderTimeout is set: ReadTimeout and WriteTimeout would apply to whole requests, and
@@ -793,6 +793,33 @@ func isOwnOrigin(origin string, port int) bool {
 		return false
 	}
 	return u.Port() == strconv.Itoa(port)
+}
+
+// noStoreByDefault gives every Inspector response freshness information, so that caching is
+// something a route opts into rather than something it forgets to prevent (#2182).
+//
+// A response with no Cache-Control, no ETag and no Last-Modified is not "uncached" -- RFC 9111
+// §4.2.2 lets a browser invent its own expiry for it. Every route here served exactly that, and
+// the one it hurt was the dashboard HTML: it is embedded in the binary, so it changes on upgrade
+// and never otherwise. After `lfr-tunnel -upgrade` a browser could keep showing the previous
+// version's UI, which made a successful upgrade look like a failed one -- and the natural way to
+// re-check is to reload the same cached page. A user on v1.48.50 reported #2155's Inspector
+// change as missing on exactly this; the binary was right and the screen was wrong.
+//
+// Applied in front of the whole chain rather than per handler, because the defect is the class:
+// the API routes return live state and the mux's own 404/405 responses are heuristically
+// cacheable too, and a route added next year would have inherited the same silence. Set before
+// the handler runs, so a handler that genuinely wants caching just says so -- /favicon.ico does,
+// and its `public, max-age=86400` still wins. That is the one deliberate exception; adding
+// another should be a decision, which is what TestInspectorCacheControlByRoute pins.
+//
+// no-store rather than no-cache: the bytes are small and served over loopback, so there is
+// nothing to gain from revalidation, and "never reuse" needs no reasoning about validators.
+func noStoreByDefault(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // guardLocalOnly rejects requests a browser on another site could have driven.

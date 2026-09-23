@@ -252,15 +252,25 @@ func (s *Server) reportVisitorSessionSecretsUpstream() {
 		slog.Info("[Edge Control] Cannot acknowledge the visitor session keys: no control connection")
 		return
 	}
-	if err := conn.WriteJSON(ControlMessage{
-		Type:                     visitorSessionSecretAckFrameType,
-		CurrentSessionSecretID:   current,
-		AcceptedSessionSecretIDs: accepted,
-	}); err != nil {
+	if err := conn.WriteJSON(visitorSessionAckFrame(current, accepted)); err != nil {
 		slog.Info(fmt.Sprintf("[Edge Control] Could not acknowledge the visitor session keys: %v", err))
 		return
 	}
 	slog.Info(fmt.Sprintf("[Edge Control] Acknowledged the visitor session keys: %d accepted, minting with generation %s", len(accepted), current))
+}
+
+// visitorSessionAckFrame builds the acknowledgement that travels up the control channel.
+//
+// One function so the frame a test inspects is the frame production sends, rather than a copy of
+// it assembled beside it (§5c rule 4). What is NOT on it is the point: no SessionSecrets field,
+// so there is no path by which key material can travel back up a channel that never needs to
+// see it.
+func visitorSessionAckFrame(current string, accepted []string) ControlMessage {
+	return ControlMessage{
+		Type:                     visitorSessionSecretAckFrameType,
+		CurrentSessionSecretID:   current,
+		AcceptedSessionSecretIDs: accepted,
+	}
 }
 
 // noteVisitorSessionSecretAck is CENTRAL's half, called from the edge control channel's read

@@ -635,12 +635,10 @@ func TestNoRotationPathCarriesAKey(t *testing.T) {
 	}
 	rendered["the persisted rotation bookkeeping"] = raw
 
+	// The production builder, not a copy of it assembled here: a test that reassembles the
+	// frame proves only that the test omits the keys (§5c rule 4).
 	current, accepted := central.proxyHandler.VisitorSessionGenerations()
-	ackJSON, err := json.Marshal(ControlMessage{
-		Type:                     visitorSessionSecretAckFrameType,
-		CurrentSessionSecretID:   current,
-		AcceptedSessionSecretIDs: accepted,
-	})
+	ackJSON, err := json.Marshal(visitorSessionAckFrame(current, accepted))
 	if err != nil {
 		t.Fatalf("could not encode an acknowledgement frame: %v", err)
 	}
@@ -665,11 +663,7 @@ func TestNoRotationPathCarriesAKey(t *testing.T) {
 // CLOSES a connection that exceeds it, and this channel also carries kicks, schedules and
 // blacklist pushes.
 func TestTheAckFrameStaysInsideTheControlChannelReadLimit(t *testing.T) {
-	payload, err := json.Marshal(ControlMessage{
-		Type:                     visitorSessionSecretAckFrameType,
-		CurrentSessionSecretID:   "d",
-		AcceptedSessionSecretIDs: []string{"a", "b", "c", "d", nodeLocalSessionKeyID},
-	})
+	payload, err := json.Marshal(visitorSessionAckFrame("d", []string{"a", "b", "c", "d", nodeLocalSessionKeyID}))
 	if err != nil {
 		t.Fatalf("could not encode an acknowledgement frame: %v", err)
 	}

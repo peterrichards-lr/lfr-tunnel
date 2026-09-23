@@ -98,7 +98,9 @@ func (s *Server) handleAdminVisitorSessionRotate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	outcome := s.RotateVisitorSessionSecret(r.Context(), visitorSessionTriggerManual, actor.Email, r)
+	// s.db read here, on the request goroutine, exactly as every other handler in this
+	// package reads it -- and handed to the engine, which reads no Server field of its own.
+	outcome := s.RotateVisitorSessionSecret(r.Context(), s.db, visitorSessionTriggerManual, actor.Email, r)
 	if !outcome.committed() {
 		// 409 rather than 500: nothing is broken here, the fleet was not in a state to switch.
 		// The whole outcome is still the body, reason included, because a UI that can only say

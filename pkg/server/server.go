@@ -867,12 +867,14 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// a rotation is the only record that one was attempted, and #1833 is what happens when an
 	// untracked goroutine is still inside SQLite as Stop closes the handle.
 	//
-	// Gated on the LOCAL `database` rather than on srv.db inside the goroutine. An edge has no
-	// database and owns nothing here, so the decision is settled at construction -- and reading
-	// srv.db from a freshly started goroutine races the tests that null it to stage a
-	// "database not configured" case, which is what the Race Detector caught on #2199.
+	// Handed the LOCAL `database`, and gated on it. Only the control plane owns and persists the
+	// visitor session keys; an edge has no database and is told them over the control channel, so
+	// whether this node rotates is settled here, once. The watcher and everything it calls take
+	// the handle as a parameter and read no Server field to decide it -- reading srv.db from a
+	// background goroutine races the tests that null it to stage a "database not configured"
+	// case, which is what CI's Race Detector caught on #2199.
 	if database != nil {
-		srv.goTracked(func() { srv.watchVisitorSessionRotation(ctx) })
+		srv.goTracked(func() { srv.watchVisitorSessionRotation(ctx, database) })
 	}
 
 	if srv.webhooks != nil {

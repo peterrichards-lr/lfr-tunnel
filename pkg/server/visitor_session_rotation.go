@@ -389,11 +389,20 @@ func (s *Server) initVisitorSessionRotation(database *db.DB) {
 //     would exhaust the accepted set's bound and end sessions, which is a worse answer than one
 //     rotation on a key that is five days old.
 //
-// It does NOT re-check s.db. Whether this node owns a key set is settled at construction, where
-// NewServer holds the database handle as a local -- reading the field here would race the tests
-// that null it to stage a "database not configured" case, and a background goroutine deciding
-// its own liveness from mutable shared state is the wrong shape regardless of who writes it.
-func (s *Server) watchVisitorSessionRotation(ctx context.Context) {
+// IT TAKES THE DATABASE HANDLE RATHER THAN READING s.db, and so does everything it calls.
+// Whether a node rotates at all is settled at construction -- only the control plane owns and
+// persists the key set, an edge has no database and is told the keys over the control channel
+// (#2181) -- so the handle is captured once by NewServer and carried, never re-read per tick.
+//
+// Re-reading the field would be a concurrent read of mutable shared state from a background
+// goroutine, which is what CI's Race Detector caught on #2199: four pre-existing tests null
+// srv.db to stage a "database not configured" case, and they are not at fault. Serialising the
+// field behind a mutex would have made the detector quiet without making the precondition
+// explicit; this makes it a parameter, so a node that must not rotate cannot.
+func (s *Server) watchVisitorSessionRotation(ctx context.Context, database *db.DB) {
+	if database == nil {
+		return
+	}
 	ticker := time.NewTicker(visitorSessionRotationCheckInterval)
 	defer ticker.Stop()
 	for {
@@ -401,7 +410,7 @@ func (s *Server) watchVisitorSessionRotation(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.sweepVisitorSessionRotation(ctx, time.Now().UTC())
+			s.sweepVisitorSessionRotation(ctx, database, time.Now().UTC())
 		}
 	}
 }
@@ -409,19 +418,19 @@ func (s *Server) watchVisitorSessionRotation(ctx context.Context) {
 // sweepVisitorSessionRotation is the body of the watch, separated so a test can drive it with an
 // explicit clock instead of waiting on a ticker -- the shape sweepEdgeMetricsDelivery and
 // sweepExpiredDiagnosticsCommands already use.
-func (s *Server) sweepVisitorSessionRotation(ctx context.Context, now time.Time) {
-	if s.db == nil {
+func (s *Server) sweepVisitorSessionRotation(ctx context.Context, database *db.DB, now time.Time) {
+	if database == nil {
 		return
 	}
 	// Retirement first, and on every tick rather than only inside a rotation. A fleet whose
 	// rotations keep aborting must still retire the generations an EARLIER rotation committed,
 	// or a key that stopped minting days ago goes on verifying forever.
-	s.retireVisitorSessionGenerations(now)
+	s.retireVisitorSessionGenerations(database, now)
 
-	state := loadVisitorSessionRotationState(s.db)
+	state := loadVisitorSessionRotationState(database)
 	if state.NextRotationAt.IsZero() {
 		state.NextRotationAt = now.Add(visitorSessionRotationInterval)
-		if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+		if err := saveVisitorSessionRotationState(database, state); err != nil {
 			slog.Error(fmt.Sprintf("[Session] Could not anchor the visitor session-key rotation schedule: %v", err))
 		}
 		return
@@ -435,13 +444,13 @@ func (s *Server) sweepVisitorSessionRotation(ctx context.Context, now time.Time)
 	// rotation storm on a control plane that crash-loops, which would burn a generation per
 	// restart and hit the accepted set's bound.
 	state.NextRotationAt = now.Add(visitorSessionRotationInterval)
-	if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+	if err := saveVisitorSessionRotationState(database, state); err != nil {
 		// Not run. A rotation whose due time could not be moved would fire again on the very
 		// next tick, every minute, until the write succeeded.
 		slog.Error(fmt.Sprintf("[Session] Skipping the periodic session-key rotation: the schedule could not be advanced: %v", err))
 		return
 	}
-	s.RotateVisitorSessionSecret(ctx, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	s.RotateVisitorSessionSecret(ctx, database, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
 }
 
 // pruneUncommittedGenerations drops generations left behind by a rotation that did not finish.
@@ -489,14 +498,14 @@ func pruneUncommittedGenerations(stored storedVisitorSessionSecrets, retirements
 // means a generation that verifies until the accepted set's bound stops rotation altogether.
 // sweepVisitorSessionRotation calls this BEFORE the rotation rather than inside it, so there is
 // nothing re-entrant to deadlock on.
-func (s *Server) retireVisitorSessionGenerations(now time.Time) {
-	if s.db == nil {
+func (s *Server) retireVisitorSessionGenerations(database *db.DB, now time.Time) {
+	if database == nil {
 		return
 	}
 	s.visitorSessionRotationMu.Lock()
 	defer s.visitorSessionRotationMu.Unlock()
 
-	state := loadVisitorSessionRotationState(s.db)
+	state := loadVisitorSessionRotationState(database)
 	if len(state.Retirements) == 0 {
 		return
 	}
@@ -539,14 +548,14 @@ func (s *Server) retireVisitorSessionGenerations(now time.Time) {
 		for _, id := range due {
 			delete(state.Retirements, id)
 		}
-		if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+		if err := saveVisitorSessionRotationState(database, state); err != nil {
 			slog.Warn(fmt.Sprintf("[Session] Could not clear a stale retirement schedule: %v", err))
 		}
 		return
 	}
 	stored.Secrets = kept
 
-	if err := s.applyAndPersistVisitorSessionSecrets(s.db, stored); err != nil {
+	if err := s.applyAndPersistVisitorSessionSecrets(database, stored); err != nil {
 		// Kept, not dropped. An over-long retirement costs nothing a visitor can see; a
 		// half-applied one ends sessions.
 		slog.Error(fmt.Sprintf("[Session] Could not retire session-key generation(s) %s: %v", strings.Join(due, ", "), err))
@@ -555,7 +564,7 @@ func (s *Server) retireVisitorSessionGenerations(now time.Time) {
 	for _, id := range due {
 		delete(state.Retirements, id)
 	}
-	if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+	if err := saveVisitorSessionRotationState(database, state); err != nil {
 		slog.Warn(fmt.Sprintf("[Session] Retired generation(s) %s but could not update the schedule: %v", strings.Join(due, ", "), err))
 	}
 
@@ -571,7 +580,7 @@ func (s *Server) retireVisitorSessionGenerations(now time.Time) {
 
 	slog.Info(fmt.Sprintf("[Session] Retired visitor session-key generation(s) %s; %d generation(s) still accepted, minting with %s",
 		strings.Join(due, ", "), len(stored.Secrets), stored.CurrentID))
-	s.auditVisitorSessionRotation(visitorSessionAuditRetired, visitorSessionPeriodicActor, strings.Join(due, ", "),
+	s.auditVisitorSessionRotation(database, visitorSessionAuditRetired, visitorSessionPeriodicActor, strings.Join(due, ", "),
 		fmt.Sprintf("Retired visitor session-key generation(s) %s, %s after they stopped minting. Sessions signed with them no longer verify. %d generation(s) still accepted, minting with %s.",
 			strings.Join(due, ", "), visitorSessionRetirementLag, len(stored.Secrets), stored.CurrentID), nil)
 }
@@ -584,7 +593,7 @@ func (s *Server) retireVisitorSessionGenerations(now time.Time) {
 //
 // r is the HTTP request for a manual rotation, used only to record the caller's address on the
 // audit entry; nil for a periodic one.
-func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor string, r *http.Request) visitorSessionRotationOutcome {
+func (s *Server) RotateVisitorSessionSecret(ctx context.Context, database *db.DB, trigger, actor string, r *http.Request) visitorSessionRotationOutcome {
 	now := time.Now().UTC()
 	outcome := visitorSessionRotationOutcome{
 		At:             now,
@@ -598,27 +607,27 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 	// two runners minting generations into the same bounded set and gating on each other's
 	// acknowledgements.
 	if !s.visitorSessionRotationMu.TryLock() {
-		return s.abortVisitorSessionRotation(outcome, "a rotation is already running on this control plane", r)
+		return s.abortVisitorSessionRotation(database, outcome, "a rotation is already running on this control plane", r)
 	}
 	defer s.visitorSessionRotationMu.Unlock()
 
-	if s.db == nil {
-		return s.abortVisitorSessionRotation(outcome, "only the control plane can rotate the visitor session keys, and this node has no database", r)
+	if database == nil {
+		return s.abortVisitorSessionRotation(database, outcome, "only the control plane can rotate the visitor session keys, and this node has no database", r)
 	}
 
-	state := loadVisitorSessionRotationState(s.db)
+	state := loadVisitorSessionRotationState(database)
 	if state.Retirements == nil {
 		state.Retirements = make(map[string]time.Time)
 	}
 
 	stored := pruneUncommittedGenerations(s.visitorSessionSecrets.get(), state.Retirements)
 	if len(stored.Secrets) == 0 || stored.CurrentID == "" {
-		return s.abortVisitorSessionRotation(outcome, "this control plane holds no visitor session keys to rotate from", r)
+		return s.abortVisitorSessionRotation(database, outcome, "this control plane holds no visitor session keys to rotate from", r)
 	}
 	outcome.PreviousGeneration = stored.CurrentID
 
 	if len(stored.Secrets)+1 > maxAcceptedVisitorSessionSecrets {
-		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf(
+		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf(
 			"a new generation would make %d accepted keys, more than the %d a node holds; generation(s) %s are still waiting to retire",
 			len(stored.Secrets)+1, maxAcceptedVisitorSessionSecrets, strings.Join(generationIDs(stored.Secrets), ", ")), r)
 	}
@@ -630,7 +639,7 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 	// here cost nothing.
 	fresh, err := newVisitorSessionSecret()
 	if err != nil {
-		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf("a new generation could not be minted: %v", err), r)
+		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf("a new generation could not be minted: %v", err), r)
 	}
 	outcome.Generation = fresh.ID
 
@@ -641,8 +650,8 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 	// Snapshotted BEFORE the push, so an acknowledgement recorded afterwards is provably about
 	// this set and not a stale one from the node's last handshake.
 	pushedAt := time.Now()
-	if err := s.applyAndPersistVisitorSessionSecrets(s.db, distributed); err != nil {
-		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf("the new generation could not be established on the control plane: %v", err), r)
+	if err := s.applyAndPersistVisitorSessionSecrets(database, distributed); err != nil {
+		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf("the new generation could not be established on the control plane: %v", err), r)
 	}
 
 	targets, failedPush := s.pushVisitorSessionSecretsToFleet()
@@ -657,14 +666,14 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 		// every node mints with and not one visitor session is affected. The distributed
 		// generation stays in the accepted set until the next attempt prunes it -- nothing has
 		// signed with it, so it verifies nothing and changes no behaviour.
-		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf(
+		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf(
 			"%d of %d connected node(s) did not confirm they hold generation %s, so the switch did not happen and generation %s goes on minting",
 			len(missing), len(targets), fresh.ID, stored.CurrentID), r)
 	}
 
 	// ---- PHASE 2: COMMIT ----
-	if err := s.commitVisitorSessionGeneration(ctx, distributed, fresh, targets); err != nil {
-		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf("the switch to generation %s could not be recorded, so it did not happen: %v", fresh.ID, err), r)
+	if err := s.commitVisitorSessionGeneration(ctx, database, distributed, fresh, targets); err != nil {
+		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf("the switch to generation %s could not be recorded, so it did not happen: %v", fresh.ID, err), r)
 	}
 
 	// ---- PHASE 3 IS SCHEDULED, NOT RUN ----
@@ -674,7 +683,7 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 	state.Retirements[stored.CurrentID] = now.Add(visitorSessionRetirementLag)
 	outcome.Outcome = visitorSessionOutcomeCommitted
 	state.Last = &outcome
-	if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+	if err := saveVisitorSessionRotationState(database, state); err != nil {
 		// The switch stands; only the bookkeeping failed. Said out loud because a lost
 		// retirement schedule means the outgoing generation verifies until something else
 		// notices it.
@@ -683,7 +692,7 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 
 	slog.Info(fmt.Sprintf("[Session] Visitor session-key rotation (%s) committed: minting with generation %s, %d node(s) acknowledged, %s retires %s",
 		trigger, fresh.ID, len(acked), stored.CurrentID, now.Add(visitorSessionRetirementLag).Format(time.RFC3339)))
-	s.auditVisitorSessionRotation(visitorSessionAuditRotated, auditActorFor(trigger, actor), fresh.ID, outcome.auditDetails(), r)
+	s.auditVisitorSessionRotation(database, visitorSessionAuditRotated, auditActorFor(trigger, actor), fresh.ID, outcome.auditDetails(), r)
 	return outcome
 }
 
@@ -715,10 +724,10 @@ func (s *Server) pushVisitorSessionSecretsToFleet() (targets []string, failures 
 // everywhere -- so such a node mints with a key the whole fleet still honours until its next
 // handshake or the next rotation's push corrects it. That window is precisely what the second
 // term of visitorSessionRetirementLag pays for.
-func (s *Server) commitVisitorSessionGeneration(ctx context.Context, distributed storedVisitorSessionSecrets, fresh VisitorSessionSecret, targets []string) error {
+func (s *Server) commitVisitorSessionGeneration(ctx context.Context, database *db.DB, distributed storedVisitorSessionSecrets, fresh VisitorSessionSecret, targets []string) error {
 	committed := storedVisitorSessionSecrets{CurrentID: fresh.ID, Secrets: distributed.Secrets}
 	committedAt := time.Now()
-	if err := s.applyAndPersistVisitorSessionSecrets(s.db, committed); err != nil {
+	if err := s.applyAndPersistVisitorSessionSecrets(database, committed); err != nil {
 		return err
 	}
 
@@ -741,18 +750,18 @@ func (s *Server) commitVisitorSessionGeneration(ctx context.Context, distributed
 //
 // The reason is the whole value of the event, so it is carried on the outcome, written into the
 // audit details and persisted for the portal to read back.
-func (s *Server) abortVisitorSessionRotation(outcome visitorSessionRotationOutcome, reason string, r *http.Request) visitorSessionRotationOutcome {
+func (s *Server) abortVisitorSessionRotation(database *db.DB, outcome visitorSessionRotationOutcome, reason string, r *http.Request) visitorSessionRotationOutcome {
 	outcome.Outcome = visitorSessionOutcomeAborted
 	outcome.Reason = reason
 	slog.Warn(fmt.Sprintf("[Session] Visitor session-key rotation aborted (%s): %s", outcome.Trigger, reason))
-	if s.db != nil {
-		state := loadVisitorSessionRotationState(s.db)
+	if database != nil {
+		state := loadVisitorSessionRotationState(database)
 		state.Last = &outcome
-		if err := saveVisitorSessionRotationState(s.db, state); err != nil {
+		if err := saveVisitorSessionRotationState(database, state); err != nil {
 			slog.Warn(fmt.Sprintf("[Session] Could not record the aborted rotation: %v", err))
 		}
 	}
-	s.auditVisitorSessionRotation(visitorSessionAuditAborted, auditActorFor(outcome.Trigger, outcome.Actor), outcome.Generation, outcome.auditDetails(), r)
+	s.auditVisitorSessionRotation(database, visitorSessionAuditAborted, auditActorFor(outcome.Trigger, outcome.Actor), outcome.Generation, outcome.auditDetails(), r)
 	return outcome
 }
 
@@ -892,15 +901,15 @@ func generationIDs(secrets []VisitorSessionSecret) []string {
 // auditDiagnostics gives: on an abort THIS ENTRY IS THE ONLY RECORD that a rotation was
 // attempted and did not happen, and a trail with silent gaps is worse than one known to be
 // incomplete. A failure is logged loudly and does not fail the rotation.
-func (s *Server) auditVisitorSessionRotation(action, actor, generation, details string, r *http.Request) {
-	if s.db == nil {
+func (s *Server) auditVisitorSessionRotation(database *db.DB, action, actor, generation, details string, r *http.Request) {
+	if database == nil {
 		return
 	}
 	ip := ""
 	if r != nil {
 		ip = s.clientIP(r)
 	}
-	if err := s.db.WriteAuditEntry(&db.AuditEntry{
+	if err := database.WriteAuditEntry(&db.AuditEntry{
 		ActorID:    actor,
 		Action:     action,
 		TargetType: "session_secret",

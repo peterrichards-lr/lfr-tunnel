@@ -225,7 +225,7 @@ func TestARotationCommitsWhileAConfiguredNodeIsPoweredOff(t *testing.T) {
 		t.Fatalf("the fixture does not stage the case this test means: connected nodes are %v, wanted only usedge", connected)
 	}
 
-	outcome := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	outcome := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
 
 	if !outcome.committed() {
 		t.Fatalf("a rotation aborted because a CONFIGURED node was powered off: %s. "+
@@ -273,7 +273,7 @@ func TestASessionMintedBeforeARotationSurvivesTheCommitAndDiesOnlyAtRetirement(t
 		return edge.proxyHandler.verifySessionCookie(cookie, "peters")
 	})
 
-	outcome := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerManual, "peter@example.com", nil)
+	outcome := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerManual, "peter@example.com", nil)
 	if !outcome.committed() {
 		t.Fatalf("the rotation did not commit, so this test never reaches its subject: %s", outcome.Reason)
 	}
@@ -319,7 +319,7 @@ func TestASessionMintedBeforeARotationSurvivesTheCommitAndDiesOnlyAtRetirement(t
 	// Phase three has NOT happened yet. Driven with an explicit clock -- the sweep takes `now`
 	// as an argument for exactly this reason -- rather than by rewriting the schedule, so what
 	// is under test is the engine's own decision about when a generation may go.
-	central.retireVisitorSessionGenerations(time.Now().UTC())
+	central.retireVisitorSessionGenerations(central.db, time.Now().UTC())
 	if !central.proxyHandler.verifySessionCookie(cookie, "peters") {
 		t.Fatalf("the retirement sweep dropped generation %s immediately after the commit; retirement must lag it by at least the %s a cookie can live",
 			outgoing, visitorSessionCookieLifetime)
@@ -327,7 +327,7 @@ func TestASessionMintedBeforeARotationSurvivesTheCommitAndDiesOnlyAtRetirement(t
 
 	// Now it has. The WALL clock is untouched, so the cookie is still well inside its own
 	// 24-hour expiry -- the only thing that can reject it here is the key having been retired.
-	central.retireVisitorSessionGenerations(time.Now().UTC().Add(visitorSessionRetirementLag + time.Minute))
+	central.retireVisitorSessionGenerations(central.db, time.Now().UTC().Add(visitorSessionRetirementLag+time.Minute))
 	if central.proxyHandler.verifySessionCookie(cookie, "peters") {
 		t.Errorf("generation %s was still verifying %s after it stopped minting, so nothing ever retires a key and the old signing key lives forever",
 			outgoing, visitorSessionRetirementLag)
@@ -359,7 +359,7 @@ func TestAnUnacknowledgedNodeAbortsTheCommitAndTheOldKeyStillMints(t *testing.T)
 		t.Fatal("the control plane would not sign a session at all")
 	}
 
-	outcome := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	outcome := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
 
 	if outcome.committed() {
 		t.Fatalf("the commit went ahead with a connected node that never acknowledged the new generation %s -- "+
@@ -434,14 +434,14 @@ func TestARestartNeitherSkipsNorDoubleFiresAScheduledRotation(t *testing.T) {
 			state.NextRotationAt, again.NextRotationAt)
 	}
 	before := central.visitorSessionSecrets.get().CurrentID
-	central.sweepVisitorSessionRotation(context.Background(), time.Now().UTC())
+	central.sweepVisitorSessionRotation(context.Background(), central.db, time.Now().UTC())
 	if central.visitorSessionSecrets.get().CurrentID != before {
 		t.Error("a rotation fired before its due time")
 	}
 
 	// The due time passes while central is down: the first tick after it comes back fires.
 	overdue := state.NextRotationAt.Add(time.Minute)
-	central.sweepVisitorSessionRotation(context.Background(), overdue)
+	central.sweepVisitorSessionRotation(context.Background(), central.db, overdue)
 	rotated := central.visitorSessionSecrets.get().CurrentID
 	if rotated == before {
 		t.Fatalf("an overdue rotation did not fire; the schedule is a countdown that restarts at zero rather than an absolute instant, so a control plane that restarts daily never rotates")
@@ -453,7 +453,7 @@ func TestARestartNeitherSkipsNorDoubleFiresAScheduledRotation(t *testing.T) {
 	if !advanced.NextRotationAt.After(overdue) {
 		t.Fatalf("after firing, the next rotation is due %s which is not after %s -- it would fire again on the very next tick", advanced.NextRotationAt, overdue)
 	}
-	central.sweepVisitorSessionRotation(context.Background(), overdue.Add(time.Second))
+	central.sweepVisitorSessionRotation(context.Background(), central.db, overdue.Add(time.Second))
 	if central.visitorSessionSecrets.get().CurrentID != rotated {
 		t.Error("the rotation fired twice for one due time")
 	}
@@ -461,7 +461,7 @@ func TestARestartNeitherSkipsNorDoubleFiresAScheduledRotation(t *testing.T) {
 	// A LONG outage fires once, not once per missed interval. Five days of downtime must not
 	// burn five generations out of a set bounded at four.
 	longOutage := advanced.NextRotationAt.Add(5 * visitorSessionRotationInterval)
-	central.sweepVisitorSessionRotation(context.Background(), longOutage)
+	central.sweepVisitorSessionRotation(context.Background(), central.db, longOutage)
 	afterOutage := central.visitorSessionSecrets.get().CurrentID
 	if afterOutage == rotated {
 		t.Fatal("no rotation fired after a long outage")
@@ -478,11 +478,11 @@ func TestARestartNeitherSkipsNorDoubleFiresAScheduledRotation(t *testing.T) {
 func TestTheAuditEventDistinguishesManualFromPeriodic(t *testing.T) {
 	central, _ := aControlPlane(t)
 
-	manual := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerManual, "peter@example.com", nil)
+	manual := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerManual, "peter@example.com", nil)
 	if !manual.committed() {
 		t.Fatalf("the manual rotation aborted: %s", manual.Reason)
 	}
-	periodic := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	periodic := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
 	if !periodic.committed() {
 		t.Fatalf("the periodic rotation aborted: %s", periodic.Reason)
 	}
@@ -528,7 +528,7 @@ func TestAnAbortedRotationIsAudited(t *testing.T) {
 	central, ts := aControlPlane(t, "wedged")
 	aSilentEdgeNode(t, central, ts, "wedged")
 
-	outcome := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	outcome := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
 	if outcome.committed() {
 		t.Fatal("the rotation committed with a node that never acknowledged; this test never reaches its subject")
 	}
@@ -592,7 +592,7 @@ func TestARotationThatWouldBreachTheAcceptedBoundAborts(t *testing.T) {
 	// put a new generation.
 	var last visitorSessionRotationOutcome
 	for i := 0; i < maxAcceptedVisitorSessionSecrets+1; i++ {
-		last = central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerManual, "peter@example.com", nil)
+		last = central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerManual, "peter@example.com", nil)
 		if !last.committed() {
 			break
 		}
@@ -618,7 +618,7 @@ func TestARotationThatWouldBreachTheAcceptedBoundAborts(t *testing.T) {
 // #2137) were a struct that reached a format string long after the line was written.
 func TestNoRotationPathCarriesAKey(t *testing.T) {
 	central, _ := aControlPlane(t)
-	outcome := central.RotateVisitorSessionSecret(context.Background(), visitorSessionTriggerManual, "peter@example.com", nil)
+	outcome := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerManual, "peter@example.com", nil)
 	if !outcome.committed() {
 		t.Fatalf("the rotation aborted: %s", outcome.Reason)
 	}
@@ -752,5 +752,83 @@ func TestANonAdminCannotRotateTheSessionKey(t *testing.T) {
 	}
 	if got := srv.visitorSessionSecrets.get().CurrentID; got != before {
 		t.Errorf("the generation moved from %s to %s on a refused request", before, got)
+	}
+}
+
+// A node with no database rotates nothing, and the watcher says so by returning rather than
+// ticking (#2199).
+//
+// Only the control plane owns and persists the key set; an edge has no database and is told the
+// keys over the control channel. The precondition is a PARAMETER settled at construction, so a
+// node that must not rotate cannot -- and the watcher does not consult a mutable Server field to
+// find out, which is the concurrent read CI's Race Detector caught.
+func TestANodeWithNoDatabaseRunsNoRotationWatcher(t *testing.T) {
+	// A check interval far shorter than this test's patience, so "it returned" and "it is still
+	// ticking" cannot look the same.
+	visitorSessionTunableMu.Lock()
+	previous := visitorSessionRotationCheckInterval
+	visitorSessionRotationCheckInterval = 5 * time.Millisecond
+	visitorSessionTunableMu.Unlock()
+	t.Cleanup(func() {
+		visitorSessionTunableMu.Lock()
+		visitorSessionRotationCheckInterval = previous
+		visitorSessionTunableMu.Unlock()
+	})
+
+	central, _ := aControlPlane(t)
+
+	returned := make(chan struct{})
+	go func() {
+		// A context that is never cancelled: the ONLY way this returns is the precondition.
+		central.watchVisitorSessionRotation(context.Background(), nil)
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the rotation watcher kept running on a node with no database -- an edge would be ticking a schedule it cannot read, " +
+			"and deciding that from a Server field rather than from its own handle is the concurrent read #2199 failed on")
+	}
+
+	// And the sweep itself is inert, so a direct call cannot rotate an edge either.
+	before := central.visitorSessionSecrets.get().CurrentID
+	central.sweepVisitorSessionRotation(context.Background(), nil, time.Now().UTC().Add(10*visitorSessionRotationInterval))
+	if got := central.visitorSessionSecrets.get().CurrentID; got != before {
+		t.Errorf("a sweep with no database moved the generation from %s to %s", before, got)
+	}
+}
+
+// The engine decides from the handle it was GIVEN, never from s.db.
+//
+// This is the property the race fix turns on, asserted deterministically rather than by hoping
+// the race detector is switched on: s.db is nulled exactly as the four pre-existing "database not
+// configured" tests do it, and a rotation handed a live handle must still work. An engine that
+// read the field would abort here instead.
+func TestTheRotationEngineUsesTheHandleItWasGivenNotTheMutableField(t *testing.T) {
+	central, _ := aControlPlane(t)
+
+	database := central.db
+	before := central.visitorSessionSecrets.get().CurrentID
+
+	// Restored before the fixture's Stop runs, which is what closes the handle -- an unclosed
+	// SQLite file makes t.TempDir's cleanup fail on Windows.
+	central.db = nil
+	t.Cleanup(func() { central.db = database })
+
+	outcome := central.RotateVisitorSessionSecret(context.Background(), database, visitorSessionTriggerManual, "peter@example.com", nil)
+	if !outcome.committed() {
+		t.Fatalf("a rotation handed a live database handle aborted because the engine read s.db instead: %s", outcome.Reason)
+	}
+	if got := central.visitorSessionSecrets.get().CurrentID; got != outcome.Generation || got == before {
+		t.Fatalf("the generation did not move (%s -> %s, now %s)", before, outcome.Generation, got)
+	}
+
+	// The audit entry too: it is written through the handle, not the field.
+	entries, err := database.ListAuditEntries(db.AuditFilter{Action: visitorSessionAuditRotated, Limit: 10})
+	if err != nil {
+		t.Fatalf("could not read the audit log: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("the rotation wrote %d audit entries, wanted 1 -- the audit write is still reading s.db", len(entries))
 	}
 }

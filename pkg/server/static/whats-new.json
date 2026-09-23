@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.48.53",
+    "release_date": "2026-09-23",
+    "features": [
+      "feat(portal): rotate the visitor session keys, and show what the last rotation did (#2196) (#2200)",
+      "feat(server): rotate the visitor session-signing key without ending a session (#2195) (#2199)"
+    ]
+  },
+  {
     "version": "v1.48.52",
     "release_date": "2026-09-23",
     "features": [
@@ -39,15 +47,6 @@
       "fix(portal-v2): the Client Versions count is users, not active tunnels (#2158) (#2160)",
       "feat(portal): the access mode comes first and decides which fields are settable (#2155) (#2159)",
       "fix(server): refuse an access mode that names a factor the tunnel does not have (#2156) (#2157)"
-    ]
-  },
-  {
-    "version": "v1.48.48",
-    "release_date": "2026-09-22",
-    "features": [
-      "feat(portal): V2 gains a tunnel details view, and both arms report launch context (#2150) (#2153)",
-      "fix(i18n): the Arabic privacy page said PATs are encrypted, not hashed (#2151) (#2152)",
-      "feat: report how the client was launched, so the portal can say why a tunnel is where it is (#2148) (#2149)"
     ]
   }
 ]

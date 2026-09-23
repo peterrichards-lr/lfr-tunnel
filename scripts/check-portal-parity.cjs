@@ -58,6 +58,56 @@ const CAPABILITIES = [
       needle: 'acPasscodeConfirm',
     },
   },
+  {
+    // #2196. Rotating the fleet's visitor session-signing key is an operator action with no
+    // other route -- there is no CLI for it -- so an arm without the control cannot do it at
+    // all, which is the shape of #2101 exactly.
+    name: 'trigger a visitor session-key rotation',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: '/api/admin/session-secrets/rotate',
+      opener: {
+        files: ['pkg/server/dashboard.html'],
+        call: 'rotateSessionKeys()',
+      },
+    },
+    v2: {
+      files: ['ui/src/pages/AdminSettings.tsx'],
+      needle: '/api/admin/session-secrets/rotate',
+      opener: {
+        files: ['ui/src/pages/AdminSettings.tsx'],
+        call: 'setSessionKeysConfirming(true)',
+      },
+    },
+  },
+  {
+    // The half that is easy to drop, and the half that matters most: without the abort reason
+    // rendered, a rotation that keeps failing closed looks exactly like one that works. An arm
+    // that shows the button but not the outcome is worse than one that shows neither, because
+    // it invites the click and then says nothing about it.
+    name: 'see why the last session-key rotation aborted',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'session_keys_reason',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminSettings.tsx'],
+      needle: 'session_keys_reason',
+    },
+  },
+  {
+    // Which nodes did not acknowledge, named. "2 of 3 nodes did not confirm" is the reason
+    // string; this is the list, and it is what turns an abort into something actionable.
+    name: 'name the nodes that did not acknowledge a rotation',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'session_keys_unacked',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminSettings.tsx'],
+      needle: 'session_keys_unacked',
+    },
+  },
 ];
 
 /**
@@ -191,6 +241,23 @@ const SHARED_LABELS = [
     key: 'th_user_count',
     v1: 'pkg/server/dashboard.html',
     v2: 'ui/src/pages/AdminAnalytics.tsx',
+  },
+  {
+    // #2196. Both arms label current_generation from GET /api/admin/session-secrets, and an
+    // operator comparing the two portals must be reading one field under one name.
+    name: 'the current session-key generation (/api/admin/session-secrets)',
+    key: 'session_keys_current',
+    v1: 'pkg/server/static/dashboard.js',
+    v2: 'ui/src/pages/AdminSettings.tsx',
+  },
+  {
+    // The interval and the lag are STATED by the endpoint so that neither arm keeps a second
+    // copy. Both arms must therefore render them through the one sentence, or one of them is
+    // free to describe a cadence the engine does not run.
+    name: 'the rotation interval and retirement lag (/api/admin/session-secrets)',
+    key: 'session_keys_interval_note',
+    v1: 'pkg/server/static/dashboard.js',
+    v2: 'ui/src/pages/AdminSettings.tsx',
   },
 ];
 

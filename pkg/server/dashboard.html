@@ -1300,6 +1300,33 @@
                     </div>
                 </div>
 
+
+                <!-- Visitor Session Keys Card (#2196)
+                     The portal half of #2184. Everything here comes from
+                     GET /api/admin/session-secrets -- including rotation_interval and
+                     retirement_lag, which the endpoint states precisely so neither arm keeps a
+                     second copy of them to drift against the engine (visitor_session_rotation.go).
+                     Nothing on that endpoint carries key material; generation ids are labels.
+
+                     The last-rotation block is the reason this card exists at all: a rotation that
+                     keeps aborting and one that works are indistinguishable without it, which is
+                     the failure pattern this repo keeps re-finding. So the outcome, its trigger
+                     (manual or periodic), the reason on an abort and the nodes that did not
+                     acknowledge are all rendered, never collapsed into "failed". -->
+                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🔑 <span data-i18n="session_keys_title">Visitor Session Keys</span></h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;" data-i18n="session_keys_desc">
+                        A visitor entering a tunnel's passcode is given a signed cookie so they are not asked again. Every node signs with the current generation and goes on verifying the generations being retired, so rotating the key does not sign anybody out.
+                    </p>
+                    <div id="session-keys-body">
+                        <div style="color: var(--text-muted); font-size: 13px;" data-i18n="loading">Loading...</div>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px;">
+                        <button id="btn-rotate-session-keys" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="rotateSessionKeys()" data-i18n="session_keys_rotate">Rotate keys now</button>
+                        <span id="session-keys-rotate-status" style="font-size: 13px; color: var(--text-muted);"></span>
+                    </div>
+                </div>
+
                 <!-- Test Integrations Card -->
                 <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
                     <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>

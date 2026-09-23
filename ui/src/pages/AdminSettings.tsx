@@ -5,6 +5,72 @@ import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
 import GeoAttribution from '../components/GeoAttribution';
+import ModalShell from '../components/ModalShell';
+
+/**
+ * The shape of GET /api/admin/session-secrets (#2196).
+ *
+ * Mirrors visitorSessionRotationStatus in pkg/server/visitor_session_rotation_api.go. No key
+ * material is on that endpoint by construction -- generation ids are labels, and the rest is
+ * timestamps and node names.
+ */
+type SessionKeyNodeStatus = { node_id: string; why: string };
+type SessionKeyRotation = {
+  at: string;
+  trigger: string;
+  actor?: string;
+  outcome: string;
+  generation?: string;
+  previous_generation?: string;
+  acknowledged: string[];
+  unacknowledged: SessionKeyNodeStatus[];
+  reason?: string;
+};
+type SessionKeyStatus = {
+  current_generation: string;
+  accepted_generations: string[];
+  next_rotation_at: string;
+  retiring_at?: Record<string, string>;
+  last_rotation?: SessionKeyRotation;
+  connected_nodes: string[];
+  rotation_interval: string;
+  retirement_lag: string;
+};
+
+// "24h0m0s" -> "24h". Go's Duration.String() is exact and unreadable; the zero tail carries no
+// information. Dropping it is the ONLY transformation applied -- the interval and the lag are
+// read from the endpoint, never recomputed here, so this portal cannot promise a cadence the
+// engine does not run. V1's copy is formatRotationDuration() in dashboard.js.
+function formatRotationDuration(raw: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/(\d+h)0m0s$/, '$1')
+    .replace(/(\d+m)0s$/, '$1');
+}
+
+function formatSessionKeyTime(value?: string): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString();
+}
+
+// A zero time.Time marshals as "0001-01-01T00:00:00Z", which renders as a real date in year 1
+// rather than as "not scheduled". Treated as absent.
+function hasSessionKeyTime(value?: string): boolean {
+  if (!value) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime()) && d.getUTCFullYear() > 1;
+}
+
+// Whether the fleet actually switched -- visitorSessionRotationOutcome.committed(), in the arm
+// that renders it. A named helper rather than an inline comparison because the badge's className
+// would otherwise contain the literal 'committed', and check-css-modifiers.cjs reads every string
+// literal inside a className expression as a class name (its parsing rule 1). It would be
+// reported as an undefined CSS class, which is a true statement about a string that is not one.
+function rotationCommitted(r?: SessionKeyRotation): boolean {
+  return r?.outcome === 'committed';
+}
 
 function objectToYAML(obj: any, indent = 0): string {
   if (!obj || typeof obj !== 'object') {
@@ -109,6 +175,15 @@ export default function AdminSettings() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
 
+  // Visitor session keys (#2196). Kept in step with V1's copy in dashboard.js.
+  const [sessionKeys, setSessionKeys] = useState<SessionKeyStatus | null>(null);
+  // Same reasoning as settingsLoaded above: null is both "not fetched yet" and "fetch failed",
+  // and a card that renders empty strings for a generation id looks like a gateway holding no
+  // keys rather than like a page that could not read them.
+  const [sessionKeysError, setSessionKeysError] = useState('');
+  const [sessionKeysConfirming, setSessionKeysConfirming] = useState(false);
+  const [sessionKeysRotating, setSessionKeysRotating] = useState(false);
+
   // Backups state
 
   const fetchAllData = async () => {
@@ -186,8 +261,58 @@ export default function AdminSettings() {
     }
   };
 
+  // Its own request, and its own error, deliberately NOT folded into fetchAllData: that
+  // function's catch sets loadError for the whole page, so a gateway that answered every other
+  // endpoint would render "could not load this page" because one card could not be filled.
+  const fetchSessionKeys = async () => {
+    try {
+      const res = await axios.get('/api/admin/session-secrets');
+      setSessionKeys(res.data);
+      setSessionKeysError('');
+    } catch (e: any) {
+      console.error(e);
+      // Cleared, so a rotation outcome can never be rendered beside a generation from before it.
+      setSessionKeys(null);
+      setSessionKeysError(
+        e.response?.data?.error ||
+          t(
+            'session_keys_load_failed',
+            'The visitor session-key status could not be read, so what you see is not current.',
+          ),
+      );
+    }
+  };
+
+  // The manual trigger. The confirmation is the point of the two-step: a rotation is fleet-wide.
+  const rotateSessionKeys = async () => {
+    setSessionKeysRotating(true);
+    try {
+      await axios.post('/api/admin/session-secrets/rotate');
+    } catch (e: any) {
+      // 409 is the documented ABORT status and its body IS the outcome, reason included. It is
+      // not an error to report as a toast and discard -- re-reading the status below renders
+      // the abort with its reason and the nodes that did not acknowledge, which is the whole
+      // reason this card exists. Anything else is a real failure and gets said out loud.
+      if (e.response?.status !== 409) {
+        showToast(
+          e.response?.data?.error ||
+            t(
+              'session_keys_rotate_failed',
+              'The rotation request did not reach the gateway.',
+            ),
+          'error',
+        );
+      }
+    } finally {
+      setSessionKeysRotating(false);
+      setSessionKeysConfirming(false);
+      await fetchSessionKeys();
+    }
+  };
+
   useEffect(() => {
     fetchAllData();
+    fetchSessionKeys();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -637,6 +762,228 @@ export default function AdminSettings() {
         )}
       </div>
 
+      {/* Visitor Session Keys (#2196) -- the portal half of #2184, and V1 carries the same card
+          in dashboard.html. Everything shown here, the rotation interval and the retirement lag
+          included, comes from GET /api/admin/session-secrets: the endpoint states them precisely
+          so neither arm keeps a second copy to drift against the engine.
+
+          The last-rotation block is why the card exists. Without it a rotation that keeps
+          aborting and one that works look identical, which is the failure pattern this repo
+          keeps re-finding -- so the outcome, its trigger, the abort reason and the nodes that
+          did not acknowledge are each rendered rather than collapsed into "failed". */}
+      <div className="card mb-xl" data-testid="session-keys-card">
+        <h4 className="section-title mb-xs">
+          {t('session_keys_title', 'Visitor Session Keys')}
+        </h4>
+        <p className="text-sm text-muted mb-lg">
+          {t(
+            'session_keys_desc',
+            "A visitor entering a tunnel's passcode is given a signed cookie so they are not asked again. Every node signs with the current generation and goes on verifying the generations being retired, so rotating the key does not sign anybody out.",
+          )}
+        </p>
+        {sessionKeys ? (
+          <>
+            <div className="flex gap-md flex-wrap items-center mb-sm">
+              <span className="text-xs text-muted">
+                {t('session_keys_current', 'Current generation')}
+              </span>
+              <code className="text-sm" data-testid="session-keys-current">
+                {sessionKeys.current_generation}
+              </code>
+            </div>
+            <div className="flex gap-md flex-wrap items-center mb-sm">
+              <span className="text-xs text-muted">
+                {t('session_keys_accepted', 'Still accepted')}
+              </span>
+              <span className="text-sm" data-testid="session-keys-accepted">
+                {(sessionKeys.accepted_generations || [])
+                  .map((g) =>
+                    hasSessionKeyTime(sessionKeys.retiring_at?.[g])
+                      ? `${g} (${t(
+                          'session_keys_retires',
+                          'retires {0}',
+                        ).replace(
+                          '{0}',
+                          formatSessionKeyTime(sessionKeys.retiring_at?.[g]),
+                        )})`
+                      : g,
+                  )
+                  .join(', ')}
+              </span>
+            </div>
+            <div className="flex gap-md flex-wrap items-center mb-sm">
+              <span className="text-xs text-muted">
+                {t('session_keys_next_rotation', 'Next rotation due')}
+              </span>
+              <span className="text-sm" data-testid="session-keys-next">
+                {hasSessionKeyTime(sessionKeys.next_rotation_at)
+                  ? formatSessionKeyTime(sessionKeys.next_rotation_at)
+                  : t('session_keys_next_unscheduled', 'Not scheduled yet')}
+              </span>
+            </div>
+            <p className="text-xs text-muted mb-lg">
+              {t(
+                'session_keys_interval_note',
+                'Rotations run every {0}. A replaced generation goes on verifying for {1} afterwards, which is longer than a visitor cookie lives, so no session ends because of a rotation.',
+              )
+                .replace(
+                  '{0}',
+                  formatRotationDuration(sessionKeys.rotation_interval),
+                )
+                .replace(
+                  '{1}',
+                  formatRotationDuration(sessionKeys.retirement_lag),
+                )}
+            </p>
+            <div className="flex gap-md flex-wrap items-center mb-sm">
+              <span className="text-xs text-muted">
+                {t('session_keys_connected', 'Nodes that must acknowledge')}
+              </span>
+              <span className="text-sm" data-testid="session-keys-connected">
+                {(sessionKeys.connected_nodes || []).length > 0
+                  ? sessionKeys.connected_nodes.join(', ')
+                  : t(
+                      'session_keys_connected_none',
+                      'None connected right now',
+                    )}
+              </span>
+            </div>
+            {/* Said out loud rather than left to be inferred. A commit is gated on connected
+                nodes, never on configured ones, so an operator who knows edge-us and edge-sa
+                power off overnight would otherwise reasonably assume a rotation is waiting for
+                them. */}
+            <p className="text-xs text-muted mb-lg">
+              {t(
+                'session_keys_connected_note',
+                'Only the nodes connected right now have to acknowledge. An edge that is powered off is not a reason a rotation is waiting -- it is handed the current keys when it reconnects.',
+              )}
+            </p>
+
+            <p className="text-xs text-muted mb-xs">
+              {t('session_keys_last', 'Last rotation')}
+            </p>
+            <div
+              className="copy-box p-md"
+              data-testid="session-keys-last-rotation"
+            >
+              {sessionKeys.last_rotation ? (
+                <>
+                  <div className="flex gap-sm items-center flex-wrap mb-sm">
+                    <span
+                      className={
+                        rotationCommitted(sessionKeys.last_rotation)
+                          ? 'badge badge-success'
+                          : 'badge badge-danger'
+                      }
+                      data-testid="session-keys-last-outcome"
+                    >
+                      {rotationCommitted(sessionKeys.last_rotation)
+                        ? t('session_keys_outcome_committed', 'Committed')
+                        : t('session_keys_outcome_aborted', 'Aborted')}
+                    </span>
+                    {/* Manual or periodic, always. A periodic rotation that aborts is a system
+                        fault; a manual one that aborts is probably somebody watching the
+                        screen, and the two call for different responses. */}
+                    <span
+                      className="text-sm"
+                      data-testid="session-keys-last-trigger"
+                    >
+                      {sessionKeys.last_rotation.trigger === 'manual'
+                        ? t('session_keys_trigger_manual', 'Manual')
+                        : t('session_keys_trigger_periodic', 'Periodic')}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {formatSessionKeyTime(sessionKeys.last_rotation.at)}
+                    </span>
+                    {sessionKeys.last_rotation.actor && (
+                      <span className="text-xs text-muted">
+                        {t('session_keys_actor', 'triggered by {0}').replace(
+                          '{0}',
+                          sessionKeys.last_rotation.actor,
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  {rotationCommitted(sessionKeys.last_rotation) &&
+                    sessionKeys.last_rotation.generation && (
+                      <p className="text-sm mb-sm">
+                        {t(
+                          'session_keys_moved_to',
+                          'Now minting with generation {0}.',
+                        ).replace('{0}', sessionKeys.last_rotation.generation)}
+                      </p>
+                    )}
+                  {sessionKeys.last_rotation.reason && (
+                    <p
+                      className="text-sm mb-sm"
+                      data-testid="session-keys-reason"
+                    >
+                      <strong>
+                        {t('session_keys_reason', 'Why it stopped')}:{' '}
+                      </strong>
+                      {sessionKeys.last_rotation.reason}
+                    </p>
+                  )}
+                  <div data-testid="session-keys-unacked">
+                    {(sessionKeys.last_rotation.unacknowledged || []).length >
+                      0 && (
+                      <>
+                        <p className="text-xs text-muted mb-xs">
+                          {t('session_keys_unacked', 'Did not acknowledge')}
+                        </p>
+                        <ul className="text-sm m-0">
+                          {sessionKeys.last_rotation.unacknowledged.map((n) => (
+                            <li key={n.node_id}>
+                              {n.why ? `${n.node_id} — ${n.why}` : n.node_id}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                  {(sessionKeys.last_rotation.acknowledged || []).length >
+                    0 && (
+                    <p
+                      className="text-xs text-muted mt-sm mb-0"
+                      data-testid="session-keys-acked"
+                    >
+                      {t('session_keys_acked', 'Acknowledged')}:{' '}
+                      {sessionKeys.last_rotation.acknowledged.join(', ')}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <span className="text-sm text-muted">
+                  {t(
+                    'session_keys_last_none',
+                    'No rotation has run on this control plane yet.',
+                  )}
+                </span>
+              )}
+            </div>
+
+            <button
+              className="btn btn-primary mt-lg"
+              data-testid="session-keys-rotate"
+              disabled={sessionKeysRotating}
+              onClick={() => setSessionKeysConfirming(true)}
+            >
+              {sessionKeysRotating
+                ? t('session_keys_rotating', 'Rotating...')
+                : t('session_keys_rotate', 'Rotate keys now')}
+            </button>
+          </>
+        ) : (
+          <div className="text-sm text-muted" data-testid="session-keys-error">
+            {sessionKeysError ||
+              t(
+                'session_keys_load_failed',
+                'The visitor session-key status could not be read, so what you see is not current.',
+              )}
+          </div>
+        )}
+      </div>
+
       <div className="card mb-xl">
         <div className="flex justify-between items-center">
           <div>
@@ -717,6 +1064,49 @@ export default function AdminSettings() {
           )}
         </div>
       )}
+
+      {/* The confirmation step (#2196). A rotation is fleet-wide, and although it fails closed
+          rather than dangerously, it is not something to set off by mis-clicking. V1 asks the
+          same two questions through confirm(), which is that arm's convention. */}
+      <ModalShell
+        isOpen={sessionKeysConfirming}
+        onClose={() => setSessionKeysConfirming(false)}
+        labelledBy="session-keys-confirm-title"
+        cardClassName="modal-card modal-card--sm"
+      >
+        <div className="modal-header">
+          <h3 id="session-keys-confirm-title" className="modal-title">
+            {t(
+              'session_keys_confirm_title',
+              'Rotate the visitor session keys?',
+            )}
+          </h3>
+        </div>
+        <p className="text-sm text-muted">
+          {t(
+            'session_keys_confirm_body',
+            'This is fleet-wide. Every connected node must confirm it holds the new generation before anything switches; if one does not, nothing changes and the attempt is recorded as aborted. No visitor is signed out either way.',
+          )}
+        </p>
+        <div className="flex gap-md justify-end mt-lg">
+          <button
+            type="button"
+            className="btn btn-secondary w-auto"
+            onClick={() => setSessionKeysConfirming(false)}
+          >
+            {t('cancel', 'Cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary w-auto"
+            data-testid="session-keys-rotate-confirm"
+            disabled={sessionKeysRotating}
+            onClick={rotateSessionKeys}
+          >
+            {t('confirm', 'Confirm')}
+          </button>
+        </div>
+      </ModalShell>
     </div>
   );
 }

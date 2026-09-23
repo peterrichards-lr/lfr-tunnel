@@ -633,15 +633,7 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf("the new generation could not be established on the control plane: %v", err), r)
 	}
 
-	// EVERY CURRENTLY-CONNECTED NODE -- never every configured one. edge-us and edge-sa are
-	// powered off nightly and a commit gated on them would fail closed every night.
-	targets := s.connectedEdgeNodeIDs()
-	failedPush := make(map[string]string, len(targets))
-	for _, nodeID := range targets {
-		if err := s.pushVisitorSessionSecrets(nodeID); err != nil {
-			failedPush[nodeID] = fmt.Sprintf("the new generation could not be sent: %v", err)
-		}
-	}
+	targets, failedPush := s.pushVisitorSessionSecretsToFleet()
 
 	acked, missing := s.awaitVisitorSessionAcks(ctx, targets, pushedAt, failedPush, func(ack visitorSessionAck) bool {
 		return ack.holds(fresh.ID)
@@ -659,36 +651,8 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 	}
 
 	// ---- PHASE 2: COMMIT ----
-	//
-	// Every connected node holds the new generation, so it is safe to make it the one they mint
-	// with. The outgoing generation stays ACCEPTED -- this is the verify-many/mint-one property
-	// #2181 built, and it is why a visitor holding a cookie signed a minute ago is not logged
-	// out by this line.
-	committed := storedVisitorSessionSecrets{CurrentID: fresh.ID, Secrets: distributed.Secrets}
-	committedAt := time.Now()
-	if err := s.applyAndPersistVisitorSessionSecrets(s.db, committed); err != nil {
+	if err := s.commitVisitorSessionGeneration(ctx, distributed, fresh, targets); err != nil {
 		return s.abortVisitorSessionRotation(outcome, fmt.Sprintf("the switch to generation %s could not be recorded, so it did not happen: %v", fresh.ID, err), r)
-	}
-
-	for _, nodeID := range targets {
-		if err := s.pushVisitorSessionSecrets(nodeID); err != nil {
-			// Recorded, not fatal. The switch has happened on the control plane and the
-			// outgoing generation is still accepted everywhere, so a node that missed this
-			// frame mints with a key the whole fleet still honours. It is corrected by its
-			// next handshake or the next rotation's push -- which is precisely the window
-			// visitorSessionRetirementLag's second term pays for.
-			slog.Warn(fmt.Sprintf("[Session] %s was not told to switch to generation %s: %v", nodeID, fresh.ID, err))
-		}
-	}
-	// Best effort and NOT a gate: readiness was decided in phase 1, and refusing to record a
-	// switch that has already been persisted would leave the audit log disagreeing with the
-	// database.
-	switched, notSwitched := s.awaitVisitorSessionAcks(ctx, targets, committedAt, nil, func(ack visitorSessionAck) bool {
-		return ack.CurrentID == fresh.ID
-	})
-	slog.Info(fmt.Sprintf("[Session] %d of %d connected node(s) confirmed they are minting with generation %s", len(switched), len(targets), fresh.ID))
-	for _, node := range notSwitched {
-		slog.Info(fmt.Sprintf("[Session] %s has not yet confirmed it is minting with generation %s (%s); it will be re-told at its next handshake", node.NodeID, fresh.ID, node.Why))
 	}
 
 	// ---- PHASE 3 IS SCHEDULED, NOT RUN ----
@@ -709,6 +673,56 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, trigger, actor 
 		trigger, fresh.ID, len(acked), stored.CurrentID, now.Add(visitorSessionRetirementLag).Format(time.RFC3339)))
 	s.auditVisitorSessionRotation(visitorSessionAuditRotated, auditActorFor(trigger, actor), fresh.ID, outcome.auditDetails(), r)
 	return outcome
+}
+
+// pushVisitorSessionSecretsToFleet sends the current key set to every connected node, returning
+// the roster it targeted and, per node, why a push did not go out.
+//
+// EVERY CURRENTLY-CONNECTED NODE -- never every configured one. edge-us and edge-sa are powered
+// off nightly, and a rotation gated on them would fail closed every night while appearing to
+// work. A node that was asleep is handed the set at its own handshake instead.
+func (s *Server) pushVisitorSessionSecretsToFleet() (targets []string, failures map[string]string) {
+	targets = s.connectedEdgeNodeIDs()
+	failures = make(map[string]string, len(targets))
+	for _, nodeID := range targets {
+		if err := s.pushVisitorSessionSecrets(nodeID); err != nil {
+			failures[nodeID] = fmt.Sprintf("the key set could not be sent: %v", err)
+		}
+	}
+	return targets, failures
+}
+
+// commitVisitorSessionGeneration is PHASE TWO: it makes the distributed generation the one the
+// fleet mints with.
+//
+// The outgoing generation stays ACCEPTED. That is the verify-many/mint-one property #2181 built,
+// and it is the reason a visitor holding a cookie signed a minute ago is not logged out here.
+//
+// A node that does not confirm the switch is logged, not fatal: readiness was decided in phase
+// one, the switch is already persisted, and the outgoing generation is still accepted
+// everywhere -- so such a node mints with a key the whole fleet still honours until its next
+// handshake or the next rotation's push corrects it. That window is precisely what the second
+// term of visitorSessionRetirementLag pays for.
+func (s *Server) commitVisitorSessionGeneration(ctx context.Context, distributed storedVisitorSessionSecrets, fresh VisitorSessionSecret, targets []string) error {
+	committed := storedVisitorSessionSecrets{CurrentID: fresh.ID, Secrets: distributed.Secrets}
+	committedAt := time.Now()
+	if err := s.applyAndPersistVisitorSessionSecrets(s.db, committed); err != nil {
+		return err
+	}
+
+	for _, nodeID := range targets {
+		if err := s.pushVisitorSessionSecrets(nodeID); err != nil {
+			slog.Warn(fmt.Sprintf("[Session] %s was not told to switch to generation %s: %v", nodeID, fresh.ID, err))
+		}
+	}
+	switched, notSwitched := s.awaitVisitorSessionAcks(ctx, targets, committedAt, nil, func(ack visitorSessionAck) bool {
+		return ack.CurrentID == fresh.ID
+	})
+	slog.Info(fmt.Sprintf("[Session] %d of %d connected node(s) confirmed they are minting with generation %s", len(switched), len(targets), fresh.ID))
+	for _, node := range notSwitched {
+		slog.Info(fmt.Sprintf("[Session] %s has not yet confirmed it is minting with generation %s (%s); it will be re-told at its next handshake", node.NodeID, fresh.ID, node.Why))
+	}
+	return nil
 }
 
 // abortVisitorSessionRotation records a rotation that did not switch, and returns it.

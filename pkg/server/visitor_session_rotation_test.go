@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -132,7 +133,13 @@ func aSilentEdgeNode(t *testing.T, central *Server, ts *httptest.Server, nodeID 
 	if err != nil {
 		t.Fatalf("the silent node could not dial the control channel: %v", err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
+	// Handled, not blanked: errcheck runs with check-blank, and a close that fails here usually
+	// means the connection this test stages was already gone.
+	t.Cleanup(func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("closing the silent node's control connection: %v", err)
+		}
+	})
 
 	var challenge struct {
 		Type  string `json:"type"`
@@ -670,5 +677,80 @@ func TestTheAckFrameStaysInsideTheControlChannelReadLimit(t *testing.T) {
 	if len(payload) > edgeControlReadLimit/8 {
 		t.Errorf("an acknowledgement frame is %d bytes, uncomfortably close to the %d byte read limit that closes the connection",
 			len(payload), edgeControlReadLimit)
+	}
+}
+
+// The admin API is what the portal UI (#2196) drives, so it has to answer three questions
+// without the UI having to know how the engine works: which generation is current, when the
+// next rotation runs, and what the last one did.
+func TestTheAdminEndpointsReadBackTheGenerationAndTheLastOutcome(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	_, adminSession := seedDiagnosticsUser(t, srv, "rotation-admin@example.com", "admin")
+
+	rec := postAs(t, srv, srv.handleAdminVisitorSessionRotate, "/api/admin/session-secrets/rotate", adminSession, map[string]string{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("a manual rotation returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var outcome visitorSessionRotationOutcome
+	if err := json.Unmarshal(rec.Body.Bytes(), &outcome); err != nil {
+		t.Fatalf("could not decode the rotation outcome: %v", err)
+	}
+	if outcome.Trigger != visitorSessionTriggerManual || outcome.Actor != "rotation-admin@example.com" {
+		t.Errorf("the endpoint recorded the rotation as %s by %q; a manual rotation must name the administrator who asked for it",
+			outcome.Trigger, outcome.Actor)
+	}
+
+	statusReq := httptest.NewRequest(http.MethodGet, "http://example.com/api/admin/session-secrets", nil)
+	statusReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: adminSession})
+	statusRec := httptest.NewRecorder()
+	srv.handleAdminVisitorSessionRotationStatus(statusRec, statusReq)
+	if statusRec.Code != http.StatusOK {
+		t.Fatalf("the read-back returned %d: %s", statusRec.Code, statusRec.Body.String())
+	}
+	var status visitorSessionRotationStatus
+	if err := json.Unmarshal(statusRec.Body.Bytes(), &status); err != nil {
+		t.Fatalf("could not decode the rotation status: %v", err)
+	}
+	if status.CurrentGeneration != outcome.Generation {
+		t.Errorf("the read-back reports generation %q as current but the rotation moved to %q", status.CurrentGeneration, outcome.Generation)
+	}
+	if status.LastRotation == nil || status.LastRotation.Generation != outcome.Generation {
+		t.Errorf("the read-back does not carry the last rotation's outcome, so an aborted rotation would be invisible to a portal: %+v", status.LastRotation)
+	}
+	if status.NextRotationAt.IsZero() {
+		t.Error("the read-back names no next rotation, so a portal cannot say when one is due")
+	}
+	if _, retiring := status.RetiringAt[outcome.PreviousGeneration]; !retiring {
+		t.Errorf("the read-back does not say when generation %s stops verifying; retirement is a scheduled event and the whole reason a session survives the commit",
+			outcome.PreviousGeneration)
+	}
+
+	// No key material on either response.
+	for _, secret := range srv.visitorSessionSecrets.get().Secrets {
+		if strings.Contains(rec.Body.String(), secret.Key) || strings.Contains(statusRec.Body.String(), secret.Key) {
+			t.Fatalf("an admin API response carries signing key material for generation %s", secret.ID)
+		}
+	}
+}
+
+// Rotating the fleet's signing key is not something a logged-in portal user may do.
+//
+// The role is re-checked against the database rather than inherited from requireAdmin, because
+// requireAdmin's cookie path rewrites a stored role of "user" to "admin" (#1760).
+func TestANonAdminCannotRotateTheSessionKey(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	_, userSession := seedDiagnosticsUser(t, srv, "ordinary@example.com", "user")
+	before := srv.visitorSessionSecrets.get().CurrentID
+
+	rec := postAs(t, srv, srv.handleAdminVisitorSessionRotate, "/api/admin/session-secrets/rotate", userSession, map[string]string{})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("an ordinary portal user rotating the fleet's signing key got %d, wanted 403: %s", rec.Code, rec.Body.String())
+	}
+	if got := srv.visitorSessionSecrets.get().CurrentID; got != before {
+		t.Errorf("the generation moved from %s to %s on a refused request", before, got)
 	}
 }

@@ -155,6 +155,22 @@ type ControlMessage struct {
 	// DiagExpiresInSecs is what REMAINS of the window central opened, not a TTL for the edge
 	// to start. One clock, held by the node that issued the request.
 	DiagExpiresInSecs int `json:"diag_expires_in,omitempty"`
+	// SessionSecrets carries the visitor session-cookie signing keys central owns, down to an
+	// edge (#2181). An edge has no database and so cannot own a key that outlives its process;
+	// signing with a per-process key is what sent a visitor back to the passcode page on every
+	// failover, failback and restart.
+	//
+	// The whole accepted SET travels, not only the key in use, together with the generation to
+	// mint with. Verify-many, mint-one: a cookie lives 24 hours, so a key has to stay accepted
+	// well after it stops being the one that signs, or a rotation would end every session in
+	// flight. The generation ids are labels rather than secrets, and are what a later rotation
+	// protocol will name a key by.
+	//
+	// Four keys of 32 bytes, hex-encoded with their ids, is under 400 bytes -- far inside
+	// edgeControlReadLimit, which matters because a frame over that limit makes gorilla close
+	// the connection and take kicks, schedules and blacklist pushes down with it.
+	SessionSecrets         []VisitorSessionSecret `json:"session_secrets,omitempty"`
+	CurrentSessionSecretID string                 `json:"current_session_secret_id,omitempty"`
 }
 
 // nodeSetFrameType is the control-channel frame that carries central's roster fingerprint
@@ -312,6 +328,12 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			StartTime: h.ScheduleStartTime,
 			Timezone:  h.Timezone,
 		})
+		// And the visitor session signing keys, for the same reason and on the same
+		// handshake (#2181). This is what makes a node that was powered off all night, or
+		// one that has only just been provisioned, able to honour a session another gateway
+		// minted the moment it comes back -- nothing here waits for the whole fleet to be
+		// present, because edge-us and edge-sa never are.
+		s.SendVisitorSessionSecrets(nodeID)
 		// This node connecting IS a roster change -- it has just moved from
 		// regions_unavailable to regions on /api/version -- so every edge is told, not
 		// just this one. The broadcast reaches the node that just registered too, which
@@ -1323,6 +1345,26 @@ func (s *Server) runEdgeControlChannel() {
 				// a person cares about is on the client side, where node_set_changed is
 				// already logged with both values.
 				s.setUpstreamNodeSet(msg.NodeSet)
+			case visitorSessionSecretFrameType:
+				// Central telling this node how to sign and check visitor session cookies
+				// (#2181). Held in memory only, like the schedule and the node set above:
+				// an edge has no database, the next handshake re-sends the set, and a key
+				// written to an edge's disk would be the new-secret-at-rest this design
+				// exists to avoid.
+				//
+				// A bad set is logged and DISCARDED, and the connection is kept: this
+				// channel also carries kicks, schedules and blacklist pushes, and none of
+				// those may be lost over a session key. Keeping the previous set means the
+				// node goes on honouring the sessions it already knows about.
+				if s.proxyHandler == nil {
+					break
+				}
+				if err := s.proxyHandler.SetVisitorSessionSecrets(msg.SessionSecrets, msg.CurrentSessionSecretID); err != nil {
+					slog.Error(fmt.Sprintf("[Edge Control] Visitor session keys from the control plane were rejected, keeping the previous set: %v", err))
+					break
+				}
+				// Counts and generation ids only -- never the keys.
+				slog.Info(fmt.Sprintf("[Edge Control] Visitor session keys updated: %d accepted, minting with generation %s", len(msg.SessionSecrets), msg.CurrentSessionSecretID))
 			case diagnosticsCollectFrameType:
 				// Central forwarding an admin's collection request for a user THIS node
 				// serves (#1991). Held in memory only, like the schedule and the node set

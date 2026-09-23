@@ -164,12 +164,24 @@ type InterceptorEngine struct {
 
 	// shutdownWarnedAt is the Unix time the connected gateway says it is going down, with
 	// the countdown and reason as last reported. Zero means none announced (#1238).
+	//
+	// Every field in this block describes ONE gateway -- the one that announced the stop --
+	// so all of them are cleared by SetRegionEndpoint when a session is committed on a
+	// gateway (#2180). Without that they outlived the move they caused: a banner reading
+	// "Gateway shutting down now" survived a full failover and failback, 65 minutes, and
+	// was still pointing at a gateway that had since restarted and was healthy.
 	shutdownWarnedAt    int64
 	shutdownWarnSeconds int
 	shutdownWarnReason  string
 	// shutdownWarnNodeID is the gateway that announced the stop. Kept because it is the
 	// only place a node ID reaches this client at all -- registration does not carry one --
 	// and the lifecycle hooks document an LFT_NODE_ID (#1708).
+	//
+	// In practice it is almost always empty, which is why retiring the warning cannot be
+	// done by comparing it against the connected node: the carrier that actually reaches a
+	// client is the tunnel-status heartbeat, and Server.pendingShutdownWarning
+	// (pkg/server/server.go) builds that body with type/action/seconds_remaining/shutdown_at
+	// and no node_id at all. Only the central-to-edge control frame populates NodeID.
 	shutdownWarnNodeID string
 	// migrateOnShutdownAt is set when a warning arrives and the client should move off this
 	// gateway before it stops, rather than waiting to be dropped (#1246). Separate from
@@ -491,6 +503,28 @@ func (e *InterceptorEngine) noteShutdownWarning(w *NodeShutdownWarning) {
 		"LFT_NODE_ID":           w.NodeID,
 		"LFT_SECONDS_REMAINING": strconv.Itoa(w.SecondsRemaining),
 	})
+}
+
+// clearShutdownWarningLocked retires the announcement made by the gateway this client was
+// previously serving from. The caller must hold e.mu for writing.
+//
+// A shutdown warning is a statement about one gateway, and it stops being true the moment
+// the client is serving from another one -- or from that same one after it came back. It
+// was the client acting on the warning that ended the old session, so the successful
+// registration that follows is proof the warning has been honoured and has nothing left to
+// say (#2180).
+//
+// The migration signal goes with it. The session loop consumes that exactly once, but only
+// on the branch it takes after a failure; a session that ended for an unrelated reason
+// before the migrator got to it would otherwise carry the old gateway's pending move onto
+// the new one and immediately tear down a healthy session.
+func (e *InterceptorEngine) clearShutdownWarningLocked() {
+	e.shutdownWarnedAt = 0
+	e.shutdownWarnSeconds = 0
+	e.shutdownWarnReason = ""
+	e.shutdownWarnNodeID = ""
+	e.migrateOnShutdownAt = 0
+	e.migrateOnShutdownReason = ""
 }
 
 // ShutdownWarning returns the pending gateway shutdown, if one has been announced: the
@@ -1209,6 +1243,17 @@ func (e *InterceptorEngine) ConsumeFailback() bool {
 // failback prober all read them concurrently -- updating them under one lock keeps
 // readers from observing a half-applied switch (e.g. the new region label next to
 // the old edge host).
+//
+// This is also where a pending gateway-shutdown warning is retired, because this is the
+// one call every re-established session makes: applySession in cmd/lfr-tunnel/main.go
+// funnels failover, failback, node-set change and plain reconnect through it, and it runs
+// before the `started` hook fires, so no hook sees the departed gateway's LFT_NODE_ID or
+// LFT_SECONDS_REMAINING either (#2180). Hanging the clear off the failover/failback log
+// events instead would have covered two of those four paths.
+//
+// Clearing on a reconnect to the same, still-draining gateway is safe and deliberate: the
+// warning rides the tunnel-status heartbeat, so a gateway that is genuinely still going
+// down says so again within seconds.
 func (e *InterceptorEngine) SetRegionEndpoint(region, serverURL string, publicURLs []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -1216,6 +1261,7 @@ func (e *InterceptorEngine) SetRegionEndpoint(region, serverURL string, publicUR
 	e.ServerURL = serverURL
 	// Copy rather than alias: the caller keeps using its slice after this returns.
 	e.PublicURLs = append([]string(nil), publicURLs...)
+	e.clearShutdownWarningLocked()
 }
 
 // RegionEndpoint returns the current region, gateway URL and public URLs together.

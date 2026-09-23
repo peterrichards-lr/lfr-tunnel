@@ -582,7 +582,76 @@ type trackingTransport struct {
 	lease        *TunnelLease
 }
 
+// Sizes of the fixed punctuation in an HTTP/1.1 message. Counted rather than spelled as string
+// literals because goconst attributes a literal's package-wide occurrences to whichever file is
+// newest, so a new file can go red for a "\r\n" that was already there ninety times (#1655).
+const (
+	httpCRLFBytes      = 2 // "\r\n"
+	httpSpaceBytes     = 1 // " "
+	httpHeaderSepBytes = 2 // ": "
+	httpHostHeaderName = 4 // "Host"
+)
+
+// headerWireBytes is the size of a header block serialised as "Name: Value\r\n" per value, which
+// is how net/http and every intermediary on the path write it.
+func headerWireBytes(h http.Header) int {
+	n := 0
+	for name, values := range h {
+		for _, v := range values {
+			n += len(name) + httpHeaderSepBytes + len(v) + httpCRLFBytes
+		}
+	}
+	return n
+}
+
+// requestWireHeaderBytes is the on-the-wire size of everything preceding a request's body: the
+// request line, the headers, and the blank line terminating them.
+//
+// Computed from the struct rather than measured off the connection. Wrapping the conn would be
+// exact, but this transport only ever sees the request, and a figure that is stable and symmetric
+// with responseWireHeaderBytes is worth more than an exact one bought by moving the measurement
+// point (#2177).
+func requestWireHeaderBytes(req *http.Request) int {
+	if req == nil {
+		return 0
+	}
+
+	n := len(req.Method) + httpSpaceBytes + httpSpaceBytes + len(req.Proto) + httpCRLFBytes
+	if req.URL != nil {
+		n += len(req.URL.RequestURI())
+	}
+
+	// Host travels as a header on the wire but lives in its own field on the struct, so it is
+	// absent from req.Header and has to be added by hand or every request undercounts by it.
+	host := req.Host
+	if host == "" && req.URL != nil {
+		host = req.URL.Host
+	}
+	if host != "" {
+		n += httpHostHeaderName + httpHeaderSepBytes + len(host) + httpCRLFBytes
+	}
+
+	return n + headerWireBytes(req.Header) + httpCRLFBytes
+}
+
+// responseWireHeaderBytes is the same measurement for a response: status line, headers, blank line.
+func responseWireHeaderBytes(res *http.Response) int {
+	if res == nil {
+		return 0
+	}
+	n := len(res.Proto) + httpSpaceBytes + len(res.Status) + httpCRLFBytes
+	return n + headerWireBytes(res.Header) + httpCRLFBytes
+}
+
 func (t *trackingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Headers first, and unconditionally. A GET reaches here with req.Body ALREADY NIL:
+	// ReverseProxy discards a bodyless body itself ("Issue 16036: nil Body for http.Transport
+	// retries", net/http/httputil/reverseproxy.go), so the wrapper below never installs and a
+	// body-only measurement records exactly zero for the entire browse case. That is what made
+	// Data In a flat line in both portals (#2177) -- a GET *is* its request line and headers,
+	// and there is nothing else about it to count.
+	atomic.AddUint64(&t.lease.BytesIn, uint64(requestWireHeaderBytes(req)))
+
 	if req.Body != nil {
 		req.Body = &trackingReadCloser{
 			ReadCloser: req.Body,
@@ -596,6 +665,11 @@ func (t *trackingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	if err != nil {
 		return res, err
 	}
+
+	// Counted on this side too, and for symmetry rather than completeness: the two series are
+	// charted against each other and summed into one quota (quota.go:27), so measuring a body
+	// on one side and a body plus headers on the other trades a flat line for a skewed one.
+	atomic.AddUint64(&t.lease.BytesOut, uint64(responseWireHeaderBytes(res)))
 
 	if res.Body != nil {
 		res.Body = &trackingReadCloser{

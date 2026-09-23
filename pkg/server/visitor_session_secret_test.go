@@ -274,14 +274,23 @@ func TestCentralKeepsItsKeyAcrossARestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the first process could not establish a key: %v", err)
 	}
+	// Closed, not merely abandoned: the restart is modelled by the file being released and
+	// reopened, and on Windows an open handle also makes t.TempDir's cleanup fail.
+	if err := first.Close(); err != nil {
+		t.Fatalf("could not close the database: %v", err)
+	}
 
-	// A SECOND handle on the same file, which is what a restarted control plane is: pkg/db
-	// exposes no Close, so the restart is modelled by a fresh Open against the same path
-	// rather than by a mirror of the load logic (§5c rule 4 -- test production, not a copy).
+	// A fresh Open against the same path IS the restarted control plane, driven through the
+	// production loader rather than a mirror of it (§5c rule 4).
 	second, err := db.Open(path)
 	if err != nil {
 		t.Fatalf("could not reopen the database: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := second.Close(); err != nil {
+			t.Errorf("could not close the database: %v", err)
+		}
+	})
 	after, err := loadOrCreateVisitorSessionSecrets(second)
 	if err != nil {
 		t.Fatalf("the second process could not read the key: %v", err)
@@ -319,6 +328,11 @@ func TestACorruptStoredKeySetIsReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not open the database: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("could not close the database: %v", err)
+		}
+	})
 
 	if err := database.SetAdminSetting(visitorSessionSecretSettingKey, "{not json"); err != nil {
 		t.Fatalf("could not seed the corrupt row: %v", err)

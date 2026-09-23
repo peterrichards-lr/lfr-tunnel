@@ -69,7 +69,9 @@ func TestBytesInCountsABodylessGET(t *testing.T) {
 
 	lease := serveThroughTrackingProxy(t,
 		func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("ok"))
+			if _, err := w.Write([]byte("ok")); err != nil {
+				t.Errorf("writing the origin response: %v", err)
+			}
 		},
 		func(base string) *http.Request {
 			req, err := http.NewRequest(http.MethodGet, base+path, nil)
@@ -102,7 +104,9 @@ func TestBytesInCountsARequestBodyOnTopOfItsHeaders(t *testing.T) {
 			if _, err := io.Copy(io.Discard, r.Body); err != nil {
 				t.Errorf("reading the request body at the origin: %v", err)
 			}
-			_, _ = w.Write([]byte("ok"))
+			if _, err := w.Write([]byte("ok")); err != nil {
+				t.Errorf("writing the origin response: %v", err)
+			}
 		},
 		func(base string) *http.Request {
 			req, err := http.NewRequest(http.MethodPost, base+"/upload", strings.NewReader(body))
@@ -127,7 +131,9 @@ func TestBytesOutCountsResponseHeadersNotOnlyTheBody(t *testing.T) {
 	lease := serveThroughTrackingProxy(t,
 		func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-A-Deliberately-Long-Header-Name", strings.Repeat("v", 128))
-			_, _ = w.Write([]byte(body))
+			if _, err := w.Write([]byte(body)); err != nil {
+				t.Errorf("writing the origin response: %v", err)
+			}
 		},
 		func(base string) *http.Request {
 			req, err := http.NewRequest(http.MethodGet, base+"/", nil)

@@ -28,10 +28,31 @@ func GetEmbeddedFaviconSVG() []byte {
 	return FaviconSVG
 }
 
+// dashboardPortToken marks every place in dashboard.html that has to name the port the Inspector
+// actually bound. It cannot be baked into the page or its translation bundles: StartInspector
+// falls forward to the next port when the requested one is taken, so the page shipped inside the
+// binary does not know the answer (#2190). Before this, the header read "Listening on
+// localhost:4040" on every Inspector, including the one on 4041.
+const dashboardPortToken = "__LFT_INSPECTOR_PORT__"
+
+// RenderDashboardHTML returns the Inspector page with the port it really bound stamped in, which
+// is the same number StartInspector returns and logs. Substituted server-side rather than read
+// from location.port in the browser so that the page is correct as served -- the served bytes are
+// what a test, a saved copy or a `curl` shows.
+func RenderDashboardHTML(port int) []byte {
+	return bytes.ReplaceAll(DashboardHTML, []byte(dashboardPortToken), []byte(strconv.Itoa(port)))
+}
+
 // StartInspector starts the local web dashboard for the given engine.
 // If the requested port is in use, it will auto-increment up to 10 times to find a free port.
 func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	mux := http.NewServeMux()
+
+	// The page with the real port stamped in. Assigned below, once the bind loop has settled on a
+	// port -- which is why this is a closure variable rather than a value computed here: the routes
+	// are registered before the listener exists. The assignment happens-before the `go srv.Serve`
+	// that first admits a request, so no handler can observe it unset.
+	var dashboardPage []byte
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "/settings" && r.URL.Path != "/logs" {
@@ -39,7 +60,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if _, err := w.Write(DashboardHTML); err != nil {
+		if _, err := w.Write(dashboardPage); err != nil {
 			log.Printf("[Warning] Failed to write response: %v", err)
 		}
 	})
@@ -739,6 +760,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to find free inspector port starting from %d: %w", port, err)
 	}
+
+	// actualPort is final from here, so the page can be rendered once and served to everyone.
+	dashboardPage = RenderDashboardHTML(actualPort)
 
 	// The Host check only makes sense on a loopback bind; beyond that the legitimate
 	// Host is whatever the container or operator mapped.

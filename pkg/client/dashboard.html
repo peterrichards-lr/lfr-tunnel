@@ -239,7 +239,14 @@
                  padding and below its bottom border. Neither file read wrong and no gate
                  could see it -- same class as #1791/#1785. -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-                <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
+                <!-- The port is NOT knowable when this page is written: StartInspector falls forward
+                     to the next free port when the requested one is taken, so the page has to be
+                     told what it actually bound (#2190). Both placeholders below are rewritten with
+                     that number by RenderDashboardHTML as the page is served -- the text is what
+                     shows before any script runs, the attribute is what setLanguage substitutes
+                     into the translated string's {0}. Naming the placeholder in this comment would
+                     be self-defeating: it would be rewritten too. See dashboardPortToken. -->
+                <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening" data-i18n-arg0="__LFT_INSPECTOR_PORT__">Listening on localhost:__LFT_INSPECTOR_PORT__</span></div>
                 <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
                 <div id="latency-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.4);"></div>
                 <div id="ratelimit-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(168, 85, 247, 0.2); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.4);"></div>
@@ -317,7 +324,7 @@ const clientTranslations = {
         "client_logs_kind_error": "Error",
         "client_logs_kind_error_desc": "Diagnostic events -- start here when something is broken",
         "client_inspector": "Inspector",
-        "client_listening": "Listening on localhost:4040",
+        "client_listening": "Listening on localhost:{0}",
         "client_host_preserved": "Host Preserved",
         "client_host_rewritten": "Host Rewritten",
         "client_replay_req": "Replay Request",
@@ -403,7 +410,7 @@ const clientTranslations = {
         "client_logs_kind_error": "Errores",
         "client_logs_kind_error_desc": "Eventos de diagnóstico: empieza aquí cuando algo falla",
         "client_inspector": "Inspector",
-        "client_listening": "Escuchando en localhost:4040",
+        "client_listening": "Escuchando en localhost:{0}",
         "client_host_preserved": "Host Preservado",
         "client_host_rewritten": "Host Reescribido",
         "client_maint": "Mantenimiento",
@@ -481,7 +488,7 @@ const clientTranslations = {
         "client_logs_kind_error": "Fehler",
         "client_logs_kind_error_desc": "Diagnoseereignisse -- hier anfangen, wenn etwas defekt ist",
         "client_inspector": "Inspektor",
-        "client_listening": "Hört auf localhost:4040",
+        "client_listening": "Hört auf localhost:{0}",
         "client_host_preserved": "Host Beibehalten",
         "client_host_rewritten": "Host Umgeschrieben",
         "client_maint": "Wartung",
@@ -559,7 +566,7 @@ const clientTranslations = {
         "client_logs_kind_error": "Erreurs",
         "client_logs_kind_error_desc": "Événements de diagnostic -- commencez ici quand quelque chose ne va pas",
         "client_inspector": "Inspecteur",
-        "client_listening": "En écoute sur localhost:4040",
+        "client_listening": "En écoute sur localhost:{0}",
         "client_host_preserved": "Hôte Préservé",
         "client_host_rewritten": "Hôte Réécrit",
         "client_maint": "Maintenance",
@@ -637,7 +644,7 @@ const clientTranslations = {
         "client_logs_kind_error": "Erros",
         "client_logs_kind_error_desc": "Eventos de diagnóstico -- comece aqui quando algo falha",
         "client_inspector": "Inspetor",
-        "client_listening": "Ouvindo em localhost:4040",
+        "client_listening": "Ouvindo em localhost:{0}",
         "client_host_preserved": "Host Preservado",
         "client_host_rewritten": "Host Reescrito",
         "client_maint": "Manutenção",
@@ -715,7 +722,7 @@ const clientTranslations = {
         "client_logs_kind_error": "エラー",
         "client_logs_kind_error_desc": "診断イベント -- 問題が起きたらここから",
         "client_inspector": "インスペクター",
-        "client_listening": "localhost:4040 でリッスン中",
+        "client_listening": "localhost:{0} でリッスン中",
         "client_host_preserved": "ホスト保持",
         "client_host_rewritten": "ホスト書き換え",
         "client_maint": "メンテナンス",
@@ -781,28 +788,49 @@ function t(key) {
     return key;
 }
 
+// Resolve a key for one element, substituting any positional arguments the element declares as
+// data-i18n-arg0, data-i18n-arg1, ... into the translated string's {0}, {1}, ... tokens (#2190).
+//
+// The substitution lives HERE, rather than being written into the element once at load, because
+// setLanguage re-applies every [data-i18n] element on a language change -- anything written
+// straight into innerText is wiped by the next switch, and would come back as the untouched
+// token. Keeping the value on the element means the argument outlives every re-render.
+//
+// A {0} token rather than concatenation, for the reason the bundles exist at all: word order is
+// not shared. "localhost:{0} でリッスン中" puts the value first; concatenating a port onto the end
+// of a translated prefix would be wrong in Japanese and right only by accident elsewhere.
+function tArgs(el, key) {
+    let text = t(key);
+    for (let i = 0; ; i++) {
+        const arg = el.getAttribute('data-i18n-arg' + i);
+        if (arg === null) break;
+        text = text.split('{' + i + '}').join(arg);
+    }
+    return text;
+}
+
 function setLanguage(lang) {
     if (clientTranslations[lang]) {
         currentLang = lang;
         localStorage.setItem('lfr_client_lang', lang);
-        
+
         // Update static elements
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
             if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'password' || el.type === 'number')) {
-                el.placeholder = t(key);
+                el.placeholder = tArgs(el, key);
             } else {
                 // If it has children (like the help-icon span), preserve them
                 const helpIcon = el.querySelector('.help-icon');
                 if (helpIcon) {
                     const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-                    if (textNode) textNode.textContent = t(key) + " ";
-                    
+                    if (textNode) textNode.textContent = tArgs(el, key) + " ";
+
                     // Update the title attribute of the help icon
                     const titleKey = el.getAttribute('data-i18n-help');
                     if (titleKey) helpIcon.setAttribute('title', t(titleKey));
                 } else {
-                    el.innerText = t(key);
+                    el.innerText = tArgs(el, key);
                 }
             }
         });

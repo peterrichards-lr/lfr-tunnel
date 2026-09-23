@@ -1,6 +1,10 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
+
+# Where `verify-release` looks for the built artefact set to compare a release against. Same
+# directory `./bin/lfr-tunnel-ops build` and the release workflow write to.
+DIST ?= dist
 
 # Which gateway, status page and portal a build points at by default. These describe one
 # deployment rather than the software, so they are not in the source tree (#1188) -- set
@@ -93,6 +97,7 @@ help:
 	@echo "  make check-branches    - Report stale remote branches"
 	@echo "  make prune-branches    - Delete merged remote branches"
 	@echo "  make check-workflow-failures - Report workflows failing repeatedly on master"
+	@echo "  make verify-release    - Re-check a published release carries every built artefact"
 
 fmt:
 	gofmt -w .
@@ -309,6 +314,7 @@ test-hooks:
 	@./tests/hooks/test-ci-runs-every-gate.sh
 	@./tests/hooks/test-tap-bucket.sh
 	@./tests/hooks/test-release-completeness.sh
+	@./tests/hooks/test-release-asset-verification.sh
 	@./tests/hooks/test-print-selectors.sh
 	@./tests/hooks/test-spec-testids.sh
 	@./tests/hooks/test-load-failure-gate.sh
@@ -351,6 +357,20 @@ check-contexts-live:
 # the scheduled job. Also what puts the detector in the bash 3.2 portable set.
 check-workflow-failures:
 	@./scripts/detect-workflow-failure-streak.sh --dry-run
+
+# Replays the release workflow's final gate against a published release (#2203). The workflow
+# cannot be re-run -- it triggers only on a tag push and a tag cannot be re-pushed -- so
+# answering "is this release actually complete?" otherwise means reading a two-minute job log
+# and comparing asset lists by hand, which is what #2203 cost. Defaults to the version in the
+# tree and the dist/ produced by `./bin/lfr-tunnel-ops build`:
+#
+#   make verify-release                              # the current version, against dist/
+#   make verify-release VERSION=v1.48.52 DIST=dist
+#
+# Also what puts the script in the bash 3.2 portable set (tests/hooks/test-shell-portability.sh
+# derives that set from what make and the git hooks invoke).
+verify-release:
+	@./scripts/verify-release-assets.sh "$(VERSION)" "$(DIST)"
 
 # Same reasoning as check-contexts above: a gate with no convenient invocation is a gate
 # nobody runs, and being make-reachable is what puts it in the bash 3.2 portable set.

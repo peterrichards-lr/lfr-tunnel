@@ -60,19 +60,68 @@ else
         leaves a release that looks published and is missing files"
 fi
 
-# FIRING. Verifying is not enough if it only warns: an incomplete release must FAIL the job.
-if awk '/Verify every built artefact/{f=1;next} f&&/^      - name:/{f=0} f' "$WF" | grep -qE "exit 1"; then
-    pass "an incomplete release fails the job rather than warning"
+# The verification logic moved out of the `run:` block and into a script in #2203, because a
+# workflow that triggers only on a tag push -- and a tag that cannot be re-pushed -- has no way
+# to exercise a change to it short of shipping. So the assertions below follow it there. The
+# behaviour itself (polling, and the two distinct verdicts) is covered by executing the script in
+# tests/hooks/test-release-asset-verification.sh; what is asserted HERE is the wiring, which has
+# no runtime to observe.
+STEP="$(awk '/Verify every built artefact/{f=1;next} f&&/^      - name:/{f=0} f' "$WF")"
+GATE_REL="$(printf '%s\n' "$STEP" | grep -oE 'scripts/[A-Za-z0-9_.-]+\.sh' | head -1)"
+
+if [ -n "$GATE_REL" ] && [ -x "${REPO_ROOT}/${GATE_REL}" ]; then
+    pass "the verification step calls $GATE_REL, which exists and is executable"
+    GATE="${REPO_ROOT}/${GATE_REL}"
 else
-    fail "the verification step cannot fail the job, so an incomplete release still reports success"
+    fail "the verification step does not call an executable script under scripts/ -- if the logic
+        moved back inline, move these assertions back with it (it is then untestable again)"
+    GATE=""
 fi
 
-# BOUNDING. It must re-upload rather than merely report, or a transient timeout still needs a
-# human and a new tag to fix.
-if awk '/Verify every built artefact/{f=1;next} f&&/^      - name:/{f=0} f' "$WF" | grep -qE "gh release upload"; then
-    pass "BOUNDING  a missing asset is re-uploaded, not just reported"
-else
-    fail "BOUNDING  nothing re-uploads a missing asset, so a flake still costs a release"
+if [ -n "$GATE" ]; then
+    # FIRING. Verifying is not enough if it only warns: an incomplete release must FAIL the job.
+    if grep -qF "The release is INCOMPLETE and must not be treated as shipped." "$GATE" &&
+       grep -qE '^[[:space:]]*exit 1$' "$GATE"; then
+        pass "an incomplete release fails the job rather than warning"
+    else
+        fail "the verification gate cannot fail the job, so an incomplete release still reports
+        success. That wording is what makes people act on a red release run -- keep it."
+    fi
+
+    # BOUNDING. It must re-upload rather than merely report, or a transient timeout still needs a
+    # human and a new tag to fix.
+    if grep -qE 'release upload' "$GATE"; then
+        pass "BOUNDING  a missing asset is re-uploaded, not just reported"
+    else
+        fail "BOUNDING  nothing re-uploads a missing asset, so a flake still costs a release"
+    fi
+
+    # FIRING (#2203). The listing must not be read once and believed. A fixed `sleep` before a
+    # single read is explicitly NOT the fix -- it moves the race rather than removing it, and
+    # v1.48.52's listing was still stale 105 seconds after the uploads finished.
+    if grep -qE '(_delay|delay)=\$\(\((_delay|delay) \* 2\)\)' "$GATE"; then
+        pass "the listing is polled with a growing backoff, not read once"
+    else
+        fail "no backoff found in $GATE_REL -- if this became a fixed sleep, the race is still
+        there and returns whenever GitHub is slower than the chosen constant"
+    fi
+
+    # FIRING (#2203, §5c). "5 artefacts are missing" had two possible causes and one message.
+    # Both verdicts must be reachable and must read differently.
+    if grep -qF "GENUINELY MISSING" "$GATE" && grep -qF "NOT a missing artefact" "$GATE"; then
+        pass "a shortfall says WHICH cause it has: absent, or a listing that has not caught up"
+    else
+        fail "the gate cannot name which of the two causes a shortfall has, which is the defect
+        #2203 was filed for -- see §5c"
+    fi
+
+    # The gate on the gate (#1929): a behavioural suite nobody runs protects nothing.
+    if grep -qF "tests/hooks/test-release-asset-verification.sh" "${REPO_ROOT}/Makefile"; then
+        pass "the behavioural suite for $GATE_REL runs under 'make test-hooks'"
+    else
+        fail "test-release-asset-verification.sh is not in the Makefile's test-hooks list, so the
+        only executable coverage of the release gate runs nowhere"
+    fi
 fi
 
 # CONTROL. The guard must be reading the real file, not passing on any text that mentions the

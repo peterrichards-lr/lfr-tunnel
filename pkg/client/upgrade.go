@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -550,6 +551,58 @@ func appendRelaunchTarget(relaunch [][]string, pid int, kind string) [][]string 
 	return append(relaunch, argv)
 }
 
+// trayRelaunchArgs returns the flags of the tray in a relaunch list, if there is one.
+func trayRelaunchArgs(relaunch [][]string) ([]string, bool) {
+	for _, argv := range relaunch {
+		if IsTrayArgv(argv) {
+			return argv[1:], true
+		}
+	}
+	return nil, false
+}
+
+// planRelaunch drops a background tunnel that the tray this upgrade is also restarting will
+// start by itself (#2189).
+//
+// The upgrade kills every process it found and restarts each one, which is right for every
+// process EXCEPT the one that something else it restarted also starts. The tray spawns a client
+// on startup (TrayClientArgs, #2076), so restarting both left two clients racing for one
+// subdomain: the second could not bind the Inspector's 4040 and silently took 4041, and the
+// state file then pointed the menu at whichever wrote last.
+//
+// Deliberately NOT "a GUI came back, so skip the tunnel". The tray does not always connect --
+// -no-autoconnect makes it a control surface and nothing else -- and skipping the relaunch there
+// would leave the user with no tunnel at all, which is #2164, fixed and verified only today.
+// What is skipped is narrower: the one tunnel whose command line is the command line the
+// restarted tray is about to spawn, and only when that tray will in fact spawn it.
+//
+// Every uncertainty resolves towards restarting: an unreadable tray argv, an opt-out, a tunnel
+// configured differently from the tray's. The worst case is therefore the behaviour that exists
+// today -- two clients, one surplus -- and never zero.
+func planRelaunch(relaunch [][]string) [][]string {
+	guiArgs, ok := trayRelaunchArgs(relaunch)
+	if !ok || !TrayConnectsOnStart(guiArgs) {
+		return relaunch
+	}
+	trayWillStart := TrayTunnelArgs(guiArgs)
+
+	out := make([][]string, 0, len(relaunch))
+	for _, argv := range relaunch {
+		// Every match, not just the first: if the machine was already in the doubled state this
+		// issue describes, one relaunch for each of them is still one too many. The tray's own
+		// entry cannot match -- TrayTunnelArgs strips -gui, so a command line equal to it is by
+		// construction not a tray's.
+		if len(argv) > 0 && slices.Equal(argv[1:], trayWillStart) {
+			fmt.Printf("[Update] Not restarting the background tunnel separately: the GUI being "+
+				"restarted connects on startup and will start it (%s).\n",
+				strings.Join(trayWillStart, " "))
+			continue
+		}
+		out = append(out, argv)
+	}
+	return out
+}
+
 func stopActiveProcessesAndServices() ([]string, bool, [][]string) {
 	var plistToReload []string
 	var restartSystemd bool
@@ -657,7 +710,8 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run() //nolint:errcheck
 	}
 
-	// 3. Restart the processes this upgrade killed directly (#2164).
+	// 3. Restart the processes this upgrade killed directly (#2164), minus any the tray this
+	// upgrade is also restarting will start by itself (#2189).
 	//
 	// stopActiveProcessesAndServices stops four kinds of thing -- launchd plists, the systemd
 	// service, the GUI process and background tunnels -- and until now restarted only the first
@@ -668,7 +722,7 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 	// Launched detached, exactly as handleBackground does. The captured argv is the CHILD's,
 	// which has already had -background stripped from it, so re-running it verbatim in the
 	// foreground would attach the tunnel to this upgrade process and kill it again on exit.
-	for _, argv := range relaunch {
+	for _, argv := range planRelaunch(relaunch) {
 		if len(argv) == 0 {
 			continue
 		}

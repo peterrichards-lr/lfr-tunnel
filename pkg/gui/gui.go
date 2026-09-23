@@ -750,36 +750,13 @@ func handleToggleLaunchOnLogin(m *trayMenu) {
 
 // clientArgsForConnect is what the tray's Connect spawns the client with.
 //
-// It used to be exactly []string{"-background"}, discarding every flag the GUI itself was
-// started with (#2074). So `lfr-tunnel -gui -prefer-region apac` launched a tray that knew the
-// user wanted apac, and then connected a client that did not -- and an empty cfg.Region is the
-// exact condition that hands the choice to the region cache (main.go:2320), so a cached election
-// silently won. The user asked for apac by name and got eu, with nothing saying so.
-//
-// Everything the GUI was given is forwarded except the flags that describe how to RUN, which
-// would be wrong or duplicated in the child: -gui (the child is not a tray) and -background
-// (added once, below).
-//
-// Values are separate argv elements for every flag this binary defines, so filtering whole
-// tokens cannot orphan one. -gui and -background are booleans, which Go's flag package never
-// spells as "-flag value", so there is no paired value to lose.
+// The filtering itself is client.TrayClientArgs, and lives there because the upgrade path needs
+// the same answer: it has to know what the tray it is restarting will spawn, or it starts a
+// second copy of it (#2189). Two independent spellings of the same argument list is how they
+// drift -- one gains a flag, the other does not -- and this repo has already paid for that shape
+// once, in #2128.
 func clientArgsForConnect(guiArgs []string) []string {
-	out := make([]string, 0, len(guiArgs)+1)
-	for _, a := range guiArgs {
-		switch {
-		case a == "-gui" || a == "--gui" ||
-			strings.HasPrefix(a, "-gui=") || strings.HasPrefix(a, "--gui="):
-			continue
-		case a == "-background" || a == "--background" ||
-			strings.HasPrefix(a, "-background=") || strings.HasPrefix(a, "--background="):
-			continue // re-added below, so passing it twice cannot happen
-		case a == "-no-autoconnect" || a == "--no-autoconnect" ||
-			strings.HasPrefix(a, "-no-autoconnect=") || strings.HasPrefix(a, "--no-autoconnect="):
-			continue // describes the tray's startup (#2076); meaningless to the client
-		}
-		out = append(out, a)
-	}
-	return append(out, "-background")
+	return client.TrayClientArgs(guiArgs)
 }
 
 // startClient spawns the background client this tray fronts, with everything the GUI was

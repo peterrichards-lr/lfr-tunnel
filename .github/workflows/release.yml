@@ -187,38 +187,18 @@ jobs:
       # Anyone installing the gateway from that release got a 404.
       #
       # So the set is verified against what was actually built, and anything missing is
-      # re-uploaded rather than reported. `--clobber` because a partial upload can leave a
-      # zero-length asset behind, which would otherwise block the retry.
+      # re-uploaded rather than reported.
+      #
+      # The logic lives in a script rather than inline (#2203) because it could not otherwise be
+      # tested: this workflow runs only on `push: tags: ['v*']`, has no workflow_dispatch, and the
+      # `Protect Version Tags` ruleset forbids deleting or updating a tag for everyone -- so a
+      # release cannot be replayed to exercise a change to it. Inline, the only way to find out
+      # whether this step worked was to ship. See tests/hooks/test-release-asset-verification.sh.
       - name: Verify every built artefact was published
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          missing=0
-          for f in dist/*; do
-            name="$(basename "$f")"
-            for attempt in 1 2 3; do
-              if gh release view "${{ github.ref_name }}" --json assets \
-                   --jq '.assets[].name' | grep -qxF "$name"; then
-                break
-              fi
-              echo "::warning::$name is not on the release (attempt $attempt); uploading"
-              gh release upload "${{ github.ref_name }}" "$f" --clobber || true
-              sleep 5
-            done
-            if gh release view "${{ github.ref_name }}" --json assets \
-                 --jq '.assets[].name' | grep -qxF "$name"; then
-              echo "  ok: $name"
-            else
-              echo "::error::$name was built but could not be published"
-              missing=$((missing + 1))
-            fi
-          done
-          if [ "$missing" -gt 0 ]; then
-            echo "::error::$missing built artefact(s) are missing from ${{ github.ref_name }}."
-            echo "::error::The release is INCOMPLETE and must not be treated as shipped."
-            exit 1
-          fi
-          echo "All $(ls dist | wc -l | tr -d ' ') built artefact(s) are published."
+          TAG: ${{ github.ref_name }}
+        run: ./scripts/verify-release-assets.sh "$TAG" dist
 
       - name: Update Homebrew Tap & Scoop Bucket
         env:

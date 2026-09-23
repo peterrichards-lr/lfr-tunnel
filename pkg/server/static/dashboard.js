@@ -8988,6 +8988,12 @@ async function loadSystemSettings() {
     }
 
     await loadAlertSettings();
+    // Wired HERE and nowhere else, because loadSystemSettings() is what showTab('system')
+    // calls. A loader hung off no branch -- or off a branch nobody takes -- leaves its markup
+    // permanently blank while every element in it still exists and still satisfies a
+    // visibility check; that has now happened four times in this file (#522/#525, #1785,
+    // #1995).
+    await loadSessionKeys();
   } catch (e) {
     console.error('Failed to load system settings', e);
   }
@@ -9171,6 +9177,347 @@ async function saveAlertSettings() {
     body: JSON.stringify(payload),
   });
   return res.ok;
+}
+
+// --- Visitor session keys (#2196) --------------------------------------------
+// The portal half of #2184, kept in step with Portal V2's copy in
+// ui/src/pages/AdminSettings.tsx: the two arms are a live A/B test (#1866), so a control
+// present in one and not the other is a defect in its own right (#2150, #2155, #2158).
+//
+// Every value here is read from GET /api/admin/session-secrets, INCLUDING the rotation
+// interval and the retirement lag. The endpoint states both deliberately so that neither
+// portal keeps a second copy to drift against the engine -- a portal promising a daily
+// rotation while the gateway runs weekly is a lie nothing would catch.
+let sessionKeysStatus = null;
+
+// "24h0m0s" -> "24h". Go's Duration.String() is exact and unreadable; the zero tail carries
+// no information, and dropping it is the only transformation applied -- the number itself is
+// never computed here.
+function formatRotationDuration(raw) {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/(\d+h)0m0s$/, '$1')
+    .replace(/(\d+m)0s$/, '$1');
+}
+
+function formatSessionKeyTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString();
+}
+
+// A zero time.Time marshals as "0001-01-01T00:00:00Z", which renders as a date in year 1
+// rather than as "not scheduled". Treated as absent.
+function hasSessionKeyTime(value) {
+  if (!value) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime()) && d.getUTCFullYear() > 1;
+}
+
+function sessionKeyRow(label, valueNode) {
+  const row = document.createElement('div');
+  row.style.cssText =
+    'display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px;';
+  const key = document.createElement('span');
+  key.style.cssText =
+    'color: var(--text-muted); font-size: 12px; min-width: 200px;';
+  key.textContent = label;
+  row.appendChild(key);
+  valueNode.style.cssText =
+    (valueNode.style.cssText || '') +
+    ';font-size: 13px; color: var(--text-main);';
+  row.appendChild(valueNode);
+  return row;
+}
+
+function sessionKeyNote(text) {
+  const p = document.createElement('p');
+  p.style.cssText =
+    'color: var(--text-muted); font-size: 12px; margin: 4px 0 16px 0; line-height: 1.4;';
+  p.textContent = text;
+  return p;
+}
+
+// The last attempt, rendered in full. Collapsing an abort to "failed" is precisely the
+// invisible-abort problem this card exists to remove, so the reason and every node that did
+// not acknowledge are named.
+function renderLastRotation(container, last) {
+  const wrap = document.createElement('div');
+  wrap.id = 'session-keys-last-rotation';
+  wrap.style.cssText =
+    'border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-top: 4px;';
+
+  if (!last) {
+    wrap.textContent = t(
+      'session_keys_last_none',
+      'No rotation has run on this control plane yet.',
+    );
+    wrap.style.cssText += ';color: var(--text-muted); font-size: 13px;';
+    container.appendChild(wrap);
+    return;
+  }
+
+  const committed = last.outcome === 'committed';
+  const head = document.createElement('div');
+  head.style.cssText =
+    'display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;';
+
+  const outcome = document.createElement('span');
+  outcome.id = 'session-keys-last-outcome';
+  outcome.className = committed ? 'badge success' : 'badge danger';
+  outcome.textContent = committed
+    ? t('session_keys_outcome_committed', 'Committed')
+    : t('session_keys_outcome_aborted', 'Aborted');
+  head.appendChild(outcome);
+
+  // Manual or periodic, always. A periodic rotation that aborts is a system fault; a manual
+  // one that aborts is probably somebody watching the screen, and the two need different
+  // responses -- which is why the owner asked for the distinction on the audit event.
+  const trigger = document.createElement('span');
+  trigger.id = 'session-keys-last-trigger';
+  trigger.style.cssText = 'font-size: 13px; color: var(--text-main);';
+  trigger.textContent =
+    last.trigger === 'manual'
+      ? t('session_keys_trigger_manual', 'Manual')
+      : t('session_keys_trigger_periodic', 'Periodic');
+  head.appendChild(trigger);
+
+  const when = document.createElement('span');
+  when.style.cssText = 'font-size: 12px; color: var(--text-muted);';
+  when.textContent = formatSessionKeyTime(last.at);
+  head.appendChild(when);
+
+  if (last.actor) {
+    const actor = document.createElement('span');
+    actor.style.cssText = 'font-size: 12px; color: var(--text-muted);';
+    actor.textContent = t('session_keys_actor', 'triggered by {0}').replace(
+      '{0}',
+      last.actor,
+    );
+    head.appendChild(actor);
+  }
+  wrap.appendChild(head);
+
+  if (committed && last.generation) {
+    const moved = document.createElement('p');
+    moved.style.cssText =
+      'font-size: 13px; margin: 0 0 8px 0; color: var(--text-main);';
+    moved.textContent = t(
+      'session_keys_moved_to',
+      'Now minting with generation {0}.',
+    ).replace('{0}', last.generation);
+    wrap.appendChild(moved);
+  }
+
+  if (last.reason) {
+    const reason = document.createElement('p');
+    reason.id = 'session-keys-last-reason';
+    reason.style.cssText =
+      'font-size: 13px; margin: 0 0 8px 0; color: var(--text-main);';
+    const label = document.createElement('strong');
+    label.textContent = t('session_keys_reason', 'Why it stopped') + ': ';
+    reason.appendChild(label);
+    reason.appendChild(document.createTextNode(last.reason));
+    wrap.appendChild(reason);
+  }
+
+  const unacked = Array.isArray(last.unacknowledged) ? last.unacknowledged : [];
+  const unackedEl = document.createElement('div');
+  unackedEl.id = 'session-keys-unacked';
+  if (unacked.length) {
+    unackedEl.style.cssText = 'font-size: 13px; margin-bottom: 8px;';
+    const label = document.createElement('div');
+    label.style.cssText = 'color: var(--text-muted); font-size: 12px;';
+    label.textContent = t('session_keys_unacked', 'Did not acknowledge');
+    unackedEl.appendChild(label);
+    const list = document.createElement('ul');
+    list.style.cssText = 'margin: 4px 0 0 18px; padding: 0;';
+    unacked.forEach((n) => {
+      const li = document.createElement('li');
+      li.style.cssText = 'color: var(--text-main);';
+      li.textContent = n.why ? n.node_id + ' — ' + n.why : n.node_id;
+      list.appendChild(li);
+    });
+    unackedEl.appendChild(list);
+  }
+  wrap.appendChild(unackedEl);
+
+  const acked = Array.isArray(last.acknowledged) ? last.acknowledged : [];
+  if (acked.length) {
+    const ackedEl = document.createElement('div');
+    ackedEl.id = 'session-keys-acked';
+    ackedEl.style.cssText = 'font-size: 12px; color: var(--text-muted);';
+    ackedEl.textContent =
+      t('session_keys_acked', 'Acknowledged') + ': ' + acked.join(', ');
+    wrap.appendChild(ackedEl);
+  }
+
+  container.appendChild(wrap);
+}
+
+function renderSessionKeys(data) {
+  const body = document.getElementById('session-keys-body');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const current = document.createElement('code');
+  current.id = 'session-keys-current-generation';
+  current.textContent = data.current_generation || '';
+  body.appendChild(
+    sessionKeyRow(t('session_keys_current', 'Current generation'), current),
+  );
+
+  const accepted = Array.isArray(data.accepted_generations)
+    ? data.accepted_generations
+    : [];
+  const retiring = data.retiring_at || {};
+  const acceptedEl = document.createElement('span');
+  acceptedEl.id = 'session-keys-accepted';
+  acceptedEl.textContent = accepted
+    .map((g) =>
+      hasSessionKeyTime(retiring[g])
+        ? g +
+          ' (' +
+          t('session_keys_retires', 'retires {0}').replace(
+            '{0}',
+            formatSessionKeyTime(retiring[g]),
+          ) +
+          ')'
+        : g,
+    )
+    .join(', ');
+  body.appendChild(
+    sessionKeyRow(t('session_keys_accepted', 'Still accepted'), acceptedEl),
+  );
+
+  const next = document.createElement('span');
+  next.id = 'session-keys-next-rotation';
+  next.textContent = hasSessionKeyTime(data.next_rotation_at)
+    ? formatSessionKeyTime(data.next_rotation_at)
+    : t('session_keys_next_unscheduled', 'Not scheduled yet');
+  body.appendChild(
+    sessionKeyRow(t('session_keys_next_rotation', 'Next rotation due'), next),
+  );
+  body.appendChild(
+    sessionKeyNote(
+      t(
+        'session_keys_interval_note',
+        'Rotations run every {0}. A replaced generation goes on verifying for {1} afterwards, which is longer than a visitor cookie lives, so no session ends because of a rotation.',
+      )
+        .replace('{0}', formatRotationDuration(data.rotation_interval))
+        .replace('{1}', formatRotationDuration(data.retirement_lag)),
+    ),
+  );
+
+  const nodes = Array.isArray(data.connected_nodes) ? data.connected_nodes : [];
+  const nodesEl = document.createElement('span');
+  nodesEl.id = 'session-keys-connected-nodes';
+  nodesEl.textContent = nodes.length
+    ? nodes.join(', ')
+    : t('session_keys_connected_none', 'None connected right now');
+  body.appendChild(
+    sessionKeyRow(
+      t('session_keys_connected', 'Nodes that must acknowledge'),
+      nodesEl,
+    ),
+  );
+  // Said out loud rather than left to be inferred. A commit is gated on connected nodes, never
+  // on configured ones, so an operator who knows edge-us and edge-sa power off overnight would
+  // otherwise reasonably assume a rotation is waiting for them.
+  body.appendChild(
+    sessionKeyNote(
+      t(
+        'session_keys_connected_note',
+        'Only the nodes connected right now have to acknowledge. An edge that is powered off is not a reason a rotation is waiting -- it is handed the current keys when it reconnects.',
+      ),
+    ),
+  );
+
+  const lastLabel = document.createElement('div');
+  lastLabel.style.cssText =
+    'color: var(--text-muted); font-size: 12px; margin-bottom: 4px;';
+  lastLabel.textContent = t('session_keys_last', 'Last rotation');
+  body.appendChild(lastLabel);
+  renderLastRotation(body, data.last_rotation);
+}
+
+async function loadSessionKeys() {
+  const body = document.getElementById('session-keys-body');
+  if (!body) return;
+  try {
+    const res = await fetch('/api/admin/session-secrets');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    sessionKeysStatus = await res.json();
+    renderSessionKeys(sessionKeysStatus);
+  } catch (e) {
+    console.error('Failed to load visitor session keys', e);
+    // Cleared, so a later rotate cannot render a stale generation beside a fresh outcome.
+    sessionKeysStatus = null;
+    body.textContent = t(
+      'session_keys_load_failed',
+      'The visitor session-key status could not be read, so what you see is not current.',
+    );
+  }
+}
+
+// The manual trigger. Confirmed first: a rotation is fleet-wide, and although it fails closed
+// rather than dangerously, it is not something to set off by mis-clicking.
+async function rotateSessionKeys() {
+  if (
+    !confirm(
+      t('session_keys_confirm_title', 'Rotate the visitor session keys?') +
+        '\n\n' +
+        t(
+          'session_keys_confirm_body',
+          'This is fleet-wide. Every connected node must confirm it holds the new generation before anything switches; if one does not, nothing changes and the attempt is recorded as aborted. No visitor is signed out either way.',
+        ),
+    )
+  ) {
+    return;
+  }
+
+  const btn = document.getElementById('btn-rotate-session-keys');
+  const status = document.getElementById('session-keys-rotate-status');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = t('session_keys_rotating', 'Rotating...');
+  try {
+    const res = await fetch('/api/admin/session-secrets/rotate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    // 409 is the documented ABORT status and carries the whole outcome, reason included, so it
+    // is read exactly like a 200 rather than thrown away as an error. Reporting "it failed"
+    // here would put the invisible abort back inside a status code.
+    if (res.ok || res.status === 409) {
+      // The body is the outcome, and it is drained rather than abandoned even though the card
+      // is refilled from the status endpoint below: an unread fetch body leaves the response
+      // stream open in the browser until it is collected, and Playwright's response.body()
+      // waits on a stream that never finishes -- which is how the V1 half of
+      // session_key_rotation_parity.spec.ts first timed out while the page behaved correctly.
+      await res.json().catch(() => null);
+      if (status) status.textContent = '';
+      // Re-read rather than render the outcome directly: a commit also changes the accepted
+      // set, the retirement schedule and the next due time, and the status endpoint is the one
+      // thing that knows all of them.
+      await loadSessionKeys();
+      return;
+    }
+    const err = await res.json().catch(() => ({}));
+    if (status) {
+      status.textContent = err.error || 'HTTP ' + res.status;
+    }
+  } catch (e) {
+    console.error('Failed to rotate visitor session keys', e);
+    if (status) {
+      status.textContent = t(
+        'session_keys_rotate_failed',
+        'The rotation request did not reach the gateway.',
+      );
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function toggleVanityHookPathInput() {

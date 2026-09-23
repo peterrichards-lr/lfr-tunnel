@@ -866,7 +866,14 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// old generation (#2195). Tracked, because both write to the database -- the audit entry on
 	// a rotation is the only record that one was attempted, and #1833 is what happens when an
 	// untracked goroutine is still inside SQLite as Stop closes the handle.
-	srv.goTracked(func() { srv.watchVisitorSessionRotation(ctx) })
+	//
+	// Gated on the LOCAL `database` rather than on srv.db inside the goroutine. An edge has no
+	// database and owns nothing here, so the decision is settled at construction -- and reading
+	// srv.db from a freshly started goroutine races the tests that null it to stage a
+	// "database not configured" case, which is what the Race Detector caught on #2199.
+	if database != nil {
+		srv.goTracked(func() { srv.watchVisitorSessionRotation(ctx) })
+	}
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second

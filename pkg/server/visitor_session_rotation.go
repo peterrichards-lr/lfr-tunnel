@@ -388,10 +388,12 @@ func (s *Server) initVisitorSessionRotation(database *db.DB) {
 //     now+interval rather than due+interval. Rotating five times to catch up on five missed days
 //     would exhaust the accepted set's bound and end sessions, which is a worse answer than one
 //     rotation on a key that is five days old.
+//
+// It does NOT re-check s.db. Whether this node owns a key set is settled at construction, where
+// NewServer holds the database handle as a local -- reading the field here would race the tests
+// that null it to stage a "database not configured" case, and a background goroutine deciding
+// its own liveness from mutable shared state is the wrong shape regardless of who writes it.
 func (s *Server) watchVisitorSessionRotation(ctx context.Context) {
-	if s.db == nil {
-		return
-	}
 	ticker := time.NewTicker(visitorSessionRotationCheckInterval)
 	defer ticker.Stop()
 	for {

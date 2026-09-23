@@ -49,9 +49,12 @@ func getInspector(t *testing.T, port int, path string) (http.Header, []byte) {
 //
 // Two things make this an assertion about the DASHBOARD rather than about "some route":
 //
-//   - the body is compared against DashboardHTML, so only the dashboard handler can satisfy it.
-//     /favicon.ico sets a Cache-Control of its own, and an assertion that merely looked for the
-//     header's presence would pass on that route while the dashboard stayed uncached.
+//   - the body is compared against the rendered dashboard, so only the dashboard handler can
+//     satisfy it. /favicon.ico sets a Cache-Control of its own, and an assertion that merely looked
+//     for the header's presence would pass on that route while the dashboard stayed uncached.
+//     Compared against RenderDashboardHTML(port) rather than the raw DashboardHTML embed because
+//     the page is stamped with the port it bound as it is served (#2190); the embed is a template,
+//     not the artefact the browser receives.
 //   - the value has to prevent unconditional reuse, not merely exist. The favicon's
 //     `public, max-age=86400` is a Cache-Control and would fail this, which is the point.
 //
@@ -64,10 +67,11 @@ func TestInspectorDashboardIsNotCached(t *testing.T) {
 
 	header, body := getInspector(t, port, "/")
 
-	if !bytes.Equal(body, DashboardHTML) {
-		t.Fatalf("GET / did not serve the embedded dashboard (%d bytes read, %d embedded); "+
+	want := RenderDashboardHTML(port)
+	if !bytes.Equal(body, want) {
+		t.Fatalf("GET / did not serve the rendered dashboard (%d bytes read, %d expected); "+
 			"the rest of this test would be asserting against the wrong route",
-			len(body), len(DashboardHTML))
+			len(body), len(want))
 	}
 
 	got := header.Get("Cache-Control")

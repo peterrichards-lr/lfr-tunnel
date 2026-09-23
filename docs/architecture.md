@@ -189,6 +189,8 @@ graph TD
    SEs can inject arbitrary HTTP headers (e.g., `-add-header "X-Bypass-CORS: true"`) at runtime. The interceptor injects these into every incoming request before Liferay sees them, bypassing restrictive local domain configurations without touching Tomcat config files.
 2. **Local Traffic Inspector (`http://localhost:4040`)**:
    The interceptor buffers the last 100 HTTP requests and their corresponding responses (up to 10KB of body payloads each). It serves a rich, real-time SPA dashboard via `//go:embed` on `localhost:4040` (automatically binding to `0.0.0.0` inside containerized execution to support host port mapping, or custom interfaces via the `LFT_INSPECTOR_BIND` environment variable). SEs can watch Webhooks hit their local machine and inspect the exact JSON payloads natively.
+
+   **4040 is a starting point, not a guarantee.** If the port is already held — a second client on the same machine is the usual way — `StartInspector` increments and retries up to ten times, so the second Inspector comes up on 4041. Because the page is embedded, it cannot know which one it is: it ships with a `__LFT_INSPECTOR_PORT__` placeholder that `RenderDashboardHTML` rewrites with the bound port as the page is served, and the translated `client_listening` string carries a `{0}` token the page substitutes the same value into. Before #2190 the port was baked into all six translations and both Inspectors claimed 4040, which is the wrong way round — the log line was correct and the screen was not.
 3. **Maintenance Mode**:
    From the Inspector dashboard, developers can instantly toggle **Maintenance Mode**. The interceptor ceases forwarding traffic to Tomcat and immediately returns a `503 Service Unavailable` with a Liferay-branded fallback HTML page. This allows SEs to reboot their local Tomcat without killing the `lfr-tunnel` process or losing their claimed subdomain.
 
@@ -454,4 +456,4 @@ Properties worth knowing when reading these figures:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-16* | *Last Reviewed: 2026-09-16*
+*Last Updated: 2026-09-23* | *Last Reviewed: 2026-09-23*

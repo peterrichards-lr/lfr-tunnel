@@ -480,10 +480,20 @@ func pruneUncommittedGenerations(stored storedVisitorSessionSecrets, retirements
 // explicitly ruled out.
 //
 // The current generation is never retired, whatever the schedule says.
+//
+// It takes the rotation lock for the same reason a rotation does. Both read the bookkeeping row,
+// change it and write it back, so a manual rotation running while this sweep is halfway through
+// would lose one of the two edits -- and the edit at risk is a retirement schedule, whose loss
+// means a generation that verifies until the accepted set's bound stops rotation altogether.
+// sweepVisitorSessionRotation calls this BEFORE the rotation rather than inside it, so there is
+// nothing re-entrant to deadlock on.
 func (s *Server) retireVisitorSessionGenerations(now time.Time) {
 	if s.db == nil {
 		return
 	}
+	s.visitorSessionRotationMu.Lock()
+	defer s.visitorSessionRotationMu.Unlock()
+
 	state := loadVisitorSessionRotationState(s.db)
 	if len(state.Retirements) == 0 {
 		return

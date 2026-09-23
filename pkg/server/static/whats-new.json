@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.48.51",
+    "release_date": "2026-09-23",
+    "features": [
+      "fix(server): count request headers as Data In, not only request bodies (#2177) (#2178)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/ec2 (#2173)",
+      "chore(deps): bump golang.org/x/time from 0.15.0 to 0.16.0 (#2174)",
+      "chore(deps): bump golang.org/x/crypto from 0.56.0 to 0.57.0 (#2171)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/sts (#2170)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#2169)"
+    ]
+  },
+  {
     "version": "v1.48.50",
     "release_date": "2026-09-22",
     "features": [
@@ -34,18 +46,6 @@
       "fix(scripts): a test lock with no pid recorded can now be broken (#2145) (#2146)",
       "fix(portal): stable alphabetical tunnel order, an inline expander, and grouping on V2's Dashboard (#2143) (#2144)",
       "feat(portal): group a client's tunnels under one collapsible row in both arms (#2129) (#2142)"
-    ]
-  },
-  {
-    "version": "v1.48.46",
-    "release_date": "2026-09-21",
-    "features": [
-      "fix(server): an edge relays the reservation's access control to the client (#2139) (#2140)",
-      "security(server): the telemetry feed no longer sends stored passcode hashes to the browser (#2135) (#2136)",
-      "security(server): a lease no longer publishes its session token or Basic Auth credential (#2137) (#2138)",
-      "fix(client): the Inspector shows the access control the gateway holds, not a hardcoded guess (#2130) (#2134)",
-      "fix(client): --upgrade looked for a pid file nothing writes, and -stop ignored the tray (#2128) (#2133)",
-      "fix(inspector): the state poll no longer wipes what you typed into Access Control (#2131) (#2132)"
     ]
   }
 ]

@@ -233,12 +233,26 @@ func (s *Server) initVisitorSessionSecrets(database *db.DB) {
 // on its own the moment it comes back -- the same convergence SendEdgeSchedule and
 // BroadcastNodeSet already rely on, and the reason a miss here is logged rather than retried.
 func (s *Server) SendVisitorSessionSecrets(nodeID string) {
+	if err := s.pushVisitorSessionSecrets(nodeID); err != nil {
+		// Logged, never retried. The handshake re-sends, which is what makes a node converge
+		// on its own; a miss here costs the node nothing it will not be told again.
+		slog.Info(fmt.Sprintf("[Edge WS] Visitor session keys for %s were not sent: %v", nodeID, err))
+	}
+}
+
+// pushVisitorSessionSecrets is SendVisitorSessionSecrets with the failure returned rather than
+// only logged (#2195).
+//
+// The rotation engine needs the answer: a push that did not go out is a node that cannot
+// acknowledge, and the whole point of a prepare/commit gate is to be able to say WHICH node and
+// WHY rather than to wait out a timeout with no explanation.
+func (s *Server) pushVisitorSessionSecrets(nodeID string) error {
 	stored := s.visitorSessionSecrets.get()
 	if len(stored.Secrets) == 0 {
 		// Not the control plane, or the key set could not be established. Either way there is
 		// nothing true to say, and saying nothing leaves the edge on its node-local key rather
 		// than on no key at all.
-		return
+		return fmt.Errorf("this node holds no visitor session keys to send")
 	}
 
 	payload, err := json.Marshal(ControlMessage{
@@ -247,21 +261,50 @@ func (s *Server) SendVisitorSessionSecrets(nodeID string) {
 		CurrentSessionSecretID: stored.CurrentID,
 	})
 	if err != nil {
-		slog.Error(fmt.Sprintf("[Edge WS] Could not encode the visitor session keys for %s: %v", nodeID, err))
-		return
+		return fmt.Errorf("the visitor session keys could not be encoded: %w", err)
 	}
 
 	s.edgeClientsMu.RLock()
 	conn, exists := s.edgeClients[nodeID]
 	s.edgeClientsMu.RUnlock()
 	if !exists || conn == nil {
-		slog.Info(fmt.Sprintf("[Edge WS] Visitor session keys for %s not sent: it has no control connection", nodeID))
-		return
+		return fmt.Errorf("it has no control connection")
 	}
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-		slog.Warn(fmt.Sprintf("[Edge WS] Visitor session keys for %s failed to send: %v", nodeID, err))
-		return
+		return fmt.Errorf("the control channel write failed: %w", err)
 	}
 	// Counts and generation ids only. The keys themselves never reach a log line.
 	slog.Info(fmt.Sprintf("[Edge WS] Told %s the visitor session keys: %d accepted, minting with generation %s", nodeID, len(stored.Secrets), stored.CurrentID))
+	return nil
+}
+
+// applyAndPersistVisitorSessionSecrets makes one key set authoritative on central: validated,
+// applied to central's own proxy handler, then written to admin_settings (#2195).
+//
+// The order is the design. Validation happens inside SetVisitorSessionSecrets, so applying
+// first means a set central itself would refuse is never written to the database -- the
+// alternative persists a row that every node including this one rejects on the next restart.
+// Persisting second means a write failure leaves a fleet that agrees with itself and a database
+// one rotation behind, which the next rotation corrects.
+func (s *Server) applyAndPersistVisitorSessionSecrets(database *db.DB, stored storedVisitorSessionSecrets) error {
+	if database == nil {
+		return fmt.Errorf("no database: only the control plane owns visitor session keys")
+	}
+	if !stored.valid() {
+		return fmt.Errorf("the key set is not usable: %d keys, current generation %q", len(stored.Secrets), stored.CurrentID)
+	}
+	if s.proxyHandler != nil {
+		if err := s.proxyHandler.SetVisitorSessionSecrets(stored.Secrets, stored.CurrentID); err != nil {
+			return fmt.Errorf("the control plane refused its own key set: %w", err)
+		}
+	}
+	payload, err := json.Marshal(stored)
+	if err != nil {
+		return fmt.Errorf("could not encode the visitor session keys for storage: %w", err)
+	}
+	if err := database.SetAdminSetting(visitorSessionSecretSettingKey, string(payload)); err != nil {
+		return fmt.Errorf("could not persist the visitor session keys: %w", err)
+	}
+	s.visitorSessionSecrets.set(stored)
+	return nil
 }

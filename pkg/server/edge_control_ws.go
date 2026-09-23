@@ -171,6 +171,19 @@ type ControlMessage struct {
 	// the connection and take kicks, schedules and blacklist pushes down with it.
 	SessionSecrets         []VisitorSessionSecret `json:"session_secrets,omitempty"`
 	CurrentSessionSecretID string                 `json:"current_session_secret_id,omitempty"`
+	// AcceptedSessionSecretIDs travels UP only, on the visitor_session_secrets_ack frame
+	// (#2195). It is the third thing to go in that direction, after the byte deltas and the
+	// diagnostics ack, and it rides the same connection for the same reason: an edge has no
+	// database, so a rotation's evidence reaches the audit log on central or it does not exist.
+	//
+	// GENERATION IDS ONLY -- never key material. Ids are labels (see VisitorSessionSecret), and
+	// a node has no reason to send a signing key back to the node that gave it one.
+	//
+	// The node reads these back out of its live proxy handler rather than echoing the frame it
+	// was sent, so an acknowledgement cannot be satisfied by a node that received the keys and
+	// then refused them. CurrentSessionSecretID is reused on the way up to say which generation
+	// the node is now MINTING with, which is the question a commit has to answer.
+	AcceptedSessionSecretIDs []string `json:"accepted_session_secret_ids,omitempty"`
 }
 
 // nodeSetFrameType is the control-channel frame that carries central's roster fingerprint
@@ -495,6 +508,16 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				// the delivery entry reaches the database (#1833). The tracked worker in
 				// watchDiagnosticsExpiry does the write.
 				s.queueForwardedDiagnosticsAck(nodeID, inbound.DiagRequestID)
+			case visitorSessionSecretAckFrameType:
+				// An edge reporting which session-key generations it now holds (#2195).
+				// nodeID is this connection's authenticated identity rather than anything
+				// the payload claims, the same rule the metrics frame follows -- a node
+				// must not be able to acknowledge a rotation on another node's behalf.
+				//
+				// Recorded in memory only. This read pump is not counted by bgWG (#1833),
+				// so nothing here may reach the database; the rotation runner is a tracked
+				// goroutine and it is the one that writes the audit entry.
+				s.noteVisitorSessionSecretAck(nodeID, inbound.CurrentSessionSecretID, inbound.AcceptedSessionSecretIDs)
 			}
 		}
 	}()
@@ -1361,10 +1384,18 @@ func (s *Server) runEdgeControlChannel() {
 				}
 				if err := s.proxyHandler.SetVisitorSessionSecrets(msg.SessionSecrets, msg.CurrentSessionSecretID); err != nil {
 					slog.Error(fmt.Sprintf("[Edge Control] Visitor session keys from the control plane were rejected, keeping the previous set: %v", err))
+					// Deliberately NOT acknowledged. A rotation's commit gate is the only
+					// thing standing between a refused key set and a fleet half of which
+					// mints with a generation the other half has never heard of, so a
+					// refusal has to read as silence upstream (#2195).
 					break
 				}
 				// Counts and generation ids only -- never the keys.
 				slog.Info(fmt.Sprintf("[Edge Control] Visitor session keys updated: %d accepted, minting with generation %s", len(msg.SessionSecrets), msg.CurrentSessionSecretID))
+				// And say so upwards, on the same connection (#2195). Sent after the apply
+				// and built from what the handler now holds, so the acknowledgement is
+				// evidence of state rather than of receipt.
+				s.reportVisitorSessionSecretsUpstream()
 			case diagnosticsCollectFrameType:
 				// Central forwarding an admin's collection request for a user THIS node
 				// serves (#1991). Held in memory only, like the schedule and the node set

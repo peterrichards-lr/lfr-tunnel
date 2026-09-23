@@ -418,22 +418,26 @@ type Server struct {
 	// handshake. The empty string means central has not told this node yet, and the
 	// heartbeat then omits the field entirely -- an absent fingerprint is not a change to
 	// any client (pkg/client's TestAnAbsentFingerprintIsNotAChange).
-	upstreamNodeSet    string
-	maintTimer         *time.Timer
-	maintScheduledAt   time.Time
-	maintMutex         sync.RWMutex
-	unsubscribeSecret  string
-	translations       map[string]map[string]string
-	lastPortalActivity map[string]time.Time
-	portalActivityMu   sync.RWMutex
-	maintReason        string
-	maintAction        string
-	maintDuration      int
-	maintEndTime       time.Time
-	wsClients          map[*wsClient]bool
-	wsMutex            sync.RWMutex
-	edgeClients        map[string]*safeConn
-	edgeVersions       map[string]string // node_id -> version
+	upstreamNodeSet string
+	// visitorSessionSecrets is central's copy of the signing keys for visitor session cookies
+	// (#2181), read once from admin_settings at startup and handed to each edge on its own
+	// handshake. Left empty on an edge, which owns nothing here and waits to be told.
+	visitorSessionSecrets visitorSessionSecretState
+	maintTimer            *time.Timer
+	maintScheduledAt      time.Time
+	maintMutex            sync.RWMutex
+	unsubscribeSecret     string
+	translations          map[string]map[string]string
+	lastPortalActivity    map[string]time.Time
+	portalActivityMu      sync.RWMutex
+	maintReason           string
+	maintAction           string
+	maintDuration         int
+	maintEndTime          time.Time
+	wsClients             map[*wsClient]bool
+	wsMutex               sync.RWMutex
+	edgeClients           map[string]*safeConn
+	edgeVersions          map[string]string // node_id -> version
 	// edgeMetricsSeen records when each node last delivered a bandwidth frame, so the portal
 	// can tell a quiet edge from one whose reporting has stopped (#1980).
 	edgeMetricsSeen *edgeMetricsTracker
@@ -667,6 +671,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.db = database
 	srv.proxyHandler.caCert = caCert
 	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
+	// The control plane owns the visitor session-cookie signing keys and persists them, so a
+	// visitor's session survives a failover, a failback and a restart of any gateway including
+	// this one (#2181). A node with no database is an edge: it is told these over the control
+	// channel instead.
+	srv.initVisitorSessionSecrets(database)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
 	// Optional and absent by default: no geo-IP database is shipped by any vendor's

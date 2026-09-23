@@ -56,29 +56,134 @@ type ProxyHandler struct {
 	limiters            sync.Map // Map of host -> *rate.Limiter
 	caCert              *x509.Certificate
 	db                  *db.DB
-	cookieSecret        []byte
 	remoteRouteResolver RemoteRouteResolver
 	// trustedProxies mirrors the server's, so the visitor-facing path resolves a client
 	// address by the same rule as everything else (#1325).
 	trustedProxies []*net.IPNet
+	// Visitor session-cookie signing keys (#2181). VERIFY-MANY, MINT-ONE: a cookie is
+	// checked against every key in sessionKeys and signed only with sessionCurrent.
+	//
+	// The set is the point. A session cookie lives 24 hours, so a node has to go on ACCEPTING
+	// a key for at least that long after it stops SIGNING with it -- otherwise a rotation
+	// would end every session in flight, which is the bug these fields exist to fix.
+	//
+	// sessionKeys is REPLACED, never mutated in place, so a reader may take the slice header
+	// under the lock and iterate it afterwards.
+	sessionMu        sync.RWMutex
+	sessionKeys      []visitorSessionKey
+	sessionCurrent   visitorSessionKey
+	sessionBootstrap visitorSessionKey
+	// nodeLocalWarnOnce holds the "this node has not been told the fleet key" warning to one
+	// line per process. Minting with a node-local key is a real degradation -- those sessions
+	// do not survive a failover -- and #1245 is the standing lesson that a behaviour
+	// difference nobody can see is indistinguishable from one that is not happening.
+	nodeLocalWarnOnce sync.Once
+}
+
+// visitorSessionKey is one signing key held in memory, decoded and ready to HMAC with.
+//
+// id is the generation label the control channel names the key by; it is not secret. key is.
+type visitorSessionKey struct {
+	id  string
+	key []byte
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.
 func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler {
-	secret := make([]byte, 32)
-	_, _ = rand.Read(secret) //nolint:errcheck
 	var trusted []*net.IPNet
 	if cfg != nil {
 		trusted = parseTrustedProxies(cfg.TrustedProxies)
 	} else {
 		trusted = parseTrustedProxies(nil)
 	}
-	return &ProxyHandler{
+	p := &ProxyHandler{
 		registry:       registry,
 		config:         cfg,
-		cookieSecret:   secret,
 		trustedProxies: trusted,
 	}
+
+	// The node-local bootstrap key: what this gateway signs with until central tells it the
+	// fleet key (#2181). It is the pre-#2181 behaviour kept as a floor, so a gateway running
+	// ahead of its control plane degrades to "sessions do not survive a move" rather than to
+	// "no correct passcode is ever accepted".
+	//
+	// The error is handled rather than discarded. A zeroed key would be a PREDICTABLE signing
+	// key, which is worse than no key: with no key this node mints nothing and says so, and
+	// the passcode page is served again rather than a forgeable session being issued.
+	boot := make([]byte, visitorSessionSecretBytes)
+	if _, err := rand.Read(boot); err != nil {
+		slog.Error(fmt.Sprintf("[Proxy] No randomness for a session signing key (%v); this gateway will not start visitor sessions until the control plane sends it one", err))
+		return p
+	}
+	p.sessionBootstrap = visitorSessionKey{id: nodeLocalSessionKeyID, key: boot}
+	p.sessionCurrent = p.sessionBootstrap
+	p.sessionKeys = []visitorSessionKey{p.sessionBootstrap}
+	return p
+}
+
+// SetVisitorSessionSecrets replaces the fleet-wide signing keys this handler accepts, and
+// names the one it mints with (#2181).
+//
+// Called on central at startup from its own database, and on an edge every time central pushes
+// the set down the control channel. Rejecting a malformed set with an error rather than
+// applying half of it is deliberate: the caller keeps the keys it already had, which is a
+// working node, instead of a node holding a set nothing agrees with.
+//
+// The node-local bootstrap key stays in the ACCEPTED set. Cookies this node minted before it
+// was told the fleet key are still live -- they last 24 hours -- and dropping the key that
+// signed them would log those visitors out at exactly the moment the fix arrived.
+func (p *ProxyHandler) SetVisitorSessionSecrets(secrets []VisitorSessionSecret, currentID string) error {
+	if len(secrets) == 0 {
+		return fmt.Errorf("no visitor session signing keys were supplied")
+	}
+	if len(secrets) > maxAcceptedVisitorSessionSecrets {
+		return fmt.Errorf("%d visitor session signing keys were supplied, more than the %d this node accepts", len(secrets), maxAcceptedVisitorSessionSecrets)
+	}
+	if currentID == "" {
+		return fmt.Errorf("no current visitor session key generation was named")
+	}
+
+	keys := make([]visitorSessionKey, 0, len(secrets)+1)
+	var current visitorSessionKey
+	for _, secret := range secrets {
+		if secret.ID == "" {
+			return fmt.Errorf("a visitor session signing key was supplied with no generation id")
+		}
+		if secret.ID == nodeLocalSessionKeyID {
+			return fmt.Errorf("a visitor session signing key was supplied under the reserved generation id %q", nodeLocalSessionKeyID)
+		}
+		raw, err := hex.DecodeString(secret.Key)
+		if err != nil {
+			return fmt.Errorf("visitor session signing key %s is not valid hex", secret.ID)
+		}
+		if len(raw) != visitorSessionSecretBytes {
+			return fmt.Errorf("visitor session signing key %s is %d bytes, not %d", secret.ID, len(raw), visitorSessionSecretBytes)
+		}
+		key := visitorSessionKey{id: secret.ID, key: raw}
+		keys = append(keys, key)
+		if secret.ID == currentID {
+			current = key
+		}
+	}
+	if len(current.key) == 0 {
+		return fmt.Errorf("the current visitor session key generation %s is not among the %d supplied", currentID, len(secrets))
+	}
+
+	p.sessionMu.Lock()
+	defer p.sessionMu.Unlock()
+	if len(p.sessionBootstrap.key) > 0 {
+		keys = append(keys, p.sessionBootstrap)
+	}
+	p.sessionKeys = keys
+	p.sessionCurrent = current
+	return nil
+}
+
+// visitorSessionKeys reports the key to mint with and the keys to verify against.
+func (p *ProxyHandler) visitorSessionKeys() (visitorSessionKey, []visitorSessionKey) {
+	p.sessionMu.RLock()
+	defer p.sessionMu.RUnlock()
+	return p.sessionCurrent, p.sessionKeys
 }
 
 // SetRemoteRouteResolver configures the callback used to locate and proxy traffic to
@@ -695,17 +800,42 @@ func (r *trackingReadCloser) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (p *ProxyHandler) createSessionCookie(subdomain string) string {
+// createSessionCookie signs a visitor's session with the CURRENT key, reporting false when
+// this node has no key to sign with.
+//
+// The cookie deliberately does NOT carry the generation id that signed it (#2181). The
+// alternative -- naming the generation so verification is one HMAC instead of up to four -- was
+// considered and rejected: the accepted set is bounded at four keys, so the saving is three
+// HMACs over forty bytes, and the cost is publishing this deployment's rotation cadence to
+// every visitor who opens their cookie jar. The cheaper thing to leak is nothing.
+func (p *ProxyHandler) createSessionCookie(subdomain string) (string, bool) {
+	current, _ := p.visitorSessionKeys()
+	if len(current.key) == 0 {
+		return "", false
+	}
+	if current.id == nodeLocalSessionKeyID {
+		p.nodeLocalWarnOnce.Do(func() {
+			slog.Warn("[Proxy] Signing visitor sessions with a key local to this gateway: the control plane has not sent the fleet key. Sessions started now will not survive a failover or a restart (#2181).")
+		})
+	}
+
 	expiration := time.Now().Add(24 * time.Hour).Unix()
 	payload := fmt.Sprintf("%s:%d", subdomain, expiration)
 
-	h := hmac.New(sha256.New, p.cookieSecret)
+	h := hmac.New(sha256.New, current.key)
 	h.Write([]byte(payload))
 	signature := hex.EncodeToString(h.Sum(nil))
 
-	return fmt.Sprintf("%s:%s", payload, signature)
+	return fmt.Sprintf("%s:%s", payload, signature), true
 }
 
+// verifySessionCookie checks a visitor's session against EVERY key this node accepts.
+//
+// Trying the whole set is what lets a cookie minted on one gateway be honoured on another, and
+// what will let a rotation retire a key without ending the sessions it signed. No candidate
+// short-circuits the loop, for the reason the edge token check already states (#1491): an early
+// exit would make the time taken report WHICH generation signed the cookie, which during a
+// rotation is a statement about the fleet nobody needs to be able to read from outside.
 func (p *ProxyHandler) verifySessionCookie(cookieValue, subdomain string) bool {
 	parts := strings.Split(cookieValue, ":")
 	if len(parts) != 3 {
@@ -726,11 +856,20 @@ func (p *ProxyHandler) verifySessionCookie(cookieValue, subdomain string) bool {
 	}
 
 	payload := fmt.Sprintf("%s:%s", cookieSubdomain, expStr)
-	h := hmac.New(sha256.New, p.cookieSecret)
-	h.Write([]byte(payload))
-	expectedSignature := hex.EncodeToString(h.Sum(nil))
-
-	return hmac.Equal([]byte(signature), []byte(expectedSignature))
+	_, accepted := p.visitorSessionKeys()
+	matched := false
+	for _, candidate := range accepted {
+		if len(candidate.key) == 0 {
+			continue
+		}
+		h := hmac.New(sha256.New, candidate.key)
+		h.Write([]byte(payload))
+		expectedSignature := hex.EncodeToString(h.Sum(nil))
+		if hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+			matched = true
+		}
+	}
+	return matched
 }
 
 func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request, host, redirectURI, errStr string) {
@@ -868,7 +1007,16 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 			}
 			parts := strings.SplitN(host, ".", 2)
 			subdomain := parts[0]
-			cookieVal := p.createSessionCookie(subdomain)
+			cookieVal, signed := p.createSessionCookie(subdomain)
+			if !signed {
+				// The passcode was right and there is still no session to hand back, because
+				// this gateway has no key to sign one with. Issuing an unsigned or
+				// zero-key-signed cookie here would be a session anyone could forge, so the
+				// visitor is asked again instead -- and told it is the gateway, not them.
+				slog.Error(fmt.Sprintf("[Proxy] %s: the correct passcode was entered but this gateway holds no session signing key, so no session could be started", host))
+				p.servePasscodePage(w, r, host, redirectURI, "This gateway is still starting up. Please try again in a moment.")
+				return false
+			}
 
 			http.SetCookie(w, &http.Cookie{
 				Name:     "lfr_tunnel_session",

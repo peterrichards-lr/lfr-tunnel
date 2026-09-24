@@ -1412,6 +1412,34 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	return listenPort, nil
 }
 
+// upgradedConnectionNote is what the Inspector shows in place of a response body for an upgraded
+// request. Stated rather than left empty: an empty preview is indistinguishable from a response
+// that genuinely had no body, and a WebSocket carrying megabytes is the case where that reads
+// most wrongly.
+const upgradedConnectionNote = "[connection upgraded - subsequent frames are not part of this request]"
+
+// headerMapOf flattens a header block the way the Inspector records it.
+func headerMapOf(h http.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[k] = strings.Join(v, ", ")
+	}
+	return out
+}
+
+// responseHeaderWireSize is the on-the-wire size of a response's status line and headers.
+//
+// Shared by the ordinary path and the 101 path rather than spelled twice: an upgraded response
+// still costs its handshake headers, and two copies of this sum would drift the moment one of
+// them was corrected.
+func responseHeaderWireSize(res *http.Response) int64 {
+	var n int64
+	for k, v := range res.Header {
+		n += int64(len(k) + len(strings.Join(v, ", ")) + 4) // key + ": " + value + "\r\n"
+	}
+	return n + int64(len(res.Proto)+15) // status line, e.g. "HTTP/1.1 200 OK\r\n"
+}
+
 // interceptorTransport intercepts roundtrips to capture request/response data.
 type interceptorTransport struct {
 	engine     *InterceptorEngine
@@ -1554,6 +1582,32 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		return res, err
 	}
 
+	// An upgraded connection is NOT a body, and treating it as one made every WebSocket through
+	// the interceptor unreachable (#2213).
+	//
+	// On a 101 the transport hands back a body that is also the backend CONNECTION.
+	// ReverseProxy type-asserts it to io.ReadWriteCloser so it can hijack and shuttle raw bytes
+	// both ways, and the preview capture below breaks that twice over: it replaces res.Body with
+	// a struct{io.Reader; io.Closer}, which fails the assertion, and before that it io.ReadAll's
+	// up to 10KB off the live connection -- which on a protocol where the client speaks first
+	// never returns, so the handshake response never even reaches the visitor. Measured as a
+	// five-second hang rather than the gateway's 502 (#2179, the same defect in pkg/server).
+	//
+	// So the body is left exactly as the transport returned it. There is nothing to preview: an
+	// upgraded connection has no response body, and the frames that follow are not this
+	// request's. The record says so rather than reporting an empty one, for the reason #2191
+	// gives about the pane stating a value it does not have.
+	if res.StatusCode == http.StatusSwitchingProtocols {
+		rec.Status = res.StatusCode
+		rec.RespHeaders = headerMapOf(res.Header)
+		rec.RespBody = upgradedConnectionNote
+		t.engine.mu.Lock()
+		t.engine.BytesOut += responseHeaderWireSize(res)
+		t.engine.mu.Unlock()
+		t.engine.AddRecord(rec)
+		return res, nil
+	}
+
 	// Capture response body (up to 10KB)
 	var respBodyStr string
 	if res.Body != nil {
@@ -1575,14 +1629,8 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		}
 	}
 
-	respHeaders := make(map[string]string)
-	var respHeadersSize int64
-	for k, v := range res.Header {
-		joinVal := strings.Join(v, ", ")
-		respHeaders[k] = joinVal
-		respHeadersSize += int64(len(k) + len(joinVal) + 4) // key + ": " + value + "\r\n"
-	}
-	respHeadersSize += int64(len(res.Proto) + 15) // Status line e.g., "HTTP/1.1 200 OK\r\n"
+	respHeaders := headerMapOf(res.Header)
+	respHeadersSize := responseHeaderWireSize(res)
 
 	var respBodySize int64
 	if res.ContentLength >= 0 {

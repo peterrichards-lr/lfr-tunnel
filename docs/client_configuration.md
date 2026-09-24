@@ -225,7 +225,7 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 | `auth_token` | string | *empty* — read from the token file | Your Personal Access Token. Prefer `~/.lfr-tunnel/token` or `token_file`; see [Secrets](#secrets). |
 | `token_file` | string | *empty* | A file to read the Personal Access Token from, so it need not be in this file at all. A leading `~` expands. **Overrides `auth_token`**, and is overridden by `LFT_CLIENT_TOKEN` and `-token`. Unlike the fallbacks, a path that cannot be read **stops the client** rather than leaving it with no token. Example: `"~/.lfr-tunnel/token"`. |
 | `subdomain` | string | this machine's hostname | Requested subdomain prefix. Example: `"your-name-se"`. The hostname fallback takes the first label, lowercases it and turns spaces and underscores into dashes; if even that is unavailable it uses `se-dev`. |
-| `custom_domain` | string | *empty* | A custom domain already reserved for you in the portal, used instead of a subdomain. Example: `"demo.example.com"`. |
+| `custom_domain` | string | *empty* | Your own domain, used instead of a subdomain. Point it at the gateway with a `CNAME` and register it under **Custom Domains** in the portal first — see [Using Your Own Domain](custom_domains.md). The gateway obtains the TLS certificate itself. Example: `"demo.example.com"`. |
 
 ### What is exposed
 
@@ -513,4 +513,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*
+*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*

@@ -61,6 +61,7 @@ nav:
     - Liferay SE Guide: liferay-se-guide.md
     - MCP Guide: mcp.md
     - Exposing Any Local HTTP Service: exposing-any-http-service.md
+    - Using Your Own Domain: custom_domains.md
   - Server & Operator Guides:
     - Control Plane Setup: server/setup_guide.md
     - Edge Node Scaling: server/edge_setup_guide.md

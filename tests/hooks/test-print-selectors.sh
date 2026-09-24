@@ -34,6 +34,11 @@ run_case() {
     dir="$WORK/$(printf '%s' "$label" | tr -c 'a-zA-Z0-9' '_')"
     mkdir -p "$dir/scripts" "$dir/ui/src" "$dir/pkg/server/static"
     cp "$GATE" "$dir/scripts/"
+    # The gate requires scripts/lib/token-match.cjs for its boundary rule (#2208). Without it
+    # node exits 1 on MODULE_NOT_FOUND before reaching any gate code, and every case expecting
+    # exit 1 below would pass for that reason instead of for its own -- the harness failing
+    # instead of the subject (SKILL 5c.5). Checked explicitly after each run, too.
+    cp -R "${REPO_ROOT}/scripts/lib" "$dir/scripts/lib"
 
     printf '@media print {\n%s\n}\n' "$css" > "$dir/ui/src/index.css"
     printf '@media print {\n%s\n}\n' "$css" > "$dir/pkg/server/static/dashboard.css"
@@ -41,8 +46,14 @@ run_case() {
     printf '%s\n' "$v1markup" > "$dir/pkg/server/dashboard.html"
     printf '// no dynamic classes\n' > "$dir/pkg/server/static/dashboard.js"
 
-    ( cd "$dir" && node scripts/check-print-selectors.cjs >/dev/null 2>&1 )
+    local out
+    out="$( cd "$dir" && node scripts/check-print-selectors.cjs 2>&1 )"
     local got=$?
+    if printf '%s' "$out" | grep -q 'MODULE_NOT_FOUND'; then
+        fail "$label -- the gate could not load a module, so this exit code says nothing about the case:
+$(printf '%s' "$out" | head -3 | sed 's/^/        /')"
+        return
+    fi
     if [ "$got" -eq "$want" ]; then
         pass "$label (exit $got)"
     else

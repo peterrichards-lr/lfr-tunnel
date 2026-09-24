@@ -6,8 +6,11 @@
 // packages. It lives under pkg/config because every caller is writing a file that
 // config.LoadClientConfig or config.LoadServerConfig will read back.
 //
-// It is imported by tests in pkg/config and pkg/server. It is deliberately not imported by any
-// production code, and holds nothing production needs.
+// It is imported by tests in pkg/config, pkg/server and cmd/lfr-tunnel. It is deliberately not
+// imported by any production code, and holds nothing production needs.
+//
+// It is also where IsNestedWorktreeRoot lives (worktree.go), for the same reason: it is a rule
+// every tree-walking gate in this repository needs and no single package owns (#2211).
 package configtest
 
 import "strings"

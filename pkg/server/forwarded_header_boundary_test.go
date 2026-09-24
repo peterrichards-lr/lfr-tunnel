@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"lfr-tunnel/pkg/config/configtest"
 	"lfr-tunnel/pkg/db"
 )
 
@@ -127,7 +128,7 @@ func TestNoHandlerReadsAForwardingHeaderOutsideTheResolver(t *testing.T) {
 			case ".git", "node_modules", "vendor", "ui-dist", "bin", "dist":
 				return filepath.SkipDir
 			}
-			if path != root && isNestedWorktreeRootServer(path) {
+			if path != root && configtest.IsNestedWorktreeRoot(path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -216,12 +217,4 @@ func TestTheOutboundAllowanceIsNameBased(t *testing.T) {
 			"the accepted limit of this check; if it ever matters, key it on type or on package "+
 			"rather than widening the name list silently.", mi[1], mo[1])
 	}
-}
-
-// isNestedWorktreeRootServer mirrors the rule in pkg/config (#1815): a nested worktree root
-// carries .git as a FILE, a real repository root as a directory. Duplicated rather than exported
-// because it is three lines and a test helper; if a third copy appears, promote it.
-func isNestedWorktreeRootServer(dir string) bool {
-	st, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil && st.Mode().IsRegular()
 }

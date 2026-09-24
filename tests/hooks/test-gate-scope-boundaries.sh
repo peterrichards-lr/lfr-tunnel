@@ -46,6 +46,7 @@ CSS_REL="scripts/check-css-modifiers.cjs"
 TOK_REL="scripts/check-theme-tokens.mjs"
 I18N_REL="scripts/check-i18n-keys.cjs"
 PARITY_REL="scripts/check-portal-parity.cjs"
+PRINT_REL="scripts/check-print-selectors.cjs"
 
 PASS=0
 FAIL=0
@@ -66,7 +67,7 @@ harness() {
   FAIL=$((FAIL + 1))
 }
 
-for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PARITY_REL"; do
+for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PARITY_REL" "$PRINT_REL"; do
   [ -f "${REPO_ROOT}/${f}" ] || {
     echo "FATAL: ${f} missing"
     exit 1
@@ -839,6 +840,10 @@ reset_parity_sandbox() {
   SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-parity.XXXXXX")"
   mkdir -p "$SANDBOX/scripts" "$SANDBOX/pkg/server/static" "$SANDBOX/ui"
   cp "${REPO_ROOT}/${PARITY_REL}" "$SANDBOX/scripts/"
+  # findMarker() moved to scripts/lib/token-match.cjs when check-print-selectors.cjs needed the
+  # same rule (#2208). Without this the gate dies on MODULE_NOT_FOUND, which run() reports as a
+  # harness failure rather than letting it satisfy the fire-cases below.
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
   cp "${REPO_ROOT}"/pkg/server/*.html "$SANDBOX/pkg/server/"
   cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
   cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
@@ -978,6 +983,113 @@ else
     pass "CONTROL   a path marker moved to a different route IS reported, so case 21 bounds rather than silences"
   else
     fail "the V1 path marker is not read at all (rc=$RC): $OUT"
+  fi
+fi
+
+echo ""
+echo "-- check-print-selectors.cjs: what counts as a live print selector"
+
+# ---------------------------------------------------------------------------
+# The print sandbox: the gate, the shared matcher it now requires, and both arms' stylesheets
+# and markup. Same shape as the parity sandbox -- every case differs from a passing tree by
+# exactly one edit to the MARKUP, never to the stylesheet, because the question here is whether
+# a selector is still matched and not whether it is still written.
+# ---------------------------------------------------------------------------
+reset_print_sandbox() {
+  [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"
+  SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-print.XXXXXX")"
+  mkdir -p "$SANDBOX/scripts" "$SANDBOX/pkg/server/static" "$SANDBOX/ui"
+  cp "${REPO_ROOT}/${PRINT_REL}" "$SANDBOX/scripts/"
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
+  cp "${REPO_ROOT}"/pkg/server/*.html "$SANDBOX/pkg/server/"
+  cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
+  cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+}
+
+run_print() { run "$PRINT_REL"; }
+
+V2_BANNER="ui/src/components/SessionExpiryWarning.tsx"
+
+reset_print_sandbox
+run_print
+if [ "$RC" -eq 0 ]; then
+  pass "PREMISE   the print sandbox reproduces a passing run"
+else
+  harness "the print sandbox does not pass as built; every case below would fail for that reason:
+$(printf '%s' "$OUT" | head -6)"
+fi
+
+# ---------------------------------------------------------------------------
+# 23. FIRING. A class renamed to EXTEND itself no longer keeps its print rule alive.
+#
+#     selectorsIn() stores the bare name without its leading `.`, and liveness was decided with
+#     markup.includes(). So `.session-expiry-banner` counted as live against markup holding only
+#     `session-expiry-banner-v2` -- and a print rule that matches nothing is indistinguishable
+#     from one that works, which is the entire #1916 defect this gate exists for, surviving in
+#     extended-name form. Exactly #2201's shape one file over, found by sweeping scripts/ for
+#     the SHAPE rather than for the symbol (#2208).
+#
+#     Measured before the fix: this same edit left the gate printing
+#     "V2: OK -- 18 print selector(s) all match markup" and exiting 0.
+#
+#     Matched on the MESSAGE as well as the exit code. The sandbox exits 0 to begin with, so an
+#     exit-code assertion alone would be satisfied by any unrelated breakage the edit caused
+#     (SKILL 5c.1), and only this path names the class as dead.
+# ---------------------------------------------------------------------------
+reset_print_sandbox
+if ! python3 - "$SANDBOX/$V2_BANNER" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = 'className="session-expiry-banner"'
+assert old in s, "the V2 session-expiry banner class is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, 'className="session-expiry-banner-v2"'))
+PY
+  harness "could not rename the V2 session-expiry banner class"
+else
+  run_print
+  if [ "$RC" -ne 0 ] \
+    && says "$OUT" 'session-expiry-banner' \
+    && says "$OUT" 'present only as part of a longer name'; then
+    pass "FIRING    a class renamed to EXTEND itself no longer keeps its print rule alive (#2208)"
+  else
+    fail "an extended rename still counted the print selector live (rc=$RC): $OUT"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 24. BOUNDING. The markup side is a concatenated blob of source, so a whole-word occurrence in
+#     a COMMENT still counts as live.
+#
+#     This is the limit of a lexical match and it is deliberate: the boundary rule above catches
+#     the rename, which is how these selectors actually rot, and telling markup from prose would
+#     need a parser rather than a stricter delimiter. Note this is not the comment case
+#     tests/hooks/test-print-selectors.sh already covers -- that one is a comment in the
+#     STYLESHEET, which selectorsIn() strips before matching. This is the markup side, which is
+#     read whole.
+#
+#     If that ever changes, this case goes red and whoever narrows it has to say so where the
+#     blob is assembled, rather than discovering later that a class is reported dead because its
+#     only other mention was prose.
+# ---------------------------------------------------------------------------
+reset_print_sandbox
+if ! python3 - "$SANDBOX/$V2_BANNER" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = 'className="session-expiry-banner"'
+assert old in s, "the V2 session-expiry banner class is not there -- the mutation would silently no-op"
+s = s.replace(old, 'className="session-expiry-banner-v2"')
+s = "// renamed from session-expiry-banner, see #2208\n" + s
+open(p, "w").write(s)
+PY
+  harness "could not rename the V2 banner class and leave a comment naming the old one"
+else
+  run_print
+  if [ "$RC" -eq 0 ]; then
+    pass "BOUNDING  a whole-word mention in markup PROSE still counts as live, deliberately"
+  else
+    fail "the markup side no longer reads comments -- intended? then say so where collectMarkup() builds the blob and update this case: $OUT"
   fi
 fi
 

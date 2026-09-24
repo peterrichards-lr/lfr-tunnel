@@ -449,13 +449,23 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			// We need to re-register services pointing to the new path
 			fmt.Println("[Update] Re-registering background services to point to the new location...")
 			_ = exec.Command(execPath, "install-service").Run() //nolint:errcheck
+
+			// install-service does not merely rewrite the unit file: installLinux enables AND
+			// starts the systemd unit, and installDarwin loads the plist. So by this line a
+			// client is already coming up, whether or not one was running before the upgrade --
+			// and the relaunch planner has to be told, or it starts a second one beside it
+			// (#2194). On macOS the plists below say so; on Linux nothing did, because
+			// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
+			if runtime.GOOS == "linux" {
+				restartSystemd = true
+			}
 			if runtime.GOOS == "darwin" {
 				_ = exec.Command(execPath, "install-gui-service").Run() //nolint:errcheck
 				// The install commands above generate new plists, so we must reload those instead of the old ones
 				home, _ := os.UserHomeDir()
 				plistToReload = []string{
-					filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.plist"),
-					filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist"),
+					filepath.Join(home, "Library", "LaunchAgents", daemonPlistName),
+					filepath.Join(home, "Library", "LaunchAgents", guiPlistName),
 				}
 			}
 		}
@@ -551,56 +561,181 @@ func appendRelaunchTarget(relaunch [][]string, pid int, kind string) [][]string 
 	return append(relaunch, argv)
 }
 
-// trayRelaunchArgs returns the flags of the tray in a relaunch list, if there is one.
-func trayRelaunchArgs(relaunch [][]string) ([]string, bool) {
-	for _, argv := range relaunch {
-		if IsTrayArgv(argv) {
-			return argv[1:], true
+// The service definitions this upgrade reloads, named here so the planner and the stop path
+// agree with each other. The templates that create them are in service_installer.go; the flags
+// each one runs are modelled in serviceStartArgv and held to the templates by
+// TestServiceStartArgvMatchesWhatTheInstallerWrites.
+const (
+	daemonPlistName = "com.liferay.tunnel.plist"
+	guiPlistName    = "com.liferay.tunnel.gui.plist"
+	systemdUnitName = "lfr-tunnel.service"
+)
+
+// serviceStartArgv returns the command lines the service managers this upgrade reloads will run
+// by themselves, once it has reloaded them.
+//
+// This is the half of the picture planRelaunch never had. The upgrade restarts a client through
+// two independent mechanisms -- the service manager it reloads, and the argv it captured from
+// the process it killed -- and until now only the captured half was planned. A machine with the
+// LaunchAgent or the systemd unit installed therefore got both: one client from the reloaded
+// service and one from the relaunch, which is #2194.
+//
+// argv[0] is this binary because that is what the templates write, but nothing here compares it:
+// the plist records a canonical path that need not match os.Executable(), so every comparison in
+// the planner is on flags alone, exactly as the #2189 one already was.
+func serviceStartArgv(exe string, plistToReload []string, restartSystemd bool) [][]string {
+	var out [][]string
+	for _, plist := range plistToReload {
+		switch filepath.Base(plist) {
+		case daemonPlistName:
+			out = append(out, []string{exe, "-" + backgroundFlagName})
+		case guiPlistName:
+			out = append(out, []string{exe, "-" + guiFlagName})
 		}
 	}
-	return nil, false
+	if restartSystemd {
+		out = append(out, []string{exe, "-" + backgroundFlagName})
+	}
+	return out
 }
 
-// planRelaunch drops a background tunnel that the tray this upgrade is also restarting will
-// start by itself (#2189).
+// startedTunnel returns the configuration of the tunnel a starter brings up by itself.
 //
-// The upgrade kills every process it found and restarts each one, which is right for every
-// process EXCEPT the one that something else it restarted also starts. The tray spawns a client
-// on startup (TrayClientArgs, #2076), so restarting both left two clients racing for one
-// subdomain: the second could not bind the Inspector's 4040 and silently took 4041, and the
-// state file then pointed the menu at whichever wrote last.
-//
-// Deliberately NOT "a GUI came back, so skip the tunnel". The tray does not always connect --
-// -no-autoconnect makes it a control surface and nothing else -- and skipping the relaunch there
-// would leave the user with no tunnel at all, which is #2164, fixed and verified only today.
-// What is skipped is narrower: the one tunnel whose command line is the command line the
-// restarted tray is about to spawn, and only when that tray will in fact spawn it.
-//
-// Every uncertainty resolves towards restarting: an unreadable tray argv, an opt-out, a tunnel
-// configured differently from the tray's. The worst case is therefore the behaviour that exists
-// today -- two clients, one surplus -- and never zero.
-func planRelaunch(relaunch [][]string) [][]string {
-	guiArgs, ok := trayRelaunchArgs(relaunch)
-	if !ok || !TrayConnectsOnStart(guiArgs) {
-		return relaunch
+// A "starter" is anything that ends up with a client running: a captured background tunnel, a
+// tray (which spawns one on startup unless told not to -- #2076), or a service definition. The
+// configuration is the flag vector the running client carries, which is what decides the
+// subdomain, the region and the Inspector port -- so two starters with the same one are two
+// clients racing for one lease. That is the thing this upgrade must not create.
+func startedTunnel(argv []string) ([]string, bool) {
+	if len(argv) == 0 {
+		return nil, false
 	}
-	trayWillStart := TrayTunnelArgs(guiArgs)
+	if IsTrayArgv(argv) {
+		if !TrayConnectsOnStart(argv[1:]) {
+			return nil, false
+		}
+		return TrayTunnelArgs(argv[1:]), true
+	}
+	return withoutBackgroundFlag(argv[1:]), true
+}
+
+// planRelaunch turns the processes this upgrade killed into the command lines it should run, and
+// is where every "do not start a second one" rule lives.
+//
+// It does two things.
+//
+// **It drops what something else will start.** The upgrade restarts every process it found,
+// which is right for every process EXCEPT one that something else it restarted also starts.
+// There are three such starters, and until #2194 the planner knew about one:
+//
+//   - a tray, which spawns a client on startup (#2076, fixed for the tray alone in #2189)
+//   - the CLI service -- launchd's com.liferay.tunnel.plist or the systemd user unit -- which
+//     runs `lfr-tunnel -background`
+//   - the GUI LaunchAgent, which runs `lfr-tunnel -gui`, i.e. another tray
+//
+// The rule is one rule over all three rather than a special case each: a captured entry is
+// dropped when something else already produces the same process, or the same tunnel.
+//
+// **It marks a tunnel as one to start through -background.** The captured argv is the CHILD's,
+// which has already had -background stripped, so running it verbatim starts a client that never
+// passes through handleBackground -- the only place in the tree that writes a pid file. Such a
+// client is invisible to -stop, to -status and to every later -upgrade, so it survives them all
+// and accumulates (#2194). Restoring the flag hands it back to the one writer rather than
+// introducing a second one, which is the mistake #2128 was.
+//
+// Deliberately NOT "a GUI or a service came back, so skip the tunnel". A tray started with
+// -no-autoconnect is a control surface that starts nothing, and a service's client is configured
+// differently from a tunnel the user started by hand. Skipping either would leave the user with
+// no tunnel at all, which is #2164 -- so every uncertainty still resolves towards restarting,
+// and the worst case remains one surplus client rather than none.
+func planRelaunch(relaunch [][]string, serviceStarts [][]string) [][]string {
+	// What will be running after this upgrade without it starting anything itself.
+	startedElsewhere := map[string]bool{} // by the flags of the process
+	tunnelsElsewhere := map[string]bool{} // by the flags of the tunnel that results
+
+	note := func(argv []string) {
+		if len(argv) == 0 {
+			return
+		}
+		startedElsewhere[flagKey(argv[1:])] = true
+		if tunnel, ok := startedTunnel(argv); ok {
+			tunnelsElsewhere[flagKey(tunnel)] = true
+		}
+	}
+	for _, argv := range serviceStarts {
+		note(argv)
+	}
+	// A captured tray is a starter too, and this is the #2189 rule: it covers the tunnel it will
+	// spawn, but not itself -- otherwise it would suppress its own relaunch and the tray would
+	// never come back.
+	for _, argv := range relaunch {
+		if IsTrayArgv(argv) && !startedElsewhere[flagKey(argv[1:])] {
+			if tunnel, ok := startedTunnel(argv); ok {
+				tunnelsElsewhere[flagKey(tunnel)] = true
+			}
+		}
+	}
 
 	out := make([][]string, 0, len(relaunch))
 	for _, argv := range relaunch {
-		// Every match, not just the first: if the machine was already in the doubled state this
-		// issue describes, one relaunch for each of them is still one too many. The tray's own
-		// entry cannot match -- TrayTunnelArgs strips -gui, so a command line equal to it is by
-		// construction not a tray's.
-		if len(argv) > 0 && slices.Equal(argv[1:], trayWillStart) {
-			fmt.Printf("[Update] Not restarting the background tunnel separately: the GUI being "+
-				"restarted connects on startup and will start it (%s).\n",
-				strings.Join(trayWillStart, " "))
-			continue
+		if len(argv) > 0 {
+			if startedElsewhere[flagKey(argv[1:])] {
+				fmt.Printf("[Update] Not restarting %s separately: the service definition this "+
+					"upgrade reloaded runs it (%s).\n",
+					filepath.Base(argv[0]), describeFlags(argv[1:]))
+				continue
+			}
+			// Trays are excluded deliberately, not incidentally: the loop above recorded a
+			// captured tray's own tunnel as covered, so without this a tray would suppress its
+			// own relaunch and never come back -- #2164, by way of the fix for #2189.
+			//
+			// Every match, not just the first: if the machine was already in the doubled state
+			// #2189 and #2194 describe, one relaunch for each of them is still one too many.
+			if tunnel, ok := startedTunnel(argv); ok && !IsTrayArgv(argv) && tunnelsElsewhere[flagKey(tunnel)] {
+				fmt.Printf("[Update] Not restarting the background tunnel separately: something "+
+					"else this upgrade restarted starts it (%s).\n", describeFlags(tunnel))
+				continue
+			}
 		}
-		out = append(out, argv)
+		out = append(out, relaunchArgv(argv))
 	}
 	return out
+}
+
+// describeFlags names a flag vector for a human reading the upgrade's output. The service's own
+// client is configured entirely by the config file and carries none, and "()" on the end of a
+// sentence reads like a truncation rather than an answer.
+func describeFlags(flags []string) string {
+	if len(flags) == 0 {
+		return "no flags"
+	}
+	return strings.Join(flags, " ")
+}
+
+// flagKey identifies a command line by its flags alone, never by argv[0].
+//
+// The paths legitimately differ for the same program: a plist records the canonical executable
+// path, os.Executable() resolves symlinks, and a user's own shell may have used either. Keying
+// on the flags is what the #2189 comparison already did, and widening the key to include the
+// path would silently stop matching the service case this is here for.
+func flagKey(flags []string) string {
+	return strings.Join(flags, "\x00")
+}
+
+// relaunchArgv is the command line the upgrade actually runs for a planned entry.
+//
+// A tray is started exactly as it was found. A tunnel is started through -background, so that
+// handleBackground writes its pid file and the next -stop or -upgrade can see it (#2194).
+func relaunchArgv(argv []string) []string {
+	if len(argv) == 0 || IsTrayArgv(argv) {
+		return argv
+	}
+	for _, a := range argv[1:] {
+		if isFlagToken(a, backgroundFlagName) {
+			return argv
+		}
+	}
+	return append(slices.Clone(argv), "-"+backgroundFlagName)
 }
 
 func stopActiveProcessesAndServices() ([]string, bool, [][]string) {
@@ -614,13 +749,13 @@ func stopActiveProcessesAndServices() ([]string, bool, [][]string) {
 
 	// 1. Unload LaunchAgents on macOS
 	if runtime.GOOS == "darwin" {
-		guiPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
+		guiPlist := filepath.Join(home, "Library", "LaunchAgents", guiPlistName)
 		if _, err := os.Stat(guiPlist); err == nil {
 			fmt.Println("[Update] Unloading macOS GUI LaunchAgent...")
 			_ = exec.Command("launchctl", "unload", guiPlist).Run() //nolint:errcheck
 			plistToReload = append(plistToReload, guiPlist)
 		}
-		daemonPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
+		daemonPlist := filepath.Join(home, "Library", "LaunchAgents", daemonPlistName)
 		if _, err := os.Stat(daemonPlist); err == nil {
 			fmt.Println("[Update] Unloading macOS CLI Daemon LaunchAgent...")
 			_ = exec.Command("launchctl", "unload", daemonPlist).Run() //nolint:errcheck
@@ -633,10 +768,10 @@ func stopActiveProcessesAndServices() ([]string, bool, [][]string) {
 
 	// 2. Stop systemd services on Linux
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("systemctl", "--user", "is-active", "lfr-tunnel.service")
+		cmd := exec.Command("systemctl", "--user", "is-active", systemdUnitName)
 		if err := cmd.Run(); err == nil {
 			fmt.Println("[Update] Stopping Linux systemd user service...")
-			_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run() //nolint:errcheck
+			_ = exec.Command("systemctl", "--user", "stop", systemdUnitName).Run() //nolint:errcheck
 			restartSystemd = true
 			time.Sleep(500 * time.Millisecond)
 		}
@@ -707,11 +842,12 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 	// 2. Restart systemd services on Linux
 	if runtime.GOOS == "linux" && restartSystemd {
 		fmt.Println("[Update] Restarting Linux systemd user service...")
-		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run() //nolint:errcheck
+		_ = exec.Command("systemctl", "--user", "start", systemdUnitName).Run() //nolint:errcheck
 	}
 
-	// 3. Restart the processes this upgrade killed directly (#2164), minus any the tray this
-	// upgrade is also restarting will start by itself (#2189).
+	// 3. Restart the processes this upgrade killed directly (#2164), minus any that something
+	// else it just restarted will start by itself -- a tray (#2189), or one of the service
+	// definitions reloaded in steps 1 and 2 (#2194).
 	//
 	// stopActiveProcessesAndServices stops four kinds of thing -- launchd plists, the systemd
 	// service, the GUI process and background tunnels -- and until now restarted only the first
@@ -719,10 +855,21 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 	// service came back, a `-background` or `-gui` client was killed and left down, with the
 	// upgrade reporting success either way.
 	//
-	// Launched detached, exactly as handleBackground does. The captured argv is the CHILD's,
-	// which has already had -background stripped from it, so re-running it verbatim in the
-	// foreground would attach the tunnel to this upgrade process and kill it again on exit.
-	for _, argv := range planRelaunch(relaunch) {
+	// The services are passed in rather than re-derived, because steps 1 and 2 above are the
+	// only place that knows which of them this upgrade actually stopped -- an installed unit it
+	// found inactive is not one that is about to start a client.
+	//
+	// Launched detached, exactly as handleBackground does; planRelaunch restores the -background
+	// flag on a tunnel so that the process that survives is one the pid-file writer has seen.
+	exe, exeErr := os.Executable()
+	if exeErr != nil {
+		// Only argv[0] of the modelled service command lines, which nothing compares. A blank
+		// one costs the planner nothing and is better than abandoning the plan.
+		exe = ""
+	}
+	serviceStarts := serviceStartArgv(exe, plistToReload, restartSystemd)
+
+	for _, argv := range planRelaunch(relaunch, serviceStarts) {
 		if len(argv) == 0 {
 			continue
 		}

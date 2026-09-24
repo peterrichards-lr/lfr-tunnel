@@ -20,6 +20,7 @@ To prevent information overload, our documentation is divided into dedicated, to
 *   **[Liferay Sales Engineering (SE) Guide](docs/liferay-se-guide.md)** — Team-specific quickstart instructions, Dockerized wrapper scripts, EDR/SentinelOne bypass instructions, and Tomcat/Docker network setups.
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
 *   **[Exposing Any Local HTTP Service](docs/exposing-any-http-service.md)** — The tunnel does not inspect what is listening on the port it publishes, so a Node service, a client extension in dev mode or any other local HTTP server works with `-ports`.
+*   **[Using Your Own Domain](docs/custom_domains.md)** — Serve a tunnel at a domain you own. Point it at the gateway with a `CNAME` and register it in the portal; the gateway obtains and renews the certificate for you.
 
 ### 🛠️ Server Administration
 *   **[Server Gateway Setup Guide](docs/server/setup_guide.md)** — Comprehensive setup guide to host your own gateway server (`lfr-tunneld`), configure wildcard DNS, Caddy/Nginx reverse proxies, Postfix secure TLS SMTP relays, and scheduled backups.
@@ -55,4 +56,4 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*
+*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*

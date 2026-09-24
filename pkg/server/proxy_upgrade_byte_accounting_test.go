@@ -141,14 +141,35 @@ func TestUpgradedConnectionBytesAreCounted(t *testing.T) {
 		t.Fatalf("the WebSocket handshake through the proxy failed (%s): %v", status, err)
 	}
 
-	in := atomic.LoadUint64(&lease.BytesIn)
-	out := atomic.LoadUint64(&lease.BytesOut)
-	if in < uint64(len(payload)) {
-		t.Errorf("BytesIn is %d after sending %d bytes through an upgraded connection; the "+
-			"handshake is counted but the session is not (#2179)", in, len(payload))
+	// WAITED FOR, not sampled once (#2230).
+	//
+	// trackingUpgradedConn increments after the underlying Write returns, which is the right
+	// order -- counting bytes a failed write never delivered would be worse than counting them
+	// late -- but it means the proxy's copy goroutine can still be between the write and the
+	// increment when the echo has already reached us. The first version of this test read the
+	// counters immediately and failed with "BytesIn is 214", the handshake headers alone, on a
+	// tree where nothing was wrong.
+	//
+	// A deadline rather than a sleep: a genuinely uncounted session still fails, and fails with
+	// the last value actually observed rather than with a guess about how long is long enough.
+	want := uint64(len(payload))
+	var in, out uint64
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		in = atomic.LoadUint64(&lease.BytesIn)
+		out = atomic.LoadUint64(&lease.BytesOut)
+		if in >= want && out >= want {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if out < uint64(len(payload)) {
-		t.Errorf("BytesOut is %d after %d bytes were echoed back through an upgraded "+
+
+	if in < want {
+		t.Errorf("BytesIn settled at %d after sending %d bytes through an upgraded connection; "+
+			"the handshake is counted but the session is not (#2179)", in, len(payload))
+	}
+	if out < want {
+		t.Errorf("BytesOut settled at %d after %d bytes were echoed back through an upgraded "+
 			"connection (#2179)", out, len(payload))
 	}
 }

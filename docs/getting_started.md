@@ -376,6 +376,7 @@ the flag parser rather than reading the source (#2081):
 | `-check-version` | off | Asks the gateway what client version it requires and prints the answer as JSON, without starting a tunnel. Use it to find out whether an upgrade is due before one is forced. |
 | `-theme <name>` | unset | Local UI theme: `light`, `dark`, `system` or `time`. |
 | `-log-dir <path>` | `~/.lfr-tunnel/logs` | Where the persistent traffic and error logs are written. |
+| `-domain <fqdn>` | unset | Serve the tunnel at a domain you own instead of a subdomain of the gateway. Point it at the gateway with a `CNAME` and register it in the portal first; the gateway obtains the TLS certificate itself. See [Using Your Own Domain](custom_domains.md). |
 
 ### 2. Autostart on Login
 

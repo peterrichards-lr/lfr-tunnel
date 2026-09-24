@@ -9,6 +9,7 @@ Welcome to the Liferay Tunnel documentation! This is the central hub for learnin
 - **[Liferay SE Guide](liferay-se-guide.md)**: Team-specific instructions for Liferay Sales Engineering (LDM setup, codesigning path exclusions, dynamic configurations).
 - **[MCP Guide](mcp.md)**: Learn how to set up the Model Context Protocol (MCP) server to use the tunnel with AI assistants.
 - **[Exposing Any Local HTTP Service](exposing-any-http-service.md)**: Addendum — the tunnel does not inspect what is listening on the port it publishes, so a client extension in dev mode, a Node service or any other local HTTP server works with `-ports`. Naming a port switches the Liferay auto-discovery off.
+- **[Using Your Own Domain](custom_domains.md)**: Serve a tunnel at a domain you own rather than a subdomain of the gateway. Point it with a `CNAME`, register it in the portal, connect with `-domain`; the gateway obtains and renews the TLS certificate itself.
 
 ## ⚙️ Server & Operator Deployment Guides
 
@@ -31,4 +32,4 @@ All operator deployment and configuration resources are organized under the `doc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*

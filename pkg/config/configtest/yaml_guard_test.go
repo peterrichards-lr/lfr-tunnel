@@ -130,6 +130,13 @@ func goSourceFiles(t *testing.T, root string) []string {
 			if path != root && (skippedDirs[name] || strings.HasPrefix(name, ".")) {
 				return filepath.SkipDir
 			}
+			// A nested worktree holds a second copy of every .go file in the repository, so a
+			// finding there is a finding about this tree reported under someone else's path
+			// (#2211). The dot-directory rule above covers .claude/worktrees today; this covers
+			// a worktree wherever `git worktree add` actually put it.
+			if path != root && IsNestedWorktreeRoot(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(d.Name(), ".go") {

@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"lfr-tunnel/pkg/config/configtest"
 )
 
 // Every flag this binary defines has to be findable in the documentation.
@@ -86,11 +88,24 @@ func readDocCorpus(t *testing.T, root string) string {
 	// -inspector-port left this green, twice.
 	var out strings.Builder
 
-	walkErr := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, d os.DirEntry, err error) error {
+	docsRoot := filepath.Join(root, "docs")
+	walkErr := filepath.WalkDir(docsRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+		if d.IsDir() {
+			// A nested worktree is a second checkout of this repository, and this corpus is
+			// read for PRESENCE -- so a copy of docs/ inside one vouches for a flag the real
+			// documentation no longer mentions. Measured for #2211: undocumenting
+			// -inspector-port with a nested copy of docs/ present left this test green, and
+			// removing the copy alone turned it red. Same class as the .agent-state.md
+			// swallowing described above, arriving through the filesystem instead.
+			if path != docsRoot && configtest.IsNestedWorktreeRoot(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".md") {
 			return nil
 		}
 		body, readErr := os.ReadFile(path)

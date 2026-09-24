@@ -58,6 +58,33 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 # one carries `?ref=`. That is the whole mechanism under test, so the stub must not conflate them.
 # --------------------------------------------------------------------------------------------
 mkdir -p "$WORK/bin"
+
+# The clock and the sleep are stubbed TOGETHER, and that pairing is the point (#2220).
+#
+# The settle loop is bounded on time, so a real clock made "the polls land at t=0, t=1 and t=3"
+# depend on how fast this machine spawns the stubbed `gh` -- green in CI, red on a workstation,
+# with the subject unchanged. Here the sleep ADVANCES the clock by exactly the delay it was asked
+# to wait, so the timeline the cases below describe is the timeline they get, on any machine, and
+# the suite no longer spends real seconds sleeping.
+#
+# This replaces an earlier decision to let the backoff run for real, on the grounds that stubbing
+# it would leave the retry untested. It does not: the loop still iterates, still doubles, and the
+# delays it asks for are now RECORDED and asserted as a sequence -- which is stronger evidence
+# than inferring them from elapsed wall-clock ever was.
+cat > "$WORK/bin/lft-now" <<'CLOCK'
+#!/usr/bin/env bash
+D="$LFT_STUB_DIR"
+cat "$D/clock" 2>/dev/null || printf '0\n'
+CLOCK
+cat > "$WORK/bin/lft-sleep" <<'NAP'
+#!/usr/bin/env bash
+D="$LFT_STUB_DIR"
+printf '%s\n' "$1" >> "$D/backoff.log"
+_n=$(cat "$D/clock" 2>/dev/null || printf '0\n')
+printf '%s\n' "$((_n + $1))" > "$D/clock"
+NAP
+chmod +x "$WORK/bin/lft-now" "$WORK/bin/lft-sleep"
+
 cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 D="$LFT_STUB_DIR"
@@ -147,13 +174,14 @@ run_case() {
         > "$_stub/formula-broken"
 
     RUN_STUB="$_stub"
-    # The backoff runs for real rather than being stubbed out -- a stubbed sleep would leave the
-    # thing the fix turns on untested. Budgets are kept small: 1s is enough for the cases where
-    # the read never agrees, and the one case that does catch up gets 5s so its polls land
-    # deterministically at t=0, t=1 and t=3 as the delay doubles 1 -> 2.
+    # The clock is virtual and the sleep advances it, so the polls land at t=0, t=1 and t=3 as the
+    # delay doubles 1 -> 2 on every machine (#2220). Budgets stay as they were: 1s for the cases
+    # where the read never agrees, 5s for the one that catches up on its third poll.
     RUN_OUT="$(
         PATH="$WORK/bin:$PATH" \
         LFT_STUB_DIR="$_stub" \
+        LFT_TAP_NOW="$WORK/bin/lft-now" \
+        LFT_TAP_SLEEP="$WORK/bin/lft-sleep" \
         LFT_TAP_SETTLE_SECONDS="${4:-1}" \
         LFT_TAP_POLL_INITIAL=1 \
         LFT_TAP_POLL_MAX=2 \
@@ -229,6 +257,19 @@ if [ ! -f "$RUN_STUB/pinned.log" ]; then
     pass "the lag was absorbed by polling alone, with no sha-pinned read needed"
 else
     fail "it read the branch head for a lag that polling had already resolved"
+fi
+# The backoff ASKED FOR, asserted as a sequence (#2220).
+#
+# This is what the wall-clock budget used to stand in for, and it is a better witness: elapsed
+# time is satisfied by any arrangement that takes about that long, including one that polls twice
+# on a slow box and gives up. The delays themselves can only be produced by the doubling the loop
+# is supposed to perform -- 1, then 2, capped at POLL_MAX=2.
+_backoff="$(tr '\n' ' ' < "$RUN_STUB/backoff.log" 2>/dev/null | sed 's/[[:space:]]*$//')"
+if [ "$_backoff" = "1 2" ]; then
+    pass "the backoff doubled and was capped: it waited 1s then 2s between polls"
+else
+    fail "the backoff sequence was \"$_backoff\", want \"1 2\" -- the loop is not doubling its
+        delay, or is not capping it at LFT_TAP_POLL_MAX"
 fi
 
 # --------------------------------------------------------------------------------------------
@@ -408,6 +449,8 @@ else
     mut_out="$(
         PATH="$WORK/bin:$PATH" \
         LFT_STUB_DIR="$mut_stub" \
+        LFT_TAP_NOW="$WORK/bin/lft-now" \
+        LFT_TAP_SLEEP="$WORK/bin/lft-sleep" \
         LFT_TAP_SETTLE_SECONDS=5 \
         LFT_TAP_POLL_INITIAL=1 \
         LFT_TAP_POLL_MAX=2 \

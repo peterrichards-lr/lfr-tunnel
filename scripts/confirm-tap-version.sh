@@ -56,6 +56,12 @@ WANT="${3:-${LFT_TAP_VERSION:-}}"
 # Seams. The tests stub `gh` on PATH; LFT_GH exists so a caller can point at a specific binary.
 GH_BIN="${LFT_GH:-gh}"
 SLEEP_CMD="${LFT_TAP_SLEEP:-sleep}"
+# The clock is a seam for the same reason the sleep is, and the lack of one made the suite flaky
+# on a developer's machine while staying green in CI (#2220). The settle loop is bounded on real
+# time, so "the third poll agrees" silently meant "the third poll, if three polls fit inside the
+# budget on this machine" -- a property of how fast the box spawns a stubbed `gh`, not of the
+# polling logic. A test that can go red without the subject changing is worse than no test.
+NOW_CMD="${LFT_TAP_NOW:-}"
 
 # How long the cached read is allowed to lag before the sha-pinned read is asked instead. 30s
 # covers the ordinary case at zero cost on the happy path, where the first poll already agrees.
@@ -88,7 +94,13 @@ if [ -z "$WANT" ]; then
     exit 1
 fi
 
-now() { date +%s; }
+now() {
+    if [ -n "$NOW_CMD" ]; then
+        "$NOW_CMD"
+    else
+        date +%s
+    fi
+}
 one_line() { printf '%s\n' "$1" | grep -v '^[[:space:]]*$' | head -2 | tr '\n' ' ' | sed 's/[[:space:]]*$//'; }
 
 # Matches the Homebrew formula's `version "1.2.3"` and the Scoop manifest's `"version": "1.2.3"`

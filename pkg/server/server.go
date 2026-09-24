@@ -1985,7 +1985,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				if s.canUserAutoReserve(userRec) {
 					domainsToReserve = append(domainsToReserve, d)
 				} else {
-					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "this custom domain is not registered to you -- add it under Custom Domains in the portal, then connect again"})
+					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "this custom domain is not registered to you -- register it in the portal, beside your subdomain reservations, then connect again"})
 					return
 				}
 			}

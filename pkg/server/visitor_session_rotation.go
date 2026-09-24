@@ -627,9 +627,22 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, database *db.DB
 	outcome.PreviousGeneration = stored.CurrentID
 
 	if len(stored.Secrets)+1 > maxAcceptedVisitorSessionSecrets {
-		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf(
+		// Naming the generations was not enough to act on: an admin who hits this has no way to
+		// clear it and, until now, no way to know it clears at all (#2198). It does, on its own,
+		// as soon as the oldest generation retires -- so say when.
+		//
+		// A manual rotation is a BREAK-GLASS control here, not a routine one, which is why this
+		// is a better message rather than a bigger bound: in steady state the accepted set holds
+		// three generations, so the first manual rotation fits and the second is the one that
+		// lands here.
+		reason := fmt.Sprintf(
 			"a new generation would make %d accepted keys, more than the %d a node holds; generation(s) %s are still waiting to retire",
-			len(stored.Secrets)+1, maxAcceptedVisitorSessionSecrets, strings.Join(generationIDs(stored.Secrets), ", ")), r)
+			len(stored.Secrets)+1, maxAcceptedVisitorSessionSecrets, strings.Join(generationIDs(stored.Secrets), ", "))
+		if generation, at, ok := earliestVisitorSessionRetirement(state.Retirements); ok {
+			reason += fmt.Sprintf("; the first of them, %s, retires at %s, and a rotation is possible again from then",
+				generation, at.Format(time.RFC3339))
+		}
+		return s.abortVisitorSessionRotation(database, outcome, reason, r)
 	}
 
 	// ---- PHASE 1: DISTRIBUTE ----
@@ -887,6 +900,26 @@ func (s *Server) awaitVisitorSessionAcks(ctx context.Context, nodes []string, si
 }
 
 // generationIDs lists a set's generation ids. Ids are labels, not secrets.
+// earliestVisitorSessionRetirement reports the generation whose scheduled retirement comes first,
+// and when.
+//
+// That instant is when the accepted set next has room, because the retirement sweep runs every
+// visitorSessionRotationCheckInterval and retires independently of rotation (see
+// sweepVisitorSessionRotation, which calls it first and on every tick). So it is a real answer to
+// "when can I rotate again", not an estimate.
+//
+// One home, two consumers: the abort reason states it to an admin who just pressed a break-glass
+// button (#2198), and #2210 needs the same instant to decide when the scheduler should next try.
+// Spelling it twice is the shape that cost us #2128.
+func earliestVisitorSessionRetirement(retirements map[string]time.Time) (generation string, at time.Time, ok bool) {
+	for id, when := range retirements {
+		if !ok || when.Before(at) {
+			generation, at, ok = id, when, true
+		}
+	}
+	return generation, at, ok
+}
+
 func generationIDs(secrets []VisitorSessionSecret) []string {
 	ids := make([]string, 0, len(secrets))
 	for _, secret := range secrets {

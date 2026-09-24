@@ -59,6 +59,27 @@ const (
 	// visitorSessionRotationInterval is the periodic cadence -- "roughly daily", per the issue.
 	visitorSessionRotationInterval = 24 * time.Hour
 
+	// visitorSessionRotationRetryFloor is the soonest an ABORTED periodic attempt may be tried
+	// again, however promptly its own cause is expected to clear (#2210).
+	//
+	// Well above visitorSessionRotationCheckInterval on purpose. A computed instant that has
+	// already passed -- a retirement that is due but has not been swept yet, a clock that moved
+	// backwards -- would put the sweep back into firing on every tick, which is precisely what
+	// the pre-attempt write in sweepVisitorSessionRotation exists to prevent. The floor is what
+	// makes "schedule from the cause" unable to reintroduce the storm.
+	visitorSessionRotationRetryFloor = 5 * time.Minute
+
+	// visitorSessionRotationUnackedBackoff is the FIRST retry delay after an attempt that a
+	// connected node did not acknowledge, doubling on each consecutive abort until it reaches
+	// visitorSessionRotationInterval.
+	//
+	// An unacknowledged node is usually a node that was busy for ten seconds, so the first
+	// retry is minutes away rather than a day. A fleet that is genuinely unreachable doubles
+	// its way to the normal interval within about a day and a half and then behaves exactly as
+	// it did before #2210 -- degrading to today's behaviour rather than retrying hard is the
+	// whole point of escalating instead of using a fixed delay.
+	visitorSessionRotationUnackedBackoff = 15 * time.Minute
+
 	// visitorSessionRetirementLag is how long after a commit a generation may be dropped from
 	// the accepted set.
 	//
@@ -207,6 +228,20 @@ type visitorSessionRotationOutcome struct {
 	Acknowledged       []string                   `json:"acknowledged"`
 	Unacknowledged     []visitorSessionNodeStatus `json:"unacknowledged"`
 	Reason             string                     `json:"reason,omitempty"`
+
+	// RetryAt is this attempt's own statement of when the cause of an ABORT is expected to
+	// have cleared, and the zero time when it does not know (#2210).
+	//
+	// Set at the abort sites, because they are the only places that know why. The scheduler
+	// reading it back off the reason string was the alternative, and a schedule keyed on the
+	// wording of a log message breaks the next time somebody improves the wording.
+	//
+	// NOT persisted and not part of the admin API's response: it is a hand-off from one
+	// attempt to the sweep that made it, inside a single call, and the schedule it feeds
+	// already has exactly one home in visitorSessionRotationState.NextRotationAt. A persisted
+	// copy would be a second answer to "when does the next rotation run" that nothing keeps
+	// in step.
+	RetryAt time.Time `json:"-"`
 }
 
 // committed reports whether the fleet actually switched.
@@ -227,6 +262,17 @@ type visitorSessionRotationState struct {
 	// a restart -- a silently-aborting rotation that is invisible is the pattern this repo
 	// keeps finding.
 	Last *visitorSessionRotationOutcome `json:"last,omitempty"`
+	// ConsecutiveAborts counts the periodic attempts that have aborted back to back, and is
+	// the input to the unacknowledged-abort backoff (#2210). Reset by the first commit.
+	//
+	// Maintained by the SCHEDULER only. A manual break-glass rotation neither raises nor
+	// clears it: an admin pressing the button says nothing about whether the fleet answers on
+	// its own cadence, and letting it clear the count would hand the scheduler a fresh
+	// fifteen-minute backoff every time somebody looked at the page.
+	//
+	// Any abort counts, not only an unacknowledged one. The number is there to notice a
+	// control plane that keeps failing, not to attribute the failures.
+	ConsecutiveAborts int `json:"consecutive_aborts,omitempty"`
 }
 
 // reportVisitorSessionSecretsUpstream is the EDGE half: it tells central which generations this
@@ -450,7 +496,100 @@ func (s *Server) sweepVisitorSessionRotation(ctx context.Context, database *db.D
 		slog.Error(fmt.Sprintf("[Session] Skipping the periodic session-key rotation: the schedule could not be advanced: %v", err))
 		return
 	}
-	s.RotateVisitorSessionSecret(ctx, database, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	outcome := s.RotateVisitorSessionSecret(ctx, database, visitorSessionTriggerPeriodic, visitorSessionPeriodicActor, nil)
+	s.rescheduleAfterVisitorSessionRotation(database, outcome, now)
+}
+
+// rescheduleAfterVisitorSessionRotation brings the due instant the write above parked a full
+// interval away back to when THIS attempt's own cause is expected to have cleared (#2210).
+//
+// The pre-attempt write is untouched, and that is the whole design. The schedule is already a
+// full interval away before RotateVisitorSessionSecret is called, so a control plane that dies
+// inside the attempt -- the crash-loop the comment above is about -- still defers a day and
+// still burns no generation per restart. This runs only once an attempt has RETURNED, which a
+// crash never reaches, so bringing the instant forward cannot reintroduce the storm.
+//
+// Before this, every abort cost a full visitorSessionRotationInterval whatever caused it: a
+// node that was busy for ten seconds left the fleet's key a day older than intended.
+func (s *Server) rescheduleAfterVisitorSessionRotation(database *db.DB, outcome visitorSessionRotationOutcome, now time.Time) {
+	if database == nil {
+		return
+	}
+	// Re-read rather than reuse the caller's copy: the attempt persisted its own outcome into
+	// this same row, so the state loaded before it ran is stale and writing it back would
+	// erase what the attempt recorded.
+	state := loadVisitorSessionRotationState(database)
+
+	if outcome.committed() {
+		if state.ConsecutiveAborts == 0 {
+			return
+		}
+		state.ConsecutiveAborts = 0
+		if err := saveVisitorSessionRotationState(database, state); err != nil {
+			slog.Warn(fmt.Sprintf("[Session] Could not clear the aborted-rotation count after a commit: %v", err))
+		}
+		return
+	}
+
+	state.ConsecutiveAborts++
+	retryAt, known := visitorSessionRetryInstant(now, outcome.RetryAt)
+	if known && retryAt.Before(state.NextRotationAt) {
+		state.NextRotationAt = retryAt
+		slog.Info(fmt.Sprintf("[Session] The periodic session-key rotation aborted; the next attempt is brought forward to %s (%s)",
+			retryAt.Format(time.RFC3339), outcome.Reason))
+	}
+	if err := saveVisitorSessionRotationState(database, state); err != nil {
+		// The schedule stands at the full interval the pre-attempt write left. Losing the
+		// bring-forward costs timeliness and nothing else, which is the right way round.
+		slog.Warn(fmt.Sprintf("[Session] Could not bring the next session-key rotation forward after an abort: %v", err))
+	}
+}
+
+// visitorSessionRetryInstant clamps an abort's own estimate of when its cause clears into the
+// window the scheduler may schedule into, reporting false when the attempt named no instant.
+//
+// Two bounds, and neither is optional:
+//
+//   - never later than now+visitorSessionRotationInterval, which is what the schedule would
+//     have said with no retry logic at all. So this mechanism can only ever make a rotation
+//     MORE timely; no abort, for any reason, can push the fleet's key past its normal cadence.
+//   - never sooner than now+visitorSessionRotationRetryFloor, so an instant that has already
+//     passed cannot have the sweep firing on every tick.
+//
+// An attempt that named nothing keeps the flat interval: an unknown cause must not retry
+// faster than a known one.
+func visitorSessionRetryInstant(now, cause time.Time) (time.Time, bool) {
+	if cause.IsZero() {
+		return time.Time{}, false
+	}
+	if earliest := now.Add(visitorSessionRotationRetryFloor); cause.Before(earliest) {
+		return earliest, true
+	}
+	if latest := now.Add(visitorSessionRotationInterval); cause.After(latest) {
+		return latest, true
+	}
+	return cause, true
+}
+
+// visitorSessionUnackedRetryDelay is how long to wait after an attempt a connected node did not
+// acknowledge, given how many attempts have now aborted back to back.
+//
+// Doubles from visitorSessionRotationUnackedBackoff and saturates at the normal interval, so a
+// fleet that is briefly busy retries in minutes and one that is genuinely unreachable settles
+// back to the cadence it had before #2210 instead of attempting every quarter of an hour
+// forever.
+func visitorSessionUnackedRetryDelay(consecutiveAborts int) time.Duration {
+	delay := visitorSessionRotationUnackedBackoff
+	for i := 0; i < consecutiveAborts; i++ {
+		if delay >= visitorSessionRotationInterval {
+			break
+		}
+		delay *= 2
+	}
+	if delay > visitorSessionRotationInterval {
+		delay = visitorSessionRotationInterval
+	}
+	return delay
 }
 
 // pruneUncommittedGenerations drops generations left behind by a rotation that did not finish.
@@ -641,6 +780,11 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, database *db.DB
 		if generation, at, ok := earliestVisitorSessionRetirement(state.Retirements); ok {
 			reason += fmt.Sprintf("; the first of them, %s, retires at %s, and a rotation is possible again from then",
 				generation, at.Format(time.RFC3339))
+			// One computation, two consumers: the sentence an admin reads and the instant the
+			// scheduler tries again at (#2210). The retirement sweep runs every tick and runs
+			// BEFORE rotation in the same tick, so the slot is free by the time the attempt
+			// scheduled here is made.
+			outcome.RetryAt = at
 		}
 		return s.abortVisitorSessionRotation(database, outcome, reason, r)
 	}
@@ -679,6 +823,13 @@ func (s *Server) RotateVisitorSessionSecret(ctx context.Context, database *db.DB
 		// every node mints with and not one visitor session is affected. The distributed
 		// generation stays in the accepted set until the next attempt prunes it -- nothing has
 		// signed with it, so it verifies nothing and changes no behaviour.
+		//
+		// A node that did not answer in ten seconds is usually a node that was busy for ten
+		// seconds, so the scheduler tries again in minutes rather than a day (#2210). The
+		// backoff is read from the count of consecutive aborts BEFORE this one -- the sweep
+		// increments it afterwards -- so a fleet that is genuinely unreachable doubles its way
+		// back to the normal interval instead of retrying at a fixed rate forever.
+		outcome.RetryAt = now.Add(visitorSessionUnackedRetryDelay(state.ConsecutiveAborts))
 		return s.abortVisitorSessionRotation(database, outcome, fmt.Sprintf(
 			"%d of %d connected node(s) did not confirm they hold generation %s, so the switch did not happen and generation %s goes on minting",
 			len(missing), len(targets), fresh.ID, stored.CurrentID), r)
@@ -899,7 +1050,6 @@ func (s *Server) awaitVisitorSessionAcks(ctx context.Context, nodes []string, si
 	return acknowledged, unacknowledged
 }
 
-// generationIDs lists a set's generation ids. Ids are labels, not secrets.
 // earliestVisitorSessionRetirement reports the generation whose scheduled retirement comes first,
 // and when.
 //
@@ -920,6 +1070,7 @@ func earliestVisitorSessionRetirement(retirements map[string]time.Time) (generat
 	return generation, at, ok
 }
 
+// generationIDs lists a set's generation ids. Ids are labels, not secrets.
 func generationIDs(secrets []VisitorSessionSecret) []string {
 	ids := make([]string, 0, len(secrets))
 	for _, secret := range secrets {

@@ -2427,8 +2427,25 @@ func (s *Server) pendingShutdownWarning() map[string]interface{} {
 	}
 
 	// Deliberately no "status" field -- see the caller.
+	//
+	// node_id names the gateway that is going down, and that is ALWAYS this one: both writers
+	// of pendingShutdownAt set it about this node and no other -- handleLocalDrain, which a
+	// deploy calls on the box itself, and the node_shutdown_warning frame central addresses to
+	// this node down the edge control channel. So it is read from this node's own identity
+	// rather than carried on the announcement: the drain path is never told an id by anybody,
+	// and an id that only arrives on one of the two paths is the empty string on the other.
+	//
+	// The registry is where that identity is resolved once for the whole gateway (#1167
+	// extracted edgeNodeIDFromToken precisely so the control channel and the lease registry
+	// cannot disagree about who this node is), so this is the same value central addressed the
+	// frame to and the same value the client's own lease is stamped with. "control" on the
+	// control plane; the node id on an edge.
+	//
+	// Without it LFT_NODE_ID reaches every warning_received hook empty (#2187), which is
+	// documented behaviour the client has decoded since #1708 and the server has never sent.
 	warning := map[string]interface{}{
 		"type":              "node_shutdown_warning",
+		"node_id":           s.registry.localNodeID(),
 		"action":            "shutdown_warning",
 		"seconds_remaining": int(remaining),
 		"shutdown_at":       at,

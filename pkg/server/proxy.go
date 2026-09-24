@@ -798,6 +798,32 @@ func (t *trackingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	atomic.AddUint64(&t.lease.BytesOut, uint64(responseWireHeaderBytes(res)))
 
 	if res.Body != nil {
+		// An upgraded connection is NOT a body, and wrapping it as one broke every WebSocket
+		// through this proxy (#2179).
+		//
+		// On a 101 the transport hands back a body that is also the backend CONNECTION, and
+		// ReverseProxy type-asserts it to io.ReadWriteCloser so it can hijack and shuttle raw
+		// bytes both ways. trackingReadCloser embeds io.ReadCloser and so fails that assertion:
+		// ReverseProxy reported "101 switching protocols response with non-writable body" to its
+		// ErrorHandler and the visitor got a 502. The issue was filed as bytes going uncounted --
+		// the counting was never reached, because the upgrade was not.
+		if res.StatusCode == http.StatusSwitchingProtocols {
+			if conn, ok := res.Body.(io.ReadWriteCloser); ok {
+				res.Body = &trackingUpgradedConn{
+					ReadWriteCloser: conn,
+					addIn: func(n int) {
+						atomic.AddUint64(&t.lease.BytesIn, uint64(n))
+					},
+					addOut: func(n int) {
+						atomic.AddUint64(&t.lease.BytesOut, uint64(n))
+					},
+				}
+			}
+			// Deliberately left alone if it is not writable: ReverseProxy will refuse it on its
+			// own terms, and replacing it with something else would only obscure whose fault
+			// that is.
+			return res, nil
+		}
 		res.Body = &trackingReadCloser{
 			ReadCloser: res.Body,
 			addBytes: func(n int) {
@@ -806,6 +832,37 @@ func (t *trackingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 	}
 	return res, nil
+}
+
+// trackingUpgradedConn counts an upgraded connection's traffic in both directions while REMAINING
+// an io.ReadWriteCloser, which is the whole point: ReverseProxy hijacks a 101 and copies raw
+// bytes, so this is the only place the session's bytes can be seen at all.
+//
+// The directions follow the existing series rather than the method names. res.Body is the BACKEND
+// connection, so ReverseProxy writes the visitor's bytes into it (visitor -> backend, which is
+// BytesIn) and reads the backend's bytes out of it (backend -> visitor, BytesOut). That matches
+// what RoundTrip already records for an ordinary request and response, so the two kinds of
+// traffic sum into one quota (quota.go) without either being counted backwards.
+type trackingUpgradedConn struct {
+	io.ReadWriteCloser
+	addIn  func(int)
+	addOut func(int)
+}
+
+func (t *trackingUpgradedConn) Read(p []byte) (int, error) {
+	n, err := t.ReadWriteCloser.Read(p)
+	if n > 0 {
+		t.addOut(n)
+	}
+	return n, err
+}
+
+func (t *trackingUpgradedConn) Write(p []byte) (int, error) {
+	n, err := t.ReadWriteCloser.Write(p)
+	if n > 0 {
+		t.addIn(n)
+	}
+	return n, err
 }
 
 type trackingReadCloser struct {

@@ -1248,6 +1248,22 @@ function setLanguage(lang) {
             renderDetails(req);
         }
 
+        // targetLabel says where a captured request actually went, from the record and never from
+        // a literal. The pane used to read "Target: localhost:${req.target_port}" on every request
+        // (#2191): the port came from the record, the host was baked in. The client proxies to
+        // whatever -target-host names -- host.docker.internal is the value its own help text
+        // advertises -- so that line was wrong for everyone running their target in a container.
+        //
+        // A record with no target_host names the PORT ALONE. Falling back to "localhost" would
+        // restate the defect being fixed, and would be wrong on top of it: an unset target host is
+        // dialled as 127.0.0.1, not localhost (NewInterceptorEngine, ReplayRequest). A record that
+        // does not know where it went should not invent an answer, and "Target: :8080" -- the blank
+        // a missed construction site would produce -- reads as a bug in the page.
+        function targetLabel(req) {
+            const host = (req.target_host || '').trim();
+            return host ? `${host}:${req.target_port}` : `port ${req.target_port}`;
+        }
+
         function renderDetails(req) {
             if(!req) return;
             const main = document.getElementById('main-view');
@@ -1272,7 +1288,7 @@ function setLanguage(lang) {
                             <span>${req.method} ${req.path}</span>
                         </h2>
                         <div class="details-meta">
-                            <span>Target: localhost:${req.target_port}</span>
+                            <span>Target: ${escapeHtml(targetLabel(req))}</span>
                             <span>Time: ${new Date(req.time).toLocaleTimeString()}</span>
                             <span>Duration: ${req.duration_ms}ms</span>
                         </div>

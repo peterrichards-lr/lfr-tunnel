@@ -406,9 +406,13 @@ type TrafficEntry struct {
 	Status     int       `json:"status"`
 	DurationMs int64     `json:"dur_ms"`
 	TargetPort int       `json:"port"`
-	Region     string    `json:"region,omitempty"`
-	ReqBody    string    `json:"req_body,omitempty"`
-	RespBody   string    `json:"resp_body,omitempty"`
+	// TargetHost is where the request was proxied. omitempty because a log written by an
+	// older client has no such key, and the readers of this format treat its absence as
+	// "unknown" rather than as localhost (#2191).
+	TargetHost string `json:"target_host,omitempty"`
+	Region     string `json:"region,omitempty"`
+	ReqBody    string `json:"req_body,omitempty"`
+	RespBody   string `json:"resp_body,omitempty"`
 }
 
 // EventEntry is one diagnostic event as written to the error log.
@@ -490,6 +494,7 @@ func (l *SessionLogger) Traffic(rec *RequestRecord, region string) {
 		Status:     rec.Status,
 		DurationMs: rec.DurationMs,
 		TargetPort: rec.TargetPort,
+		TargetHost: rec.TargetHost,
 		Region:     region,
 	}
 	if l.logBodies {

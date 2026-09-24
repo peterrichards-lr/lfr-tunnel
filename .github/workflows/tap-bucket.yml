@@ -91,12 +91,12 @@ jobs:
           # The step that failed for three releases reported nothing an outside observer could
           # check. This reads the tap back and fails if it does not carry the version just
           # pushed -- so a silent no-op cannot pass for success (#1969).
-          want="${VERSION#v}"
-          got=$(gh api repos/${GITHUB_REPOSITORY_OWNER}/homebrew-tap/contents/Formula/lfr-tunnel.rb \
-                  --jq .content | base64 -d | grep -oE 'version "[0-9.]+"' | head -1 | tr -d 'version "')
-          echo "tap advertises: ${got:-<none>}   expected: $want"
-          if [ "$got" != "$want" ]; then
-            echo "::error::The tap still does not advertise $want after a push that reported success."
-            exit 1
-          fi
-          echo "Confirmed: the tap advertises $want"
+          #
+          # It used to read the contents API exactly once and report a mismatch with a single
+          # sentence blaming the push. That API is cached and eventually consistent, so a read
+          # taken seconds after a push can return the previous blob -- the same race #2203 fixed
+          # in release.yml, one API over. The script polls with backoff and then separates the
+          # two causes against the branch head (#2204).
+          chmod +x scripts/confirm-tap-version.sh
+          ./scripts/confirm-tap-version.sh \
+            "${GITHUB_REPOSITORY_OWNER}/homebrew-tap" Formula/lfr-tunnel.rb "$VERSION"

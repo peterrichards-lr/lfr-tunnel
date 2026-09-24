@@ -109,14 +109,6 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-var skippedDirs = map[string]bool{
-	"vendor":       true,
-	"node_modules": true,
-	"ui-dist":      true,
-	"dist":         true,
-	"bin":          true,
-}
-
 // goSourceFiles returns every .go file in the repository, relative to its root.
 func goSourceFiles(t *testing.T, root string) []string {
 	t.Helper()
@@ -127,7 +119,7 @@ func goSourceFiles(t *testing.T, root string) []string {
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if path != root && (skippedDirs[name] || strings.HasPrefix(name, ".")) {
+			if path != root && (IsNonSourceDir(name) || strings.HasPrefix(name, ".")) {
 				return filepath.SkipDir
 			}
 			// A nested worktree holds a second copy of every .go file in the repository, so a

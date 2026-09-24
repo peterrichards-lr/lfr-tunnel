@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -611,6 +612,83 @@ func TestARotationThatWouldBreachTheAcceptedBoundAborts(t *testing.T) {
 		t.Errorf("the stored set grew to %d keys, past the %d a node will accept",
 			len(central.visitorSessionSecrets.get().Secrets), maxAcceptedVisitorSessionSecrets)
 	}
+
+	// The reason must say WHEN it clears, not only that it is blocked (#2198).
+	//
+	// The retirement schedule is rewritten to distinct instants first, on purpose: with every
+	// generation retiring at the same moment, "the reason names a time" is satisfied by naming
+	// any of them, and a helper that reports the wrong one would pass. Only the FIRST retirement
+	// is the answer to "when can I rotate again".
+	state := loadVisitorSessionRotationState(central.db)
+	if len(state.Retirements) < 2 {
+		t.Fatalf("only %d generation(s) are awaiting retirement, so this test can no longer tell "+
+			"the earliest from the latest; the fixture has stopped reaching the bound the way it assumes",
+			len(state.Retirements))
+	}
+	ids := make([]string, 0, len(state.Retirements))
+	for id := range state.Retirements {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids) // map order is randomised; the staged schedule must not be
+	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	for i, id := range ids {
+		state.Retirements[id] = base.Add(time.Duration(i) * 10 * time.Hour)
+	}
+	if err := saveVisitorSessionRotationState(central.db, state); err != nil {
+		t.Fatalf("could not stage the retirement schedule: %v", err)
+	}
+	earliest := base.Format(time.RFC3339)
+	latest := base.Add(time.Duration(len(ids)-1) * 10 * time.Hour).Format(time.RFC3339)
+
+	blocked := central.RotateVisitorSessionSecret(context.Background(), central.db, visitorSessionTriggerManual, "peter@example.com", nil)
+	if blocked.committed() {
+		t.Fatal("a rotation committed past the bound once the retirement schedule was staged")
+	}
+	if !strings.Contains(blocked.Reason, earliest) {
+		t.Errorf("the abort reason does not say when a rotation becomes possible again.\n"+
+			"want it to contain %q\ngot: %s\n\nAn admin who hits the bound has no way to clear "+
+			"it, so a reason that does not name the moment it clears by itself leaves them with "+
+			"nothing to do (#2198).", earliest, blocked.Reason)
+	}
+	if strings.Contains(blocked.Reason, latest) {
+		t.Errorf("the abort reason names %q, which is the LAST generation to retire. The set has "+
+			"room again when the FIRST one does, so naming the last overstates the wait by up to "+
+			"the whole retirement lag.\ngot: %s", latest, blocked.Reason)
+	}
+}
+
+// earliestVisitorSessionRetirement is what that message rests on, and #2210 will schedule the
+// next automatic attempt from it, so it is asserted directly as well as through the abort.
+func TestTheEarliestScheduledRetirementIsTheOneReported(t *testing.T) {
+	base := time.Date(2026, 9, 24, 9, 14, 0, 0, time.UTC)
+	retirements := map[string]time.Time{
+		"gen-c": base.Add(20 * time.Hour),
+		"gen-a": base,
+		"gen-d": base.Add(47 * time.Hour),
+		"gen-b": base.Add(2 * time.Hour),
+	}
+
+	// Go randomises map iteration order, so a helper that returns whichever entry it happens to
+	// see first passes a single call about a quarter of the time. Repeated until that is not a
+	// coin toss -- an intermittently-green guard is worse than none, because it is read as flake.
+	for i := 0; i < 200; i++ {
+		generation, at, ok := earliestVisitorSessionRetirement(retirements)
+		if !ok {
+			t.Fatal("a schedule with four generations reported nothing to retire")
+		}
+		if generation != "gen-a" || !at.Equal(base) {
+			t.Fatalf("earliestVisitorSessionRetirement reported %s at %s, want gen-a at %s.\n"+
+				"The accepted set has room again when the FIRST generation retires; reporting any "+
+				"other one tells an admin to wait longer than they must, and will defer #2210's "+
+				"automatic retry past the moment it could have succeeded.",
+				generation, at.Format(time.RFC3339), base.Format(time.RFC3339))
+		}
+	}
+
+	if _, _, ok := earliestVisitorSessionRetirement(nil); ok {
+		t.Error("an empty schedule reported a retirement. With nothing scheduled there is no " +
+			"instant to promise, and the abort reason must say nothing rather than name a zero time")
+	}
 }
 
 // Nothing on the rotation's paths may carry key material: not the acknowledgement frame, not the
@@ -725,6 +803,13 @@ func TestTheAdminEndpointsReadBackTheGenerationAndTheLastOutcome(t *testing.T) {
 	if _, retiring := status.RetiringAt[outcome.PreviousGeneration]; !retiring {
 		t.Errorf("the read-back does not say when generation %s stops verifying; retirement is a scheduled event and the whole reason a session survives the commit",
 			outcome.PreviousGeneration)
+	}
+
+	if status.AcceptedLimit != maxAcceptedVisitorSessionSecrets {
+		t.Errorf("the read-back reports an accepted limit of %d, want %d. A UI that cannot read "+
+			"the bound has to keep a second copy of it, which is the drift rotation_interval and "+
+			"retirement_lag are already stated to avoid (#2198).",
+			status.AcceptedLimit, maxAcceptedVisitorSessionSecrets)
 	}
 
 	// No key material on either response.

@@ -43,6 +43,11 @@ type visitorSessionRotationStatus struct {
 	// second copy of.
 	RotationInterval string `json:"rotation_interval"`
 	RetirementLag    string `json:"retirement_lag"`
+	// AcceptedLimit is how many generations a node will hold at once, for the same reason the
+	// two above are stated: a UI that wants to compare AcceptedGenerations against the bound --
+	// to explain why a rotation just refused, or that the next one will -- should read the
+	// server's number rather than keep a second copy of it that can drift (#2198).
+	AcceptedLimit int `json:"accepted_limit"`
 }
 
 // handleAdminVisitorSessionRotationStatus serves the read-back.
@@ -68,6 +73,7 @@ func (s *Server) handleAdminVisitorSessionRotationStatus(w http.ResponseWriter, 
 		ConnectedNodes:      s.connectedEdgeNodeIDs(),
 		RotationInterval:    visitorSessionRotationInterval.String(),
 		RetirementLag:       visitorSessionRetirementLag.String(),
+		AcceptedLimit:       maxAcceptedVisitorSessionSecrets,
 	})
 }
 

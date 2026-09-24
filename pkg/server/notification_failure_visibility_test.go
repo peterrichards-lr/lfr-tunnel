@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"lfr-tunnel/pkg/config/configtest"
 	"lfr-tunnel/pkg/db"
 )
 
@@ -382,6 +383,11 @@ func TestEveryNotificationSendGoesThroughTheFunnel(t *testing.T) {
 		if info.IsDir() {
 			base := info.Name()
 			if base == ".git" || base == "node_modules" || base == "vendor" || excludedDirs[path] {
+				return filepath.SkipDir
+			}
+			// A nested worktree is a second checkout of this repository, so descending into
+			// one reports copies of the funnel itself as bypasses of the funnel (#2211).
+			if path != root && configtest.IsNestedWorktreeRoot(path) {
 				return filepath.SkipDir
 			}
 			return nil

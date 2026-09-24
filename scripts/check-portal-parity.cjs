@@ -16,7 +16,8 @@
  * two text buttons (#2114). So where a capability names its opener, the control that opens it must
  * say what it does IN WORDS, in both arms.
  *
- * Every marker below is matched by findMarker(), NOT by String.includes(). A bare substring match
+ * Every marker below is matched by findMarker() from scripts/lib/token-match.cjs, NOT by
+ * String.includes(). A bare substring match
  * is satisfied by any rename that EXTENDS the old name -- `session_keys_unacked` still "found" in
  * a file that only has `session_keys_unacked_MUTANT` -- so the gate vouches for a marker that no
  * longer exists (#2201). That is the same rot openerLabel() has always refused to be quiet about;
@@ -30,6 +31,11 @@
 
 const fs = require('fs');
 const path = require('path');
+
+// One home for the boundary rule, shared with check-print-selectors.cjs (#2208). It was defined
+// here by #2201 and copying it into the second gate would have been the same mistake #2211 was
+// fixing on the Go side at the time.
+const { findMarker } = require('./lib/token-match.cjs');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -118,42 +124,6 @@ const CAPABILITIES = [
     },
   },
 ];
-
-// What can continue a symbol, an i18n key or an HTML id. `-` is in here because half the markers
-// above are kebab-case, and without it `reservation-ac-passcode-confirm` would go on matching
-// `reservation-ac-passcode-confirm-v2` -- the very rename this is here to catch.
-const TOKEN_CHAR = /[A-Za-z0-9_$-]/;
-
-/**
- * Where `marker` occurs in `src` as a WHOLE marker, or -1.
- *
- * Boundaries are required only on the sides where the marker's own edge is a token character, the
- * same rule `\b` uses: `openReservationAcModal(` ends in a delimiter already, so nothing may
- * precede it but anything may follow. A marker containing `/` is a URL path and is matched as a
- * plain substring on purpose -- `/api/x` should still be found in a tree that has moved it to
- * `/api/x/bulk`, because the capability is reached either way.
- *
- * Done with indexOf rather than a RegExp so the marker needs no escaping: these contain `/`, `(`,
- * `)` and `-`, and an escape helper is one more thing that can be wrong about a marker.
- */
-function findMarker(src, marker) {
-  if (!marker) return -1;
-  if (marker.includes('/')) return src.indexOf(marker);
-  const boundLeft = TOKEN_CHAR.test(marker[0]);
-  const boundRight = TOKEN_CHAR.test(marker[marker.length - 1]);
-  for (
-    let at = src.indexOf(marker);
-    at !== -1;
-    at = src.indexOf(marker, at + 1)
-  ) {
-    const before = at === 0 ? '' : src[at - 1];
-    const after = src[at + marker.length] || '';
-    if (boundLeft && before && TOKEN_CHAR.test(before)) continue;
-    if (boundRight && after && TOKEN_CHAR.test(after)) continue;
-    return at;
-  }
-  return -1;
-}
 
 /**
  * Whether `marker` is in any of `files` -- and, when it is not, whether a LOOSE match would have

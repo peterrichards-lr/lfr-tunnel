@@ -15,6 +15,15 @@
  * feature missing from both arms, because V2's only affordance was a bare padlock sitting between
  * two text buttons (#2114). So where a capability names its opener, the control that opens it must
  * say what it does IN WORDS, in both arms.
+ *
+ * Every marker below is matched by findMarker(), NOT by String.includes(). A bare substring match
+ * is satisfied by any rename that EXTENDS the old name -- `session_keys_unacked` still "found" in
+ * a file that only has `session_keys_unacked_MUTANT` -- so the gate vouches for a marker that no
+ * longer exists (#2201). That is the same rot openerLabel() has always refused to be quiet about;
+ * the needle half simply had no equivalent. The one deliberate exception is a marker containing
+ * `/`, which is a URL path: a sub-route is still the capability, so those go on matching loosely.
+ * Both halves of that rule are asserted in tests/hooks/test-gate-scope-boundaries.sh rather than
+ * stated only here -- prose does not fail a build (github-workflow SKILL 5b rule 6).
  */
 
 'use strict';
@@ -110,6 +119,68 @@ const CAPABILITIES = [
   },
 ];
 
+// What can continue a symbol, an i18n key or an HTML id. `-` is in here because half the markers
+// above are kebab-case, and without it `reservation-ac-passcode-confirm` would go on matching
+// `reservation-ac-passcode-confirm-v2` -- the very rename this is here to catch.
+const TOKEN_CHAR = /[A-Za-z0-9_$-]/;
+
+/**
+ * Where `marker` occurs in `src` as a WHOLE marker, or -1.
+ *
+ * Boundaries are required only on the sides where the marker's own edge is a token character, the
+ * same rule `\b` uses: `openReservationAcModal(` ends in a delimiter already, so nothing may
+ * precede it but anything may follow. A marker containing `/` is a URL path and is matched as a
+ * plain substring on purpose -- `/api/x` should still be found in a tree that has moved it to
+ * `/api/x/bulk`, because the capability is reached either way.
+ *
+ * Done with indexOf rather than a RegExp so the marker needs no escaping: these contain `/`, `(`,
+ * `)` and `-`, and an escape helper is one more thing that can be wrong about a marker.
+ */
+function findMarker(src, marker) {
+  if (!marker) return -1;
+  if (marker.includes('/')) return src.indexOf(marker);
+  const boundLeft = TOKEN_CHAR.test(marker[0]);
+  const boundRight = TOKEN_CHAR.test(marker[marker.length - 1]);
+  for (
+    let at = src.indexOf(marker);
+    at !== -1;
+    at = src.indexOf(marker, at + 1)
+  ) {
+    const before = at === 0 ? '' : src[at - 1];
+    const after = src[at + marker.length] || '';
+    if (boundLeft && before && TOKEN_CHAR.test(before)) continue;
+    if (boundRight && after && TOKEN_CHAR.test(after)) continue;
+    return at;
+  }
+  return -1;
+}
+
+/**
+ * Whether `marker` is in any of `files` -- and, when it is not, whether a LOOSE match would have
+ * found it anyway.
+ *
+ * `looseOnly` is the signature of the rename this gate used to be blind to, and it is worth
+ * reporting separately: "the marker is gone" and "the marker is now the prefix of something else"
+ * ask the reader to do different things.
+ */
+function locateMarker(files, marker) {
+  let looseOnly = false;
+  for (const rel of files) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) continue;
+    const src = fs.readFileSync(file, 'utf8');
+    if (findMarker(src, marker) !== -1)
+      return { found: true, looseOnly: false };
+    if (src.includes(marker)) looseOnly = true;
+  }
+  return { found: false, looseOnly };
+}
+
+const ROT_HINT =
+  'A rename that EXTENDS the old name leaves the marker a substring of its replacement, so ' +
+  'matching loosely would vouch for something that no longer exists (#2201). Point this check ' +
+  'at the name that replaced it.';
+
 /**
  * The children of the <button> that contains `call`, as a reader would see them.
  *
@@ -129,7 +200,7 @@ function openerLabel(spec) {
     const file = path.join(ROOT, rel);
     if (!fs.existsSync(file)) continue;
     const src = fs.readFileSync(file, 'utf8');
-    const at = src.indexOf(spec.call);
+    const at = findMarker(src, spec.call);
     if (at === -1) continue;
     const open = src.lastIndexOf('<button', at);
     if (open === -1) continue;
@@ -165,19 +236,13 @@ function openerLabel(spec) {
   return null;
 }
 
-function findsIt(spec) {
-  return spec.files.some((rel) => {
-    const file = path.join(ROOT, rel);
-    if (!fs.existsSync(file)) return false;
-    return fs.readFileSync(file, 'utf8').includes(spec.needle);
-  });
-}
-
 let failures = 0;
 
 for (const cap of CAPABILITIES) {
-  const inV1 = findsIt(cap.v1);
-  const inV2 = findsIt(cap.v2);
+  const hitV1 = locateMarker(cap.v1.files, cap.v1.needle);
+  const hitV2 = locateMarker(cap.v2.files, cap.v2.needle);
+  const inV1 = hitV1.found;
+  const inV2 = hitV2.found;
 
   if (inV1 && inV2) {
     for (const [arm, spec] of [
@@ -209,6 +274,24 @@ for (const cap of CAPABILITIES) {
   failures += 1;
   const present = inV1 ? 'V1' : 'V2';
   const missing = inV1 ? 'V2' : 'V1';
+
+  // The rename case first, because it is a different instruction to the reader: the marker IS
+  // in the file, as the prefix of something longer, and the arm may well still have the
+  // capability under its new name.
+  const rotted = [
+    ['V1', cap.v1, hitV1],
+    ['V2', cap.v2, hitV2],
+  ].filter(([, , hit]) => hit.looseOnly);
+  if (rotted.length > 0) {
+    for (const [arm, spec] of rotted) {
+      console.log(
+        `  ✗ "${cap.name}": ${arm}'s marker \`${spec.needle}\` is only present as part of ` +
+          `a longer symbol in ${spec.files.join(', ')}.\n      ${ROT_HINT}`,
+      );
+    }
+    continue;
+  }
+
   if (!inV1 && !inV2) {
     console.log(
       `  ✗ "${cap.name}" is in NEITHER arm. Either both lost it, or this check is ` +
@@ -274,15 +357,22 @@ for (const label of SHARED_LABELS) {
       );
       continue;
     }
-    if (!fs.readFileSync(file, 'utf8').includes(label.key)) {
-      failures += 1;
+    const hit = locateMarker([rel], label.key);
+    if (hit.found) continue;
+    failures += 1;
+    if (hit.looseOnly) {
       console.log(
-        `  \u2717 "${label.name}": ${arm} does not use the '${label.key}' key.\n` +
-          `      Both arms render this column from one endpoint, so both must name it the same ` +
-          `way. A hardcoded header is invisible to check-i18n-keys -- it has no key to report ` +
-          `missing -- and goes untranslated in every locale besides English.`,
+        `  \u2717 "${label.name}": ${arm}'s key '${label.key}' is only present as part of a ` +
+          `longer key in ${rel}.\n      ${ROT_HINT}`,
       );
+      continue;
     }
+    console.log(
+      `  \u2717 "${label.name}": ${arm} does not use the '${label.key}' key.\n` +
+        `      Both arms render this column from one endpoint, so both must name it the same ` +
+        `way. A hardcoded header is invisible to check-i18n-keys -- it has no key to report ` +
+        `missing -- and goes untranslated in every locale besides English.`,
+    );
   }
 }
 

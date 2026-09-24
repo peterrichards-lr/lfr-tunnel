@@ -382,7 +382,11 @@ func TestEveryNotificationSendGoesThroughTheFunnel(t *testing.T) {
 		}
 		if info.IsDir() {
 			base := info.Name()
-			if base == ".git" || base == "node_modules" || base == "vendor" || excludedDirs[path] {
+			// configtest.IsNonSourceDir rather than a fourth spelling of the list (#2217).
+			// This gate's own copy was the narrowest of the five -- it omitted ui-dist, dist
+			// and bin, so a .go file dropped in any of them would have been parsed as
+			// repository source and reported as a bypass of the funnel.
+			if configtest.IsNonSourceDir(base) || excludedDirs[path] {
 				return filepath.SkipDir
 			}
 			// A nested worktree is a second checkout of this repository, so descending into

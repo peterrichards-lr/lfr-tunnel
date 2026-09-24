@@ -322,8 +322,7 @@ func TestEveryClientTokenAssignmentDeclaresItsProvenance(t *testing.T) {
 			return err
 		}
 		if info.IsDir() {
-			switch info.Name() {
-			case ".git", "node_modules", "vendor", "ui-dist", "bin":
+			if configtest.IsNonSourceDir(info.Name()) {
 				return filepath.SkipDir
 			}
 			if path != root && configtest.IsNestedWorktreeRoot(path) {

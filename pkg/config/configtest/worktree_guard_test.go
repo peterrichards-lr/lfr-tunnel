@@ -40,7 +40,7 @@ const minimumWalkingGates = 5
 func TestEveryFilesystemWalkingGateSkipsNestedWorktrees(t *testing.T) {
 	root := repoRoot(t)
 
-	var walkers, offenders []string
+	var walkers, offenders, unskipped []string
 	for _, dir := range []string{"pkg", "cmd"} {
 		base := filepath.Join(root, dir)
 		err := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
@@ -49,7 +49,7 @@ func TestEveryFilesystemWalkingGateSkipsNestedWorktrees(t *testing.T) {
 			}
 			if d.IsDir() {
 				name := d.Name()
-				if path != base && (skippedDirs[name] || strings.HasPrefix(name, ".")) {
+				if path != base && (IsNonSourceDir(name) || strings.HasPrefix(name, ".")) {
 					return filepath.SkipDir
 				}
 				if path != base && IsNestedWorktreeRoot(path) {
@@ -84,6 +84,9 @@ func TestEveryFilesystemWalkingGateSkipsNestedWorktrees(t *testing.T) {
 			if !strings.Contains(src, "IsNestedWorktreeRoot") {
 				offenders = append(offenders, rel)
 			}
+			if !strings.Contains(src, "IsNonSourceDir") {
+				unskipped = append(unskipped, rel)
+			}
 			return nil
 		})
 		if err != nil {
@@ -108,6 +111,20 @@ func TestEveryFilesystemWalkingGateSkipsNestedWorktrees(t *testing.T) {
 			"`if path != root && configtest.IsNestedWorktreeRoot(path) { return filepath.SkipDir }` "+
 			"to the directory branch of the walk (#2211, #1815).",
 			len(offenders), len(walkers), strings.Join(offenders, "\n  "))
+	}
+
+	if len(unskipped) > 0 {
+		t.Errorf("%d of %d filesystem-walking test gate(s) never consult "+
+			"configtest.IsNonSourceDir:\n  %s\n\n"+
+			"Which directories are not this repository's source is the other half of every walk "+
+			"here, and it used to be copied once per gate with the copies disagreeing -- the "+
+			"narrowest omitted ui-dist, dist and bin, so a .go file in any of them was read as "+
+			"source. That is the same failure as the nested-worktree rule above, one field over: "+
+			"a rule copied instead of shared has nowhere for the next gate to pick it up from. "+
+			"Call configtest.IsNonSourceDir in the directory branch of the walk; a genuinely "+
+			"wider rule (yaml_guard's dot-directories) belongs beside the call, not folded into "+
+			"it (#2217).",
+			len(unskipped), len(walkers), strings.Join(unskipped, "\n  "))
 	}
 }
 

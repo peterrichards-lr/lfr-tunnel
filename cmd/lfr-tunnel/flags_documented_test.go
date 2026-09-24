@@ -100,6 +100,14 @@ func readDocCorpus(t *testing.T, root string) string {
 			// -inspector-port with a nested copy of docs/ present left this test green, and
 			// removing the copy alone turned it red. Same class as the .agent-state.md
 			// swallowing described above, arriving through the filesystem instead.
+			// The same non-source rule every other walking gate uses (#2217). docs/ holds
+			// none of those directories today, which is exactly why this is worth stating:
+			// "there is nothing to skip here" and "this walk has no rule" look identical
+			// until a docs toolchain drops a node_modules/ in, and then one of them is
+			// silently wrong in the direction this corpus fails worst -- presence.
+			if path != docsRoot && configtest.IsNonSourceDir(d.Name()) {
+				return filepath.SkipDir
+			}
 			if path != docsRoot && configtest.IsNestedWorktreeRoot(path) {
 				return filepath.SkipDir
 			}

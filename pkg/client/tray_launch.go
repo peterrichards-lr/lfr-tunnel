@@ -122,10 +122,21 @@ func TrayClientArgs(guiArgs []string) []string {
 // file, the one the upgrade reads and kills -- carries everything except -background. This is
 // the form the upgrade has to compare against.
 func TrayTunnelArgs(guiArgs []string) []string {
-	spawned := TrayClientArgs(guiArgs)
-	out := make([]string, 0, len(spawned))
-	for _, a := range spawned {
-		// Exactly what handleBackground strips: the bare spellings only.
+	return withoutBackgroundFlag(TrayClientArgs(guiArgs))
+}
+
+// withoutBackgroundFlag turns the arguments a client is SPAWNED with into the ones it ends up
+// RUNNING with.
+//
+// handleBackground re-execs itself with -background removed, so every process that survives it
+// carries everything except that flag. Anything reasoning about what a starter will produce has
+// to make the same transformation, and there is now more than one caller -- TrayTunnelArgs for
+// the tray, startedTunnel for the upgrade's own relaunch entries -- so it is spelled once.
+//
+// Exactly what handleBackground strips: the bare spellings only.
+func withoutBackgroundFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, a := range args {
 		if a == "-"+backgroundFlagName || a == "--"+backgroundFlagName {
 			continue
 		}

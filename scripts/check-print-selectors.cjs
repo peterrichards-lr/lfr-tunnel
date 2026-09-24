@@ -15,10 +15,23 @@
  * So this compares rather than documents: every class/id selector inside @media print must
  * appear somewhere in that arm's markup. Fails closed -- if either side parses to nothing the
  * run exits 1 rather than reporting that two empty sets agree (#1779).
+ *
+ * "Appears" means on TOKEN BOUNDARIES, via findMarker(), not String.includes() (#2208).
+ * selectorsIn() stores the bare name without its leading `.`, so a containment test counted
+ * `.summary` live against markup holding only `summary-row` or `summaryTotal` -- the #1916
+ * failure this gate exists to prevent, surviving in extended-name form. Same defect as #2201 one
+ * file over, found by sweeping scripts/ for the shape rather than for the symbol, and matched by
+ * the same shared helper rather than a second copy of it.
+ *
+ * What that still does not buy, stated where tests/hooks/test-gate-scope-boundaries.sh can
+ * assert it rather than only here: the markup side is a concatenated blob of source, so the word
+ * "summary" in a comment or a sentence is still a match. The boundary rule catches the rename,
+ * which is how these rot; telling markup from prose would need a parser.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { findMarker } = require('./lib/token-match.cjs');
 
 const REPO = path.join(__dirname, '..');
 const rel = (p) => path.relative(REPO, p);
@@ -128,11 +141,25 @@ for (const arm of ARMS) {
     continue;
   }
 
-  const dead = selectors.filter((s) => !EXEMPT[s] && !markup.includes(s));
+  const dead = selectors.filter(
+    (s) => !EXEMPT[s] && findMarker(markup, s) === -1,
+  );
+  // "The class is gone" and "the class was renamed to something longer" ask the reader to do
+  // different things, so they are reported apart rather than lumped together (#2208, after
+  // #2201's locateMarker).
+  const looseOnly = dead.filter((s) => markup.includes(s));
   if (dead.length) {
     fail(
       `${arm.name} print styles target markup that does not exist: ${dead.join(', ')}`,
     );
+    if (looseOnly.length) {
+      fail(
+        `  ${looseOnly.join(', ')}: present only as part of a longer name. A rename that ` +
+          'EXTENDS a class (summary -> summary-row) leaves the old name a substring of its ' +
+          'replacement, so a containment test would still vouch for it (#2201). Point the ' +
+          'print rule at the name that replaced it.',
+      );
+    }
     fail(
       '  A rule matching nothing looks identical to a rule that works. This is #1916.',
     );

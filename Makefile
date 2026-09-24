@@ -1,10 +1,17 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
 # Where `verify-release` looks for the built artefact set to compare a release against. Same
 # directory `./bin/lfr-tunnel-ops build` and the release workflow write to.
 DIST ?= dist
+
+# What `confirm-tap` reads back. The owner is resolved from this checkout's own remote rather
+# than hardcoded, so a fork confirms its own tap; ?= keeps the lookup lazy, so no other target
+# pays for it. tap-bucket.yml uses GITHUB_REPOSITORY_OWNER for the same value.
+TAP_OWNER ?= $(shell gh repo view --json owner --jq .owner.login 2>/dev/null)
+TAP_REPO ?= $(TAP_OWNER)/homebrew-tap
+TAP_FILE ?= Formula/lfr-tunnel.rb
 
 # Which gateway, status page and portal a build points at by default. These describe one
 # deployment rather than the software, so they are not in the source tree (#1188) -- set
@@ -98,6 +105,7 @@ help:
 	@echo "  make prune-branches    - Delete merged remote branches"
 	@echo "  make check-workflow-failures - Report workflows failing repeatedly on master"
 	@echo "  make verify-release    - Re-check a published release carries every built artefact"
+	@echo "  make confirm-tap       - Re-check the Homebrew tap advertises a released version"
 
 fmt:
 	gofmt -w .
@@ -313,6 +321,7 @@ test-hooks:
 	@./tests/hooks/test-alert-vocabulary.sh
 	@./tests/hooks/test-ci-runs-every-gate.sh
 	@./tests/hooks/test-tap-bucket.sh
+	@./tests/hooks/test-tap-version-confirmation.sh
 	@./tests/hooks/test-release-completeness.sh
 	@./tests/hooks/test-release-asset-verification.sh
 	@./tests/hooks/test-print-selectors.sh
@@ -371,6 +380,21 @@ check-workflow-failures:
 # derives that set from what make and the git hooks invoke).
 verify-release:
 	@./scripts/verify-release-assets.sh "$(VERSION)" "$(DIST)"
+
+# Replays tap-bucket.yml's post-push confirmation against the live tap (#2204). Read-only: it
+# polls the contents API and, only if that never agrees, reads the formula at the branch head to
+# say whether a push failed or a cache is merely behind. Answering that by hand means comparing
+# a cached web view against the repository's commit list, which is exactly the confusion the
+# single inline read created.
+#
+#   make confirm-tap                                   # the version in the tree
+#   make confirm-tap VERSION=v1.48.52
+#   make confirm-tap TAP_REPO=me/scoop-bucket TAP_FILE=lfr-tunnel.json
+#
+# Also what puts the script in the bash 3.2 portable set (tests/hooks/test-shell-portability.sh
+# derives that set from what make and the git hooks invoke).
+confirm-tap:
+	@./scripts/confirm-tap-version.sh "$(TAP_REPO)" "$(TAP_FILE)" "$(VERSION)"
 
 # Same reasoning as check-contexts above: a gate with no convenient invocation is a gate
 # nobody runs, and being make-reachable is what puts it in the bash 3.2 portable set.

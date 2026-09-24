@@ -948,6 +948,11 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 		ReqHeaders: record.ReqHeaders,
 		ReqBody:    record.ReqBody,
 		TargetPort: record.TargetPort,
+		// The host this replay was actually sent to -- the argument AFTER the empty-value
+		// default above, not the caller's, so a record cannot claim a host that was never
+		// dialled (#2191). Set here rather than left to AddRecord's stamp because this is the
+		// one path whose target can differ from engine.TargetHost.
+		TargetHost: targetHost,
 	}
 
 	if err != nil {

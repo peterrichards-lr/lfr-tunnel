@@ -40,6 +40,14 @@ type RequestRecord struct {
 	RespBody    string            `json:"resp_body"`
 	DurationMs  int64             `json:"duration_ms"`
 	TargetPort  int               `json:"target_port"`
+	// TargetHost is the host this request was actually proxied to, recorded because the
+	// Inspector's details pane used to state "localhost" whatever the client dialled (#2191).
+	// The port alone does not identify a target: -target-host is a setting, and
+	// host.docker.internal is the value the client's own help text advertises.
+	//
+	// Not omitempty: a record that does not know its host has to say so to the page, which
+	// names the port alone rather than guessing a host. See AddRecord, which stamps it.
+	TargetHost string `json:"target_host"`
 }
 
 // InterceptorEngine manages the traffic routing, modification, and capture.
@@ -1211,8 +1219,18 @@ func (e *InterceptorEngine) LogEvent(level, event string, fields map[string]any)
 }
 
 // AddRecord safely appends a record to the history buffer and persists it.
+//
+// A record that names no target host is stamped with the engine's before it is stored. Every
+// request this client proxies goes to e.TargetHost, so that is the answer for any capture site;
+// the stamp exists so that a site which forgets the field cannot put a BLANK host in front of
+// someone -- "Target: :8080" is worse than the wrong constant #2191 replaced. The one caller that
+// knows a host the field does not necessarily equal is ReplayRequest, which dials 127.0.0.1 for an
+// empty target host and sets TargetHost itself; a record that already names a host is left alone.
 func (e *InterceptorEngine) AddRecord(rec *RequestRecord) {
 	e.mu.Lock()
+	if rec != nil && rec.TargetHost == "" {
+		rec.TargetHost = e.TargetHost
+	}
 	e.History = append([]*RequestRecord{rec}, e.History...) // Prepend
 	if len(e.History) > e.MaxHistory {
 		e.History = e.History[:e.MaxHistory]
@@ -1574,6 +1592,7 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		ReqBody:    reqBodyStr,
 		DurationMs: duration,
 		TargetPort: t.targetPort,
+		TargetHost: t.engine.TargetHost,
 	}
 
 	if err != nil {

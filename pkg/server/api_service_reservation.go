@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -124,6 +125,128 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 	return res, nil
 }
 
+// CreateCustomDomain reserves a custom domain for a user from the portal (#2222).
+//
+// A SEPARATE method from CreateReservation, not a mode of it. The two validate opposite things:
+// CreateReservation requires a subdomain and requires the domain to be one this gateway serves;
+// this one requires no subdomain and requires the domain NOT to be one this gateway serves. They
+// also differ on expiry, on which quota they count against, and on what a conflict means. Folding
+// them together would put two policies behind one signature, which is the shape #2018 already
+// rejected for the registration path's own copy of this decision.
+//
+// What it deliberately does NOT do is verify that the caller controls the domain. Pointing a
+// CNAME at this gateway already requires authority over it, so the action is the proof; and a
+// name nobody has pointed here can never be served anyway, because provisioning validates over
+// ACME HTTP-01 and no certificate is ever issued. The residual risk is parking a name you cannot
+// use, which releasing (self-service, and it tears down the vhost and certificate -- #1010)
+// undoes.
+func (s *portalService) CreateCustomDomain(user *db.User, domain, ip string) (*db.SubdomainReservation, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = strings.TrimSuffix(domain, ".")
+
+	if domain == "" || !isValidCustomDomain(domain) {
+		return nil, ErrInvalidRequest
+	}
+	if isUnderServedRootDomain(domain, s.cfg.Domains) {
+		return nil, ErrInvalidRequest
+	}
+
+	// A failed delete FAILS THE REQUEST here, unlike CreateReservation's neighbouring copy which
+	// ignores it. The stale row is keyed on this exact domain, so carrying on would create a
+	// second row for one name -- and the lookup that decides who holds it returns one row. Better
+	// to refuse and leave the old row standing, which is a state the user can act on.
+	//
+	// THIS DOMAIN's own standing is resolved BEFORE the quota, and the order is load-bearing.
+	//
+	// A holder re-submitting the form has changed nothing and consumes no additional quota, but
+	// with the count taken first they are refused for a limit their own existing row fills --
+	// "you already have one" reported as "you may not have one". Resolving the row first also
+	// means a quarantined or lapsed row is deleted before the count, so the count is of what
+	// will actually exist rather than of what is about to be replaced.
+	//
+	// The same standing rule the registration path applies, through the same function rather
+	// than a second reading of ExpiresAt and the quarantine window.
+	existing, err := s.db.GetSubdomainReservationByName("", domain)
+	if err == nil && existing != nil {
+		switch reservationStandingOf(existing, s.cfg.SubdomainQuarantineDays) {
+		case reservationLive:
+			// Already theirs is success, not a conflict: the portal form is the obvious place
+			// to land twice.
+			if existing.UserID == user.ID {
+				return existing, nil
+			}
+			return nil, ErrConflict
+		case reservationQuarantined:
+			if existing.UserID != user.ID {
+				return nil, ErrConflict
+			}
+			if derr := s.db.DeleteSubdomainReservation(existing.ID); derr != nil {
+				return nil, ErrInternalError
+			}
+		case reservationLapsed:
+			if derr := s.db.DeleteSubdomainReservation(existing.ID); derr != nil {
+				return nil, ErrInternalError
+			}
+		}
+	}
+
+	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	if err != nil {
+		return nil, ErrInternalError
+	}
+
+	// Only rows with an EMPTY subdomain count here -- custom domains have their own, smaller
+	// quota and must not be charged against the plain subdomain limit (#1004), exactly as
+	// CreateReservation declines to charge them the other way round.
+	limit := s.getUserMaxCustomDomains(user)
+	activeCount := 0
+	for _, res := range list {
+		if res.Subdomain != "" {
+			continue
+		}
+		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+			activeCount++
+		}
+	}
+	if limit >= 0 && activeCount >= limit {
+		return nil, ErrQuotaReached
+	}
+
+	// PERMANENT, matching what the registration path creates (#1009). The expiry/quarantine/
+	// extension model exists to reclaim a shared, contested namespace; nobody else can ever claim
+	// this exact name, because it belongs to the holder externally through DNS.
+	res := &db.SubdomainReservation{
+		UserID:    user.ID,
+		Subdomain: "",
+		Domain:    domain,
+		ExpiresAt: nil,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := s.db.CreateSubdomainReservation(res); err != nil {
+		return nil, ErrInternalError
+	}
+
+	// Logged rather than suppressed, and deliberately NOT fatal: the reservation is already
+	// committed, so failing the request here would tell the user it did not happen when it did.
+	// The surrounding methods spell this as `_ =` with a //nolint, which the ratchet is at its
+	// ceiling for -- and a silent audit gap is the one thing an audit log must not have.
+	if aerr := s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "custom_domain.reserved",
+		TargetType: "custom_domain",
+		TargetID:   domain,
+		Details:    "Custom domain reserved from the portal. Permanent; released explicitly.",
+		IPAddress:  ip,
+		CreatedAt:  time.Now(),
+	}); aerr != nil {
+		slog.Warn(fmt.Sprintf("[Portal] Reserved custom domain %s for %s but could not write the audit entry: %v",
+			domain, user.Email, aerr))
+	}
+
+	return res, nil
+}
+
 // DeleteReservation removes a reservation securely. Returns the now-deleted reservation so
 // callers can act on what kind of reservation it was -- in particular, the HTTP handler uses
 // this to trigger the vanity domain hook's "remove" action for a custom domain (Subdomain ==
@@ -154,10 +277,13 @@ func (s *portalService) DeleteReservation(user *db.User, idStr, ip string) (*db.
 		ActorID:    user.Email,
 		Action:     "subdomain.released",
 		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    "Subdomain reservation deleted / released by owner",
-		IPAddress:  ip,
-		CreatedAt:  time.Now(),
+		// A custom domain has no subdomain, so "%s.%s" recorded it as ".example.com" with a
+		// leading dot. handleDeleteReservation already gets this right when it names the thing
+		// in its own audit line; the two now agree (#2217-adjacent, fixed with #2222).
+		TargetID:  releasedReservationName(res),
+		Details:   "Subdomain reservation deleted / released by owner",
+		IPAddress: ip,
+		CreatedAt: time.Now(),
 	})
 
 	return res, nil
@@ -562,4 +688,17 @@ func MaskPasscode(stored string) string {
 		return ""
 	}
 	return PasscodeMask
+}
+
+// releasedReservationName names a reservation for an audit entry, whichever kind it is.
+//
+// A custom domain's Subdomain is empty, so the obvious "%s.%s" produces ".example.com".
+func releasedReservationName(res *db.SubdomainReservation) string {
+	if res == nil {
+		return ""
+	}
+	if res.Subdomain == "" {
+		return res.Domain
+	}
+	return fmt.Sprintf("%s.%s", res.Subdomain, res.Domain)
 }

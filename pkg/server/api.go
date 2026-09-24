@@ -1388,6 +1388,36 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 	respondJSON(w, http.StatusOK, res)
 }
 
+// handleCreateCustomDomain reserves a custom domain from the portal (#2222).
+//
+// Until this existed, a user who was not admin or owner could not obtain a custom domain at all:
+// registration refused them with "Custom domains must be reserved in the portal prior to
+// connecting" and no portal route created one. The refusal named a control that was never built.
+func (s *Server) handleCreateCustomDomain(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Domain string `json:"domain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.portalService.CreateCustomDomain(user, req.Domain, s.clientIP(r))
+	if err != nil {
+		respondWithError(w, err)
+		return
+	}
+
+	s.writeAudit(user.Email, "custom_domain.created", "custom_domain", res.Domain, "", r)
+	respondJSON(w, http.StatusOK, res)
+}
+
 // handleDeleteReservation deletes a reservation.
 func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)

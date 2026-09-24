@@ -1513,6 +1513,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Its own route rather than a mode of POST /reservations: the two validate opposite
+		// things (a subdomain on a served domain, versus a domain this gateway does NOT serve)
+		// and differ on expiry, quota and what a conflict means (#2222).
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/custom-domains" {
+			s.handleCreateCustomDomain(w, r)
+			return
+		}
+
 		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/reservations/") {
 			s.handleDeleteReservation(w, r)
 			return
@@ -7376,6 +7384,33 @@ func isValidCustomDomain(domain string) bool {
 		return false
 	}
 	return customDomainRegex.MatchString(domain)
+}
+
+// isUnderServedRootDomain reports whether host is, or sits under, a domain this gateway already
+// serves -- in which case it is a SUBDOMAIN and not a custom one.
+//
+// The distinction is not cosmetic: the two are different rows with different rules. A subdomain
+// reservation carries a name and a role-based expiry and counts against getUserMaxReservations; a
+// custom-domain reservation has an EMPTY subdomain, never expires (#1009) and counts against the
+// separate, smaller getUserMaxCustomDomains (#1004). Registering "demo.lfr-demo.se" through the
+// custom-domain flow would create a permanent row in the wrong quota for a name the subdomain
+// flow believes is its own, and nothing afterwards would reconcile the two.
+//
+// Checked only by the portal flow (#2222). The registration path validates the FQDN shape above
+// and not this, which is survivable there because only admins and owners reach it -- but it is
+// the same collision, and worth closing separately rather than widening this change.
+func isUnderServedRootDomain(host string, rootDomains []string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, d := range rootDomains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d == "" {
+			continue
+		}
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleAdminConfigView(w http.ResponseWriter, r *http.Request, actor, role string) {

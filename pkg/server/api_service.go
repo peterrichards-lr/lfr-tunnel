@@ -26,6 +26,9 @@ type PortalService interface {
 
 	ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, int, int, error)
 	CreateReservation(user *db.User, subdomain, domain, ip string) (*db.SubdomainReservation, error)
+	// CreateCustomDomain is separate from CreateReservation rather than a mode of it: the two
+	// validate opposite things and differ on expiry, quota and what a conflict means (#2222).
+	CreateCustomDomain(user *db.User, domain, ip string) (*db.SubdomainReservation, error)
 	DeleteReservation(user *db.User, idStr, ip string) (*db.SubdomainReservation, error)
 	RequestExtension(user *db.User, idStr, ip string) (*db.SubdomainReservation, error)
 	PromoteReservation(user *db.User, subdomain, domain, ip string) (*db.SubdomainReservation, error)

@@ -293,10 +293,19 @@ const (
 // site -- "not live" and "free to take" are different questions, and conflating them is what a
 // quarantine window exists to prevent.
 func (s *Server) standingOf(existing *db.SubdomainReservation) reservationStanding {
+	return reservationStandingOf(existing, s.cfg.SubdomainQuarantineDays)
+}
+
+// reservationStandingOf is the rule itself, free of the Server it used to be a method on.
+//
+// The portal's custom-domain registration (#2222) has to answer the same question the
+// registration path answers, and answering it a second way is how two policies drift into
+// disagreeing about the same row. It is the *Server method that is the thin one now.
+func reservationStandingOf(existing *db.SubdomainReservation, quarantineDays int) reservationStanding {
 	if existing == nil || existing.ExpiresAt == nil || !existing.ExpiresAt.Before(time.Now()) {
 		return reservationLive
 	}
-	if time.Now().Before(existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)) {
+	if time.Now().Before(existing.ExpiresAt.AddDate(0, 0, quarantineDays)) {
 		return reservationQuarantined
 	}
 	return reservationLapsed

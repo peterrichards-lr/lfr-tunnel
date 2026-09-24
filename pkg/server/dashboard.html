@@ -864,6 +864,35 @@
                     </div>
                 </div>
 
+                <!-- Register a Custom Domain (#2224).
+                     The V2 arm's equivalent control, against the same endpoint. A capability in
+                     one arm only is a defect here, not a roadmap item (#2101), so this lands with
+                     ReservationsPanel's form rather than after it. The CNAME line is stated in the
+                     form because it is the one step the user performs outside the product. -->
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 18px;" data-i18n="res_custom_domain_title">Register a Custom Domain</h3>
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px;">
+                        <span style="font-weight: 500;" data-i18n="custom_domain_quota">Custom Domain Quota</span>
+                        <span id="custom-domain-quota-text" style="color: var(--text-muted);">0 / 0</span>
+                    </div>
+                    <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 16px;">
+                        <div id="custom-domain-quota-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+                    </div>
+                    <p style="color: var(--text-muted); margin-top: 0; margin-bottom: 16px; font-size: 13px;" data-i18n="custom_domain_cname_hint">Before you register: point the domain at this gateway with a CNAME record. That record is the one step only you can do -- the gateway obtains and installs the TLS certificate itself.</p>
+                    <div id="custom-domain-form-container">
+                        <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+                            <div style="flex: 2; min-width: 200px;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="custom-domain-input" data-i18n="custom_domain">Domain</label>
+                                <input type="text" id="custom-domain-input" class="input-field" placeholder="demo.customer.com" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+                            </div>
+                            <button id="btn-register-custom-domain" class="btn btn-primary" style="width: auto; margin: 0;" onclick="reserveCustomDomain()" data-i18n="register_custom_domain">Register Domain</button>
+                        </div>
+                    </div>
+                    <div id="custom-domain-quota-warning" class="alert alert-warning hidden" style="margin-top: 16px;" data-i18n="custom_domain_limit_reached">
+                        You have reached your custom domain limit. Release one to register a new one.
+                    </div>
+                </div>
+
                 <!-- Active Reservations Table -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 id="reservations-title" style="margin: 0; font-size: 18px;" data-i18n="res_active_title">Your Reserved Subdomains</h3>

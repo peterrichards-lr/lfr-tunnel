@@ -59,6 +59,8 @@ export default function ReservationsPanel() {
   const [domains, setDomains] = useState<string[]>([]);
   const [selectedDomain, setSelectedDomain] = useState('');
   const [subdomainInput, setSubdomainInput] = useState('');
+  const [customDomainInput, setCustomDomainInput] = useState('');
+  const [customDomainSubmitting, setCustomDomainSubmitting] = useState(false);
   const [subdomainStyle, setSubdomainStyle] = useState('liferay');
   const [styleInitialized, setStyleInitialized] = useState(false);
 
@@ -140,6 +142,74 @@ export default function ReservationsPanel() {
         `${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`,
         'error',
       );
+    }
+  };
+
+  // Which of the endpoint's refusals this was, in words the user can act on (#2223).
+  //
+  // Status alone cannot tell them apart: mapErrorToStatusCode (pkg/server/api_errors.go) puts
+  // BOTH ErrQuotaReached and ErrInvalidRequest on 400, so "you are out of quota" and "that is
+  // not a domain this flow accepts" arrive identically and only the sentinel text separates
+  // them. Collapsing the three into one "failed" toast would leave the two most actionable
+  // cases -- release one, or fix the name -- indistinguishable from each other.
+  const customDomainErrorMessage = (err: any): string => {
+    const status = err?.response?.status;
+    const reason = String(err?.response?.data?.error || '');
+    if (status === 409) {
+      return t(
+        'error_custom_domain_taken',
+        'That domain is already registered to someone else.',
+      );
+    }
+    if (status === 400 && reason.includes('quota')) {
+      return t(
+        'custom_domain_limit_reached',
+        'You have reached your custom domain limit. Release one to register a new one.',
+      );
+    }
+    if (status === 400) {
+      return t(
+        'error_custom_domain_invalid',
+        'Enter a domain you own, such as demo.customer.com. A name under a domain this gateway already serves is a subdomain reservation, not a custom domain.',
+      );
+    }
+    return t('failed_create_custom_domain', 'Failed to register custom domain');
+  };
+
+  // Registering a custom domain from the portal (#2222 built the endpoint, #2223 this control).
+  //
+  // Idempotent for the holder: re-submitting a domain already held answers 200 with the existing
+  // row rather than a conflict (CreateCustomDomain, api_service_reservation.go), so landing on
+  // this form twice is success and is reported as such.
+  const createCustomDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const domain = customDomainInput.trim().toLowerCase();
+    if (!domain) {
+      showToast(
+        t('error_enter_custom_domain', 'Please enter a domain name'),
+        'error',
+      );
+      return;
+    }
+    setCustomDomainSubmitting(true);
+    try {
+      await axios.post('/api/portal/custom-domains', { domain });
+      setCustomDomainInput('');
+      fetchData();
+      showToast(
+        t(
+          'success_create_custom_domain',
+          'Custom domain registered. Point it at this gateway with a CNAME record if you have not already.',
+        ),
+        'success',
+      );
+    } catch (err: any) {
+      showToast(
+        `${t('error', 'Error')}: ${customDomainErrorMessage(err)}`,
+        'error',
+      );
+    } finally {
+      setCustomDomainSubmitting(false);
     }
   };
 
@@ -488,10 +558,15 @@ export default function ReservationsPanel() {
               style={{ width: `${Math.min(customDomainPercent, 100)}%` }}
             ></div>
           </div>
+          {/* Said what the admin/owner path does, and that path is refused for everyone else
+              (canUserAutoReserve, server.go) -- which is probably why nobody noticed the portal
+              had no register control at all (#2221). It now describes the control below, and
+              keeps the CNAME visible: that is the one step the user performs outside the
+              product, and being asked for a domain name is the moment they need to know it. */}
           <p className="text-muted text-xs mt-xs mb-0">
             {t(
               'custom_domain_quota_hint',
-              'Custom domains (via CNAME) are tracked separately from subdomain reservations above -- connect your client with -domain to reserve one, up to this limit.',
+              'Custom domains are tracked separately from the subdomain reservations above, up to this limit. Point the domain at this gateway with a CNAME record, register it below, then connect with -domain.',
             )}
           </p>
           {isAtCustomDomainLimit && customDomainLimit >= 0 && (
@@ -573,6 +648,50 @@ export default function ReservationsPanel() {
               {t('reserve', 'Reserve')}
             </button>
           </form>
+        )}
+
+        {/* Gated by the CUSTOM DOMAIN quota, exactly as the form above is gated by the
+            subdomain one -- the two quotas are separate and neither may hide the other's
+            control. Deliberately here and not on VanityDomainStatusPanel, which returns null
+            for a user with no attempts yet and so would hide this from precisely the people
+            who have never had a custom domain (#2223). */}
+        {!isAtCustomDomainLimit && (
+          <div>
+            <p className="text-muted text-xs mt-0 mb-sm">
+              {t(
+                'custom_domain_cname_hint',
+                'Before you register: point the domain at this gateway with a CNAME record. That record is the one step only you can do -- the gateway obtains and installs the TLS certificate itself.',
+              )}
+            </p>
+            <form
+              onSubmit={createCustomDomain}
+              className="flex gap-sm flex-wrap"
+            >
+              <div className="flex-1 min-w-sm">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder={t(
+                    'custom_domain_placeholder',
+                    'demo.customer.com',
+                  )}
+                  value={customDomainInput}
+                  onChange={(e) => setCustomDomainInput(e.target.value)}
+                  aria-label={t(
+                    'aria_custom_domain',
+                    'Custom domain to register',
+                  )}
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={customDomainSubmitting}
+              >
+                {t('register_custom_domain', 'Register Domain')}
+              </button>
+            </form>
+          </div>
         )}
       </div>
 

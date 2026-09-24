@@ -174,7 +174,12 @@ else
     fi
     # CONTROL for the read-back: the post-push verification is what stops a silent no-op
     # passing for success a second time.
-    if grep -q "still does not advertise" "$WORKFLOW"; then
+    #
+    # This used to grep the workflow for the inline step's own error text. #2204 moved that
+    # read into scripts/confirm-tap-version.sh -- so the assertion moves with it, and checks
+    # the workflow still RUNS the confirmation rather than that it still contains the words.
+    # What the confirmation must then say is tests/hooks/test-tap-version-confirmation.sh's job.
+    if grep -q "scripts/confirm-tap-version.sh" "$WORKFLOW"; then
         pass "CONTROL  it reads the tap back and fails if the version did not land"
     else
         fail "CONTROL  nothing verifies the push had any effect"

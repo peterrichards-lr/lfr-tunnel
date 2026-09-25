@@ -1,5 +1,29 @@
 [
   {
+    "version": "v1.49.0",
+    "release_date": "2026-09-25",
+    "features": [
+      "fix(tests): the release-asset suite no longer measures the machine (#2238) (#2239)",
+      "fix(server): the custom-domain refusal names a place both portals have (#2236) (#2237)",
+      "feat(portal): a user can register a custom domain from either portal arm (#2223, #2224) (#2235)",
+      "docs: how to use your own domain, starting with the CNAME (#2225) (#2232)",
+      "fix(tests): wait for the upgraded-connection counters instead of sampling once (#2230) (#2231)",
+      "feat(portal): a user can register a custom domain without being an admin (#2222) (#2229)",
+      "fix(tests): one skip list for every filesystem-walking gate (#2217) (#2227)",
+      "fix(tests): the tap confirmation suite no longer measures the machine (#2220) (#2226)",
+      "fix(server): the gateway tells a client what it already knows (#2187, #2210) (#2219)",
+      "fix(client): a WebSocket survives the interceptor, and is recorded as one (#2213) (#2218)",
+      "fix(gates): two scanning gates read the corpus they think they have (#2211, #2208) (#2216)",
+      "fix(client): the Inspector's details pane names the host it proxied to (#2191) (#2215)",
+      "fix(server): a WebSocket through the proxy connects again, and is counted (#2179) (#2214)",
+      "fix(server): a rotation refused at the accepted bound says when it clears (#2198) (#2212)",
+      "fix(gates): a marker renamed longer no longer satisfies check-portal-parity (#2201) (#2209)",
+      "fix(tap): tell a failed push apart from a contents API that has not caught up (#2204) (#2207)",
+      "fix(client): every client the upgrade starts is one it can find again (#2194) (#2206)",
+      "fix(release): tell a missing artefact apart from a listing that has not caught up (#2203) (#2205)"
+    ]
+  },
+  {
     "version": "v1.48.53",
     "release_date": "2026-09-23",
     "features": [
@@ -37,16 +61,6 @@
       "fix(client): a cancelled request is no longer logged as a proxy error (#2165) (#2172)",
       "fix(server): the portal's stop button warns a node's clients first (#2167) (#2168)",
       "fix(client): the upgrade restarts the processes it stopped (#2164) (#2166)"
-    ]
-  },
-  {
-    "version": "v1.48.49",
-    "release_date": "2026-09-22",
-    "features": [
-      "fix(server): a deregistration no longer destroys the lease a failback just made (#2161) (#2162)",
-      "fix(portal-v2): the Client Versions count is users, not active tunnels (#2158) (#2160)",
-      "feat(portal): the access mode comes first and decides which fields are settable (#2155) (#2159)",
-      "fix(server): refuse an access mode that names a factor the tunnel does not have (#2156) (#2157)"
     ]
   }
 ]

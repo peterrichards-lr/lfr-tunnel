@@ -422,7 +422,7 @@ export default function AdminAnalytics() {
                       labels: data.personal.daily.map((d: any) => d.date),
                       datasets: [
                         {
-                          label: 'Data In',
+                          label: t('data_in', 'Data In'),
                           data: data.personal.daily.map((d: any) => d.bytes_in),
                           borderColor: '#3b82f6',
                           backgroundColor: '#3b82f620',
@@ -430,7 +430,7 @@ export default function AdminAnalytics() {
                           tension: 0.4,
                         },
                         {
-                          label: 'Data Out',
+                          label: t('data_out', 'Data Out'),
                           data: data.personal.daily.map(
                             (d: any) => d.bytes_out,
                           ),
@@ -460,7 +460,10 @@ export default function AdminAnalytics() {
                       ),
                       datasets: [
                         {
-                          label: 'Total Bandwidth',
+                          label: t(
+                            'analytics_total_bandwidth',
+                            'Total Bandwidth',
+                          ),
                           data: data.personal.tunnels.map(
                             (t: any) => t.bytes_in + t.bytes_out,
                           ),
@@ -538,7 +541,10 @@ export default function AdminAnalytics() {
                       ),
                       datasets: [
                         {
-                          label: 'Total Bandwidth',
+                          label: t(
+                            'analytics_total_bandwidth',
+                            'Total Bandwidth',
+                          ),
                           data: data.global.top_users.map(
                             (u: any) => u.bytes_in + u.bytes_out,
                           ),
@@ -566,7 +572,10 @@ export default function AdminAnalytics() {
                       ),
                       datasets: [
                         {
-                          label: 'Total Bandwidth',
+                          label: t(
+                            'analytics_total_bandwidth',
+                            'Total Bandwidth',
+                          ),
                           data: data.global.top_tunnels.map(
                             (tItem: any) => tItem.bytes_in + tItem.bytes_out,
                           ),

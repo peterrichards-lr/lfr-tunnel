@@ -49,20 +49,32 @@ export default function AdminSubdomains() {
 
   const columns: ColumnDef<SubdomainInfo>[] = useMemo(
     () => [
-      { key: 'subdomain', label: 'Subdomain', sortable: true },
-      { key: 'full_host', label: 'Target Host', sortable: true },
-      { key: 'user_email', label: 'Owner', sortable: true },
-      { key: 'is_online', label: 'Status', sortable: true },
-      { key: 'node_id', label: 'Node', sortable: true },
-      { key: 'client_ip', label: 'Client IP', sortable: true },
-      { key: 'bytes_in', label: 'Bytes In', sortable: true },
-      { key: 'bytes_out', label: 'Bytes Out', sortable: true },
-      { key: 'created_at', label: 'Created Date', sortable: true },
+      { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
+      {
+        key: 'full_host',
+        label: t('target_host', 'Target Host'),
+        sortable: true,
+      },
+      { key: 'user_email', label: t('owner', 'Owner'), sortable: true },
+      { key: 'is_online', label: t('status', 'Status'), sortable: true },
+      { key: 'node_id', label: t('node', 'Node'), sortable: true },
+      { key: 'client_ip', label: t('client_ip', 'Client IP'), sortable: true },
+      { key: 'bytes_in', label: t('th_bytes_in', 'Bytes In'), sortable: true },
+      {
+        key: 'bytes_out',
+        label: t('th_bytes_out', 'Bytes Out'),
+        sortable: true,
+      },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
       // Visible by default: expiry is the point of a reservation, and V1's equivalent screen
       // has always shown it. Still hideable through the column toggle like any other (#1617).
-      { key: 'expires_at', label: 'Expires', sortable: true },
+      { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
     ],
-    [],
+    [t],
   );
 
   const {
@@ -290,7 +302,9 @@ export default function AdminSubdomains() {
       )}
 
       <div className="page-header">
-        <h1 className="page-header__title">Registered Subdomains</h1>
+        <h1 className="page-header__title">
+          {t('subdomain_reservations', 'Registered Subdomains')}
+        </h1>
         <a
           href="/api/admin/leases/export"
           className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
@@ -326,7 +340,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('subdomain')}
                     aria-sort={getAriaSort('subdomain')}
                   >
-                    Subdomain{getSortIndicator('subdomain')}
+                    {t('subdomain', 'Subdomain')}
+                    {getSortIndicator('subdomain')}
                   </th>
                 )}
                 {isColumnVisible('full_host') && (
@@ -335,7 +350,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('full_host')}
                     aria-sort={getAriaSort('full_host')}
                   >
-                    Target Host{getSortIndicator('full_host')}
+                    {t('target_host', 'Target Host')}
+                    {getSortIndicator('full_host')}
                   </th>
                 )}
                 {isColumnVisible('user_email') && (
@@ -344,7 +360,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('user_email')}
                     aria-sort={getAriaSort('user_email')}
                   >
-                    Owner{getSortIndicator('user_email')}
+                    {t('owner', 'Owner')}
+                    {getSortIndicator('user_email')}
                   </th>
                 )}
                 {isColumnVisible('is_online') && (
@@ -353,7 +370,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('is_online')}
                     aria-sort={getAriaSort('is_online')}
                   >
-                    Status{getSortIndicator('is_online')}
+                    {t('status', 'Status')}
+                    {getSortIndicator('is_online')}
                   </th>
                 )}
                 {isColumnVisible('node_id') && (
@@ -362,7 +380,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('node_id')}
                     aria-sort={getAriaSort('node_id')}
                   >
-                    Node{getSortIndicator('node_id')}
+                    {t('node', 'Node')}
+                    {getSortIndicator('node_id')}
                   </th>
                 )}
                 {isColumnVisible('client_ip') && (
@@ -371,7 +390,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('client_ip')}
                     aria-sort={getAriaSort('client_ip')}
                   >
-                    Client IP{getSortIndicator('client_ip')}
+                    {t('client_ip', 'Client IP')}
+                    {getSortIndicator('client_ip')}
                   </th>
                 )}
                 {isColumnVisible('bytes_in') && (
@@ -380,7 +400,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('bytes_in')}
                     aria-sort={getAriaSort('bytes_in')}
                   >
-                    Bytes In{getSortIndicator('bytes_in')}
+                    {t('th_bytes_in', 'Bytes In')}
+                    {getSortIndicator('bytes_in')}
                   </th>
                 )}
                 {isColumnVisible('bytes_out') && (
@@ -389,7 +410,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('bytes_out')}
                     aria-sort={getAriaSort('bytes_out')}
                   >
-                    Bytes Out{getSortIndicator('bytes_out')}
+                    {t('th_bytes_out', 'Bytes Out')}
+                    {getSortIndicator('bytes_out')}
                   </th>
                 )}
                 {isColumnVisible('created_at') && (
@@ -398,7 +420,8 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('created_at')}
                     aria-sort={getAriaSort('created_at')}
                   >
-                    Created Date{getSortIndicator('created_at')}
+                    {t('created_at', 'Created Date')}
+                    {getSortIndicator('created_at')}
                   </th>
                 )}
                 {isColumnVisible('expires_at') && (
@@ -407,10 +430,11 @@ export default function AdminSubdomains() {
                     onClick={() => requestSort('expires_at')}
                     aria-sort={getAriaSort('expires_at')}
                   >
-                    Expires{getSortIndicator('expires_at')}
+                    {t('expires', 'Expires')}
+                    {getSortIndicator('expires_at')}
                   </th>
                 )}
-                <th className="th-col text-right">Actions</th>
+                <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -520,14 +544,14 @@ export default function AdminSubdomains() {
                           disabled={!sub.is_online}
                           onClick={() => throttleLease(sub.full_host)}
                         >
-                          Throttle
+                          {t('action_throttle', 'Throttle')}
                         </button>
                         <button
                           className="btn btn-danger py-xs px-sm text-xs"
                           disabled={!sub.is_online}
                           onClick={() => kickLease(sub.subdomain)}
                         >
-                          Kick
+                          {t('action_kick', 'Kick')}
                         </button>
                       </div>
                     </td>

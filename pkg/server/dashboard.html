@@ -170,7 +170,7 @@
     <!-- A visible way into the shortcuts list (#1611). One reachable only by the shortcut it
          documents is no use to anyone who does not already know the shortcut, which is the
          problem being fixed. -->
-    <button type="button" id="shortcuts-trigger" class="shortcuts-trigger" onclick="openShortcutsOverlay()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
+    <button type="button" id="shortcuts-trigger" class="shortcuts-trigger" onclick="openShortcutsOverlay()" aria-label="Keyboard shortcuts" data-i18n-aria-label="shortcuts_open" title="Keyboard shortcuts">?</button>
 
     <div id="view-as-bar" class="hidden"></div>
 
@@ -204,7 +204,7 @@
         <p style="margin: 0; font-size: 14px; font-weight: 500;">
             Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
         </p>
-        <button onclick="dismissV2Promo()" aria-label="Dismiss" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px; line-height: 1;">&times;</button>
+        <button onclick="dismissV2Promo()" aria-label="Dismiss" data-i18n-aria-label="dismiss" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px; line-height: 1;">&times;</button>
     </div>
     <script>
         if (!localStorage.getItem('v2_promo_dismissed')) {
@@ -294,7 +294,7 @@
                 <a id="nav-system" class="nav-item hidden" data-i18n="sidebar_system" href="/portal/system">System Settings</a>
 
                 <a id="nav-account" class="nav-item" data-i18n="sidebar_account" href="/portal/account">Account Settings</a>
-                <button type="button" class="nav-item" onclick="logout()">Logout</button>
+                <button type="button" class="nav-item" data-i18n="sidebar_logout" onclick="logout()">Logout</button>
                 <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
                     <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
                     <span data-i18n="system_status">System Status</span>
@@ -439,11 +439,11 @@
                         <div style="margin-bottom: 16px;">
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme" for="acc-theme">Theme Preference</label>
                             <select id="acc-theme" class="input-field">
-                                <option value="system">System Default</option>
+                                <option value="system" data-i18n="theme_system">System Default</option>
                                 <option value="light">Light Mode</option>
                                 <option value="dark">Dark Mode</option>
-                                <option value="liferay">Liferay Waffle &#x1F9C7;</option>
-                                <option value="high-contrast">High Contrast</option>
+                                <option value="liferay" data-i18n="theme_liferay">Liferay Waffle &#x1F9C7;</option>
+                                <option value="high-contrast" data-i18n="theme_high_contrast">High Contrast</option>
                                 <option value="time">Time of Day (Sunset/Sunrise)</option>
                             </select>
                         </div>
@@ -465,15 +465,15 @@
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" for="acc-subdomain-style">Default Subdomain Generator Style</label>
                             <select id="acc-subdomain-style" class="input-field">
                                 <option value="liferay">Liferay Style</option>
-                                <option value="words">Words Style</option>
-                                <option value="heroku">Heroku Style</option>
+                                <option value="words" data-i18n="style_words">Words Style</option>
+                                <option value="heroku" data-i18n="style_heroku">Heroku Style</option>
                                 <option value="random">Alphanumeric (Random)</option>
                             </select>
                         </div>
                         <div style="margin-bottom: 16px;" id="acc-preferred-domain-container">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" for="acc-preferred-domain">Preferred Domain</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="preferred_domain" for="acc-preferred-domain">Preferred Domain</label>
                             <select id="acc-preferred-domain" class="input-field">
-                                <option value="">None (Auto)</option>
+                                <option value="" data-i18n="none_auto">None (Auto)</option>
                             </select>
                             <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;" id="acc-preferred-domain-help">Preferred Domain is active when the administrator configures User Preference domain allocation.</p>
                         </div>
@@ -544,7 +544,7 @@
                 <div class="glass" id="danger-zone-container" style="padding: 24px; border-radius: 8px; margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2);">
                     <h3 style="margin-bottom: 8px; font-size: 18px; color: #f43f5e;" data-i18n="danger_zone_title">⚠️ Danger Zone (GDPR / Right to Be Forgotten)</h3>
                     <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. <strong>Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.</strong></p>
-                    <button class="btn btn-outline" style="color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()">Delete Account...</button>
+                    <button class="btn btn-outline" style="color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()" data-i18n="delete_account">Delete Account...</button>
                 </div>
             </div>
 
@@ -780,7 +780,7 @@
 
                 <!-- Personal Section -->
                 <div>
-                    <h3 style="margin-bottom: 16px;">My Usage</h3>
+                    <h3 style="margin-bottom: 16px;" data-i18n="my_usage">My Usage</h3>
                     <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
                         <div class="glass" style="padding: 16px;" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
@@ -836,14 +836,14 @@
                     <div id="reservation-form-container">
                         <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap;">
                             <div style="flex: 2; min-width: 200px;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="res-subdomain">Subdomain Prefix</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="th_subdomain_prefix" for="res-subdomain">Subdomain Prefix</label>
                                 <input type="text" id="res-subdomain" class="input-field" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
                             </div>
                             <div style="flex: 1; min-width: 150px;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="res-domain">Domain</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="domain" for="res-domain">Domain</label>
                                 <select id="res-domain" class="input-field" style="width: 100%; box-sizing: border-box; margin-bottom: 0;"></select>
                             </div>
-                            <button id="btn-reserve-subdomain" class="btn btn-primary" style="width: auto; margin: 0;" onclick="reserveSubdomain()">Reserve</button>
+                            <button id="btn-reserve-subdomain" class="btn btn-primary" style="width: auto; margin: 0;" onclick="reserveSubdomain()" data-i18n="reserve">Reserve</button>
                         </div>
                         
                         <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
@@ -854,7 +854,7 @@
                                 <option value="random">Alphanumeric (8 chars)</option>
                                 <option value="words">What-Three-Words Style</option>
                                 <option value="heroku">Adjective-Noun-Number</option>
-                                <option value="liferay">Liferay SE style</option>
+                                <option value="liferay" data-i18n="style_liferay">Liferay SE style</option>
                             </select>
                             <button id="btn-generate-subdomain" class="btn btn-secondary" style="padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
                         </div>
@@ -926,7 +926,7 @@
                         </thead>
                         <tbody id="custom-domain-status-body">
                             <tr>
-                                <td colspan="6" class="table-empty">Loading...</td>
+                                <td colspan="6" class="table-empty" data-i18n="loading">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -935,7 +935,7 @@
                 <!-- Active Reservations Table -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 id="reservations-title" style="margin: 0; font-size: 18px;" data-i18n="res_active_title">Your Reserved Subdomains</h3>
-                    <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()">Export CSV</button>
+                    <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()" data-i18n="btn_export_csv">Export CSV</button>
                 </div>
                 <div class="glass table-container" style="margin-bottom: 32px;">
                     <table>
@@ -960,7 +960,7 @@
                 <div id="admin-reservations-section" class="hidden">
                     <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Administration Controls</div>
                     
-                    <h3 style="margin-bottom: 16px; font-size: 18px;">Extension Requests</h3>
+                    <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="extension_requests">Extension Requests</h3>
                     <div class="glass table-container">
                           <table>
                               <thead>
@@ -985,7 +985,7 @@
             <!-- Registrations Tab -->
             <div id="tab-registrations" class="hidden">
                 <div class="header">
-                    <h2>Pending Registrations</h2>
+                    <h2 data-i18n="users_tab_registrations">Pending Registrations</h2>
                 </div>
                 <div class="glass table-container">
                     <table>
@@ -1020,8 +1020,8 @@
             <!-- Blacklist Tab -->
             <div id="tab-blacklist" class="hidden">
                 <div class="header">
-                    <h2>IP Blacklist</h2>
-                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openBlacklistModal()">Ban IP</button>
+                    <h2 data-i18n="sidebar_blacklist">IP Blacklist</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openBlacklistModal()" data-i18n="btn_ban_ip">Ban IP</button>
                 </div>
                 <div class="glass table-container">
                     <table>
@@ -1050,8 +1050,8 @@
             <!-- Audit Logs Tab -->
             <div id="tab-audit" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2>Audit Logs</h2>
-                    <button class="btn btn-secondary" onclick="exportAuditLog()">Export CSV</button>
+                    <h2 data-i18n="sidebar_audit">Audit Logs</h2>
+                    <button class="btn btn-secondary" onclick="exportAuditLog()" data-i18n="btn_export_csv">Export CSV</button>
                 </div>
                 <p id="audit-truncated-notice" class="section-desc" hidden></p>
                 <div class="glass table-container">
@@ -1065,7 +1065,7 @@
             <!-- Magic Links Tab -->
             <div id="tab-magic" class="hidden">
                 <div class="header">
-                    <h2>Magic Links</h2>
+                    <h2 data-i18n="sidebar_magic">Magic Links</h2>
                 </div>
                 <div class="glass table-container">
                     <table>
@@ -1098,26 +1098,26 @@
                             <th data-i18n="th_summary">Summary</th>
                             <th data-i18n="th_actions">Actions</th>
                         </tr></thead>
-                        <tbody id="custom-domains-table-body"><tr><td colspan="8" class="table-empty">Loading...</td></tr></tbody>
+                        <tbody id="custom-domains-table-body"><tr><td colspan="8" class="table-empty" data-i18n="loading">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>
 
             <div id="tab-backups" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2>Database Backups</h2>
+                    <h2 data-i18n="sidebar_backups">Database Backups</h2>
                     <button id="btn-create-backup" class="btn btn-secondary" onclick="triggerBackup()" data-i18n="btn_create_backup">Create Backup</button>
                 </div>
                 <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--primary);">
                     <strong>&#x1F6E1; Restore via CLI only.</strong>
                     To restore from a backup, SSH into the VPS and run the wrapper script:<br>
                     <code style="display:inline-block; margin-top:8px; font-size:0.85em;">sudo ./scripts/common/restore-with-maintenance.sh</code><br>
-                    <span style="font-size:0.85em; opacity:0.75;">This wrapper automatically coordinates Nginx maintenance mode, stops the daemon, restores the database backup, and restarts the service.</span>
+                    <span style="font-size:0.85em; opacity:0.75;" data-i18n="backups_restore_cli_note">This wrapper automatically coordinates Nginx maintenance mode, stops the daemon, restores the database backup, and restarts the service.</span>
                 </div>
                 <div class="glass table-container">
                     <table>
                         <thead><tr><th data-sort="filename" data-i18n="th_filename">Filename</th><th data-sort="size_bytes" data-i18n="th_size">Size</th><th data-sort="created_at" data-i18n="th_created_utc">Created (UTC)</th><th data-i18n="th_actions">Actions</th></tr></thead>
-                        <tbody id="backups-table-body"><tr><td colspan="4" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                        <tbody id="backups-table-body"><tr><td colspan="4" style="text-align:center;opacity:0.6;" data-i18n="loading">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1126,7 +1126,7 @@
             <div id="tab-network-health" class="hidden">
                 <div class="header">
                     <h2 data-i18n="edge_gateways_title">Edge Gateways</h2>
-                    <button class="btn btn-secondary" onclick="loadNetworkHealth()">Refresh</button>
+                    <button class="btn btn-secondary" onclick="loadNetworkHealth()" data-i18n="btn_refresh">Refresh</button>
                 </div>
                 <div id="edge-bulk-toolbar" class="glass hidden" style="padding: 10px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
                     <span id="edge-bulk-count" style="opacity: 0.8;"></span>
@@ -1156,7 +1156,7 @@
                             </tr>
                         </thead>
                         <tbody id="network-health-body">
-                            <tr><td colspan="12" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                            <tr><td colspan="12" style="text-align:center;opacity:0.6;" data-i18n="loading">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1492,7 +1492,7 @@
 
     <div id="token-modal" class="modal-overlay">
         <div class="glass modal">
-            <h3 id="modal-title">Generate New Token</h3>
+            <h3 id="modal-title" data-i18n="btn_generate_token">Generate New Token</h3>
             
             <div id="token-form-step">
                 <input type="text" id="token-name" class="input-field" placeholder="What's this token for? (e.g. MacBook)" required aria-label="Token name" data-i18n-aria-label="aria_token_name">
@@ -1500,10 +1500,10 @@
                     <option value="30">30 Days</option>
                     <option value="90">90 Days</option>
                     <option value="365">1 Year</option>
-                    <option value="0" id="token-expiry-never">Never</option>
+                    <option value="0" id="token-expiry-never" data-i18n="never">Never</option>
                 </select>
-                <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
-                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="generateToken()" data-i18n="generate_token">Generate Token</button>
+                <button class="btn" onclick="closeModal()" data-i18n="btn_cancel">Cancel</button>
             </div>
 
             <div id="token-result-step" class="hidden">
@@ -1607,7 +1607,7 @@
             </p>
             <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;" aria-label="Confirm your email address to delete the account" data-i18n-aria-label="aria_delete_confirm">
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeDeleteAccountModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeDeleteAccountModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()">Delete Permanently</button>
             </div>
         </div>
@@ -1626,7 +1626,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Set to 0 to grant unlimited requests.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeUserQuotaModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserQuotaModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserQuota()">Save Quota</button>
             </div>
         </div>
@@ -1645,7 +1645,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeUserResLimitModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserResLimitModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
             </div>
         </div>
@@ -1664,7 +1664,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeUserTunnelsLimitModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserTunnelsLimitModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()">Save Limit</button>
             </div>
         </div>
@@ -1687,7 +1687,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Enter 0 to exempt this user from the quota entirely.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeUserBandwidthQuotaModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserBandwidthQuotaModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserBandwidthQuota()">Save Quota</button>
             </div>
         </div>
@@ -1709,7 +1709,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Changes are dynamically applied in-memory and will throttle the proxy instantly.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="closeTunnelOverrideModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeTunnelOverrideModal()" data-i18n="btn_cancel">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()">Apply Override</button>
             </div>
         </div>

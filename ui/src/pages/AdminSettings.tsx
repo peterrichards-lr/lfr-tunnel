@@ -450,7 +450,9 @@ export default function AdminSettings() {
       )}
 
       <div className="mb-xl">
-        <h1 className="page-header__title">System Settings</h1>
+        <h1 className="page-header__title">
+          {t('system_settings_title', 'System Settings')}
+        </h1>
         <p className="page-header__desc">
           Configure global routing and domain parameters.
         </p>
@@ -512,7 +514,7 @@ export default function AdminSettings() {
           onClick={saveSystemSettings}
           disabled={!settingsLoaded}
         >
-          Save Settings
+          {t('save_settings', 'Save Settings')}
         </button>
       </div>
 
@@ -563,7 +565,7 @@ export default function AdminSettings() {
           onClick={saveSystemSettings}
           disabled={user.role !== 'owner' || !settingsLoaded}
         >
-          Save Settings
+          {t('save_settings', 'Save Settings')}
         </button>
       </div>
 
@@ -749,7 +751,7 @@ export default function AdminSettings() {
               onClick={saveSystemSettings}
               disabled={!settingsLoaded}
             >
-              Save Settings
+              {t('save_settings', 'Save Settings')}
             </button>
           </>
         ) : (

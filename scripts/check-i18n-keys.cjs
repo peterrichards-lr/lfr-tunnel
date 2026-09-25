@@ -573,6 +573,541 @@ if (hardcodedRows.length) {
   );
 }
 
+// --- 4. Prose already in the bundle must resolve through its key (#2247) ------------------
+//
+// Everything above verifies that a key which IS used resolves, and the muted-row assertion
+// widens that by one shape. Neither can see the opposite defect: an element that renders prose
+// which is ALREADY a value in Language.properties, already translated into all ten locales, and
+// simply does not point at the key. 139 of those existed when this was written -- the Reserve a
+// Subdomain labels reported from production, the sidebar's Logout button, and every column
+// header on four V2 admin screens among them.
+//
+// The rule carries no translation judgement, which is what makes it gateable: if the exact text
+// an element renders is already the value of a key, that element must resolve through that key.
+// Text with no matching value is deliberately OUT of scope -- it needs a new key and ten
+// translations, which is #2248. This gate must never be widened into asking for a translation.
+//
+// Scope, stated as data rather than prose (§5b rule 6):
+//   * V1_MARKUP only. The SELF_CONTAINED pages carry their own bundles and are compared against
+//     their own English above; measuring them against Language.properties is exactly the wrong
+//     answer rule 4 documents.
+//   * V1 attribute rules apply only where the page's own translator implements them, DERIVED by
+//     reading the page and the scripts it loads rather than listed here. So `title="..."` is not
+//     checked today because nothing applies `data-i18n-title` -- and the day something does,
+//     this starts checking it with no edit here.
+//   * V2 covers JSX text, JSX string attributes, and object-literal display labels.
+
+const ENTITIES = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  times: '×',
+  rarr: '→',
+  larr: '←',
+  middot: '·',
+  mdash: '—',
+  ndash: '–',
+  hellip: '…',
+};
+
+function decodeEntities(str) {
+  return str.replace(/&(#[xX]?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, body) => {
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X';
+      const code = parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+    }
+    return Object.prototype.hasOwnProperty.call(ENTITIES, body)
+      ? ENTITIES[body]
+      : m;
+  });
+}
+
+function normText(str) {
+  return decodeEntities(String(str)).replace(/\s+/g, ' ').trim();
+}
+
+// Matching is case-INSENSITIVE, and the exact-case key wins when one exists. Both halves were
+// measured against real defects: V1's generator option read "Liferay SE style" against a bundle
+// value of "Liferay SE Style", so a case-sensitive rule would have missed it -- while the PAT
+// badges need the case to choose, because `active`/`status_active` and `revoked`/`status_revoked`
+// differ from each other only by capitalisation and mean different things.
+const byValue = new Map();
+for (const [k, v] of base.props) {
+  const n = normText(v).toLowerCase();
+  // Two letters minimum: a bundle value of "—" or "0" would otherwise match every glyph on
+  // the page and report nonsense.
+  if (!n || !/[A-Za-z]{2}/.test(n)) continue;
+  if (!byValue.has(n)) byValue.set(n, []);
+  byValue.get(n).push(k);
+}
+
+function keysForText(text) {
+  const n = normText(text);
+  if (!n || !/[A-Za-z]{2}/.test(n)) return null;
+  const ks = byValue.get(n.toLowerCase());
+  if (!ks) return null;
+  const exact = ks.filter((k) => normText(base.props.get(k)) === n);
+  return (exact.length ? exact : ks).slice(0, 4);
+}
+
+// The offenders found this pass, and the counters that prove the derivation still derives.
+const unwired = [];
+// The opposite mistake, and the one the fix for the above walks straight into: data-i18n on an
+// element that CONTAINS other elements. applyTranslations assigns `el.innerText`
+// (static/dashboard.js:19-23), so the first language switch replaces the children with a flat
+// string. It looks correct until then, because the initial render happens before any translation
+// pass and the English fallback is already in the markup -- which is why
+// tests/e2e/ui/tests/portal_heading_anchors.spec.ts:187 exists at all: a copy-link button was
+// being wiped out of an <h2> exactly this way. Asserted here as the class rather than left to
+// one spec covering one heading.
+const containerI18n = [];
+const counters = {
+  v1Elements: 0,
+  v1I18nElements: 0,
+  v1Wired: 0,
+  v2TextRuns: 0,
+  v2Wired: 0,
+};
+
+function report(file, line, what, text, keys) {
+  unwired.push({ file: rel(file), line, what, text: normText(text), keys });
+}
+
+// -- V1 markup --------------------------------------------------------------------------
+//
+// Parsed with a tag stack rather than a regex over `<tag>text</tag>`, because the question
+// "does an ancestor already carry data-i18n" cannot be asked of a flat match. It is not
+// academic: setup.html's consent label is one data-i18n element whose value contains two
+// <a> children, and applyTranslations rewrites the whole label -- a regex reads those anchors
+// as two untranslated links and demands keys they must not have.
+
+const VOID_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
+function blankOut(src, re) {
+  return src.replace(re, (m) => m.replace(/[^\n]/g, ' '));
+}
+
+// Scripts, styles and comments are blanked whole -- tags included, so the stack stays balanced.
+// A <script> body is JavaScript, and reading it as markup is how setup.html's inline
+// applyTranslations (which contains the literal text "Privacy Policy" inside a .replace call)
+// turns into two phantom offenders.
+function strippedMarkup(src) {
+  let out = blankOut(src, /<!--[\s\S]*?-->/g);
+  out = blankOut(out, /<script\b[\s\S]*?<\/script\s*>/gi);
+  out = blankOut(out, /<style\b[\s\S]*?<\/style\s*>/gi);
+  return out;
+}
+
+function attrValue(attrs, name) {
+  const m = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`).exec(attrs);
+  return m ? m[1] : null;
+}
+
+// Which data-i18n-<attr> mechanisms this page actually has, read out of the page and the local
+// scripts it loads. Derived, not listed: a page cannot be asked to point an attribute at a key
+// when nothing would ever apply it, and adding the mechanism must switch the check on by itself.
+function attrMechanisms(file, src) {
+  let text = src;
+  for (const m of src.matchAll(
+    /<script[^>]*\bsrc\s*=\s*"\/static\/([^"?#]+)"/g,
+  )) {
+    const js = path.join(ROOT, 'pkg', 'server', 'static', m[1]);
+    if (fs.existsSync(js)) text += '\n' + fs.readFileSync(js, 'utf8');
+  }
+  const attrs = new Set();
+  for (const m of text.matchAll(/data-i18n-([a-z][a-z-]*)\s*[\]="']/g)) {
+    attrs.add(m[1]);
+  }
+  return attrs;
+}
+
+const V1_TAG = /<(\/?)([a-zA-Z][\w-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)(\/?)>/g;
+
+for (const file of V1_MARKUP) {
+  const raw = fs.readFileSync(file, 'utf8');
+  const src = strippedMarkup(raw);
+  const mechanisms = attrMechanisms(file, raw);
+  const lineAt = (off) => src.slice(0, off).split('\n').length;
+
+  const stack = [];
+  let last = 0;
+  V1_TAG.lastIndex = 0;
+  for (const m of src.matchAll(V1_TAG)) {
+    const [whole, closing, nameRaw, attrs, selfClose] = m;
+    const name = nameRaw.toLowerCase();
+    if (stack.length) stack[stack.length - 1].text += src.slice(last, m.index);
+    last = m.index + whole.length;
+
+    if (!closing) {
+      const i18n = /\bdata-i18n\s*=/.test(attrs);
+      if (stack.length) stack[stack.length - 1].children++;
+      counters.v1Elements++;
+
+      for (const attr of ['placeholder', 'aria-label']) {
+        if (!mechanisms.has(attr)) continue;
+        const val = attrValue(attrs, attr);
+        if (val === null) continue;
+        if (new RegExp(`\\bdata-i18n-${attr}\\s*=`).test(attrs)) {
+          counters.v1Wired++;
+          continue;
+        }
+        const keys = keysForText(val);
+        if (keys) report(file, lineAt(m.index), `${attr}=`, val, keys);
+      }
+
+      if (i18n) counters.v1I18nElements++;
+      if (VOID_ELEMENTS.has(name) || selfClose) continue;
+      stack.push({
+        name,
+        i18n,
+        key: attrValue(attrs, 'data-i18n'),
+        ancestorI18n:
+          i18n || (stack.length ? stack[stack.length - 1].ancestorI18n : false),
+        start: m.index,
+        text: '',
+        children: 0,
+      });
+      continue;
+    }
+
+    // Closing tag. Unwind tolerantly -- make check-html already asserts these documents are
+    // balanced, so an unwind here means that gate is the one to look at, not this one.
+    let idx = -1;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (stack[i].name === name) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx === -1) continue;
+    const closed = stack.splice(idx).shift();
+    if (closed.i18n && closed.children > 0) {
+      containerI18n.push({
+        file: rel(file),
+        line: lineAt(closed.start),
+        name: closed.name,
+        key: closed.key || '(unreadable)',
+        children: closed.children,
+      });
+    }
+    const text = normText(closed.text);
+    if (!text || closed.children > 0) continue;
+    if (closed.i18n) {
+      const key = closed.key;
+      if (
+        key &&
+        base.props.has(key) &&
+        normText(base.props.get(key)) === text
+      ) {
+        counters.v1Wired++;
+      }
+      continue;
+    }
+    if (closed.ancestorI18n) continue;
+    const keys = keysForText(text);
+    if (keys)
+      report(file, lineAt(closed.start), `<${closed.name}>`, text, keys);
+  }
+}
+
+// -- V2 ---------------------------------------------------------------------------------
+//
+// String literals and comments are blanked before JSX text is read, so a t() fallback -- which
+// is a string literal -- cannot be mistaken for unwired prose, and a commented-out block cannot
+// fail the build. Known limit: this lexer does not track regex literals, so a regex containing
+// a quote can blank more than it should. That direction is safe (it can only hide an offender,
+// never invent one) and the floors below fail loudly if it ever hides most of a file.
+
+function blankLiterals(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') {
+      let j = src.indexOf('\n', i);
+      if (j === -1) j = src.length;
+      out += ' '.repeat(j - i);
+      i = j;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      let j = src.indexOf('*/', i + 2);
+      j = j === -1 ? src.length : j + 2;
+      out += src.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (src[j] === c) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      out += src.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+function braceSpans(blank) {
+  const stack = [];
+  const spans = [];
+  for (let i = 0; i < blank.length; i++) {
+    if (blank[i] === '{') stack.push(i);
+    else if (blank[i] === '}' && stack.length) spans.push([stack.pop(), i]);
+  }
+  return spans;
+}
+
+function enclosingBraces(spans, pos) {
+  let best = null;
+  for (const [a, b] of spans) {
+    if (a < pos && pos < b && (!best || a > best[0])) best = [a, b];
+  }
+  return best;
+}
+
+const JSX_TEXT = /[>}]([^<>{}]+)[<{]/g;
+const JSX_ATTR = /\b(placeholder|aria-label|title)\s*=\s*(['"])([^'"\n]*)\2/g;
+const OBJ_LABEL = /\b(label|title|placeholder)\s*:\s*(['"])([^'"\n]*)\2/g;
+// A display literal is accounted for when the same object carries the key that resolves it --
+// the shape ShortcutsOverlay needs, because its table is a module-level const where t() cannot
+// be called and the key has to travel with the row.
+const SIBLING_KEY = /\b[A-Za-z]*[Kk]ey\s*:\s*['"]([A-Za-z0-9_.]+)['"]/g;
+
+for (const file of tsFiles) {
+  const raw = fs.readFileSync(file, 'utf8');
+  const blank = blankLiterals(raw);
+  const spans = braceSpans(blank);
+  const lineAt = (off) => raw.slice(0, off).split('\n').length;
+
+  for (const m of blank.matchAll(JSX_TEXT)) {
+    counters.v2TextRuns++;
+    const keys = keysForText(m[1]);
+    if (keys) report(file, lineAt(m.index), 'JSX text', m[1], keys);
+  }
+
+  for (const m of raw.matchAll(JSX_ATTR)) {
+    const keys = keysForText(m[3]);
+    if (keys) report(file, lineAt(m.index), `${m[1]}=`, m[3], keys);
+  }
+
+  for (const m of raw.matchAll(OBJ_LABEL)) {
+    const keys = keysForText(m[3]);
+    if (!keys) continue;
+    const span = enclosingBraces(spans, m.index);
+    let accounted = false;
+    if (span) {
+      const obj = raw.slice(span[0], span[1] + 1);
+      SIBLING_KEY.lastIndex = 0;
+      for (const k of obj.matchAll(SIBLING_KEY)) {
+        if (
+          base.props.has(k[1]) &&
+          normText(base.props.get(k[1])).toLowerCase() ===
+            normText(m[3]).toLowerCase()
+        ) {
+          accounted = true;
+          break;
+        }
+      }
+    }
+    if (accounted) counters.v2Wired++;
+    else report(file, lineAt(m.index), `${m[1]}:`, m[3], keys);
+  }
+
+  for (const m of raw.matchAll(T_CALL)) {
+    if (
+      m[5] &&
+      base.props.has(m[2]) &&
+      normText(base.props.get(m[2])) === normText(m[5])
+    ) {
+      counters.v2Wired++;
+    }
+  }
+}
+
+// -- data-i18n on a container ------------------------------------------------------------
+//
+// Same ratchet shape. An entry that is no longer a container -- or no longer carries the key --
+// fails the run, so the list can only shrink.
+const KNOWN_CONTAINER_I18N = [
+  {
+    file: 'pkg/server/static/setup.html',
+    key: 'policy_consent_label',
+    why:
+      "setup.html's own applyTranslations special-cases this one key by name (setup.html:183-190) " +
+      'and rebuilds the two policy anchors with innerHTML, so the children survive. It is the ' +
+      'only key on the page that does, which is exactly why it is named there rather than ' +
+      'inferred.',
+  },
+  {
+    file: 'pkg/server/dashboard.html',
+    key: 'maint_soft_desc',
+    why: 'The <strong> is inside the properties value, so innerText renders the tags as visible text. Filed as #2252.',
+  },
+  {
+    file: 'pkg/server/dashboard.html',
+    key: 'maint_iron_desc',
+    why: 'The <strong> is inside the properties value, so innerText renders the tags as visible text. Filed as #2252.',
+  },
+];
+
+const containerMatched = new Set();
+const containerOffenders = [];
+for (const c of containerI18n) {
+  const hit = KNOWN_CONTAINER_I18N.findIndex(
+    (k) => k.file === c.file && k.key === c.key,
+  );
+  if (hit === -1) containerOffenders.push(c);
+  else containerMatched.add(hit);
+}
+const staleContainer = KNOWN_CONTAINER_I18N.filter(
+  (_, i) => !containerMatched.has(i),
+);
+
+if (containerOffenders.length) {
+  errors.push(
+    `${containerOffenders.length} element(s) carry data-i18n AND contain child elements:\n` +
+      containerOffenders
+        .map(
+          (c) =>
+            `  ${c.file}:${c.line}  <${c.name} data-i18n="${c.key}"> has ${c.children} child element(s)`,
+        )
+        .join('\n') +
+      `\n\n  applyTranslations assigns el.innerText, so the first language switch replaces those` +
+      `\n  children with a flat string -- an icon, a badge or a copy-link button simply vanishes.` +
+      `\n  It renders correctly until then, because the initial paint happens before any` +
+      `\n  translation pass, so neither review nor a single-language E2E run can see it.` +
+      `\n  Move data-i18n onto an inner text-only element (add a <span> if there is none), the way` +
+      `\n  the heading-anchor fix did -- do not reach for innerHTML.`,
+  );
+}
+if (staleContainer.length) {
+  errors.push(
+    `${staleContainer.length} stale KNOWN_CONTAINER_I18N entr(ies) in ${rel(__filename)}:\n` +
+      staleContainer.map((k) => `  ${k.file}: ${k.key}`).join('\n') +
+      `\n\n  Remove them -- the element no longer carries that key, or no longer has children.`,
+  );
+}
+
+// -- The ratchet ------------------------------------------------------------------------
+//
+// Not an exclusion list. An entry that no longer matches an offender fails the run, so this can
+// only shrink -- the V1_KNOWN_INERT shape (§5b rule 5). Each entry says why the obvious mapping
+// is WRONG, because a wrong key is worse than no key: it renders confidently in the wrong words
+// in nine languages.
+const KNOWN_UNWIRED = [
+  {
+    file: 'pkg/server/dashboard.html',
+    text: 'Status: Inactive 🟢',
+    why:
+      'dashboard.js:5473-5488 writes this span from maint_iron_active or maint_iron_inactive as ' +
+      'the Iron Curtain is toggled. data-i18n="maint_iron_inactive" would make the next language ' +
+      'switch overwrite a live "Active" with "Inactive" -- the gateway reported as open while it ' +
+      'is sealed. It needs the JS to re-apply, not an attribute.',
+  },
+];
+
+const matched = new Set();
+const remaining = [];
+for (const u of unwired) {
+  const hit = KNOWN_UNWIRED.findIndex(
+    (k) => k.file === u.file && normText(k.text) === u.text,
+  );
+  if (hit === -1) remaining.push(u);
+  else matched.add(hit);
+}
+const staleKnown = KNOWN_UNWIRED.filter((_, i) => !matched.has(i));
+
+// -- Anti-vacuity floors ----------------------------------------------------------------
+//
+// A derivation that stops matching reports a clean pass over nothing, which is the failure this
+// repo keeps re-learning. Every input to the rule above gets a floor, because each of them has
+// its own way of silently going to zero: a regex that stops matching, a lexer that blanks a file,
+// a properties parser that returns an empty map.
+const FLOORS = [
+  ['bundle values usable as prose', byValue.size, 500],
+  ['V1 markup elements parsed', counters.v1Elements, 800],
+  ['V1 elements carrying data-i18n', counters.v1I18nElements, 200],
+  ['V2 JSX text runs read', counters.v2TextRuns, 2000],
+  [
+    'strings already resolving through the key whose value they equal',
+    counters.v1Wired + counters.v2Wired,
+    400,
+  ],
+];
+for (const [what, got, floor] of FLOORS) {
+  if (got < floor) {
+    errors.push(
+      `check-i18n-keys: only ${got} ${what} (floor ${floor}) -- the #2247 derivation is broken, ` +
+        `so a green result here would mean nothing was checked. Fix the derivation rather than ` +
+        `lowering the floor; the floors are set well under the real counts on purpose.`,
+    );
+  }
+}
+
+if (staleKnown.length) {
+  errors.push(
+    `${staleKnown.length} stale KNOWN_UNWIRED entr(ies) in ${rel(__filename)} -- no such ` +
+      `unwired prose was found any more:\n` +
+      staleKnown.map((k) => `  ${k.file}: ${k.text}`).join('\n') +
+      `\n\n  Remove them. The list is a ratchet, not an exclusion: an entry that outlives its ` +
+      `\n  subject silently exempts whatever is written at that spot next.`,
+  );
+}
+
+if (remaining.length) {
+  errors.push(
+    `${remaining.length} element(s) render prose that is ALREADY a value in ${rel(BASE)} but do ` +
+      `not resolve through its key:\n` +
+      remaining
+        .slice(0, 40)
+        .map(
+          (u) =>
+            `  ${u.file}:${u.line}  ${u.what}  "${u.text.slice(0, 60)}"` +
+            `\n      -> ${u.keys.join(' | ')}`,
+        )
+        .join('\n') +
+      (remaining.length > 40 ? `\n  …and ${remaining.length - 40} more` : '') +
+      `\n\n  The translation already exists in all ten locales; only the pointer is missing.` +
+      `\n  V1: add data-i18n="<key>" (or data-i18n-placeholder / data-i18n-aria-label).` +
+      `\n  V2: wrap it as t('<key>', '<the same English>').` +
+      `\n  Check the key means what the element means before pointing at it -- where several are` +
+      `\n  listed, they are candidates, not a verdict. If none of them fits, the element needs a` +
+      `\n  new key and belongs to #2248: add it to KNOWN_UNWIRED with the reason instead.`,
+  );
+}
+
 if (errors.length) {
   console.error('check-i18n-keys: FAILED\n');
   console.error(errors.join('\n\n'));
@@ -584,4 +1119,15 @@ console.log(
     `all resolve, ${LOCALES.length} locale bundle(s) match the ${base.props.size} English keys, ` +
     `and ${SELF_CONTAINED.length} self-contained page(s) agree with their own English ` +
     `(${selfContainedKeys} key(s))`,
+);
+// Printed rather than kept internal: these are the counts the floors above guard, and a reader
+// who cannot see them has no way to tell a real pass from a derivation that quietly stopped
+// matching.
+console.log(
+  `check-i18n-keys: #2247 scan -- ${counters.v1Elements} V1 element(s) and ` +
+    `${counters.v2TextRuns} V2 text run(s) read against ${byValue.size} bundle value(s); ` +
+    `${counters.v1Wired + counters.v2Wired} string(s) resolve through the key they equal, ` +
+    `${counters.v1I18nElements} V1 element(s) carry data-i18n and only ` +
+    `${containerI18n.length} of them wrap markup, ` +
+    `${KNOWN_UNWIRED.length + KNOWN_CONTAINER_I18N.length} ratcheted`,
 );

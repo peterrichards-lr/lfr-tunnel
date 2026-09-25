@@ -650,49 +650,54 @@ export default function ReservationsPanel() {
           </form>
         )}
 
-        {/* Gated by the CUSTOM DOMAIN quota, exactly as the form above is gated by the
-            subdomain one -- the two quotas are separate and neither may hide the other's
-            control. Deliberately here and not on VanityDomainStatusPanel, which returns null
-            for a user with no attempts yet and so would hide this from precisely the people
-            who have never had a custom domain (#2223). */}
-        {!isAtCustomDomainLimit && (
-          <div>
-            <p className="text-muted text-xs mt-0 mb-sm">
-              {t(
-                'custom_domain_cname_hint',
-                'Before you register: point the domain at this gateway with a CNAME record. That record is the one step only you can do -- the gateway obtains and installs the TLS certificate itself.',
-              )}
-            </p>
-            <form
-              onSubmit={createCustomDomain}
-              className="flex gap-sm flex-wrap"
+        {/* DISABLED at the quota, never removed -- V1 does the same, and the two arms must not
+            disagree about whether the control exists (#2241).
+
+            It was `{!isAtCustomDomainLimit && (...)}`, mirroring the subdomain form above. That
+            is right for subdomains, where the quota is several and a user at the limit has
+            visible reservations explaining why. The custom-domain quota defaults to ONE, so the
+            same pattern hid the control from everyone who had ever used the feature -- including
+            every admin and owner, who have always been able to auto-reserve by connecting with
+            -domain. Reported from production the day it shipped as "I can see it on V1 but not
+            V2", where the honest reading of an absent control is that it was never built.
+
+            Deliberately here and not on VanityDomainStatusPanel, which returns null for a user
+            with no attempts yet and so would hide this from precisely the people who have never
+            had a custom domain (#2223). */}
+        <div>
+          <p className="text-muted text-xs mt-0 mb-sm">
+            {t(
+              'custom_domain_cname_hint',
+              'Before you register: point the domain at this gateway with a CNAME record. That record is the one step only you can do -- the gateway obtains and installs the TLS certificate itself.',
+            )}
+          </p>
+          <form onSubmit={createCustomDomain} className="flex gap-sm flex-wrap">
+            <div className="flex-1 min-w-sm">
+              <input
+                type="text"
+                className="form-control"
+                placeholder={t(
+                  'custom_domain_placeholder',
+                  'demo.customer.com',
+                )}
+                value={customDomainInput}
+                onChange={(e) => setCustomDomainInput(e.target.value)}
+                disabled={isAtCustomDomainLimit}
+                aria-label={t(
+                  'aria_custom_domain',
+                  'Custom domain to register',
+                )}
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={customDomainSubmitting || isAtCustomDomainLimit}
             >
-              <div className="flex-1 min-w-sm">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder={t(
-                    'custom_domain_placeholder',
-                    'demo.customer.com',
-                  )}
-                  value={customDomainInput}
-                  onChange={(e) => setCustomDomainInput(e.target.value)}
-                  aria-label={t(
-                    'aria_custom_domain',
-                    'Custom domain to register',
-                  )}
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={customDomainSubmitting}
-              >
-                {t('register_custom_domain', 'Register Domain')}
-              </button>
-            </form>
-          </div>
-        )}
+              {t('register_custom_domain', 'Register Domain')}
+            </button>
+          </form>
+        </div>
       </div>
 
       <ReservationsTable

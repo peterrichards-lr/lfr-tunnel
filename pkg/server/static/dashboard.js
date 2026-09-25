@@ -6835,6 +6835,14 @@ async function loadReservations() {
       const limit =
         data.limit !== undefined && data.limit !== null ? data.limit : 0;
       const used = data.used || 0;
+      // The SAME payload already carries the custom-domain quota (api.go:1251) -- it is a
+      // separate, smaller limit and must never be conflated with the subdomain one (#1004).
+      const customDomainLimit =
+        data.custom_domain_limit !== undefined &&
+        data.custom_domain_limit !== null
+          ? data.custom_domain_limit
+          : 0;
+      const customDomainUsed = data.custom_domain_used || 0;
 
       // Progress bar & quota text
       if (limit < 0) {
@@ -6869,6 +6877,8 @@ async function loadReservations() {
         }
         if (warningAlert) warningAlert.classList.add('hidden');
       }
+
+      renderCustomDomainQuota(customDomainLimit, customDomainUsed);
 
       // Set headers dynamically BEFORE calling renderTable
       const resHeaders = document.getElementById('reservations-table-headers');
@@ -6907,7 +6917,13 @@ async function loadReservations() {
 
         const canExtend = !!(item.expires_at && !item.extension_requested);
 
-        const host = `${item.subdomain}.${item.domain}`;
+        // A custom domain is a row with an EMPTY subdomain (api_service_reservation.go), so the
+        // subdomain-shaped join renders ".demo.customer.com" for one -- a broken host and a dead
+        // link. Survivable while only an admin could obtain one; reachable by anyone the moment
+        // the register control above exists (#2224).
+        const host = item.subdomain
+          ? `${item.subdomain}.${item.domain}`
+          : item.domain;
         const hostLink = `<a href="https://${host}" target="_blank" class="host-link">${escapeHTML(host)}</a>`;
         const copyBtn = `
                             <button class="btn-copy" onclick="copyToClipboard('${escapeHTML(host)}')" title="Copy Host to Clipboard">
@@ -6953,6 +6969,121 @@ async function loadReservations() {
     }
   } catch (e) {
     console.error('Failed to load reservations', e);
+  }
+}
+
+// Custom Domain Quota meter and form gating, mirroring the subdomain block above. Separate
+// quotas, so an at-limit subdomain quota must never disable this form and vice versa.
+function renderCustomDomainQuota(limit, used) {
+  const text = document.getElementById('custom-domain-quota-text');
+  const bar = document.getElementById('custom-domain-quota-bar');
+  if (text) {
+    text.innerText = limit < 0 ? `${used} / ∞` : `${used} / ${limit}`;
+  }
+  if (bar) {
+    const percent = limit > 0 ? (used / limit) * 100 : 0;
+    bar.style.width = limit < 0 ? '0%' : `${Math.min(percent, 100)}%`;
+  }
+
+  const container = document.getElementById('custom-domain-form-container');
+  const warning = document.getElementById('custom-domain-quota-warning');
+  const atLimit = limit >= 0 && used >= limit;
+  if (container) {
+    container
+      .querySelectorAll('input, select, button')
+      .forEach((el) => (el.disabled = atLimit));
+  }
+  if (warning) warning.classList.toggle('hidden', !atLimit);
+}
+
+// Which of the endpoint's refusals this was, in words the user can act on (#2224).
+//
+// Status alone cannot tell them apart: mapErrorToStatusCode (pkg/server/api_errors.go) puts BOTH
+// ErrQuotaReached and ErrInvalidRequest on 400, so "you are out of quota" and "that is not a
+// domain this flow accepts" arrive identically and only the sentinel text separates them. The V2
+// arm resolves the same three cases through the same keys.
+function customDomainErrorMessage(status, reason) {
+  if (status === 409) {
+    return t(
+      'error_custom_domain_taken',
+      'That domain is already registered to someone else.',
+    );
+  }
+  if (status === 400 && String(reason || '').includes('quota')) {
+    return t(
+      'custom_domain_limit_reached',
+      'You have reached your custom domain limit. Release one to register a new one.',
+    );
+  }
+  if (status === 400) {
+    return t(
+      'error_custom_domain_invalid',
+      'Enter a domain you own, such as demo.customer.com. A name under a domain this gateway already serves is a subdomain reservation, not a custom domain.',
+    );
+  }
+  return t('failed_create_custom_domain', 'Failed to register custom domain');
+}
+
+// Registering a custom domain from the portal (#2222 built the endpoint, #2224 this control).
+//
+// Idempotent for the holder: re-submitting a domain already held answers 200 with the existing
+// row rather than a conflict (CreateCustomDomain, api_service_reservation.go), so landing on this
+// form twice is success and is reported as such.
+async function reserveCustomDomain() {
+  const input = document.getElementById('custom-domain-input');
+  const domain = (input ? input.value : '').trim().toLowerCase();
+  if (!domain) {
+    return showToast(
+      t('error_enter_custom_domain', 'Please enter a domain name'),
+      'danger',
+    );
+  }
+
+  const btn = document.getElementById('btn-register-custom-domain');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/portal/custom-domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain }),
+    });
+    if (res.ok) {
+      if (input) input.value = '';
+      showToast(
+        t(
+          'success_create_custom_domain',
+          'Custom domain registered. Point it at this gateway with a CNAME record if you have not already.',
+        ),
+        'success',
+      );
+      // Refetched rather than appended: the row's id and expiry come from the server.
+      await loadReservations();
+      return;
+    }
+    // The body is written by http.Error, so it is JSON with a text/plain content type -- and on
+    // an unexpected failure it may not be JSON at all. A parse failure here must not become an
+    // exception that reports nothing.
+    let reason = '';
+    try {
+      reason = (await res.json()).error || '';
+    } catch (parseErr) {
+      console.error('Custom domain error body was not JSON', parseErr);
+    }
+    showToast(customDomainErrorMessage(res.status, reason), 'danger');
+  } catch (e) {
+    console.error('Failed to register custom domain', e);
+    showToast(
+      t('failed_create_custom_domain', 'Failed to register custom domain'),
+      'danger',
+    );
+  } finally {
+    // Re-derived, not blanket-re-enabled: loadReservations has just recomputed the at-limit
+    // gating on the success path, and `disabled = false` here would undo it -- handing back a
+    // control that posts a request the server will refuse.
+    if (btn) {
+      const warning = document.getElementById('custom-domain-quota-warning');
+      btn.disabled = !!(warning && !warning.classList.contains('hidden'));
+    }
   }
 }
 

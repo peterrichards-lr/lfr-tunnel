@@ -111,6 +111,63 @@ const CAPABILITIES = [
     },
   },
   {
+    // #2223/#2224. The portal register control is the ONLY route to a custom domain for a user
+    // who is not admin or owner: auto-reservation at connect time reads
+    // RoleSettings[role].AllowAutoReservation, which ships true for exactly those two roles, and
+    // every other role is refused at registration (#2221). So an arm without this control cannot
+    // do the thing at all -- the shape of #2101 exactly, not a cosmetic difference.
+    //
+    // The needle is the endpoint rather than a symbol name: it is what the capability IS, and it
+    // survives the renames a handler name does not. It contains `/`, so findMarker matches it
+    // loosely by design -- a sub-route is still the capability.
+    name: 'register a custom domain from the portal',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: '/api/portal/custom-domains',
+      opener: {
+        files: ['pkg/server/dashboard.html'],
+        call: 'reserveCustomDomain()',
+      },
+    },
+    v2: {
+      files: ['ui/src/components/ReservationsPanel.tsx'],
+      needle: '/api/portal/custom-domains',
+      opener: {
+        files: ['ui/src/components/ReservationsPanel.tsx'],
+        call: 'register_custom_domain',
+      },
+    },
+  },
+  {
+    // The step the product cannot take for the user, and the reason a registered domain that
+    // never gets a CNAME simply never provisions: the gateway proves control over ACME HTTP-01,
+    // so a name that does not resolve here can never be served. An arm that asks for a domain
+    // name without saying this sends the user away to find out why nothing happened.
+    name: 'state the CNAME requirement where the domain is asked for',
+    v1: {
+      files: ['pkg/server/dashboard.html'],
+      needle: 'custom_domain_cname_hint',
+    },
+    v2: {
+      files: ['ui/src/components/ReservationsPanel.tsx'],
+      needle: 'custom_domain_cname_hint',
+    },
+  },
+  {
+    // Which pinned above the rest: quota, conflict and invalid-request are three different
+    // instructions (release one / it is someone else's / fix the name), and the endpoint answers
+    // the first two on the SAME 400. An arm that shows one "failed" toast has thrown that away.
+    name: 'distinguish the custom-domain refusals from each other',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'error_custom_domain_invalid',
+    },
+    v2: {
+      files: ['ui/src/components/ReservationsPanel.tsx'],
+      needle: 'error_custom_domain_invalid',
+    },
+  },
+  {
     // Which nodes did not acknowledge, named. "2 of 3 nodes did not confirm" is the reason
     // string; this is the list, and it is what turns an abort into something actionable.
     name: 'name the nodes that did not acknowledge a rotation',

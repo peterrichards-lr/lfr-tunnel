@@ -970,16 +970,6 @@ const KNOWN_CONTAINER_I18N = [
       'only key on the page that does, which is exactly why it is named there rather than ' +
       'inferred.',
   },
-  {
-    file: 'pkg/server/dashboard.html',
-    key: 'maint_soft_desc',
-    why: 'The <strong> is inside the properties value, so innerText renders the tags as visible text. Filed as #2252.',
-  },
-  {
-    file: 'pkg/server/dashboard.html',
-    key: 'maint_iron_desc',
-    why: 'The <strong> is inside the properties value, so innerText renders the tags as visible text. Filed as #2252.',
-  },
 ];
 
 const containerMatched = new Set();

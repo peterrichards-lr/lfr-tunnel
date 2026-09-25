@@ -154,6 +154,32 @@ const CAPABILITIES = [
     },
   },
   {
+    // #2233. The per-user provisioning view. The endpoint scopes to the caller
+    // (handleListVanityDomainStatus), so it answers "did MY domain provision?" -- a question
+    // #2223/#2224 made askable by letting a non-admin register one in the first place. V1's own
+    // Custom Domains tab is NOT this capability: it reads /api/admin/vanity-domain-status and is
+    // in ADMIN_ONLY_TABS, so a non-admin cannot reach it, which is why the needle names the
+    // portal route specifically rather than `vanity-domain-status`.
+    //
+    // No opener: neither arm has one. The panel renders with its section, so there is no control
+    // to name in words, and pointing openerLabel() at a button that does not exist would fail on
+    // the marker rather than on the capability.
+    //
+    // What this entry CANNOT prove: it asserts source presence, not render-time reachability.
+    // #2241 shipped a control present in both arms' source and unreachable in one, and this gate
+    // was green throughout. portal_v1_custom_domain_status.spec.ts is the half that proves a
+    // non-admin actually sees it.
+    name: "see your own custom domain's provisioning status",
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: '/api/portal/vanity-domain-status',
+    },
+    v2: {
+      files: ['ui/src/components/VanityDomainStatusPanel.tsx'],
+      needle: '/api/portal/vanity-domain-status',
+    },
+  },
+  {
     // Which pinned above the rest: quota, conflict and invalid-request are three different
     // instructions (release one / it is someone else's / fix the name), and the endpoint answers
     // the first two on the SAME 400. An arm that shows one "failed" toast has thrown that away.

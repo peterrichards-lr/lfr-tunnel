@@ -893,6 +893,45 @@
                     </div>
                 </div>
 
+                <!-- Custom Domain Status (#2233).
+                     The per-user provisioning view, from GET /api/portal/vanity-domain-status.
+                     That endpoint scopes to the caller (handleListVanityDomainStatus), so these
+                     are the signed-in user's own domains -- not the admin table behind
+                     #nav-custom-domains, which reads /api/admin/vanity-domain-status and sits in
+                     ADMIN_ONLY_TABS, so a non-admin cannot reach it at all. Before this, whether
+                     a person could see their own provisioning run depended only on which arm of
+                     the A/B test served them, which is the shape of #2101.
+
+                     It sits with the register form rather than in that admin tab because this is
+                     where a non-admin actually goes, and "did it provision?" is the question the
+                     form immediately raises. V2 places its equivalent panel directly after
+                     ReservationsPanel on the dashboard (ui/src/pages/Dashboard.tsx).
+
+                     Rendered for everyone, including a user with no attempts: see
+                     loadCustomDomainStatus() in static/dashboard.js for why V2's null-render is
+                     deliberately not copied here. -->
+                <h3 id="custom-domain-status-title" style="margin: 0 0 4px; font-size: 18px;" data-i18n="vanity_status_title">Custom Domain Status</h3>
+                <p style="color: var(--text-muted); margin-top: 0; margin-bottom: 16px; font-size: 13px;" data-i18n="vanity_status_desc">Live provisioning progress for your custom domains.</p>
+                <div id="custom-domain-status-table" class="glass table-container" style="margin-bottom: 32px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-i18n="vanity_status_col_domain">Domain</th>
+                                <th style="text-align: center;" data-i18n="vanity_status_col_requested">Requested</th>
+                                <th style="text-align: center;" data-i18n="vanity_status_col_nginx">Nginx Config</th>
+                                <th style="text-align: center;" data-i18n="vanity_status_col_cert">Cert Issued</th>
+                                <th style="text-align: center;" data-i18n="vanity_status_col_live">Live</th>
+                                <th data-i18n="vanity_status_col_summary">Summary</th>
+                            </tr>
+                        </thead>
+                        <tbody id="custom-domain-status-body">
+                            <tr>
+                                <td colspan="6" class="table-empty">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
                 <!-- Active Reservations Table -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 id="reservations-title" style="margin: 0; font-size: 18px;" data-i18n="res_active_title">Your Reserved Subdomains</h3>

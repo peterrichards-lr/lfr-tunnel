@@ -3119,7 +3119,16 @@ function showTab(tabName, skipHistory = false) {
   }
   if (tabName === 'tokens') loadTokens();
   if (tabName === 'tunnels') loadTunnels();
-  if (tabName === 'reservations') loadReservations();
+  if (tabName === 'reservations') {
+    loadReservations();
+    // The user's own custom-domain provisioning status (#2233). Wired HERE, not to the
+    // admin-only 'custom-domains' branch: #custom-domain-status-body lives in
+    // #tab-reservations, which is the section a non-admin can actually open. An unwired
+    // loader leaves its markup permanently blank while every toBeVisible() on the
+    // container still passes -- three prior instances (#522/#525, #1785, #1995), and
+    // TestShowTabLoadersStayInTheirTab is what holds the pairing in place.
+    loadCustomDomainStatus();
+  }
   if (tabName === 'analytics') loadAnalytics();
   if (tabName === 'custom-domains') loadCustomDomains();
   if (tabName === 'telemetry') renderTelemetry();
@@ -4554,6 +4563,101 @@ function vanitySummary(status) {
     return t('vanity_status_summary_nginx', 'Requesting certificate...');
   }
   return t('vanity_status_summary_requested', 'Setup starting...');
+}
+
+// Cleared and re-armed by loadCustomDomainStatus() alone; null whenever no poll is pending.
+let customDomainStatusTimer = null;
+
+// The user's OWN custom domain provisioning status (#2233), on the Reservations section.
+//
+// GET /api/portal/vanity-domain-status scopes to the caller (handleListVanityDomainStatus,
+// pkg/server/api.go), so this shows the signed-in user their own domains. V1 already had a
+// custom-domains table, and it is the wrong one: loadCustomDomains() above reads the ADMIN
+// endpoint and lives behind #nav-custom-domains, which is in ADMIN_ONLY_TABS -- so a non-admin
+// could not reach it at all, and after #2223/#2224 gave them a way to REGISTER a custom domain
+// they had no way to find out whether it provisioned. Which arm of the A/B test served them
+// decided whether they could see their own provisioning run (#2101's shape).
+//
+// The stage cells are vanityStageCell()/vanitySummary(), the same functions the admin table
+// renders through, deliberately rather than a second renderer: those already mirror V2's
+// semantics exactly (failed when failed_stage names the stage, done when its timestamp is set,
+// otherwise not yet reached), and a second spelling of them is how two arms come to disagree
+// about whether a domain is healthy.
+//
+// RENDERED FOR EVERYONE, including a user with no attempts. V2's VanityDomainStatusPanel
+// returns null in that case and V1 must not copy it:
+//
+//   * V1's sections ship hidden and several of its cards ship display:none, so an empty
+//     container is indistinguishable from a loader that never ran -- the failure that shipped
+//     three times already (#522/#525, #1785, #1995), and the reason e2e-testing SKILL 3b says
+//     an element that exists but is empty is a wiring bug rather than a rendering one.
+//   * Registering does NOT start provisioning: handleCreateCustomDomain writes the reservation
+//     and nothing else -- the hook runs when a client connects with -domain. So "no attempts
+//     tracked yet" is the true and useful answer for the person who has just registered and is
+//     asking why nothing is happening, and a panel that vanished would answer them with an
+//     absence they cannot tell from a broken page.
+async function loadCustomDomainStatus() {
+  const tbody = document.getElementById('custom-domain-status-body');
+  if (!tbody) return;
+
+  // Any poll already scheduled is cancelled first, so re-entering the section cannot leave two
+  // timers refreshing one table.
+  if (customDomainStatusTimer) {
+    clearTimeout(customDomainStatusTimer);
+    customDomainStatusTimer = null;
+  }
+
+  const failed = (msg) => {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">${escapeHTML(msg)}</td></tr>`;
+  };
+  const loadFailed = t(
+    'vanity_status_load_failed',
+    'Could not load your custom domain status, so what you see is not current.',
+  );
+
+  let domains;
+  try {
+    const res = await fetch('/api/portal/vanity-domain-status');
+    if (!res.ok) {
+      // Said out loud rather than logged: an empty table reads as "you have no custom domains",
+      // which is a different answer to "we could not ask" (#1868).
+      failed(loadFailed);
+      return;
+    }
+    domains = (await res.json()) || [];
+  } catch (e) {
+    console.error('Failed to load custom domain status', e);
+    failed(loadFailed);
+    return;
+  }
+
+  if (!domains.length) {
+    failed(t('no_vanity_domains', 'No custom domain attempts tracked yet.'));
+    return;
+  }
+
+  tbody.innerHTML = domains
+    .map(
+      (d) => `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(d.full_host)}</td>
+                    ${vanityStageCell(d, 'requested', d.requested_at)}
+                    ${vanityStageCell(d, 'nginx_config', d.nginx_config_at)}
+                    ${vanityStageCell(d, 'cert_issued', d.cert_issued_at)}
+                    ${vanityStageCell(d, 'live', d.live_at)}
+                    <td class="cell-muted">${vanitySummary(d)}</td>
+                </tr>`,
+    )
+    .join('');
+
+  // Provisioning runs over roughly 10-60s (nginx config -> Certbot -> live), so a domain
+  // mid-setup has to visibly progress without the user reloading -- V2's panel polls on a 5s
+  // interval for the same reason. This one re-arms only while a run is still in flight and the
+  // section is still on screen, so it stops on its own rather than polling a hidden tab forever.
+  const inFlight = domains.some((d) => !d.failed_stage && !d.live_at);
+  const section = document.getElementById('tab-reservations');
+  if (inFlight && section && !section.classList.contains('hidden')) {
+    customDomainStatusTimer = setTimeout(loadCustomDomainStatus, 5000);
+  }
 }
 
 async function loadCustomDomains() {

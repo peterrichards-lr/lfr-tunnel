@@ -66,6 +66,34 @@ lfr-tunnel-darwin-arm64'
 # outcome rather than only that the exit code was right.
 # --------------------------------------------------------------------------------------------
 mkdir -p "$WORK/bin"
+
+# The clock and the sleep are stubbed TOGETHER, and the pairing is the point (#2238).
+#
+# The settle loop is bounded on time, so "the polls land at t=0, t=1 and t=3" depended on how fast
+# this machine spawns the stubbed `gh` -- green in CI, red on a workstation, with the subject
+# unchanged. Here the sleep ADVANCES the clock by exactly the delay it was asked to wait, so the
+# timeline these cases describe is the timeline they get, on any machine, and the suite stops
+# spending real seconds asleep.
+#
+# This replaces an earlier decision to let the backoff run for real, on the grounds that stubbing
+# it would leave the retry untested. It does not: the loop still iterates, still doubles, and the
+# delays it asks for are now RECORDED and asserted as a sequence -- stronger evidence than
+# inferring them from elapsed wall-clock ever was. Same reasoning, and the same fix, as #2220
+# applied to confirm-tap-version.sh.
+cat > "$WORK/bin/lft-now" <<'CLOCK'
+#!/usr/bin/env bash
+D="$LFT_STUB_DIR"
+cat "$D/clock" 2>/dev/null || printf '0\n'
+CLOCK
+cat > "$WORK/bin/lft-sleep" <<'NAP'
+#!/usr/bin/env bash
+D="$LFT_STUB_DIR"
+printf '%s\n' "$1" >> "$D/backoff.log"
+_n=$(cat "$D/clock" 2>/dev/null || printf '0\n')
+printf '%s\n' "$((_n + $1))" > "$D/clock"
+NAP
+chmod +x "$WORK/bin/lft-now" "$WORK/bin/lft-sleep"
+
 cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 D="$LFT_STUB_DIR"
@@ -133,13 +161,14 @@ $4
 DIST_INPUT
 
     RUN_STUB="$_stub"
-    # The backoff runs for real rather than being stubbed out -- a stubbed sleep would leave the
-    # thing the fix turns on untested. Budgets are kept small: 1s is enough for the cases where
-    # the listing never settles, and the one case that does catch up gets 5s so its polls land
-    # deterministically at t=0, t=1 and t=3 as the delay doubles 1 -> 2.
+    # The clock is virtual and the sleep advances it, so the polls land at t=0, t=1 and t=3 as the
+    # delay doubles 1 -> 2 on every machine (#2238). Budgets stay as they were: 1s for the cases
+    # where the listing never settles, 5s for the one that catches up on its third poll.
     RUN_OUT="$(
         PATH="$WORK/bin:$PATH" \
         LFT_STUB_DIR="$_stub" \
+        LFT_RELEASE_NOW="$WORK/bin/lft-now" \
+        LFT_RELEASE_SLEEP="$WORK/bin/lft-sleep" \
         LFT_RELEASE_SETTLE_SECONDS="${5:-1}" \
         LFT_RELEASE_POLL_INITIAL=1 \
         LFT_RELEASE_POLL_MAX=2 \
@@ -212,6 +241,19 @@ says_not "it did not report anything missing" "$RUN_OUT" "INCOMPLETE"
 # out -- and a re-upload of an asset that is already there is exactly what v1.48.52 did 15 times.
 if [ ! -f "$RUN_STUB/uploads.log" ]; then
     pass "the lag was absorbed by polling alone, with no upload attempted"
+    # The backoff ASKED FOR, asserted as a sequence (#2238).
+    #
+    # This is what the wall-clock budget used to stand in for, and it is a better witness:
+    # elapsed time is satisfied by any arrangement that takes about that long, including one
+    # that polls twice on a slow box and gives up. The delays themselves can only be produced
+    # by the doubling the loop is supposed to perform -- 1, then 2, capped at POLL_MAX=2.
+    _backoff="$(tr '\n' ' ' < "$RUN_STUB/backoff.log" 2>/dev/null | sed 's/[[:space:]]*$//')"
+    if [ "$_backoff" = "1 2" ]; then
+        pass "the backoff doubled and was capped: it waited 1s then 2s between polls"
+    else
+        fail "the backoff sequence was \"$_backoff\", want \"1 2\" -- the loop is not doubling
+        its delay, or is not capping it at LFT_RELEASE_POLL_MAX"
+    fi
 else
     fail "it re-uploaded assets that were already published"
 fi
@@ -325,6 +367,8 @@ else
     mut_out="$(
         PATH="$WORK/bin:$PATH" \
         LFT_STUB_DIR="$mut_stub" \
+        LFT_RELEASE_NOW="$WORK/bin/lft-now" \
+        LFT_RELEASE_SLEEP="$WORK/bin/lft-sleep" \
         LFT_RELEASE_SETTLE_SECONDS=1 \
         LFT_RELEASE_POLL_INITIAL=1 \
         LFT_RELEASE_POLL_MAX=2 \

@@ -48,6 +48,13 @@ DIST="${2:-${LFT_RELEASE_DIST:-dist}}"
 # Seams. The tests stub `gh` on PATH; LFT_GH exists so a caller can point at a specific binary.
 GH_BIN="${LFT_GH:-gh}"
 SLEEP_CMD="${LFT_RELEASE_SLEEP:-sleep}"
+# The clock is a seam for the same reason the sleep is, and its absence made this suite flaky on a
+# developer's machine while staying green in CI (#2238, the sibling of #2220 which fixed exactly
+# this in confirm-tap-version.sh). The settle loop is bounded on real time, so a case expecting
+# agreement on the third poll silently meant "the third poll, if three fit in the budget on this
+# box" -- a property of how fast a stubbed `gh` spawns, not of the polling logic. A test that can
+# go red without the subject changing is worse than no test, and this one guards releases.
+NOW_CMD="${LFT_RELEASE_NOW:-}"
 
 # How long the listing is allowed to lag before the upload endpoint is asked instead. 30s covers
 # the ordinary case at zero cost on the happy path, where the first poll already agrees.
@@ -64,7 +71,13 @@ if [ -z "$TAG" ]; then
     exit 1
 fi
 
-now() { date +%s; }
+now() {
+    if [ -n "$NOW_CMD" ]; then
+        "$NOW_CMD"
+    else
+        date +%s
+    fi
+}
 count_lines() { printf '%s' "$1" | grep -c . ; }
 
 # ---------------------------------------------------------------------------------------------

@@ -99,13 +99,28 @@ jobs:
 
           # Go: sources, module files, the Makefile that builds and tests them, the E2E
           # harnesses that exercise the binaries, and this workflow itself.
-          if echo "$CHANGED" | grep -qE '\.go$|^go\.(mod|sum)$|^Makefile$|^tests/|^scripts/|^\.github/workflows/|^Dockerfile$|^cmd/'; then
+          # ^scripts/ is deliberately NOT here (#2250). It is already in the `hooks` filter,
+          # which is where a checker script belongs; having it here meant editing a Node
+          # linter triggered the Go suite on three operating systems AND the 14-minute E2E
+          # job. ^tests/ stays: those harnesses exercise the binaries.
+          if echo "$CHANGED" | grep -qE '\.go$|^go\.(mod|sum)$|^Makefile$|^tests/|^\.github/workflows/|^Dockerfile$|^cmd/'; then
             GO=true
           else
             GO=false
           fi
 
-          if echo "$CHANGED" | grep -qE '^ui/|^\.github/workflows/'; then
+          # BOTH portal arms, not just V2 (#2250). Portal V1 lives in pkg/server/static/ and
+          # pkg/server/dashboard.html, which matched neither this filter nor `go` -- so a
+          # V1-only change SKIPPED the E2E job entirely, including portal_v1_custom_domains
+          # and the V1 status spec. The specs existed and simply did not run. It was masked
+          # because a V1 change almost always drags a scripts/ or tests/ file along, so the
+          # job ran by accident rather than by intent.
+          #
+          # The i18n bundles are here because a translation pass is a code path a spec
+          # exercises, not merely data: applyTranslations() assigns innerText over every
+          # [data-i18n] element (dashboard.js:19), and portal_heading_anchors.spec.ts drives
+          # exactly that to prove a heading's copy-link survives it.
+          if echo "$CHANGED" | grep -qE '^ui/|^pkg/server/static/|^pkg/server/dashboard\.html$|^pkg/server/i18n/|^\.github/workflows/'; then
             UI=true
           else
             UI=false

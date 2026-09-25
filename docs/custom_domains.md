@@ -80,8 +80,10 @@ portal — the **Custom Domain Status** panel shows each stage as it completes, 
 that failed if something goes wrong.
 
 The commonest failure is the CNAME: either it does not exist yet, or DNS has not propagated. If a
-stage fails for that reason, fix the record and retry from the same panel — there is no need to
-reconnect the client.
+stage fails for that reason, fix the record and reconnect the client: registration alone does not
+provision anything, and the gateway runs the setup again on the next connection that carries the
+domain. The status panel is read-only for you — retrying in place is an administrator action, on
+the fleet-wide *Custom Domains* page.
 
 ## Giving the domain up
 
@@ -114,4 +116,4 @@ If the option is missing from your portal, that is why — see
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*
+*Last Updated: 2026-09-25* | *Last Reviewed: 2026-09-25*

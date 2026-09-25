@@ -1554,8 +1554,7 @@ function renderTelemetry() {
   setText('telemetry-active-nodes', String(activeNodes));
 
   if (!tunnels.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="7" style="text-align:center;opacity:0.6;">No active tunnels right now.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;opacity:0.6;">${escapeHTML(t('no_active_tunnels', 'No active tunnels right now.'))}</td></tr>`;
     return;
   }
 
@@ -4665,14 +4664,12 @@ async function loadCustomDomains() {
   if (!tbody) return;
   const res = await fetch('/api/admin/vanity-domain-status');
   if (!res.ok) {
-    tbody.innerHTML =
-      '<tr><td colspan="8" style="text-align:center;opacity:0.6;">Failed to load custom domains.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;opacity:0.6;">${escapeHTML(t('custom_domains_load_failed', 'Failed to load custom domains.'))}</td></tr>`;
     return;
   }
   const domains = (await res.json()) || [];
   if (!domains.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="8" style="text-align:center;opacity:0.6;">No custom domains have been registered yet.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;opacity:0.6;">${escapeHTML(t('no_custom_domains_registered', 'No custom domains have been registered yet.'))}</td></tr>`;
     return;
   }
   renderTable('custom-domains-table-body', domains, (d) => {
@@ -4737,14 +4734,12 @@ async function loadBackups() {
   const tbody = document.getElementById('backups-table-body');
   const res = await fetch('/api/admin/backups');
   if (!res.ok) {
-    tbody.innerHTML =
-      '<tr><td colspan="4" style="text-align:center;opacity:0.6;">Failed to load backups.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;opacity:0.6;">${escapeHTML(t('backups_load_failed', 'Failed to load backups.'))}</td></tr>`;
     return;
   }
   const backups = await res.json();
   if (!backups || backups.length === 0) {
-    tbody.innerHTML =
-      '<tr><td colspan="4" style="text-align:center;opacity:0.6;">No backups found yet. The first backup runs on server startup.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;opacity:0.6;">${escapeHTML(t('no_backups_found', 'No backups found yet. The first backup runs on server startup.'))}</td></tr>`;
     return;
   }
   renderTable('backups-table-body', backups, (b) => {

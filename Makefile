@@ -324,6 +324,7 @@ test-hooks:
 	@./tests/hooks/test-tap-version-confirmation.sh
 	@./tests/hooks/test-release-completeness.sh
 	@./tests/hooks/test-release-asset-verification.sh
+	@./tests/hooks/test-ci-path-filter.sh
 	@./tests/hooks/test-print-selectors.sh
 	@./tests/hooks/test-spec-testids.sh
 	@./tests/hooks/test-load-failure-gate.sh

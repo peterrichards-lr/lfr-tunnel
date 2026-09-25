@@ -539,6 +539,40 @@ for (const file of SELF_CONTAINED) {
   }
 }
 
+// A string that never became a key has nothing for the checks above to report missing -- they
+// verify that a key which IS used resolves. That is the blind spot #2158 found on the V2 side and
+// #2244 on V1's: five table rows wrote their empty and failure states as bare English literals,
+// so they stayed English in all nine translated bundles and no gate could see it.
+//
+// The shape is specific enough to assert directly. Every one of V1's empty/error table rows is a
+// full-width muted cell, written as `text-align:center;opacity:0.6`, and every one of them is
+// prose a user reads -- so each must resolve through t(). Asserted as the CLASS rather than as the
+// five instances, or the sixth gets written next month and nothing notices.
+const MUTED_ROW = /text-align:center;opacity:0\.6;?"?>([\s\S]{0,240}?)<\/td>/g;
+const v1Rows = [...fs.readFileSync(V1_SCRIPT, 'utf8').matchAll(MUTED_ROW)];
+
+// Anti-vacuity: a regex that stops matching reports a clean pass over nothing, which is the
+// failure every gate in this repo keeps re-learning. Five exist as this is written.
+if (v1Rows.length < 4) {
+  errors.push(
+    `only ${v1Rows.length} muted table row(s) were found in ${rel(V1_SCRIPT)}; the derivation is ` +
+      `broken, so a green result here would mean nothing was checked`,
+  );
+}
+
+const hardcodedRows = v1Rows
+  .filter((m) => !m[1].includes('t('))
+  .map((m) => `  ${m[1].trim().slice(0, 90)}`);
+
+if (hardcodedRows.length) {
+  errors.push(
+    `${hardcodedRows.length} empty/error table row(s) in ${rel(V1_SCRIPT)} write prose directly ` +
+      `instead of resolving it through t():\n${hardcodedRows.join('\n')}\n\n` +
+      `Those rows stay English in all nine translated bundles, and no other check here can see ` +
+      `them -- a string that never became a key has nothing to report missing (#2244).`,
+  );
+}
+
 if (errors.length) {
   console.error('check-i18n-keys: FAILED\n');
   console.error(errors.join('\n\n'));

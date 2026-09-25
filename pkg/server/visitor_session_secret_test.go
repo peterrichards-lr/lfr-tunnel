@@ -415,14 +415,28 @@ func TestAnEdgeIsToldTheKeysOnItsHandshake(t *testing.T) {
 	cfgEdge := config.DefaultServerConfig()
 	cfgEdge.DBPath = "" // an edge has no database, which is the whole reason this frame exists
 	cfgEdge.Domains = []string{"lfr-demo.se"}
-	cfgEdge.ControlPlaneURL = ts.URL
 	cfgEdge.EdgeToken = edgeToken
 	cfgEdge.DisableBackupScheduler = true
+	// Built with NO control-plane URL, so NewServer starts no control channel (server.go:894).
+	//
+	// The precondition below -- that the edge does not yet honour central's session -- is the
+	// whole reason this test can tell a push from a coincidence, and it used to RACE the very
+	// goroutine it was observing: on a loaded machine the handshake could connect, authenticate
+	// and receive the keys before the assertion ran, and the guard fired on a tree where nothing
+	// was wrong (#2234; 1 failure in 4 full-suite runs, 5/5 in isolation).
+	//
+	// So "before the handshake" is now a state this test ESTABLISHES rather than one it hopes to
+	// catch. The guard is unchanged and still means exactly what it says.
+	cfgEdge.ControlPlaneURL = ""
 
 	edgeSrv, err := NewServer(cfgEdge)
 	if err != nil {
 		t.Fatalf("failed to create the edge: %v", err)
 	}
+	// NewServer derives the edge's node id from the token only when a control-plane URL is set
+	// too (server.go:586), so omitting the URL would quietly change the fixture's IDENTITY as
+	// well as its timing. Set explicitly, through the same function NewServer uses.
+	edgeSrv.registry.SetNodeID(edgeNodeIDFromToken(edgeToken))
 	defer func() {
 		time.Sleep(50 * time.Millisecond)
 		edgeSrv.Stop()
@@ -440,6 +454,15 @@ func TestAnEdgeIsToldTheKeysOnItsHandshake(t *testing.T) {
 		t.Fatal("the edge honoured the control plane's session before the handshake; the two must " +
 			"already share a key, and this test cannot then tell a push from a coincidence")
 	}
+
+	// Only NOW is the channel started -- everything above was observed against an edge that
+	// could not have been told anything, so what follows is the push and nothing else.
+	edgeSrv.cfg.ControlPlaneURL = ts.URL
+	edgeSrv.bgWG.Add(1)
+	go func() {
+		defer edgeSrv.bgWG.Done()
+		edgeSrv.runEdgeControlChannel()
+	}()
 
 	waitUntil(t, stated("the edge to be told the visitor session keys over its control channel"), func() bool {
 		return edgeSrv.proxyHandler.verifySessionCookie(cookie, "peters")

@@ -654,14 +654,22 @@ export default function AdminUsers() {
   const columns: ColumnDef<User>[] = useMemo(
     () => [
       { key: 'email', label: 'User', sortable: true },
-      { key: 'role', label: 'Role', sortable: true },
-      { key: 'status', label: 'Status', sortable: true },
+      { key: 'role', label: t('th_role', 'Role'), sortable: true },
+      { key: 'status', label: t('status', 'Status'), sortable: true },
       { key: 'auth_method', label: 'Auth Method', sortable: true },
-      { key: 'quotas', label: 'Quotas', sortable: false },
-      { key: 'last_login_at', label: 'Last Seen', sortable: true },
-      { key: 'created_at', label: 'Created Date', sortable: true },
+      { key: 'quotas', label: t('th_quotas', 'Quotas'), sortable: false },
+      {
+        key: 'last_login_at',
+        label: t('th_last_seen', 'Last Seen'),
+        sortable: true,
+      },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
     ],
-    [],
+    [t],
   );
 
   const statusOptions = useMemo(
@@ -859,7 +867,8 @@ export default function AdminUsers() {
                     onClick={() => requestSort('role')}
                     aria-sort={getAriaSort('role')}
                   >
-                    Role{getSortIndicator('role')}
+                    {t('th_role', 'Role')}
+                    {getSortIndicator('role')}
                   </th>
                 )}
                 {isColumnVisible('status') && (
@@ -868,7 +877,8 @@ export default function AdminUsers() {
                     onClick={() => requestSort('status')}
                     aria-sort={getAriaSort('status')}
                   >
-                    Status{getSortIndicator('status')}
+                    {t('status', 'Status')}
+                    {getSortIndicator('status')}
                   </th>
                 )}
                 {isColumnVisible('auth_method') && (
@@ -881,7 +891,7 @@ export default function AdminUsers() {
                   </th>
                 )}
                 {isColumnVisible('quotas') && (
-                  <th className="th-col">Quotas</th>
+                  <th className="th-col">{t('th_quotas', 'Quotas')}</th>
                 )}
                 {isColumnVisible('last_login_at') && (
                   <th
@@ -889,7 +899,8 @@ export default function AdminUsers() {
                     onClick={() => requestSort('last_login_at')}
                     aria-sort={getAriaSort('last_login_at')}
                   >
-                    Last Seen{getSortIndicator('last_login_at')}
+                    {t('th_last_seen', 'Last Seen')}
+                    {getSortIndicator('last_login_at')}
                   </th>
                 )}
                 {isColumnVisible('created_at') && (
@@ -898,10 +909,11 @@ export default function AdminUsers() {
                     onClick={() => requestSort('created_at')}
                     aria-sort={getAriaSort('created_at')}
                   >
-                    Created Date{getSortIndicator('created_at')}
+                    {t('created_at', 'Created Date')}
+                    {getSortIndicator('created_at')}
                   </th>
                 )}
-                <th className="th-col text-right">Actions</th>
+                <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -933,12 +945,12 @@ export default function AdminUsers() {
                             {u.portal_active ? (
                               <div
                                 className="status-dot status-dot--online"
-                                title="Online"
+                                title={t('status_online', 'Online')}
                               />
                             ) : (
                               <div
                                 className="status-dot status-dot--offline"
-                                title="Offline"
+                                title={t('status_offline', 'Offline')}
                               />
                             )}
                             <div>
@@ -1041,7 +1053,9 @@ export default function AdminUsers() {
                           ) : u.last_login_at ? (
                             formatDate(u.last_login_at)
                           ) : (
-                            <span className="text-muted">Never</span>
+                            <span className="text-muted">
+                              {t('never', 'Never')}
+                            </span>
                           )}
                         </td>
                       )}
@@ -1066,7 +1080,7 @@ export default function AdminUsers() {
                             className="btn btn-secondary py-xs px-sm text-xs"
                             onClick={() => setSelectedUser(u)}
                           >
-                            Details
+                            {t('details', 'Details')}
                           </button>
                           {!isSelf && (
                             <>
@@ -1193,7 +1207,7 @@ export default function AdminUsers() {
           <div className="auto-grid-md gap-lg mb-xl">
             <div>
               <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                Name
+                {t('name', 'Name')}
               </div>
               <div className="fw-medium">
                 {selectedUser.first_name} {selectedUser.last_name}
@@ -1201,7 +1215,7 @@ export default function AdminUsers() {
             </div>
             <div>
               <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                Email
+                {t('email', 'Email')}
               </div>
               <div className="fw-medium font-mono">{selectedUser.email}</div>
             </div>
@@ -1234,7 +1248,7 @@ export default function AdminUsers() {
             </div>
             <div>
               <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                Joined Date
+                {t('user_lbl_joined', 'Joined Date')}
               </div>
               <div className="fw-medium">
                 {selectedUser.created_at
@@ -1244,7 +1258,7 @@ export default function AdminUsers() {
             </div>
             <div>
               <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                API Quota
+                {t('user_lbl_quota', 'API Quota')}
               </div>
               <div className="fw-medium">
                 {selectedUser.rate_limit
@@ -1283,7 +1297,7 @@ export default function AdminUsers() {
                   min={0}
                   value={modalRateLimit}
                   onChange={(e) => setModalRateLimit(Number(e.target.value))}
-                  placeholder="Unlimited"
+                  placeholder={t('unlimited', 'Unlimited')}
                 />
               </div>
             </div>
@@ -1387,7 +1401,9 @@ export default function AdminUsers() {
               <div className="flex items-center gap-md">
                 {selectedUser.totp_enabled ? (
                   <>
-                    <span className="badge badge-success">Enabled</span>
+                    <span className="badge badge-success">
+                      {t('enabled', 'Enabled')}
+                    </span>
                     <button
                       type="button"
                       className="btn btn-danger py-xs px-sm text-xs"
@@ -1415,7 +1431,7 @@ export default function AdminUsers() {
           </div>
 
           <h4 className="section-title mb-lg border-b pb-xs flex items-center">
-            Connected Tunnels{' '}
+            {t('user_lbl_connected_tunnels', 'Connected Tunnels')}{' '}
             <span className="badge ml-sm">
               {(selectedUser.active_tunnels || []).length}
             </span>
@@ -1431,16 +1447,16 @@ export default function AdminUsers() {
                     </td>
                   </tr>
                 )}
-                {(selectedUser.active_tunnels || []).map((t) => {
-                  const publicUrl = `https://${t.full_host}`;
+                {(selectedUser.active_tunnels || []).map((tunnel) => {
+                  const publicUrl = `https://${tunnel.full_host}`;
                   return (
-                    <tr key={t.subdomain_prefix} className="border-b">
+                    <tr key={tunnel.subdomain_prefix} className="border-b">
                       <td className="td-cell align-middle">
                         <div className="fw-semibold font-mono text-sm">
-                          {t.subdomain_prefix}
+                          {tunnel.subdomain_prefix}
                         </div>
                         <div className="text-2xs text-muted mt-2xs">
-                          Local Port: {t.local_port}
+                          Local Port: {tunnel.local_port}
                         </div>
                       </td>
                       <td className="td-cell align-middle">
@@ -1452,9 +1468,9 @@ export default function AdminUsers() {
                         >
                           {publicUrl}
                         </a>
-                        {t.node_id && t.node_id !== 'control' ? (
+                        {tunnel.node_id && tunnel.node_id !== 'control' ? (
                           <span className="badge badge-node text-2xs ml-xs">
-                            🌍 {t.node_id}
+                            🌍 {tunnel.node_id}
                           </span>
                         ) : (
                           <span className="badge badge-control text-2xs ml-xs">
@@ -1462,25 +1478,26 @@ export default function AdminUsers() {
                           </span>
                         )}
                         <div className="text-2xs text-muted mt-2xs">
-                          IP: {t.client_ip} | Connected:{' '}
-                          {formatDate(t.created_at)}
+                          IP: {tunnel.client_ip} | Connected:{' '}
+                          {formatDate(tunnel.created_at)}
                         </div>
                       </td>
                       <td className="td-cell align-middle text-xs text-muted">
                         <div>
-                          📥 In: <strong>{formatBytes(t.bytes_in)}</strong>
+                          📥 In: <strong>{formatBytes(tunnel.bytes_in)}</strong>
                         </div>
                         <div className="mt-2xs">
-                          📤 Out: <strong>{formatBytes(t.bytes_out)}</strong>
+                          📤 Out:{' '}
+                          <strong>{formatBytes(tunnel.bytes_out)}</strong>
                         </div>
                       </td>
                       <td className="td-cell align-middle text-right">
                         <button
                           type="button"
                           className="btn btn-danger py-xs px-md text-xs"
-                          onClick={() => kickTunnel(t.subdomain_prefix)}
+                          onClick={() => kickTunnel(tunnel.subdomain_prefix)}
                         >
-                          Kick
+                          {t('action_kick', 'Kick')}
                         </button>
                       </td>
                     </tr>
@@ -1491,7 +1508,7 @@ export default function AdminUsers() {
           </div>
 
           <h4 className="section-title mb-lg border-b pb-xs flex items-center mt-xl">
-            Personal Access Tokens{' '}
+            {t('pat_title', 'Personal Access Tokens')}{' '}
             <span className="badge ml-sm">{selectedUserPATs.length}</span>
           </h4>
 
@@ -1499,11 +1516,13 @@ export default function AdminUsers() {
             <table className="w-full m-0">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col text-xs">Name</th>
-                  <th className="th-col text-xs">Prefix</th>
-                  <th className="th-col text-xs">Expires</th>
-                  <th className="th-col text-xs">Status</th>
-                  <th className="th-col text-xs text-right">Actions</th>
+                  <th className="th-col text-xs">{t('name', 'Name')}</th>
+                  <th className="th-col text-xs">{t('prefix', 'Prefix')}</th>
+                  <th className="th-col text-xs">{t('expires', 'Expires')}</th>
+                  <th className="th-col text-xs">{t('status', 'Status')}</th>
+                  <th className="th-col text-xs text-right">
+                    {t('actions', 'Actions')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1524,15 +1543,21 @@ export default function AdminUsers() {
                     new Date(pat.expires_at) < new Date();
 
                   let statusBadge = (
-                    <span className="badge badge-success">active</span>
+                    <span className="badge badge-success">
+                      {t('status_active', 'active')}
+                    </span>
                   );
                   if (isRevoked) {
                     statusBadge = (
-                      <span className="badge badge-danger">revoked</span>
+                      <span className="badge badge-danger">
+                        {t('revoked', 'revoked')}
+                      </span>
                     );
                   } else if (isExpired) {
                     statusBadge = (
-                      <span className="badge badge-warning">expired</span>
+                      <span className="badge badge-warning">
+                        {t('status_expired', 'expired')}
+                      </span>
                     );
                   }
 
@@ -1580,7 +1605,7 @@ export default function AdminUsers() {
                               className="btn btn-danger py-2xs px-xs text-2xs"
                               onClick={() => revokeUserToken(pat.id)}
                             >
-                              Revoke
+                              {t('revoke', 'Revoke')}
                             </button>
                           </div>
                         )}
@@ -1738,7 +1763,7 @@ export default function AdminUsers() {
               className="btn btn-secondary"
               onClick={() => setTargetedUserId('')}
             >
-              Cancel
+              {t('btn_cancel', 'Cancel')}
             </button>
             <button
               type="button"

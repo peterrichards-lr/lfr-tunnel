@@ -24,25 +24,104 @@ type Shortcut = {
   keys: string;
   label: string;
   path?: string;
+  // The bundle key `label` already exists under, where one does (#2247). The table is a
+  // module-level const, so t() cannot be called here -- it is applied at render instead.
+  // Entries with no key are strings the bundle does not carry yet; they belong to #2248.
+  labelKey?: string;
 };
 
 const GO_TO: Shortcut[] = [
   { keys: 'g d', label: 'Dashboard', path: '/dashboard' },
-  { keys: 'g a', label: 'Analytics', path: '/analytics' },
-  { keys: 'g o', label: 'Account Settings', path: '/account' },
-  { keys: 'g w', label: 'Registered Subdomains', path: '/admin/subdomains' },
-  { keys: 'g c', label: 'Custom Domains', path: '/admin/vanity-domain-status' },
-  { keys: 'g e', label: 'Extension Requests', path: '/admin/extensions' },
-  { keys: 'g u', label: 'Users', path: '/admin/users' },
-  { keys: 'g t', label: 'API Tokens', path: '/admin/tokens' },
-  { keys: 'g y', label: 'Telemetry', path: '/admin/telemetry' },
-  { keys: 'g n', label: 'Network Health', path: '/admin/edge-health' },
-  { keys: 'g l', label: 'Audit Logs', path: '/admin/audit' },
-  { keys: 'g i', label: 'IP Blacklist', path: '/admin/blacklist' },
-  { keys: 'g k', label: 'Magic Links', path: '/admin/magic-links' },
-  { keys: 'g b', label: 'Database Backups', path: '/admin/backups' },
-  { keys: 'g m', label: 'Gateway Maintenance', path: '/admin/maintenance' },
-  { keys: 'g s', label: 'System Settings', path: '/admin/settings' },
+  {
+    keys: 'g a',
+    label: 'Analytics',
+    labelKey: 'sidebar_analytics',
+    path: '/analytics',
+  },
+  {
+    keys: 'g o',
+    label: 'Account Settings',
+    labelKey: 'sidebar_account',
+    path: '/account',
+  },
+  {
+    keys: 'g w',
+    label: 'Registered Subdomains',
+    labelKey: 'sidebar_admin_subdomains',
+    path: '/admin/subdomains',
+  },
+  {
+    keys: 'g c',
+    label: 'Custom Domains',
+    labelKey: 'sidebar_vanity_status',
+    path: '/admin/vanity-domain-status',
+  },
+  {
+    keys: 'g e',
+    label: 'Extension Requests',
+    labelKey: 'extension_requests',
+    path: '/admin/extensions',
+  },
+  {
+    keys: 'g u',
+    label: 'Users',
+    labelKey: 'sidebar_users',
+    path: '/admin/users',
+  },
+  {
+    keys: 'g t',
+    label: 'API Tokens',
+    labelKey: 'sidebar_tokens',
+    path: '/admin/tokens',
+  },
+  {
+    keys: 'g y',
+    label: 'Telemetry',
+    labelKey: 'telemetry',
+    path: '/admin/telemetry',
+  },
+  {
+    keys: 'g n',
+    label: 'Network Health',
+    labelKey: 'network_health',
+    path: '/admin/edge-health',
+  },
+  {
+    keys: 'g l',
+    label: 'Audit Logs',
+    labelKey: 'sidebar_audit',
+    path: '/admin/audit',
+  },
+  {
+    keys: 'g i',
+    label: 'IP Blacklist',
+    labelKey: 'sidebar_blacklist',
+    path: '/admin/blacklist',
+  },
+  {
+    keys: 'g k',
+    label: 'Magic Links',
+    labelKey: 'sidebar_magic',
+    path: '/admin/magic-links',
+  },
+  {
+    keys: 'g b',
+    label: 'Database Backups',
+    labelKey: 'sidebar_backups',
+    path: '/admin/backups',
+  },
+  {
+    keys: 'g m',
+    label: 'Gateway Maintenance',
+    labelKey: 'sidebar_maintenance_mode',
+    path: '/admin/maintenance',
+  },
+  {
+    keys: 'g s',
+    label: 'System Settings',
+    labelKey: 'sidebar_system',
+    path: '/admin/settings',
+  },
 ];
 
 // Every destination the sidebar can show. Admin ones are simply absent from the DOM for a
@@ -194,7 +273,7 @@ export default function ShortcutsOverlay({ user }: { user: any }) {
               <dt>
                 <kbd>{s.keys}</kbd>
               </dt>
-              <dd>{s.label}</dd>
+              <dd>{s.labelKey ? t(s.labelKey, s.label) : s.label}</dd>
             </div>
           ))}
         </dl>

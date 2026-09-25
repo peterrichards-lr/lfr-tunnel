@@ -227,14 +227,19 @@ export default function ReservationsTable({
                         <td className="td-cell">
                           {isExpired ? (
                             <span className="badge badge-danger">
-                              quarantined
+                              {t('status_quarantined', 'quarantined')}
                             </span>
                           ) : r.extension_requested ? (
                             <span className="badge badge-warning">
-                              extension requested
+                              {t(
+                                'status_extension_requested',
+                                'extension requested',
+                              )}
                             </span>
                           ) : (
-                            <span className="badge badge-success">active</span>
+                            <span className="badge badge-success">
+                              {t('status_active', 'active')}
+                            </span>
                           )}
                         </td>
                       )}

@@ -28,13 +28,17 @@ export default function AdminExtensions() {
 
   const columns: ColumnDef<ExtRequest>[] = useMemo(
     () => [
-      { key: 'user_email', label: 'Email', sortable: true },
-      { key: 'subdomain', label: 'Subdomain', sortable: true },
-      { key: 'domain', label: 'Domain', sortable: true },
-      { key: 'expires_at', label: 'Expires', sortable: true },
-      { key: 'created_at', label: 'Created Date', sortable: true },
+      { key: 'user_email', label: t('email', 'Email'), sortable: true },
+      { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
+      { key: 'domain', label: t('domain', 'Domain'), sortable: true },
+      { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
     ],
-    [],
+    [t],
   );
 
   const {
@@ -221,7 +225,8 @@ export default function AdminExtensions() {
                     onClick={() => requestSort('user_email')}
                     aria-sort={getAriaSort('user_email')}
                   >
-                    Email{getSortIndicator('user_email')}
+                    {t('email', 'Email')}
+                    {getSortIndicator('user_email')}
                   </th>
                 )}
                 {isColumnVisible('subdomain') && (
@@ -230,7 +235,8 @@ export default function AdminExtensions() {
                     onClick={() => requestSort('subdomain')}
                     aria-sort={getAriaSort('subdomain')}
                   >
-                    Subdomain{getSortIndicator('subdomain')}
+                    {t('subdomain', 'Subdomain')}
+                    {getSortIndicator('subdomain')}
                   </th>
                 )}
                 {isColumnVisible('domain') && (
@@ -239,7 +245,8 @@ export default function AdminExtensions() {
                     onClick={() => requestSort('domain')}
                     aria-sort={getAriaSort('domain')}
                   >
-                    Domain{getSortIndicator('domain')}
+                    {t('domain', 'Domain')}
+                    {getSortIndicator('domain')}
                   </th>
                 )}
                 {isColumnVisible('expires_at') && (
@@ -248,7 +255,8 @@ export default function AdminExtensions() {
                     onClick={() => requestSort('expires_at')}
                     aria-sort={getAriaSort('expires_at')}
                   >
-                    Expires{getSortIndicator('expires_at')}
+                    {t('expires', 'Expires')}
+                    {getSortIndicator('expires_at')}
                   </th>
                 )}
                 {isColumnVisible('created_at') && (
@@ -257,10 +265,11 @@ export default function AdminExtensions() {
                     onClick={() => requestSort('created_at')}
                     aria-sort={getAriaSort('created_at')}
                   >
-                    Created Date{getSortIndicator('created_at')}
+                    {t('created_at', 'Created Date')}
+                    {getSortIndicator('created_at')}
                   </th>
                 )}
-                <th className="th-col text-right">Actions</th>
+                <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>

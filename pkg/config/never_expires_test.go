@@ -313,3 +313,31 @@ func TestCustomDomainExpiryDaysIsSpelledAsDocumented(t *testing.T) {
 		t.Errorf("custom_domain_expiry_days did not bind: %v", rs.CustomDomainExpiryDays)
 	}
 }
+
+// Both halves of the clamp warning, because there are two independent keys and the startup
+// warning watched only one of them (#2276 review).
+func TestBothPermanentRoleSettingsAreFound(t *testing.T) {
+	zero, week := 0, 7
+	cfg := &ServerConfig{RoleSettings: map[string]RoleSetting{
+		"sub-only":    {SubdomainExpiryDays: &zero, CustomDomainExpiryDays: &week},
+		"custom-only": {CustomDomainExpiryDays: &zero, SubdomainExpiryDays: &week},
+		"both":        {SubdomainExpiryDays: &zero, CustomDomainExpiryDays: &zero},
+		"neither":     {SubdomainExpiryDays: &week, CustomDomainExpiryDays: &week},
+	}}
+
+	subs := cfg.RolesConfiguredPermanent()
+	if len(subs) != 2 || subs[0] != "both" || subs[1] != "sub-only" {
+		t.Errorf("subdomain half: want [both sub-only], got %v", subs)
+	}
+
+	customs := cfg.RolesWithPermanentCustomDomains()
+	if len(customs) != 2 || customs[0] != "both" || customs[1] != "custom-only" {
+		t.Errorf("custom-domain half: want [both custom-only], got %v", customs)
+	}
+
+	// The two must not return the same answer, or one of them is reading the other's key --
+	// which is the whole defect class these settings exist to end.
+	if len(subs) == len(customs) && subs[0] == customs[0] && subs[1] == customs[1] {
+		t.Error("both halves returned the same roles; one is reading the wrong key")
+	}
+}

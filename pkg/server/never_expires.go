@@ -153,14 +153,26 @@ func logNeverExpiresPolicy(cfg *config.ServerConfig) {
 	slog.Info(fmt.Sprintf("[Config] never_expires: tokens=%s subdomains=%s custom_domains=%s",
 		cfg.NeverExpiresTokens(), cfg.NeverExpiresSubdomains(), cfg.NeverExpiresCustomDomains()))
 
-	if roles := cfg.RolesConfiguredPermanent(); len(roles) > 0 && !cfg.NeverExpiresSubdomains().Available() {
-		slog.Warn(fmt.Sprintf("[Config] never_expires.subdomains is %q, but role_settings gives a "+
-			"subdomain_expiry_days of 0 or less to: %s. Reservations for those roles will expire after "+
-			"%d days instead of never. Set never_expires.subdomains to %q or %q to honour the role "+
-			"setting, or give those roles a positive subdomain_expiry_days to stop this warning.",
-			cfg.NeverExpiresSubdomains(), strings.Join(roles, ", "), defaultSubdomainExpiryDays,
-			config.NeverExpiresApproval, config.NeverExpiresAllowed))
+	// BOTH settings. A warning that watches one of two independent keys says nothing about the
+	// other, and the custom-domain case was being clamped in silence (#2276).
+	warnClamped(cfg.NeverExpiresSubdomains(), "subdomains", "subdomain_expiry_days",
+		cfg.RolesConfiguredPermanent(), defaultSubdomainExpiryDays)
+	warnClamped(cfg.NeverExpiresCustomDomains(), "custom_domains", "custom_domain_expiry_days",
+		cfg.RolesWithPermanentCustomDomains(), defaultCustomDomainExpiryDays)
+}
+
+// warnClamped says once, at startup, that a role setting and a policy contradict each other, and
+// which way the contradiction was resolved.
+func warnClamped(policy config.NeverExpiresPolicy, policyKey, roleKey string, roles []string, clampedTo int) {
+	if len(roles) == 0 || policy.Available() {
+		return
 	}
+	slog.Warn(fmt.Sprintf("[Config] never_expires.%s is %q, but role_settings gives a %s of 0 or "+
+		"less to: %s. Those reservations will expire after %d days instead of never. Set "+
+		"never_expires.%s to %q or %q to honour the role setting, or give those roles a positive "+
+		"%s to stop this warning.",
+		policyKey, policy, roleKey, strings.Join(roles, ", "), clampedTo,
+		policyKey, config.NeverExpiresApproval, config.NeverExpiresAllowed, roleKey))
 }
 
 // permanenceStateFor turns resolvePATExpiry's "a request was raised" into the state stored on the

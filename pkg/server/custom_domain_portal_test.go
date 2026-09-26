@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 )
 
@@ -33,6 +34,12 @@ func aPortalServerAllowing(t *testing.T, customDomains int) *Server {
 	t.Helper()
 	srv := setupTestServerForAPI(t)
 	srv.cfg.DefaultMaxCustomDomains = customDomains
+	// Custom domains are permanent only where the operator has said so (#2264). This was
+	// unconditional when #2222 was written, and the config literal setupTestServerForAPI builds
+	// leaves every never_expires policy at its zero value, which reads as "disabled". Stated
+	// here so these tests keep asserting #1009's behaviour rather than silently switching to
+	// asserting the new default -- which pkg/server/never_expires_test.go covers separately.
+	srv.cfg.NeverExpires.CustomDomains = config.NeverExpiresAllowed
 	return srv
 }
 
@@ -61,10 +68,11 @@ func TestAPlainUserCanRegisterACustomDomainFromThePortal(t *testing.T) {
 			"subdomain, and one with a subdomain is charged to the wrong quota and expires",
 			res.Subdomain)
 	}
-	// Permanent, matching what the registration path creates (#1009).
+	// Permanent, matching what the registration path creates (#1009) -- on a gateway whose
+	// never_expires.custom_domains says so, which aPortalServerAllowing sets (#2264).
 	if res.ExpiresAt != nil {
-		t.Errorf("the reservation expires at %v; custom domains are permanent, because nobody "+
-			"else can claim a name its holder controls through DNS", res.ExpiresAt)
+		t.Errorf("the reservation expires at %v; custom domains are permanent where the operator "+
+			"allows it, because nobody else can claim a name its holder controls through DNS", res.ExpiresAt)
 	}
 	if res.UserID != user.ID {
 		t.Errorf("the reservation belongs to %q, want %q", res.UserID, user.ID)

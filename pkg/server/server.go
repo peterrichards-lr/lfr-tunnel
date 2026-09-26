@@ -564,6 +564,7 @@ func newChiselServerConfig(cfg *config.ServerConfig) *chserver.Config {
 // NewServer initializes and returns a new Server instance.
 func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	validateTunnelDomains(cfg)
+	logNeverExpiresPolicy(cfg)
 
 	// Before anything is constructed: an over-wide trusted_proxies entry hands the choice of
 	// client address to whoever holds an address in the range (#1801). Refused rather than
@@ -1311,9 +1312,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"start_time":               s.startTime.Format(time.RFC3339),
 				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
 				"force_mfa":                s.cfg.ForceMFA,
-				"enable_onboarding":        s.cfg.EnableOnboarding,
-				"owner_email":              s.cfg.Owner.UserID,
-				"supported_domains":        s.tunnelDomains(),
+				// Which resources this gateway will let be permanent, and on whose say-so
+				// (#2264). Advertised, not enforced: both portal arms and the client render
+				// the option from this, and the server refuses independently at every create
+				// and grant path. The role gate these replace lived only in the two portals,
+				// which is how one arm could disagree with the other for months (#2259).
+				"never_expires": map[string]string{
+					"tokens":         s.cfg.NeverExpiresTokens().String(),
+					"subdomains":     s.cfg.NeverExpiresSubdomains().String(),
+					"custom_domains": s.cfg.NeverExpiresCustomDomains().String(),
+				},
+				"enable_onboarding": s.cfg.EnableOnboarding,
+				"owner_email":       s.cfg.Owner.UserID,
+				"supported_domains": s.tunnelDomains(),
 				// How long a client should keep trying to reattach to this gateway before
 				// handing control back to its own region failover (#1946). Advertised so the
 				// number can be corrected without a client release; omitted when unset, in
@@ -2029,13 +2040,21 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						UserID:    user.ID,
 						Subdomain: "",
 						Domain:    d,
-						// Custom domains are always permanent (#1009), unlike plain
-						// subdomain reservations' role-based getUserSubdomainExpiry: the
-						// expiry+quarantine+extension model exists to reclaim a shared,
-						// contested namespace, but nobody else can ever claim this exact
-						// domain -- it belongs to the requesting user externally (DNS/
-						// CNAME) regardless of what this reservation says.
-						ExpiresAt: nil,
+						// Permanent where never_expires.custom_domains says so (#2264).
+						//
+						// This is the CLIENT's door: `lfr-tunnel -domain x.example.com`
+						// with auto-reservation lands here, not in the portal service, and
+						// writes the row itself. A policy applied only at the two portal
+						// entry points would have left a client able to obtain exactly what
+						// the portals refuse -- which is the shape of the bug this whole
+						// setting replaces, one layer down.
+						//
+						// The reasoning for the old unconditional nil still holds and is
+						// why an operator may well choose "allowed": the expiry+quarantine+
+						// extension model exists to reclaim a shared, contested namespace,
+						// and nobody else can ever claim this exact domain because it
+						// belongs to the requesting user externally through DNS.
+						ExpiresAt: resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), s.getUserSubdomainExpiry(user), time.Now()),
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err))
@@ -5331,10 +5350,14 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var expiresAt *time.Time
-	if req.Days > 0 {
-		exp := time.Now().AddDate(0, 0, req.Days)
-		expiresAt = &exp
+	// days == 0 means "never" here, which makes this the second door to a permanent token and
+	// the reason resolvePATExpiry is shared rather than inlined at the create path (#2264).
+	// An admin is subject to the operator's policy: under `disabled` this gateway grants
+	// permanence by no route, admin routes included.
+	expiresAt, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.Days, time.Now())
+	if perr != nil {
+		respondWithError(w, perr)
+		return
 	}
 
 	if err := s.db.UpdatePATExpiry(patID, expiresAt); err != nil {

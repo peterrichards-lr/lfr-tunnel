@@ -2715,6 +2715,12 @@ echo "$1 $2" >> "%s"
 		AllowClientAutoReservation: true,
 		VanityDomainHook:           hookPath,
 		DBPath:                     filepath.Join(tmpDir, "test.db"),
+		// A custom domain is permanent only where the operator allows it (#2264). Stated
+		// rather than inherited: this config is a literal, so every never_expires policy is
+		// its zero value, which reads as "disabled". The clamped case has its own coverage in
+		// never_expires_test.go; this test is about the vanity-domain hook and keeps
+		// asserting #1009's behaviour.
+		NeverExpires: config.NeverExpiresConfig{CustomDomains: config.NeverExpiresAllowed},
 	}
 
 	srv, err := NewServer(cfg)
@@ -2777,7 +2783,7 @@ echo "$1 $2" >> "%s"
 		t.Errorf("expected reservation for custom-site.org, got %v", res)
 	}
 	if res != nil && res.ExpiresAt != nil {
-		t.Errorf("expected custom domain reservation to be permanent (ExpiresAt nil), got %v", res.ExpiresAt)
+		t.Errorf("expected custom domain reservation to be permanent (ExpiresAt nil) under never_expires.custom_domains=allowed, got %v", res.ExpiresAt)
 	}
 
 	// Wait up to 3 seconds for the async hook to execute
@@ -3132,6 +3138,11 @@ func TestServer_RoleSettingsConfig(t *testing.T) {
 		Domains:                    []string{"example.com"},
 		DisableBackupScheduler:     true,
 		AllowClientAutoReservation: true,
+		// subdomain_expiry_days: 0 means permanent, and never_expires.subdomains has to allow
+		// it or the gateway clamps it to a real expiry and warns (#2264). Writing the role
+		// setting into a config file IS the operator granting permanence in advance, which is
+		// why `approval` honours it without a second, per-reservation approval.
+		NeverExpires: config.NeverExpiresConfig{Subdomains: config.NeverExpiresApproval},
 		RoleSettings: map[string]config.RoleSetting{
 			"owner": {
 				MaxReservations:     &minusOneVal,

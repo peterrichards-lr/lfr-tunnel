@@ -98,6 +98,31 @@ bandwidth_quota:
   period_days: 0
 allow_client_auto_reservation: false
 subdomain_quarantine_days: 0
+
+# --- Which resources may be granted permanently, and on whose say-so (#2264) ---
+# Three independent policies, because they are three different risks: a never-expiring
+# credential is not a never-expiring DNS name, and an operator may well want one and not
+# the other. Each is one of:
+#
+#   disabled  Permanence cannot be granted by any route. The option does not appear in
+#             either portal arm or in the client, the server refuses it at every create
+#             path, an admin cannot approve it, and a role whose subdomain_expiry_days is
+#             0 or less is clamped to a real expiry (and warned about at startup).
+#   approval  The option is offered as a REQUEST. The resource is created with its
+#             ordinary expiry and an admin's approval is what makes it permanent. Costs
+#             somebody the job of working the queue -- do not set it and walk away.
+#   allowed   The option is offered plainly, to every role, granted on the spot.
+#
+# All three default to "disabled", so upgrading a gateway never widens what it grants.
+# Note that custom domains were unconditionally permanent before this setting existed: a
+# gateway that wants that behaviour back must say so here.
+#
+# A policy change is not retroactive. Tokens and reservations that are already permanent
+# stay permanent; tightening an existing grant is a separate, explicit admin action.
+never_expires:
+  tokens: disabled
+  subdomains: disabled
+  custom_domains: disabled
 max_tunnel_rate_limit: 0
 disable_api_rate_limit: false
 pat_retention_days: 0

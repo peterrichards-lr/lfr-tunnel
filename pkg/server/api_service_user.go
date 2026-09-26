@@ -78,6 +78,16 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 			return "", nil, ErrInvalidRequest
 		}
 		expiresAt = &parsed
+	} else {
+		// An empty expiry is this signature's spelling of "never", exactly as
+		// expires_in_days <= 0 is handleCreateToken's. Both go through resolvePATExpiry so
+		// there is one rule and not two implementations of it -- this method had no gate at
+		// all before #2264, and would have shipped that gap the day it was routed.
+		resolved, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), 0, time.Now())
+		if perr != nil {
+			return "", nil, perr
+		}
+		expiresAt = resolved
 	}
 
 	pats, err := s.db.ListPATs(user.ID)

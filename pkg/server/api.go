@@ -377,13 +377,20 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ExpiresIn <= 0 && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Only admins and owners can create non-expiring tokens"}`, http.StatusForbidden)
+	if req.Name == "" {
+		http.Error(w, `{"error":"Token name is required"}`, http.StatusBadRequest)
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, `{"error":"Token name is required"}`, http.StatusBadRequest)
+	// The operator's policy decides this, not the caller's role (#2264).
+	//
+	// What was here refused a non-admin any token with expires_in_days <= 0. That was the only
+	// server-side gate on permanence anywhere, and it answered a question the operator was never
+	// asked: whether a non-expiring credential is acceptable on THIS gateway at all. An admin
+	// could always mint one, on every gateway, with nothing configurable about it.
+	expiresAt, err := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.ExpiresIn, time.Now())
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
 
@@ -396,12 +403,6 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	hashStr := hex.EncodeToString(hash[:])
 
 	prefix := rawToken[:12]
-
-	var expiresAt *time.Time
-	if req.ExpiresIn > 0 {
-		t := time.Now().AddDate(0, 0, req.ExpiresIn)
-		expiresAt = &t
-	}
 
 	pat := &db.PersonalAccessToken{
 		UserID:      user.ID,
@@ -1208,26 +1209,34 @@ func (s *Server) getUserMaxCustomDomains(user *db.User) int {
 // getUserSubdomainExpiry computes the default expiry date for a subdomain reservation.
 // Returns nil if the reservation should be permanent (no expiration).
 func (s *Server) getUserSubdomainExpiry(user *db.User) *time.Time {
-	days := 7 // default fallback
+	days := defaultSubdomainExpiryDays
 
+	// Two ways to be permanent without asking: a role whose subdomain_expiry_days is <= 0, and
+	// -- where no role settings exist at all -- being the owner. Neither goes through a create
+	// handler that could refuse it, so never_expires.subdomains is applied here, at the one
+	// place both arrive (#2264).
+	permanentByRole := false
 	if s.cfg.RoleSettings != nil {
 		if setting, ok := s.cfg.RoleSettings[user.Role]; ok {
 			if setting.SubdomainExpiryDays != nil {
 				if *setting.SubdomainExpiryDays <= 0 {
-					return nil // Permanent
+					permanentByRole = true
+				} else {
+					days = *setting.SubdomainExpiryDays
 				}
-				days = *setting.SubdomainExpiryDays
 			}
 		}
-	} else {
-		// Default fallback for owner if RoleSettings not defined
-		if user.Role == "owner" {
-			return nil // Owner subdomains do not expire by default
-		}
+	} else if user.Role == "owner" {
+		permanentByRole = true
 	}
 
-	expiry := time.Now().AddDate(0, 0, days)
-	return &expiry
+	var expiry *time.Time
+	if !permanentByRole {
+		t := time.Now().AddDate(0, 0, days)
+		expiry = &t
+	}
+	resolved, _ := resolveReservationExpiry(s.cfg.NeverExpiresSubdomains(), expiry, days, time.Now())
+	return resolved
 }
 
 // handleListReservations returns a list of reservations held by the current user.

@@ -82,16 +82,21 @@ type ServerConfig struct {
 	// numbers that decide what "throttled" means.
 	BandwidthQuota             BandwidthQuotaConfig `yaml:"bandwidth_quota"`
 	AllowClientAutoReservation bool                 `yaml:"allow_client_auto_reservation"`
-	SubdomainQuarantineDays    int                  `yaml:"subdomain_quarantine_days"`
-	SSLCertFile                string               `yaml:"ssl_cert_file"`
-	SSLKeyFile                 string               `yaml:"ssl_key_file"`
-	ClientCAFile               string               `yaml:"client_ca_file"`
-	ClientCAKeyFile            string               `yaml:"client_ca_key_file"`
-	ForceClientCert            bool                 `yaml:"force_client_cert"`
-	ForcePasscode              bool                 `yaml:"force_passcode"`
-	ForceIPWhitelist           bool                 `yaml:"force_ip_whitelist"`
-	ForceMFA                   bool                 `yaml:"force_mfa"`
-	DBPath                     string               `yaml:"db_path"`
+	// NeverExpires governs which resources may be granted permanently, and on whose say-so
+	// (#2264). One policy per resource; see NeverExpiresConfig. Absent means all three are
+	// "disabled", which is the strict position -- an upgrade must not widen what a gateway
+	// grants.
+	NeverExpires            NeverExpiresConfig `yaml:"never_expires"`
+	SubdomainQuarantineDays int                `yaml:"subdomain_quarantine_days"`
+	SSLCertFile             string             `yaml:"ssl_cert_file"`
+	SSLKeyFile              string             `yaml:"ssl_key_file"`
+	ClientCAFile            string             `yaml:"client_ca_file"`
+	ClientCAKeyFile         string             `yaml:"client_ca_key_file"`
+	ForceClientCert         bool               `yaml:"force_client_cert"`
+	ForcePasscode           bool               `yaml:"force_passcode"`
+	ForceIPWhitelist        bool               `yaml:"force_ip_whitelist"`
+	ForceMFA                bool               `yaml:"force_mfa"`
+	DBPath                  string             `yaml:"db_path"`
 	// CountryDBPath points at a country database in MaxMind's .mmdb format, used to
 	// resolve a client IP to a country in memory at registration (#1152). Empty -- the
 	// default -- disables the anonymous geographic distribution entirely; the panel
@@ -672,6 +677,7 @@ func DefaultServerConfig() *ServerConfig {
 			ThrottleRateLimit: defaultQuotaThrottleRateLimit,
 		},
 		SubdomainQuarantineDays:     3,
+		NeverExpires:                DefaultNeverExpiresConfig(),
 		MaxTunnelRateLimit:          100,
 		EdgeShutdownWarningMinutes:  5,
 		EnableUserPortal:            true,
@@ -1088,6 +1094,14 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if cfg.AdminNotificationEmail == "" {
 		slog.Warn("[Config] Neither admin_notification_email nor owner.user_id is set -- admin alerts (new registrations, approval requests, IP bans) will not be sent to anyone.")
+	}
+
+	// Applied before validation so an override is held to the same three names as the file
+	// (#2264). An env var that names a policy this gateway does not have is the same mistake
+	// as a file that does, and gets the same refusal.
+	applyNeverExpiresEnv(cfg)
+	if err := cfg.NeverExpires.Validate(); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil

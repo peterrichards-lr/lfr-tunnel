@@ -200,7 +200,7 @@ export default function ReservationsTable({
                                 copyText(host, 'Host copied to clipboard')
                               }
                               className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
-                              title="Copy Host"
+                              title={t('btn_copy_host', 'Copy Host')}
                             >
                               📋
                             </button>
@@ -209,7 +209,10 @@ export default function ReservationsTable({
                                 copyText(cliCommand, 'CLI command copied')
                               }
                               className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
-                              title="Copy CLI Connection Command"
+                              title={t(
+                                'btn_copy_cli_command',
+                                'Copy CLI Connection Command',
+                              )}
                             >
                               🔌
                             </button>

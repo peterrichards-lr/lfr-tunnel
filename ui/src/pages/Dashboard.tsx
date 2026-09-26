@@ -689,8 +689,8 @@ export default function Dashboard() {
                     setNewTokenExpiresDays(Number(e.target.value))
                   }
                 >
-                  <option value={30}>30 Days</option>
-                  <option value={90}>90 Days</option>
+                  <option value={30}>{t('expiry_30_days', '30 Days')}</option>
+                  <option value={90}>{t('expiry_90_days', '90 Days')}</option>
                   <option value={365}>365 Days</option>
                   {(user?.role === 'admin' || user?.role === 'owner') && (
                     <option value={0}>Never Expire</option>

@@ -505,7 +505,7 @@ export default function AdminAnalytics() {
                       labels: data.global.daily.map((d: any) => d.date),
                       datasets: [
                         {
-                          label: 'Total Data In',
+                          label: t('chart_total_data_in', 'Total Data In'),
                           data: data.global.daily.map((d: any) => d.bytes_in),
                           borderColor: '#6366f1',
                           backgroundColor: '#6366f120',
@@ -513,7 +513,7 @@ export default function AdminAnalytics() {
                           tension: 0.4,
                         },
                         {
-                          label: 'Total Data Out',
+                          label: t('chart_total_data_out', 'Total Data Out'),
                           data: data.global.daily.map((d: any) => d.bytes_out),
                           borderColor: '#f43f5e',
                           backgroundColor: '#f43f5e20',

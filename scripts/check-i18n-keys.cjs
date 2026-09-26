@@ -134,7 +134,11 @@ if (base.props.size === 0) {
 // is not read as a call.
 const T_CALL =
   /\bt\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1(\s*,\s*(["'`])((?:\\.|(?!\4)[^\\])*)\4)?/g;
-const ATTR = /data-i18n(?:-placeholder|-aria-label)?\s*=\s*"([^"]+)"/g;
+// Any `data-i18n-<attr>`, not the two that existed when this was written. The value of every
+// one of them is a bundle key, so naming them individually meant a newly implemented mechanism
+// was invisible here: `data-i18n-title` landed in #2248 and its nine keys were neither counted
+// as used nor reported as missing -- the gate read a clean pass over them.
+const ATTR = /data-i18n(?:-[a-z][a-z-]*)?\s*=\s*"([^"]+)"/g;
 const GO_CALL = /GetTranslation\(\s*[^,)]+,\s*"([^"]+)"/g;
 
 const used = new Map(); // key -> [ "file:line", ... ]
@@ -762,8 +766,12 @@ for (const file of V1_MARKUP) {
       if (stack.length) stack[stack.length - 1].children++;
       counters.v1Elements++;
 
-      for (const attr of ['placeholder', 'aria-label']) {
-        if (!mechanisms.has(attr)) continue;
+      // Iterate the DERIVED set, not a list. This loop used to read
+      // `['placeholder', 'aria-label']` filtered by `mechanisms`, which made the comment above
+      // ("adding the mechanism must switch the check on by itself") false: adding
+      // data-i18n-title to dashboard.js switched nothing on, because `title` was not in the
+      // hardcoded pair. A list intersected with a derivation is a list (#2248).
+      for (const attr of mechanisms) {
         const val = attrValue(attrs, attr);
         if (val === null) continue;
         if (new RegExp(`\\bdata-i18n-${attr}\\s*=`).test(attrs)) {
@@ -1090,7 +1098,8 @@ if (remaining.length) {
         .join('\n') +
       (remaining.length > 40 ? `\n  …and ${remaining.length - 40} more` : '') +
       `\n\n  The translation already exists in all ten locales; only the pointer is missing.` +
-      `\n  V1: add data-i18n="<key>" (or data-i18n-placeholder / data-i18n-aria-label).` +
+      `\n  V1: add data-i18n="<key>" (or data-i18n-<attr> for an attribute -- the mechanisms` +
+      `\n      applyTranslations implements today are placeholder, aria-label and title).` +
       `\n  V2: wrap it as t('<key>', '<the same English>').` +
       `\n  Check the key means what the element means before pointing at it -- where several are` +
       `\n  listed, they are candidates, not a verdict. If none of them fits, the element needs a` +

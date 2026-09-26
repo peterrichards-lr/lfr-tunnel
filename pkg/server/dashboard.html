@@ -79,20 +79,20 @@
             <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
             
             <form id="email-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
+                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" data-i18n-placeholder="email_placeholder" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
                 <button type="submit" class="btn btn-primary" id="btn-magic-link" data-i18n="btn_send_magic_link">Send Magic Link</button>
                 <div id="email-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="register-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
+                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" data-i18n-placeholder="email_placeholder" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
                 <button type="submit" class="btn btn-primary" id="btn-register" data-i18n="btn_register_account">Register Account</button>
                 <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="mfa-form" class="hidden" style="margin-top: 16px;">
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
-                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
+                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" data-i18n-placeholder="mfa_code_placeholder" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <input type="hidden" id="mfa-temp-token">
                 <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
@@ -145,7 +145,7 @@
                 <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
-                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-main);" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
+                <input type="text" id="intercept-mfa-verify-code" class="input-field" data-i18n-placeholder="mfa_code_placeholder" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-main);" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
             </div>
         </div>
@@ -170,7 +170,7 @@
     <!-- A visible way into the shortcuts list (#1611). One reachable only by the shortcut it
          documents is no use to anyone who does not already know the shortcut, which is the
          problem being fixed. -->
-    <button type="button" id="shortcuts-trigger" class="shortcuts-trigger" onclick="openShortcutsOverlay()" aria-label="Keyboard shortcuts" data-i18n-aria-label="shortcuts_open" title="Keyboard shortcuts">?</button>
+    <button type="button" id="shortcuts-trigger" class="shortcuts-trigger" onclick="openShortcutsOverlay()" aria-label="Keyboard shortcuts" data-i18n-aria-label="shortcuts_open" data-i18n-title="shortcuts_open" title="Keyboard shortcuts">?</button>
 
     <div id="view-as-bar" class="hidden"></div>
 
@@ -229,7 +229,7 @@
 
     <div id="dashboard-screen">
         <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
-        <nav class="sidebar" aria-label="Primary">
+        <nav class="sidebar" aria-label="Primary" data-i18n-aria-label="aria_primary_nav">
             <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
                 <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style="flex-shrink: 0;">
                 <span style="font-weight: bold; font-size: 16px; color: var(--text-main); letter-spacing: 0.5px;">Liferay Tunnel</span>
@@ -434,17 +434,17 @@
                         </div>
                         <div style="margin-bottom: 16px;">
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_preferred_name" for="acc-preferred-name">Preferred Name</label>
-                            <input type="text" id="acc-preferred-name" class="input-field" placeholder="How should we address you?">
+                            <input type="text" id="acc-preferred-name" class="input-field" data-i18n-placeholder="preferred_name_placeholder" placeholder="How should we address you?">
                         </div>
                         <div style="margin-bottom: 16px;">
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme" for="acc-theme">Theme Preference</label>
                             <select id="acc-theme" class="input-field">
                                 <option value="system" data-i18n="theme_system">System Default</option>
-                                <option value="light">Light Mode</option>
-                                <option value="dark">Dark Mode</option>
+                                <option value="light" data-i18n="theme_light">Light</option>
+                                <option value="dark" data-i18n="theme_dark">Dark</option>
                                 <option value="liferay" data-i18n="theme_liferay">Liferay Waffle &#x1F9C7;</option>
                                 <option value="high-contrast" data-i18n="theme_high_contrast">High Contrast</option>
-                                <option value="time">Time of Day (Sunset/Sunrise)</option>
+                                <option value="time" data-i18n="theme_time">Time of Day</option>
                             </select>
                         </div>
                         <div style="margin-bottom: 16px;">
@@ -462,12 +462,12 @@
                             </div>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" for="acc-subdomain-style">Default Subdomain Generator Style</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="default_subdomain_style" for="acc-subdomain-style">Default Subdomain Style</label>
                             <select id="acc-subdomain-style" class="input-field">
-                                <option value="liferay">Liferay Style</option>
+                                <option value="liferay" data-i18n="style_liferay">Liferay SE Style</option>
                                 <option value="words" data-i18n="style_words">Words Style</option>
                                 <option value="heroku" data-i18n="style_heroku">Heroku Style</option>
-                                <option value="random">Alphanumeric (Random)</option>
+                                <option value="random" data-i18n="style_random">Alphanumeric</option>
                             </select>
                         </div>
                         <div style="margin-bottom: 16px;" id="acc-preferred-domain-container">
@@ -536,7 +536,7 @@
                             <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Want to review the layout and learn how to use Liferay Tunnel's dashboard again? You can run through the interactive walkthrough tutorial at any time.</p>
                         </div>
                         <div style="margin-top: auto;">
-                            <button class="btn btn-outline" onclick="startTutorial(true)">Start Onboarding Tour</button>
+                            <button class="btn btn-outline" onclick="startTutorial(true)" data-i18n="btn_start_onboarding_tour">Start Onboarding Tour</button>
                         </div>
                     </div>
                 </div>
@@ -620,21 +620,21 @@
                 
                 <!-- Admin Only Section -->
                 <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
-                    <h3 style="margin-bottom: 16px;">Global Overview</h3>
+                    <h3 style="margin-bottom: 16px;" data-i18n="global_overview">Global Overview</h3>
                     <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px;">
-                        <div class="glass" style="padding: 16px;" title="Shows the total bytes received (Data In) and sent (Data Out) across all tunnels over the last 30 days.">
+                        <div class="glass" style="padding: 16px;" data-i18n-title="chart_global_bandwidth_desc" title="Shows the total bytes received (Data In) and sent (Data Out) across all tunnels over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="globalBandwidthChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px;" title="Shows the top 10 users ranked by total bandwidth consumption over the last 30 days.">
+                        <div class="glass" style="padding: 16px;" data-i18n-title="chart_top_users_desc" title="Shows the top 10 users ranked by total bandwidth consumption over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Top Users</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="topUsersChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px;" title="Shows the distribution of portal visits between the V1 and V2 portals.">
+                        <div class="glass" style="padding: 16px;" data-i18n-title="chart_portal_split_desc" title="Shows the distribution of portal visits between the V1 and V2 portals.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Portal Usage</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="portalStatsChart"></canvas>
@@ -648,7 +648,7 @@
                              stopped being recorded, and against an unlabelled all-time
                              aggregate it read as a flat number rather than as a drop.
                              V1 and V2 are an A/B test (#1866), so the panel lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting.">
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="bandwidth_by_gateway_desc" title="Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="bandwidth_by_gateway">Bandwidth by Gateway</h4>
                             <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 12px;" data-i18n="bandwidth_by_gateway_desc">Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.</p>
                             <p id="gateway-bandwidth-total" style="font-size: 13px; margin: 0 0 12px;"></p>
@@ -667,7 +667,7 @@
                              between the two arms of the V1/V2 comparison rather than a
                              missing nicety. Both portals now carry the snapshot and the
                              history. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.">
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="sessions_per_edge_desc" title="Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="sessions_per_edge">Sessions per Gateway</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="nodeSessionsChart"></canvas>
@@ -677,7 +677,7 @@
                         <!-- Region latency (#1151). The data path shipped in #1501 with no
                              reader in either portal; V1 and V2 are an A/B test, so the panel
                              lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_region_latency_desc" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="region_latency">Region Latency</h4>
                             <p id="region-latency-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
                             <!-- Hidden until there are rows, like the other two panels on
@@ -695,7 +695,7 @@
                              user could reach? Same data as Region Latency above, joined to
                              which node actually served each session, so it sits beside it.
                              V1 and V2 are an A/B test, so the panel lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_node_placement_desc" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="node_placement">Node Placement</h4>
                             <p id="node-placement-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
                             <!-- Hidden until there are rows, like the other two panels on
@@ -740,7 +740,7 @@
                              very different meanings: no geo-IP database deployed (the normal
                              state -- the server ships without one), deployed but nothing has
                              cleared the k-threshold yet, or real counts. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Distinct users per country per ISO week. The IP is resolved in memory and discarded; no row can be linked back to a person.">
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_geo_weekly_desc" title="Distinct users per country per ISO week. The IP is resolved in memory and discarded; no row can be linked back to a person.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="geo_distribution">Geographic Distribution</h4>
                             <p id="geo-distribution-headline" style="font-size: 13px; margin: 0 0 12px; color: var(--text-muted);"></p>
                             <!-- Ships hidden and is revealed only when there are buckets to
@@ -782,13 +782,13 @@
                 <div>
                     <h3 style="margin-bottom: 16px;" data-i18n="my_usage">My Usage</h3>
                     <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
-                        <div class="glass" style="padding: 16px;" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
+                        <div class="glass" style="padding: 16px;" data-i18n-title="chart_my_bandwidth_desc" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="myBandwidthChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px;" title="Shows the distribution of total bandwidth usage across your active tunnels.">
+                        <div class="glass" style="padding: 16px;" data-i18n-title="chart_my_tunnel_split_desc" title="Shows the distribution of total bandwidth usage across your active tunnels.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Tunnels Breakdown</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="myTunnelsChart"></canvas>
@@ -837,7 +837,7 @@
                         <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap;">
                             <div style="flex: 2; min-width: 200px;">
                                 <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="th_subdomain_prefix" for="res-subdomain">Subdomain Prefix</label>
-                                <input type="text" id="res-subdomain" class="input-field" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+                                <input type="text" id="res-subdomain" class="input-field" data-i18n-placeholder="res_subdomain_placeholder" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
                             </div>
                             <div style="flex: 1; min-width: 150px;">
                                 <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="domain" for="res-domain">Domain</label>
@@ -851,16 +851,16 @@
                         <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 13px; color: var(--text-muted);">Need inspiration?</span>
                             <select id="res-style-select" class="input-field" style="width: auto; max-width: 200px; margin: 0;" aria-label="Subdomain generator style" data-i18n-aria-label="aria_subdomain_style">
-                                <option value="random">Alphanumeric (8 chars)</option>
-                                <option value="words">What-Three-Words Style</option>
-                                <option value="heroku">Adjective-Noun-Number</option>
+                                <option value="random" data-i18n="style_random">Alphanumeric</option>
+                                <option value="words" data-i18n="style_words">Words Style</option>
+                                <option value="heroku" data-i18n="style_heroku">Heroku Style</option>
                                 <option value="liferay" data-i18n="style_liferay">Liferay SE style</option>
                             </select>
-                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
+                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="padding: 6px 16px;" onclick="generateRandomSubdomain()" data-i18n="btn_generate_random">Generate Random</button>
                         </div>
                     </div>
-                    <div id="reservation-quota-warning" class="alert alert-warning hidden" style="margin-top: 16px;">
-                        You have reached your subdomain reservation quota limit. Release an existing reservation to register a new one.
+                    <div id="reservation-quota-warning" class="alert alert-warning hidden" data-i18n="reservation_limit_reached" style="margin-top: 16px;">
+                        You have reached your reservation limit. Release a subdomain to register a new one.
                     </div>
                 </div>
 
@@ -1130,9 +1130,9 @@
                 </div>
                 <div id="edge-bulk-toolbar" class="glass hidden" style="padding: 10px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
                     <span id="edge-bulk-count" style="opacity: 0.8;"></span>
-                    <button class="btn btn-secondary" onclick="bulkEdgeAction('start')">Start Selected</button>
-                    <button class="btn btn-secondary" onclick="bulkEdgeAction('stop')">Stop Selected</button>
-                    <button class="btn btn-secondary" onclick="bulkEdgeAction('restart')">Restart Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('start')" data-i18n="bulk_start_selected">Start Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('stop')" data-i18n="bulk_stop_selected">Stop Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('restart')" data-i18n="bulk_restart_selected">Restart Selected</button>
                 </div>
                 <div class="glass table-container">
                     <table>
@@ -1261,18 +1261,18 @@
                 <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
                     <!-- Column 1: Domain Allocation -->
                     <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
-                        <h3 style="margin-bottom: 16px; font-size: 16px;">Domain Allocation</h3>
+                        <h3 style="margin-bottom: 16px; font-size: 16px;" data-i18n="domain_allocation_title">Domain Allocation</h3>
                         <div class="form-group">
                             <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-domain-allocation-rule">Domain Allocation Rule</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
                             <select id="system-domain-allocation-rule" class="input-field" style="width: 100%;">
-                                <option value="contextual">Contextual (Match requesting domain)</option>
-                                <option value="preference">Preference (Use configured domain list order)</option>
-                                <option value="user-preference">User Preference (Use user's preferred domain)</option>
-                                <option value="round-robin">Round Robin (Sequential load balancing)</option>
-                                <option value="hashing">Deterministic Hashing (Consistent for user/IP)</option>
-                                <option value="least-connections">Least Connections (Load-based allocation)</option>
-                                <option value="random">Random Allocation</option>
+                                <option value="contextual" data-i18n="alloc_contextual">Contextual (Match requesting domain)</option>
+                                <option value="preference" data-i18n="alloc_preference">Preference (Use configured domain list order)</option>
+                                <option value="user-preference" data-i18n="alloc_user_preference">User Preference (Use user's preferred domain)</option>
+                                <option value="round-robin" data-i18n="alloc_round_robin">Round Robin (Sequential load balancing)</option>
+                                <option value="hashing" data-i18n="alloc_hashing">Deterministic Hashing (Consistent for user/IP)</option>
+                                <option value="least-connections" data-i18n="alloc_least_connections">Least Connections (Load-based allocation)</option>
+                                <option value="random" data-i18n="alloc_random">Random Allocation</option>
                             </select>
                         </div>
 
@@ -1287,7 +1287,7 @@
 
                     <!-- Column 2: Vanity Domain Hook -->
                     <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
-                        <h3 style="margin-bottom: 16px; font-size: 16px;">Vanity Domain Hook</h3>
+                        <h3 style="margin-bottom: 16px; font-size: 16px;" data-i18n="vanity_hook_title">Vanity Domain Hook</h3>
                         
                         <!-- Warning badge for non-owners -->
                         <div id="system-vanity-hook-owner-warning" class="alert alert-warning" style="font-size: 12px; display: none; margin-bottom: 16px; padding: 8px 12px; border-radius: 4px;">
@@ -1305,8 +1305,8 @@
                         </div>
 
                         <div class="form-group" style="margin-bottom: auto;">
-                            <label style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-vanity-hook-path">Vanity Domain Hook Script Path</label>
-                            <input type="text" id="system-vanity-hook-path" class="input-field" placeholder="/usr/local/bin/lfr-vanity-hook.sh" style="width: 100%; box-sizing: border-box;" disabled />
+                            <label style="display: block; margin-bottom: 4px; font-weight: 500;" data-i18n="vanity_hook_path" for="system-vanity-hook-path">Vanity Domain Hook Script Path</label>
+                            <input type="text" id="system-vanity-hook-path" class="input-field" data-i18n-placeholder="vanity_hook_path_placeholder" placeholder="/usr/local/bin/lfr-vanity-hook.sh" style="width: 100%; box-sizing: border-box;" disabled />
                         </div>
                     </div>
                 </div>
@@ -1402,7 +1402,7 @@
                         Trigger a test message to all configured collaboration and notification channels (Slack, Microsoft Teams, and Administrator Email relay) to verify that integration alerting is working correctly.
                     </p>
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()">Send Test Alert</button>
+                        <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()" data-i18n="btn_send_test_alert">Send Test Alert</button>
                         <span id="test-integration-status" style="font-size: 13px; color: var(--text-muted); display: none;"></span>
                     </div>
                     <div id="test-integration-target-container" style="margin-top: 12px; font-size: 12px; color: var(--text-muted); display: none;">
@@ -1418,7 +1418,7 @@
                     </p>
                     
                     <div style="margin-bottom: 16px;">
-                        <input type="text" id="config-search" class="input-field" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()"  aria-label="Search configuration" data-i18n-aria-label="aria_config_search"/>
+                        <input type="text" id="config-search" class="input-field" data-i18n-placeholder="config_search_placeholder" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()"  aria-label="Search configuration" data-i18n-aria-label="aria_config_search"/>
                     </div>
 
                     <div id="config-tree-container" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text-main);">
@@ -1481,7 +1481,7 @@
             <input type="password" id="reservation-ac-passcode-confirm" class="input-field" autocomplete="new-password">
 
             <label style="font-size: 13px; opacity: 0.8;" data-i18n="whitelist_ips" for="reservation-ac-whitelist">IP Whitelist</label>
-            <input type="text" id="reservation-ac-whitelist" class="input-field" placeholder="e.g. 192.168.1.1, 10.0.0.0/24">
+            <input type="text" id="reservation-ac-whitelist" class="input-field" data-i18n-placeholder="res_whitelist_placeholder" placeholder="e.g. 192.168.1.1, 10.0.0.0/24">
 
             <p id="reservation-ac-error" style="display: none; color: var(--danger); font-size: 12px; margin-top: 8px;"></p>
 
@@ -1495,11 +1495,11 @@
             <h3 id="modal-title" data-i18n="btn_generate_token">Generate New Token</h3>
             
             <div id="token-form-step">
-                <input type="text" id="token-name" class="input-field" placeholder="What's this token for? (e.g. MacBook)" required aria-label="Token name" data-i18n-aria-label="aria_token_name">
+                <input type="text" id="token-name" class="input-field" data-i18n-placeholder="token_name_placeholder" placeholder="e.g. Work Laptop" required aria-label="Token name" data-i18n-aria-label="aria_token_name">
                 <select id="token-expiry" class="input-field" aria-label="Token expiry" data-i18n-aria-label="aria_token_expiry">
-                    <option value="30">30 Days</option>
-                    <option value="90">90 Days</option>
-                    <option value="365">1 Year</option>
+                    <option value="30" data-i18n="expiry_30_days">30 Days</option>
+                    <option value="90" data-i18n="expiry_90_days">90 Days</option>
+                    <option value="365" data-i18n="expiry_1_year">1 Year</option>
                     <option value="0" id="token-expiry-never" data-i18n="never">Never</option>
                 </select>
                 <button class="btn btn-primary" onclick="generateToken()" data-i18n="generate_token">Generate Token</button>
@@ -1510,8 +1510,8 @@
                 <div id="handoff-alert" class="alert"></div>
                 <p style="font-size: 14px; color: var(--text-muted);">Make sure to copy your personal access token now. You won't be able to see it again!</p>
                 <div class="copy-box" id="raw-token-display"></div>
-                <button class="btn btn-primary" onclick="copyToken()">Copy to Clipboard</button>
-                <button class="btn" onclick="closeModal(); loadTokens();">Done</button>
+                <button class="btn btn-primary" onclick="copyToken()" data-i18n="btn_copy_to_clipboard">Copy to Clipboard</button>
+                <button class="btn" onclick="closeModal(); loadTokens();" data-i18n="btn_done">Done</button>
             </div>
         </div>
     </div>
@@ -1589,7 +1589,7 @@
                 <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
-                <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
+                <input type="text" id="mfa-verify-code" class="input-field" data-i18n-placeholder="mfa_code_placeholder" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
                 <button data-i18n="btn_cancel" class="btn" id="mfa-cancel-btn" onclick="closeMFAModal()">Cancel</button>
             </div>
@@ -1599,16 +1599,16 @@
     <!-- DELETE ACCOUNT MODAL -->
     <div id="delete-account-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid rgba(239,68,68,0.3); text-align: center;">
-            <h3 style="color: #f43f5e; margin-bottom: 12px; font-size: 20px;">Permanently Delete Account?</h3>
+            <h3 style="color: #f43f5e; margin-bottom: 12px; font-size: 20px;" data-i18n="delete_account_confirm_title">Permanently Delete Account?</h3>
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
                 This action is irreversible. It will instantly revoke all tokens, drop active tunnels, and completely delete/anonymise your profile records from our databases.
                 <br/><br/>
                 Please type your email address <strong><span id="delete-acc-email-hint"></span></strong> to confirm deletion:
             </p>
-            <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;" aria-label="Confirm your email address to delete the account" data-i18n-aria-label="aria_delete_confirm">
+            <input type="email" id="delete-acc-confirm-input" class="input-field" data-i18n-placeholder="delete_account_email_placeholder" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;" aria-label="Confirm your email address to delete the account" data-i18n-aria-label="aria_delete_confirm">
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeDeleteAccountModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()">Delete Permanently</button>
+                <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()" data-i18n="btn_delete_permanently">Delete Permanently</button>
             </div>
         </div>
     </div>
@@ -1616,18 +1616,18 @@
     <!-- EDIT USER QUOTA MODAL -->
     <div id="user-quota-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Bandwidth & Rate Limit</h3>
+            <h3 style="margin-bottom: 12px; font-size: 20px;" data-i18n="user_quota_modal_title">Configure Bandwidth & Rate Limit</h3>
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
                 Configure the requests-per-second (RPS) quota limit for <strong><span id="user-quota-email-hint"></span></strong>. Any subdomains created by this user will be capped at this maximum rate.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-quota-input">Requests Per Second Limit (RPS)</label>
-                <input type="number" id="user-quota-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="lbl_rps_limit" for="user-quota-input">Requests Per Second Limit (RPS)</label>
+                <input type="number" id="user-quota-input" class="input-field" min="0" data-i18n-placeholder="rps_limit_placeholder" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Set to 0 to grant unlimited requests.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeUserQuotaModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserQuota()">Save Quota</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserQuota()" data-i18n="btn_save_quota">Save Quota</button>
             </div>
         </div>
     </div>
@@ -1635,18 +1635,18 @@
     <!-- EDIT USER RESERVATION LIMIT MODAL -->
     <div id="user-res-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Subdomain Reservations Limit</h3>
+            <h3 style="margin-bottom: 12px; font-size: 20px;" data-i18n="user_res_limit_modal_title">Configure Subdomain Reservations Limit</h3>
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
                 Configure the maximum subdomain reservations quota override for <strong><span id="user-res-limit-email-hint"></span></strong>.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-res-limit-input">Max Subdomain Reservations Limit</label>
-                <input type="number" id="user-res-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="lbl_max_reservations" for="user-res-limit-input">Max Subdomain Reservations Limit</label>
+                <input type="number" id="user-res-limit-input" class="input-field" min="1" data-i18n-placeholder="use_default_placeholder" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeUserResLimitModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()" data-i18n="btn_save_limit">Save Limit</button>
             </div>
         </div>
     </div>
@@ -1654,18 +1654,18 @@
     <!-- EDIT USER TUNNELS LIMIT MODAL -->
     <div id="user-tunnels-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Active Tunnels Quota</h3>
+            <h3 style="margin-bottom: 12px; font-size: 20px;" data-i18n="user_tunnels_modal_title">Configure Active Tunnels Quota</h3>
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
                 Configure the maximum concurrent active tunnels quota override for <strong><span id="user-tunnels-limit-email-hint"></span></strong>.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-tunnels-limit-input">Max Active Tunnels Limit</label>
-                <input type="number" id="user-tunnels-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="lbl_max_active_tunnels" for="user-tunnels-limit-input">Max Active Tunnels Limit</label>
+                <input type="number" id="user-tunnels-limit-input" class="input-field" min="1" data-i18n-placeholder="use_default_placeholder" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeUserTunnelsLimitModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()">Save Limit</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()" data-i18n="btn_save_limit">Save Limit</button>
             </div>
         </div>
     </div>
@@ -1673,7 +1673,7 @@
     <!-- CUMULATIVE BANDWIDTH QUOTA MODAL (#1959) -->
     <div id="user-bandwidth-quota-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 460px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Bandwidth Quota</h3>
+            <h3 style="margin-bottom: 12px; font-size: 20px;" data-i18n="user_bandwidth_modal_title">Configure Bandwidth Quota</h3>
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
                 Set the cumulative bandwidth allowance for <strong><span id="user-bandwidth-quota-email-hint"></span></strong> for the current period.
                 <br/><br/>
@@ -1682,13 +1682,13 @@
                 Over 80% of the allowance the user's tunnels are throttled but stay up. Over the allowance they are terminated and new tunnels are refused until the period resets.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-bandwidth-quota-input">Allowance (GiB per period)</label>
-                <input type="number" id="user-bandwidth-quota-input" class="input-field" min="0" step="0.01" placeholder="e.g. 50" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="lbl_allowance_gib" for="user-bandwidth-quota-input">Allowance (GiB per period)</label>
+                <input type="number" id="user-bandwidth-quota-input" class="input-field" min="0" step="0.01" data-i18n-placeholder="bandwidth_allowance_placeholder" placeholder="e.g. 50" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Enter 0 to exempt this user from the quota entirely.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeUserBandwidthQuotaModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserBandwidthQuota()">Save Quota</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserBandwidthQuota()" data-i18n="btn_save_quota">Save Quota</button>
             </div>
         </div>
     </div>
@@ -1696,7 +1696,7 @@
     <!-- ACTIVE TUNNEL OVERRIDE MODAL -->
     <div id="tunnel-override-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 460px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid rgba(217,119,6,0.3); text-align: left;">
-            <h3 style="color: #d97706; margin-bottom: 12px; font-size: 20px; display: flex; align-items: center; gap: 8px;">⚠️ Override Tunnel Rate Limit</h3>
+            <h3 style="color: #d97706; margin-bottom: 12px; font-size: 20px; display: flex; align-items: center; gap: 8px;" data-i18n="tunnel_override_modal_title">⚠️ Override Tunnel Rate Limit</h3>
             
             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
                 You are overriding the requests-per-second (RPS) rate limit for active subdomain <strong><span id="tunnel-override-host-hint" style="font-family: monospace;"></span></strong>.
@@ -1704,13 +1704,13 @@
                 <span style="color: #f43f5e; font-weight: bold;">Warning:</span> Throttling an active developer tunnel may result in packet drops, slow response times, or asset delivery failures on Liferay Client Extensions (Portlets).
             </p>
             <div style="margin-bottom: 24px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="tunnel-override-input">Live Rate Limit Override (RPS)</label>
-                <input type="number" id="tunnel-override-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="lbl_live_rps_override" for="tunnel-override-input">Live Rate Limit Override (RPS)</label>
+                <input type="number" id="tunnel-override-input" class="input-field" min="0" data-i18n-placeholder="rps_limit_placeholder" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Changes are dynamically applied in-memory and will throttle the proxy instantly.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" onclick="closeTunnelOverrideModal()" data-i18n="btn_cancel">Cancel</button>
-                <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()">Apply Override</button>
+                <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()" data-i18n="btn_apply_override">Apply Override</button>
             </div>
         </div>
     </div>
@@ -1854,7 +1854,7 @@
                 <div>
                     <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;" for="detail-user-preferred-domain">Preferred Domain</label>
                     <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-main); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
-                        <option value="">Default (Contextual)</option>
+                        <option value="" data-i18n="domain_default_contextual">Default (Contextual)</option>
                     </select>
                 </div>
                 <div>

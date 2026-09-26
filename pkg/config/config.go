@@ -393,10 +393,25 @@ func (c *ServerConfig) CountryDatabasePath() (path string, bothSet bool) {
 }
 
 type RoleSetting struct {
-	MaxReservations      *int  `yaml:"max_reservations" json:"max_reservations"`
-	MaxCustomDomains     *int  `yaml:"max_custom_domains" json:"max_custom_domains"`
-	SubdomainExpiryDays  *int  `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
-	AllowAutoReservation *bool `yaml:"allow_auto_reservation" json:"allow_auto_reservation"`
+	MaxReservations     *int `yaml:"max_reservations" json:"max_reservations"`
+	MaxCustomDomains    *int `yaml:"max_custom_domains" json:"max_custom_domains"`
+	SubdomainExpiryDays *int `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
+	// CustomDomainExpiryDays is how long this role's CUSTOM DOMAIN reservations live, in days,
+	// with 0 or less meaning permanent -- the same shape as SubdomainExpiryDays and a
+	// separate setting from it on purpose (#2264).
+	//
+	// Borrowing subdomain_expiry_days for custom domains is what this replaces. A gateway
+	// with `developer.subdomain_expiry_days: 99` was handing out 99-day custom domains that
+	// nobody had configured and nobody could tune independently -- the same misattribution as
+	// letting never_expires.subdomains decide whether a custom domain may be permanent, just
+	// expressed in days instead of yes/no.
+	//
+	// nil means this role says nothing and the resource's own default applies. It does NOT
+	// mean permanent: 0 means permanent, and it is then subject to
+	// never_expires.custom_domains exactly as the subdomain equivalent is subject to
+	// never_expires.subdomains.
+	CustomDomainExpiryDays *int  `yaml:"custom_domain_expiry_days" json:"custom_domain_expiry_days"`
+	AllowAutoReservation   *bool `yaml:"allow_auto_reservation" json:"allow_auto_reservation"`
 	// BandwidthQuotaBytes is this role's cumulative bandwidth allowance per period, in
 	// bytes (#1959). The middle of three levels: a per-user override beats it, and it
 	// beats BandwidthQuota.DefaultBytes. nil means this role says nothing and the global

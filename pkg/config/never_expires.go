@@ -207,12 +207,28 @@ func (c *ServerConfig) NeverExpiresCustomDomains() NeverExpiresPolicy {
 // it once at startup and clamps under `disabled`, which is louder than a silent clamp and less
 // disruptive than refusing to boot a fleet gateway over a setting that was legal yesterday.
 func (c *ServerConfig) RolesConfiguredPermanent() []string {
+	return c.rolesConfiguredPermanent(func(rs RoleSetting) *int { return rs.SubdomainExpiryDays })
+}
+
+// RolesWithPermanentCustomDomains is the custom-domain half of the same question.
+//
+// Separate from the subdomain one because the two settings are independent and an operator has
+// to be told which of them contradicts which policy. Only the subdomain half existed at first,
+// so a role with `custom_domain_expiry_days: 0` on a gateway whose custom-domain policy is
+// `disabled` was clamped in silence while the identical subdomain case warned loudly (#2276).
+func (c *ServerConfig) RolesWithPermanentCustomDomains() []string {
+	return c.rolesConfiguredPermanent(func(rs RoleSetting) *int { return rs.CustomDomainExpiryDays })
+}
+
+// rolesConfiguredPermanent is the shared body: any role whose chosen expiry-days setting is 0 or
+// less has been granted permanence in the config file, with no request for a policy to refuse.
+func (c *ServerConfig) rolesConfiguredPermanent(days func(RoleSetting) *int) []string {
 	if c == nil || c.RoleSettings == nil {
 		return nil
 	}
 	var roles []string
 	for role, rs := range c.RoleSettings {
-		if rs.SubdomainExpiryDays != nil && *rs.SubdomainExpiryDays <= 0 {
+		if d := days(rs); d != nil && *d <= 0 {
 			roles = append(roles, role)
 		}
 	}

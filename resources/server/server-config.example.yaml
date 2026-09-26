@@ -162,9 +162,25 @@ role_settings:
     allow_auto_reservation: false
     # Per-role bandwidth allowance in bytes; null (or absent) inherits bandwidth_quota.default_bytes.
     bandwidth_quota_bytes: null
+    # How long this role's reservations live, in days. 0 or less means permanent, which is
+    # then subject to the matching never_expires policy above -- `disabled` clamps it back to
+    # a real expiry and says so at startup.
+    #
+    # TWO keys, deliberately (#2264). A subdomain lives in a shared, contested namespace and
+    # the expiry exists to reclaim it. A custom domain does not -- nobody else can ever claim
+    # a name its holder proved through DNS -- so the two want different numbers, and a gateway
+    # that set only subdomain_expiry_days used to hand out custom domains on that same clock
+    # without anyone choosing it.
+    #
+    # null (or absent) means the role says nothing and the resource default applies: 7 days for
+    # a subdomain, 90 for a custom domain. null is NOT the same as 0.
+    subdomain_expiry_days: null
+    custom_domain_expiry_days: null
   owner:
     allow_auto_reservation: true
     bandwidth_quota_bytes: null
+    subdomain_expiry_days: null
+    custom_domain_expiry_days: null
 sso_providers: []
 
 # --- Edge tier. urls are DERIVED from the DNS spec -- see `lfr-tunnel-ops render-edge-nodes` (#1468) ---

@@ -477,8 +477,8 @@ var expiryCopyRE = regexp.MustCompile(`ExpiresAt\s*[:=]\s*[A-Za-z_][A-Za-z0-9_.]
 // policyAware reports whether a function body consults the never_expires policy at all.
 var policyMarkers = []string{
 	"resolvePATExpiry",
-	"resolveReservationExpiry",
-	"resolveCustomDomainExpiry",
+	"resolveExpiryUnderPolicy",
+	"reservationExpiry",
 	"permanenceGrantAllowed",
 	"NeverExpires",
 	// The two resolvers that apply a policy on the caller's behalf. A function that takes its
@@ -486,8 +486,6 @@ var policyMarkers = []string{
 	// cannot forget to. reservationExpiryForKind is the one that picks by resource kind, which
 	// is the rule the sixth door broke.
 	"reservationExpiryFor",
-	"getUserSubdomainExpiry",
-	"roleExpiry",
 }
 
 func policyAware(funcBody string) bool {
@@ -655,7 +653,7 @@ func TestTheUnguardedPermanenceGateFiresAndIsNotVacuous(t *testing.T) {
 	guarded := `func createSomething(user *db.User) *db.SubdomainReservation {
 	return &db.SubdomainReservation{
 		UserID:    user.ID,
-		ExpiresAt: resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), nil, time.Now()),
+		ExpiresAt: reservationExpiry(s.cfg, resourceKindCustomDomain, user, time.Now()),
 	}
 }
 `
@@ -732,7 +730,7 @@ func TestTheUnguardedPermanenceGateFiresAndIsNotVacuous(t *testing.T) {
 		t.Error("source with no policy reference was judged policy-aware")
 	}
 	if !policyAware(guarded) {
-		t.Error("a write that goes through resolveCustomDomainExpiry was judged unguarded")
+		t.Error("a write that goes through reservationExpiry was judged unguarded")
 	}
 	if !policyAware(guardedByCheck) {
 		t.Error("a write behind permanenceGrantAllowed was judged unguarded")

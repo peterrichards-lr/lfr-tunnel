@@ -163,23 +163,34 @@ export async function createApprovedUser(
  * `deleting <email> failed: 401 Unauthorized: admin access required` -- a message about the
  * DELETE, on a run where the DELETE was the one thing that had behaved correctly (#1833).
  */
-export async function deleteUser(email: string): Promise<void> {
+/**
+ * A request context holding a signed-in ADMIN session, obtained the way a person gets one.
+ *
+ * Extracted from deleteUser rather than copied for its second caller (#2249): every comment
+ * below is a defect someone already paid for, and a second copy is a second place for them to
+ * come back. `purpose` appears in the errors so a failure names which caller's session could not
+ * be established -- the distinction #1833 lost.
+ *
+ * The inbox is NOT cleared first -- specs own their own mail -- so the mails already in it are
+ * recorded and skipped. The admin has almost always just signed in, leaving a magic-link mail
+ * whose token that login consumed, and requesting this one invalidates it a second time
+ * (`InvalidateOtherMagicLinks`). Accepting it yields 401 "Invalid or already used token" from
+ * verify, then 401 from whatever the session was needed for.
+ *
+ * The caller owns the context and must dispose of it.
+ */
+export async function adminRequestContext(
+  purpose: string,
+): Promise<APIRequestContext> {
   const ctx = await request.newContext();
 
-  // An admin session, obtained the same way a person gets one. The context keeps the cookie.
-  //
-  // The inbox is NOT cleared first -- specs own their own mail -- so the mails already in it are
-  // recorded and skipped. The admin has almost always just signed in, leaving a magic-link mail
-  // whose token that login consumed, and requesting this one invalidates it a second time
-  // (`InvalidateOtherMagicLinks`). Accepting it yields 401 "Invalid or already used token" from
-  // verify, then 401 from the DELETE.
   const seen = await mailpitMessageIDs(ctx);
   const requested = await ctx.post(`${API}/api/auth/magic-link`, {
     data: { email: ADMIN_EMAIL },
   });
   if (!requested.ok()) {
     throw new Error(
-      `requesting a cleanup magic link for the admin failed: ${requested.status()} ${await requested.text()}`,
+      `requesting an admin magic link for ${purpose} failed: ${requested.status()} ${await requested.text()}`,
     );
   }
 
@@ -187,16 +198,22 @@ export async function deleteUser(email: string): Promise<void> {
   // a `token=` too, and neither is a magic link.
   const mail = await waitForMail(ctx, ADMIN_EMAIL, MAGIC_LINK, seen);
   const token = mail.match(MAGIC_LINK)?.[1];
-  if (!token) throw new Error('No magic-link token for the admin');
+  if (!token) throw new Error(`No magic-link token for the admin (${purpose})`);
   const verified = await ctx.post(`${API}/api/auth/verify`, {
     data: { token, lang: 'en' },
   });
   if (!verified.ok()) {
     throw new Error(
-      `the admin session for cleaning up ${email} could not be established: ` +
+      `the admin session for ${purpose} could not be established: ` +
         `/api/auth/verify answered ${verified.status()} ${await verified.text()}`,
     );
   }
+
+  return ctx;
+}
+
+export async function deleteUser(email: string): Promise<void> {
+  const ctx = await adminRequestContext(`cleaning up ${email}`);
 
   const res = await ctx.delete(
     `${API}/api/admin/users/${encodeURIComponent(email)}`,

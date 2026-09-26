@@ -2061,7 +2061,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						// extension model exists to reclaim a shared, contested namespace,
 						// and nobody else can ever claim this exact domain because it
 						// belongs to the requesting user externally through DNS.
-						ExpiresAt: resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), s.getUserSubdomainExpiry(user), time.Now()),
+						// reservationExpiry with the CUSTOM DOMAIN kind, not the
+						// subdomain expiry passed in as a fallback. That was the same
+						// misattribution the portal path had -- a custom domain taking
+						// its lifetime, and its permanence, from subdomain settings --
+						// left behind here because the two paths had separate copies of
+						// the logic (#2264).
+						ExpiresAt: reservationExpiry(s.cfg, resourceKindCustomDomain, user, time.Now()),
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err))

@@ -260,3 +260,56 @@ func TestRolesConfiguredPermanentIsEmptyWhenNoRoleIsPermanent(t *testing.T) {
 		t.Errorf("a config with no role_settings reports %v", got)
 	}
 }
+
+// custom_domain_expiry_days is a separate key from subdomain_expiry_days, and the point of it is
+// that the two do not move together (#2264).
+func TestTheTwoExpiryDayKeysAreSeparate(t *testing.T) {
+	cfg, err := LoadServerConfig(writeCfg(t, `domains:
+  - example.com
+role_settings:
+  developer:
+    subdomain_expiry_days: 7
+    custom_domain_expiry_days: 200
+  contractor:
+    subdomain_expiry_days: 3
+`))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	dev, ok := cfg.RoleSettings["developer"]
+	if !ok {
+		t.Fatal("the developer role did not load")
+	}
+	if dev.SubdomainExpiryDays == nil || *dev.SubdomainExpiryDays != 7 {
+		t.Errorf("subdomain_expiry_days = %v, want 7", dev.SubdomainExpiryDays)
+	}
+	if dev.CustomDomainExpiryDays == nil || *dev.CustomDomainExpiryDays != 200 {
+		t.Errorf("custom_domain_expiry_days = %v, want 200", dev.CustomDomainExpiryDays)
+	}
+
+	// A role that sets only the subdomain key says NOTHING about custom domains. nil is not
+	// zero: zero would mean permanent, and inheriting it from the sibling key is the
+	// misattribution this key exists to end.
+	contractor, ok := cfg.RoleSettings["contractor"]
+	if !ok {
+		t.Fatal("the contractor role did not load")
+	}
+	if contractor.CustomDomainExpiryDays != nil {
+		t.Errorf("a role that never mentioned custom_domain_expiry_days has %v; "+
+			"it must stay nil so the resource default applies", *contractor.CustomDomainExpiryDays)
+	}
+}
+
+// CONTROL. The key is spelled the way the example config and the docs spell it. A test that
+// constructs RoleSetting in Go would pass against any yaml tag at all.
+func TestCustomDomainExpiryDaysIsSpelledAsDocumented(t *testing.T) {
+	cfg, err := LoadServerConfig(writeCfg(t, "domains:\n  - example.com\nrole_settings:\n  user:\n    custom_domain_expiry_days: 45\n"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	rs := cfg.RoleSettings["user"]
+	if rs.CustomDomainExpiryDays == nil || *rs.CustomDomainExpiryDays != 45 {
+		t.Errorf("custom_domain_expiry_days did not bind: %v", rs.CustomDomainExpiryDays)
+	}
+}

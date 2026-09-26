@@ -698,31 +698,6 @@ func (s *portalService) getUserSubdomainExpiry(u *db.User) *time.Time {
 	return s.reservationExpiryForKind(resourceKindSubdomain, u)
 }
 
-// roleExpiry resolves what the ROLE says, with no policy applied.
-//
-// Split out so the policy can be chosen by the caller (#2267). A role whose subdomain_expiry_days
-// is <= 0 gets permanence without anyone asking for it -- no create handler sees a request it
-// could refuse, because there is no request -- which is why the policy has to be applied to this
-// result rather than only where a portal offers a choice (#2264).
-func (s *portalService) roleExpiry(u *db.User) (expiry *time.Time, days int) {
-	days = defaultSubdomainExpiryDays
-	permanentByRole := false
-	if s.cfg.RoleSettings != nil {
-		if rs, ok := s.cfg.RoleSettings[u.Role]; ok && rs.SubdomainExpiryDays != nil {
-			if *rs.SubdomainExpiryDays <= 0 {
-				permanentByRole = true
-			} else {
-				days = *rs.SubdomainExpiryDays
-			}
-		}
-	}
-	if !permanentByRole {
-		t := time.Now().AddDate(0, 0, days)
-		expiry = &t
-	}
-	return expiry, days
-}
-
 // reservationExpiryForKind applies the policy that belongs to the KIND of resource named.
 //
 // The class rule, stated once because three functions in this file write a reservation's expiry
@@ -737,24 +712,7 @@ func (s *portalService) roleExpiry(u *db.User) (expiry *time.Time, days int) {
 // `disabled`, because subdomains happened to be `allowed` and the holder's role was configured
 // permanent. Found in review of #2267, in the same PR that fixed the other two.
 func (s *portalService) reservationExpiryForKind(kind string, owner *db.User) *time.Time {
-	if kind == resourceKindCustomDomain {
-		// The role's subdomain_expiry_days is NOT consulted here, and that is the point.
-		//
-		// It is a subdomain setting, and letting it decide how long a custom domain lives is
-		// the same misattribution as letting never_expires.subdomains decide whether one can
-		// be permanent -- just in days rather than in yes/no. A gateway with
-		// `developer.subdomain_expiry_days: 99` was handing out 99-day custom domains, which
-		// nobody configured and nobody could turn off independently.
-		//
-		// There is no custom-domain equivalent of that setting today, so a custom domain that
-		// may not be permanent gets the plain default. Naming the gap rather than papering
-		// over it with the nearest-looking number: if operators want to tune this, it wants
-		// its own key, not a borrowed one.
-		return resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), nil, time.Now())
-	}
-	expiry, days := s.roleExpiry(owner)
-	resolved, _ := resolveReservationExpiry(s.cfg.NeverExpiresSubdomains(), expiry, days, time.Now())
-	return resolved
+	return reservationExpiry(s.cfg, kind, owner, time.Now())
 }
 
 // reservationExpiryFor is reservationExpiryForKind for a row that already exists.

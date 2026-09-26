@@ -55,55 +55,66 @@ func resolvePATExpiry(policy config.NeverExpiresPolicy, days int, now time.Time)
 	}
 }
 
-// resolveReservationExpiry applies a never_expires policy to an expiry that has already been
-// computed from role settings, and reports whether permanence was requested but not granted.
-//
-// The role-settings path is the door that does not go through any create handler: a role with
-// subdomain_expiry_days <= 0 makes getUserSubdomainExpiry return nil, and every reservation that
-// role creates is permanent without anyone asking for it. A policy that only guarded the explicit
-// "never" option would leave that wide open and read as though it did not.
-//
-// fallbackDays is what such a reservation gets instead under `disabled`. Under `approval` the
-// role setting stands: an operator writing it into the config file IS the approval, given in
-// advance, and demanding a second one per reservation would make the setting unusable.
-func resolveReservationExpiry(policy config.NeverExpiresPolicy, expiry *time.Time, fallbackDays int, now time.Time) (*time.Time, bool) {
-	if expiry != nil {
-		return expiry, false
-	}
-	if policy.Available() {
-		return nil, false
-	}
-	if fallbackDays <= 0 {
-		fallbackDays = defaultSubdomainExpiryDays
-	}
-	t := now.AddDate(0, 0, fallbackDays)
-	return &t, true
-}
-
-// defaultSubdomainExpiryDays is the fallback both getUserSubdomainExpiry implementations already
-// use when no role setting applies. Named here so resolveReservationExpiry cannot drift from
-// them.
+// defaultSubdomainExpiryDays is what a subdomain reservation gets when no role setting applies.
 const defaultSubdomainExpiryDays = 7
 
-// resolveCustomDomainExpiry decides what a newly reserved custom domain expires at.
+// defaultCustomDomainExpiryDays is the same for a custom domain, and is deliberately not 7.
 //
-// Custom domains were unconditionally permanent (#1009), for a reason that still holds: the
-// expiry model exists to reclaim a contested shared namespace, and a custom domain is not in one
-// -- nobody else can ever claim it, because the holder owns it externally through DNS. That
-// reasoning is now the operator's to accept rather than the code's to assume, which is why the
-// default is `disabled` and a gateway that wants the old behaviour says `allowed`.
-func resolveCustomDomainExpiry(policy config.NeverExpiresPolicy, fallback *time.Time, now time.Time) *time.Time {
-	// GrantsImmediately, not Available: under `approval` the domain is reserved with an ordinary
-	// expiry and it is the admin's grant that removes it. Available() here would have made
-	// `approval` identical to `allowed` for the one resource that used to be permanent
-	// unconditionally -- the exact state this setting exists to make deliberate.
-	if policy.GrantsImmediately() {
+// A subdomain lives in a shared, contested namespace and a week is a reasonable hold on one. A
+// custom domain is not in that namespace at all -- nobody else can ever claim a name its holder
+// controls through DNS (#1009) -- and it costs its holder a DNS change and this gateway a
+// certificate. It expires only because an operator asked for expiry at all, so the default is
+// generous and `custom_domain_expiry_days` is there to tighten it.
+const defaultCustomDomainExpiryDays = 90
+
+// expiryInputs is what the config says about one reservation, before any policy is applied.
+type expiryInputs struct {
+	// PermanentByRole is set when the role's <kind>_expiry_days is 0 or less. That is the
+	// door no create handler guards, because nobody asked for it: it is simply what the role
+	// gets, and a policy that only checked the explicit "never" option would leave it open.
+	PermanentByRole bool
+	// Days is the lifetime to use when the reservation is not permanent.
+	Days int
+	// PermanentByDefault is the resource's behaviour when the role says nothing at all.
+	//
+	// The one real asymmetry between the two resources, and the reason this is a parameter
+	// rather than two functions: a subdomain with no role setting expires, and a custom domain
+	// with no role setting was unconditionally permanent before #2264. Writing that difference
+	// down once is the point -- as two separate resolvers they drifted, and the drift was a
+	// permanent custom domain on a gateway that forbids them (#2267 review).
+	PermanentByDefault bool
+}
+
+// resolveExpiryUnderPolicy is the single place a reservation's expiry is decided.
+//
+// Two different policy questions are being asked here and they are not interchangeable:
+//
+//   - A role configured permanent is honoured under `approval` as well as `allowed`, because an
+//     operator writing it into the config file IS the approval, given in advance. Demanding a
+//     second one per reservation would make the setting unusable. Only `disabled` clamps it.
+//   - A resource that is permanent BY DEFAULT is permanent only under `allowed`. Under
+//     `approval` it is created with an ordinary expiry and an admin's grant is what removes it;
+//     treating this case as Available() would make `approval` identical to `allowed` for the
+//     one resource that used to be permanent unconditionally.
+func resolveExpiryUnderPolicy(policy config.NeverExpiresPolicy, in expiryInputs, now time.Time) *time.Time {
+	days := in.Days
+	if days <= 0 {
+		days = defaultSubdomainExpiryDays
+	}
+
+	if in.PermanentByRole {
+		if policy.Available() {
+			return nil
+		}
+		t := now.AddDate(0, 0, days)
+		return &t
+	}
+
+	if in.PermanentByDefault && policy.GrantsImmediately() {
 		return nil
 	}
-	if fallback != nil {
-		return fallback
-	}
-	t := now.AddDate(0, 0, defaultSubdomainExpiryDays)
+
+	t := now.AddDate(0, 0, days)
 	return &t
 }
 
@@ -170,4 +181,64 @@ func resolveAdminGrantedExpiry(policy config.NeverExpiresPolicy, days int, now t
 		return nil, ErrPermanenceNotAllowed
 	}
 	return nil, nil
+}
+
+// policyForKind returns the never_expires policy that governs a reservation of this kind.
+func policyForKind(cfg *config.ServerConfig, kind string) config.NeverExpiresPolicy {
+	if kind == resourceKindCustomDomain {
+		return cfg.NeverExpiresCustomDomains()
+	}
+	return cfg.NeverExpiresSubdomains()
+}
+
+// expiryInputsFor reads what the config says about a reservation of this kind for this user.
+//
+// A free function over *config.ServerConfig rather than a method, because BOTH holders of a
+// config compute this -- *Server for the registration path the client uses, *portalService for
+// the portal -- and they had two copies that disagreed. The duplication is the bug: the Server
+// copy kept passing the SUBDOMAIN expiry in as a custom domain's fallback long after the portal
+// copy stopped (#2264, #2267 review).
+func expiryInputsFor(cfg *config.ServerConfig, kind string, user *db.User) expiryInputs {
+	if kind == resourceKindCustomDomain {
+		in := expiryInputs{Days: defaultCustomDomainExpiryDays, PermanentByDefault: true}
+		if cfg != nil && cfg.RoleSettings != nil {
+			if rs, ok := cfg.RoleSettings[user.Role]; ok && rs.CustomDomainExpiryDays != nil {
+				if *rs.CustomDomainExpiryDays <= 0 {
+					in.PermanentByRole = true
+				} else {
+					in.Days = *rs.CustomDomainExpiryDays
+				}
+			}
+		}
+		return in
+	}
+
+	in := expiryInputs{Days: defaultSubdomainExpiryDays}
+	if cfg == nil {
+		return in
+	}
+	if cfg.RoleSettings != nil {
+		if rs, ok := cfg.RoleSettings[user.Role]; ok && rs.SubdomainExpiryDays != nil {
+			if *rs.SubdomainExpiryDays <= 0 {
+				in.PermanentByRole = true
+			} else {
+				in.Days = *rs.SubdomainExpiryDays
+			}
+		}
+		return in
+	}
+	// No role_settings block at all: the owner's subdomains have never expired by default.
+	// Preserved rather than tidied away -- it is live behaviour on a gateway that has not
+	// configured roles, and it is a permanence route, so never_expires.subdomains governs it
+	// like any other.
+	if user.Role == "owner" {
+		in.PermanentByRole = true
+	}
+	return in
+}
+
+// reservationExpiry is the whole decision in one call: what the config says, run through the
+// policy that governs this kind of resource.
+func reservationExpiry(cfg *config.ServerConfig, kind string, user *db.User, now time.Time) *time.Time {
+	return resolveExpiryUnderPolicy(policyForKind(cfg, kind), expiryInputsFor(cfg, kind, user), now)
 }

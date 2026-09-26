@@ -1213,34 +1213,7 @@ func (s *Server) getUserMaxCustomDomains(user *db.User) int {
 // getUserSubdomainExpiry computes the default expiry date for a subdomain reservation.
 // Returns nil if the reservation should be permanent (no expiration).
 func (s *Server) getUserSubdomainExpiry(user *db.User) *time.Time {
-	days := defaultSubdomainExpiryDays
-
-	// Two ways to be permanent without asking: a role whose subdomain_expiry_days is <= 0, and
-	// -- where no role settings exist at all -- being the owner. Neither goes through a create
-	// handler that could refuse it, so never_expires.subdomains is applied here, at the one
-	// place both arrive (#2264).
-	permanentByRole := false
-	if s.cfg.RoleSettings != nil {
-		if setting, ok := s.cfg.RoleSettings[user.Role]; ok {
-			if setting.SubdomainExpiryDays != nil {
-				if *setting.SubdomainExpiryDays <= 0 {
-					permanentByRole = true
-				} else {
-					days = *setting.SubdomainExpiryDays
-				}
-			}
-		}
-	} else if user.Role == "owner" {
-		permanentByRole = true
-	}
-
-	var expiry *time.Time
-	if !permanentByRole {
-		t := time.Now().AddDate(0, 0, days)
-		expiry = &t
-	}
-	resolved, _ := resolveReservationExpiry(s.cfg.NeverExpiresSubdomains(), expiry, days, time.Now())
-	return resolved
+	return reservationExpiry(s.cfg, resourceKindSubdomain, user, time.Now())
 }
 
 // handleListReservations returns a list of reservations held by the current user.

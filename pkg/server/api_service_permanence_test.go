@@ -2,6 +2,8 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -544,9 +546,13 @@ func TestADemotedCustomDomainDoesNotTakeTheSubdomainRoleLifetime(t *testing.T) {
 	if got.ExpiresAt == nil {
 		t.Fatal("permanent under a disabled custom-domain policy")
 	}
-	if days := int(time.Until(*got.ExpiresAt).Hours() / 24); days > 90 {
-		t.Errorf("the custom domain got %d days, which is role_settings.developer.subdomain_expiry_days (99) "+
-			"-- a subdomain setting deciding a custom domain's lifetime", days)
+	// The custom-domain default, exactly -- not 99, and not "something under 99", which a
+	// borrowed subdomain setting of 89 would also have satisfied.
+	days := int(time.Until(*got.ExpiresAt).Hours() / 24)
+	if days < defaultCustomDomainExpiryDays-1 || days > defaultCustomDomainExpiryDays {
+		t.Errorf("the custom domain got %d days; with no custom_domain_expiry_days set it must get "+
+			"the custom-domain default (%d), never role_settings.developer.subdomain_expiry_days (99)",
+			days, defaultCustomDomainExpiryDays)
 	}
 }
 
@@ -730,5 +736,151 @@ func TestADeniedHolderMayAskAgain(t *testing.T) {
 	}
 	if queue := mustQueue(t, srv); len(queue) != 1 {
 		t.Errorf("the re-request is not in the queue (%d)", len(queue))
+	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// custom_domain_expiry_days: a custom domain's lifetime is its own setting.
+
+func daysUntil(t *testing.T, at *time.Time) int {
+	t.Helper()
+	if at == nil {
+		t.Fatal("expected an expiry, got permanent")
+	}
+	return int(time.Until(*at).Hours() / 24)
+}
+
+// The two keys are independent in both directions, which is the whole reason the second one
+// exists. Set them far apart and each resource must take its own.
+func TestEachResourceTakesItsOwnExpiryDays(t *testing.T) {
+	sevenDays, twoHundred := 7, 200
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {
+		SubdomainExpiryDays:    &sevenDays,
+		CustomDomainExpiryDays: &twoHundred,
+	}}
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	sub := srv.getUserSubdomainExpiry(dev)
+	if d := daysUntil(t, sub); d < 6 || d > 7 {
+		t.Errorf("subdomain got %d days, want 7 -- it must not take custom_domain_expiry_days", d)
+	}
+
+	cd, err := srv.portalService.CreateCustomDomain(dev, "vanity.customer.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateCustomDomain: %v", err)
+	}
+	if d := daysUntil(t, cd.ExpiresAt); d < 199 || d > 200 {
+		t.Errorf("custom domain got %d days, want 200 -- it must not take subdomain_expiry_days", d)
+	}
+}
+
+// With no custom_domain_expiry_days the resource takes its OWN default, and that default is
+// deliberately not the subdomain one: a custom domain is not in a contested namespace, and a
+// week's hold on a name its holder proved through DNS serves nobody.
+func TestAnUnsetCustomDomainExpiryTakesTheCustomDomainDefault(t *testing.T) {
+	if defaultCustomDomainExpiryDays == defaultSubdomainExpiryDays {
+		t.Fatal("the two defaults are the same, so this test cannot tell them apart")
+	}
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	cd, err := srv.portalService.CreateCustomDomain(dev, "vanity.customer.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateCustomDomain: %v", err)
+	}
+	if d := daysUntil(t, cd.ExpiresAt); d < defaultCustomDomainExpiryDays-1 || d > defaultCustomDomainExpiryDays {
+		t.Errorf("custom domain got %d days, want the custom-domain default (%d)", d, defaultCustomDomainExpiryDays)
+	}
+}
+
+// 0 means permanent, the same as its subdomain counterpart -- and is governed by
+// never_expires.custom_domains, not by the subdomain policy.
+func TestCustomDomainExpiryDaysZeroMeansPermanentAndIsPoliced(t *testing.T) {
+	zero := 0
+	for _, tc := range []struct {
+		policy    config.NeverExpiresPolicy
+		permanent bool
+	}{
+		// An operator writing 0 into the config file IS the approval, given in advance --
+		// the same rule subdomains follow, so `approval` honours it.
+		{config.NeverExpiresApproval, true},
+		{config.NeverExpiresAllowed, true},
+		// And `disabled` clamps it, because that is the state in which this gateway grants
+		// permanence by no route at all.
+		{config.NeverExpiresDisabled, false},
+	} {
+		t.Run(string(tc.policy), func(t *testing.T) {
+			srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, tc.policy)
+			srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {CustomDomainExpiryDays: &zero}}
+			dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+			cd, err := srv.portalService.CreateCustomDomain(dev, "vanity.customer.com", "127.0.0.1")
+			if err != nil {
+				t.Fatalf("CreateCustomDomain: %v", err)
+			}
+			if tc.permanent && cd.ExpiresAt != nil {
+				t.Errorf("policy %q: custom_domain_expiry_days is 0 and the domain expires %v", tc.policy, cd.ExpiresAt)
+			}
+			if !tc.permanent && cd.ExpiresAt == nil {
+				t.Errorf("policy %q: a disabled policy did not clamp a role configured permanent", tc.policy)
+			}
+		})
+	}
+}
+
+// The subdomain policy must not decide a custom domain configured permanent, or the two settings
+// are not independent -- which is the defect this whole key exists to close.
+func TestTheSubdomainPolicyDoesNotDecideAPermanentCustomDomain(t *testing.T) {
+	zero := 0
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresAllowed, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {CustomDomainExpiryDays: &zero}}
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	cd, err := srv.portalService.CreateCustomDomain(dev, "vanity.customer.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateCustomDomain: %v", err)
+	}
+	if cd.ExpiresAt == nil {
+		t.Error("never_expires.subdomains is `allowed` and never_expires.custom_domains is " +
+			"`disabled`, and the custom domain came back permanent -- the subdomain policy decided it")
+	}
+}
+
+// The CLIENT's door takes the same setting. The registration path writes the reservation row
+// itself, and it is where the borrowed subdomain expiry survived longest.
+func TestTheClientsRegistrationPathUsesTheCustomDomainExpiryDays(t *testing.T) {
+	twoHundred, sevenDays := 200, 7
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {
+		SubdomainExpiryDays:    &sevenDays,
+		CustomDomainExpiryDays: &twoHundred,
+	}}
+
+	email := "client@example.com"
+	if err := srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "developer", Status: "approved"}); err != nil {
+		t.Fatalf("creating the user: %v", err)
+	}
+	secret := "pat_custom_domain_days"
+	hash := sha256.Sum256([]byte(secret))
+	if err := srv.db.CreatePAT(&db.PersonalAccessToken{UserID: email, TokenHash: hex.EncodeToString(hash[:]), TokenPrefix: "pat_cd_days"}); err != nil {
+		t.Fatalf("creating the token: %v", err)
+	}
+
+	body, _ := json.Marshal(RegisterRequest{CustomDomain: "client.customer.com", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: secret})
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/api/register", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("registering: got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	stored, err := srv.db.GetSubdomainReservationByName("", "client.customer.com")
+	if err != nil || stored == nil {
+		t.Fatalf("no reservation created: %v", err)
+	}
+	if d := daysUntil(t, stored.ExpiresAt); d < 199 || d > 200 {
+		t.Errorf("the client's custom domain got %d days, want 200 -- the registration path still "+
+			"takes its lifetime from subdomain_expiry_days (7)", d)
 	}
 }

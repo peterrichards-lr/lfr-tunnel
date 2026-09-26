@@ -60,6 +60,9 @@ Two things worth knowing:
   than a fixed rule (`never_expires.custom_domains`), so on some gateways a custom domain carries
   an expiry like a subdomain does, and on others an admin grants the permanence on request. The
   panel shows which of those applies to the domain you hold.
+- **If it does expire, it expires on its own clock.** A custom domain's lifetime comes from
+  `custom_domain_expiry_days`, not from the subdomain setting — they are separate because the two
+  resources are not comparable. Unset, a custom domain gets 90 days where a subdomain gets 7.
 
 ## 3. Connect
 

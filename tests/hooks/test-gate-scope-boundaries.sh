@@ -466,6 +466,73 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 9b. FIRING, with a CONTROL. Which V1 ATTRIBUTES the #2247 scan reads is derived from the
+#     data-i18n-<attr> mechanisms that actually exist, not from a list in the gate.
+#
+#     The gate's header said exactly that -- "`title="..."` is not checked today because
+#     nothing applies `data-i18n-title`, and the day something does, this starts checking it
+#     with no edit here" -- and the loop under it read `for (const attr of ['placeholder',
+#     'aria-label'])` filtered by the derived set. A list intersected with a derivation is a
+#     list: #2248 added the data-i18n-title mechanism and the check stayed off, silently,
+#     because `title` was not one of the two names. Prose does not fail; this does (#2248).
+#
+#     The CONTROL is the half that makes this a derivation claim rather than a "title is
+#     checked" claim: with the mechanism removed from BOTH the page and the script it loads,
+#     the very same markup must go unreported. Without it, hardcoding `title` in a third list
+#     would pass the FIRING case.
+# ---------------------------------------------------------------------------
+probe_title_attr() {
+  python3 - "$SANDBOX/pkg/server/dashboard.html" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+# The LAST </body>: the first one in this document sits inside an HTML comment, which
+# strippedMarkup blanks -- a probe anchored there is never parsed and the case would fail
+# for a reason that has nothing to do with the attribute scope.
+old = "</body>"
+assert s.count(old) >= 1, "no </body> to anchor the probe -- the mutation would silently no-op"
+head, tail = s.rsplit(old, 1)
+open(p, "w").write(head + '<div title="Copy URL"></div>\n' + old + tail)
+PY
+}
+
+reset_i18n_sandbox
+if ! probe_title_attr; then
+  harness "could not add the title= probe to dashboard.html"
+else
+  run_i18n
+  if [ "$RC" -ne 0 ] && says "$OUT" 'title=' && says "$OUT" 'btn_copy_url'; then
+    pass "FIRING  a title= that equals a bundle value is reported, now the mechanism exists"
+  else
+    fail "a title= matching a bundle value was not reported (rc=$RC): $OUT"
+  fi
+fi
+
+reset_i18n_sandbox
+if ! python3 - "$SANDBOX/pkg/server/dashboard.html" \
+  "$SANDBOX/pkg/server/static/dashboard.js" <<'PY'; then
+import sys
+seen = 0
+for p in sys.argv[1:]:
+    s = open(p).read()
+    out = s.replace("data-i18n-title", "data-probe-no-title")
+    seen += s != out
+    open(p, "w").write(out)
+assert seen == 2, "data-i18n-title absent from page or script -- the mutation would no-op"
+PY
+  harness "could not remove the data-i18n-title mechanism"
+elif ! probe_title_attr; then
+  harness "could not add the title= probe to dashboard.html"
+else
+  run_i18n
+  if ! says "$OUT" 'btn_copy_url'; then
+    pass "CONTROL   with no data-i18n-title anywhere the same title= is out of scope again"
+  else
+    fail "title= was checked with no mechanism behind it, so the attribute set is not derived: $OUT"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 10. FIRING. A self-contained page's OWN bundle IS checked for internal drift.
 #
 #     This was a BOUNDING case until #1854: the gate read Language_<locale>.properties and the

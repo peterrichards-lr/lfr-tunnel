@@ -652,19 +652,19 @@ export default function AdminEdgeHealth() {
             className="btn btn-secondary text-xs py-xs px-sm"
             onClick={() => bulkAction('start')}
           >
-            Start Selected
+            {t('bulk_start_selected', 'Start Selected')}
           </button>
           <button
             className="btn btn-secondary text-xs py-xs px-sm"
             onClick={() => bulkAction('stop')}
           >
-            Stop Selected
+            {t('bulk_stop_selected', 'Stop Selected')}
           </button>
           <button
             className="btn btn-secondary text-xs py-xs px-sm"
             onClick={() => bulkAction('restart')}
           >
-            Restart Selected
+            {t('bulk_restart_selected', 'Restart Selected')}
           </button>
         </div>
       )}

@@ -107,7 +107,7 @@ export default function Sidebar({
       <nav
         ref={navRef}
         className={`sidebar ${isOpen ? 'active' : ''}`}
-        aria-label="Primary"
+        aria-label={t('aria_primary_nav', 'Primary')}
       >
         <div className="sidebar-brand flex items-center gap-sm px-lg py-md">
           <img

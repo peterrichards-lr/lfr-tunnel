@@ -37,6 +37,16 @@ function applyTranslations(bundle, lang) {
       el.setAttribute('aria-label', bundle[key]);
     }
   });
+  // A native tooltip is prose the user reads, so it needs the same treatment (#2248). Nine of
+  // the eleven title= attributes on the dashboard explain what an analytics chart is actually
+  // counting, which is the one place a reader most needs their own language -- and until this
+  // existed there was no way to reach a key from a title at all.
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-title');
+    if (bundle[key]) {
+      el.setAttribute('title', bundle[key]);
+    }
+  });
 
   // Rebuilt rather than looked up: this name interpolates the heading text (#1520).
   if (typeof refreshHeadingAnchorLabels === 'function')

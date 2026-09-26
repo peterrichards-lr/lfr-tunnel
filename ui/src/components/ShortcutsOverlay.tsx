@@ -24,14 +24,20 @@ type Shortcut = {
   keys: string;
   label: string;
   path?: string;
-  // The bundle key `label` already exists under, where one does (#2247). The table is a
-  // module-level const, so t() cannot be called here -- it is applied at render instead.
-  // Entries with no key are strings the bundle does not carry yet; they belong to #2248.
+  // The bundle key `label` resolves through (#2247). The table is a module-level const, so
+  // t() cannot be called here -- it is applied at render instead. Every entry carries one as
+  // of #2248; the field stays optional so a new row is not blocked on a bundle edit, and
+  // `label` remains the English fallback either way.
   labelKey?: string;
 };
 
 const GO_TO: Shortcut[] = [
-  { keys: 'g d', label: 'Dashboard', path: '/dashboard' },
+  {
+    keys: 'g d',
+    label: 'Dashboard',
+    labelKey: 'nav_dashboard',
+    path: '/dashboard',
+  },
   {
     keys: 'g a',
     label: 'Analytics',
@@ -149,9 +155,21 @@ function isReachable(path: string): boolean {
 // Documented but not bound here -- the sidebar owns these (#1562). Listed because the overlay is
 // meant to answer "what can I do with the keyboard", not "what did this component register".
 const SIDEBAR_KEYS: Shortcut[] = [
-  { keys: '↑ ↓', label: 'Move between sidebar links' },
-  { keys: 'Home / End', label: 'First or last sidebar link' },
-  { keys: 'Tab', label: 'Move through the page as usual' },
+  {
+    keys: '↑ ↓',
+    label: 'Move between sidebar links',
+    labelKey: 'shortcuts_sidebar_move',
+  },
+  {
+    keys: 'Home / End',
+    label: 'First or last sidebar link',
+    labelKey: 'shortcuts_sidebar_ends',
+  },
+  {
+    keys: 'Tab',
+    label: 'Move through the page as usual',
+    labelKey: 'shortcuts_tab',
+  },
 ];
 
 /** True when the user is typing, and a plain key must be left alone. */
@@ -287,7 +305,7 @@ export default function ShortcutsOverlay({ user }: { user: any }) {
               <dt>
                 <kbd>{s.keys}</kbd>
               </dt>
-              <dd>{s.label}</dd>
+              <dd>{s.labelKey ? t(s.labelKey, s.label) : s.label}</dd>
             </div>
           ))}
           <div className="shortcuts-row">

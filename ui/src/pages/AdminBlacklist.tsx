@@ -228,7 +228,10 @@ export default function AdminBlacklist() {
             <input
               id="reason"
               type="text"
-              placeholder="e.g. Malicious payload scan"
+              placeholder={t(
+                'ban_reason_placeholder',
+                'e.g. Malicious payload scan',
+              )}
               value={reasonInput}
               onChange={(e) => setReasonInput(e.target.value)}
               className="input-field w-full"

@@ -459,7 +459,9 @@ export default function AdminSettings() {
       </div>
 
       <div className="card mb-xl">
-        <h4 className="section-title mb-lg">Domain Allocation</h4>
+        <h4 className="section-title mb-lg">
+          {t('domain_allocation_title', 'Domain Allocation')}
+        </h4>
         <div className="form-group mt-lg">
           <label className="form-label" htmlFor="field">
             Allocation Rule
@@ -471,24 +473,41 @@ export default function AdminSettings() {
             onChange={(e) => setAllocationRule(e.target.value)}
           >
             <option value="contextual">
-              Contextual (Match requesting domain)
+              {t('alloc_contextual', 'Contextual (Match requesting domain)')}
             </option>
             <option value="preference">
-              Preference (Use configured domain list order)
+              {t(
+                'alloc_preference',
+                'Preference (Use configured domain list order)',
+              )}
             </option>
             <option value="user-preference">
-              User Preference (Use user's preferred domain)
+              {t(
+                'alloc_user_preference',
+                "User Preference (Use user's preferred domain)",
+              )}
             </option>
             <option value="round-robin">
-              Round Robin (Sequential load balancing)
+              {t(
+                'alloc_round_robin',
+                'Round Robin (Sequential load balancing)',
+              )}
             </option>
             <option value="hashing">
-              Deterministic Hashing (Consistent for user/IP)
+              {t(
+                'alloc_hashing',
+                'Deterministic Hashing (Consistent for user/IP)',
+              )}
             </option>
             <option value="least-connections">
-              Least Connections (Load-based allocation)
+              {t(
+                'alloc_least_connections',
+                'Least Connections (Load-based allocation)',
+              )}
             </option>
-            <option value="random">Random Allocation</option>
+            <option value="random">
+              {t('alloc_random', 'Random Allocation')}
+            </option>
           </select>
         </div>
         <div className="form-group">
@@ -519,7 +538,9 @@ export default function AdminSettings() {
       </div>
 
       <div className="card mb-xl">
-        <h4 className="section-title mb-lg">Vanity Domain Hook</h4>
+        <h4 className="section-title mb-lg">
+          {t('vanity_hook_title', 'Vanity Domain Hook')}
+        </h4>
         {user.role !== 'owner' && (
           <div className="alert-banner alert-banner--warning mb-lg text-sm m-0">
             ⚠️ Only the System Owner is authorized to modify vanity domain hook
@@ -548,7 +569,7 @@ export default function AdminSettings() {
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="field-3">
-            Vanity Domain Hook Script Path
+            {t('vanity_hook_path', 'Vanity Domain Hook Script Path')}
           </label>
           <input
             id="field-3"
@@ -556,7 +577,10 @@ export default function AdminSettings() {
             className="input-field"
             value={vanityHookPath}
             onChange={(e) => setVanityHookPath(e.target.value)}
-            placeholder="/usr/local/bin/lfr-vanity-hook.sh"
+            placeholder={t(
+              'vanity_hook_path_placeholder',
+              '/usr/local/bin/lfr-vanity-hook.sh',
+            )}
             disabled={user.role !== 'owner' || !enableVanityHook}
           />
         </div>

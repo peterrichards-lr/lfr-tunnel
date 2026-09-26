@@ -72,7 +72,12 @@ const formatBytes = (bytes: number, decimals = 2) => {
 // beside it because that is what the AWS invoice charges for. A "not measured yet" standing
 // renders as an em dash rather than as 0, because a gateway that has not swept and a user
 // who sent nothing are different facts.
-const renderQuotaUsage = (q: User['bandwidth_quota']) => {
+// `t` is threaded in rather than read from the hook: this is a module-level helper, so
+// useI18n() cannot be called here (#2248).
+const renderQuotaUsage = (
+  q: User['bandwidth_quota'],
+  t: (key: string, fallback: string) => string,
+) => {
   if (!q) return null;
   if (!q.allowance_bytes || q.allowance_bytes <= 0) {
     return (
@@ -89,7 +94,12 @@ const renderQuotaUsage = (q: User['bandwidth_quota']) => {
       <span className="badge badge-danger">stopped</span>
     ) : null;
   return (
-    <div title="Enforced on the total (in + out). Egress is shown separately because that is the figure that maps to the AWS invoice.">
+    <div
+      title={t(
+        'bandwidth_quota_total_note',
+        'Enforced on the total (in + out). Egress is shown separately because that is the figure that maps to the AWS invoice.',
+      )}
+    >
       <span className="text-2xs text-muted">Bandwidth:</span>{' '}
       <strong>
         {q.measured ? formatBytes(q.used_bytes) : '—'} /{' '}
@@ -653,10 +663,14 @@ export default function AdminUsers() {
 
   const columns: ColumnDef<User>[] = useMemo(
     () => [
-      { key: 'email', label: 'User', sortable: true },
+      { key: 'email', label: t('th_user', 'User'), sortable: true },
       { key: 'role', label: t('th_role', 'Role'), sortable: true },
       { key: 'status', label: t('status', 'Status'), sortable: true },
-      { key: 'auth_method', label: 'Auth Method', sortable: true },
+      {
+        key: 'auth_method',
+        label: t('th_auth_method', 'Auth Method'),
+        sortable: true,
+      },
       { key: 'quotas', label: t('th_quotas', 'Quotas'), sortable: false },
       {
         key: 'last_login_at',
@@ -858,7 +872,8 @@ export default function AdminUsers() {
                     onClick={() => requestSort('email')}
                     aria-sort={getAriaSort('email')}
                   >
-                    User{getSortIndicator('email')}
+                    {t('th_user', 'User')}
+                    {getSortIndicator('email')}
                   </th>
                 )}
                 {isColumnVisible('role') && (
@@ -887,7 +902,8 @@ export default function AdminUsers() {
                     onClick={() => requestSort('auth_method')}
                     aria-sort={getAriaSort('auth_method')}
                   >
-                    Auth Method{getSortIndicator('auth_method')}
+                    {t('th_auth_method', 'Auth Method')}
+                    {getSortIndicator('auth_method')}
                   </th>
                 )}
                 {isColumnVisible('quotas') && (
@@ -1040,7 +1056,7 @@ export default function AdminUsers() {
                                   : '3'}
                               </strong>
                             </div>
-                            {renderQuotaUsage(u.bandwidth_quota)}
+                            {renderQuotaUsage(u.bandwidth_quota, t)}
                           </div>
                         </td>
                       )}

@@ -137,10 +137,21 @@ test.describe('Portal V1 declares its locale on <html lang>', () => {
   test('an unsupported locale declares English rather than a language it is not rendering', async ({
     page,
   }) => {
-    // `?lang=` is arbitrary input and V2 seeds the shared preference from navigator.language,
-    // so a code with no bundle is reachable. The server answers those with the English bundle
-    // (handleGetI18n), and echoing the code would claim Italian over English prose — worse
-    // than the lang="en" this fix replaces.
+    // BOUNDING, not FIRING: `lang` was always `en` before #2262, so this case passes against
+    // the unfixed code too and is no evidence the fix works. It pins the deliberate edge —
+    // cross it, by echoing the requested code, and this goes red.
+    //
+    // Worth pinning because the edge is reachable: `?lang=` is arbitrary input here and V2
+    // seeds the shared `lfr_lang` preference from navigator.language, so 'it' arrives from a
+    // browser nobody configured. The server answers an unsupported locale with the English
+    // bundle (handleGetI18n), and declaring Italian over English prose would be worse than
+    // the lang="en" this fix replaces.
+    //
+    // Switched away from English first, so the assertion is about a value being *reset* and
+    // not about one that never moved.
+    await page.evaluate(() => changePortalLanguage('ja'));
+    await expect(page.locator('#nav-account')).toHaveText('アカウント設定');
+
     await page.evaluate(() => changePortalLanguage('it'));
     await expect(page.locator('#nav-account')).toHaveText('Account Settings');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');

@@ -122,7 +122,7 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.created",
-		TargetType: "pat",
+		TargetType: auditTargetPAT,
 		TargetID:   "", // Will update properly if pat.ID was string, but it's an int64
 		Details:    "Personal Access Token created",
 		IPAddress:  ipAddress,
@@ -163,7 +163,7 @@ func (s *portalService) DeleteToken(user *db.User, tokenID string, ipAddress str
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.deleted",
-		TargetType: "pat",
+		TargetType: auditTargetPAT,
 		TargetID:   tokenID,
 		Details:    "Personal Access Token deleted",
 		IPAddress:  ipAddress,

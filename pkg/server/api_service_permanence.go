@@ -45,6 +45,10 @@ type ExtensionRequestView struct {
 const (
 	resourceKindSubdomain    = "subdomain"
 	resourceKindCustomDomain = "custom_domain"
+	// auditTargetPAT is the TargetType every Personal Access Token audit entry carries. Named
+	// because three call sites spell it, and three copies of a string that has to match is the
+	// shape of an audit trail that silently splits in two after a typo.
+	auditTargetPAT = "pat"
 )
 
 // reservationResourceKind names what a reservation row actually is.
@@ -219,7 +223,7 @@ func (s *portalService) auditPermanence(actor, action, targetID, details, ip str
 	if aerr := s.db.WriteAuditEntry(&db.AuditEntry{
 		ActorID:    actor,
 		Action:     action,
-		TargetType: "pat",
+		TargetType: auditTargetPAT,
 		TargetID:   targetID,
 		Details:    details,
 		IPAddress:  ip,

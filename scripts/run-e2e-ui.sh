@@ -38,6 +38,7 @@ export E2E_PROJECT_NAME
 
 export E2E_MAILPIT_PORT=8025
 export E2E_PROXY_PORT=8000
+export E2E_WS_ECHO_PORT=8090
 
 echo "=== Building UI ==="
 cd ui && pnpm install && pnpm run build
@@ -94,7 +95,7 @@ fi
 
 docker-compose build --no-cache lfr-tunnel lfr-tunneld
 echo "=== Starting E2E Environment ==="
-docker-compose up -d mailpit mock-target lfr-tunneld nginx-proxy lfr-tunnel
+docker-compose up -d mailpit mock-target ws-echo lfr-tunneld nginx-proxy lfr-tunnel
 
 # Wait for services to be healthy
 echo "=== Waiting for services to become healthy ==="

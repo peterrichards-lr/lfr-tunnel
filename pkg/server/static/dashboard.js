@@ -54,6 +54,15 @@ function applyTranslations(bundle, lang) {
 
   const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
   document.documentElement.dir = dir;
+  // The locale, not just the direction (#2262). `dir` was set here and `lang` was not, so
+  // dashboard.html's hardcoded <html lang="en"> survived every switch and a Japanese portal
+  // still declared itself English -- which is where VoiceOver, NVDA and JAWS get the speech
+  // synthesiser from, and what :lang(), hyphenation and font fallback read.
+  //
+  // This is the only place either path assigns a language: init() calls applyTranslations()
+  // with the restored preference on load, and changePortalLanguage() calls it on every switch,
+  // so one assignment covers both and the two attributes cannot drift apart.
+  document.documentElement.lang = htmlLangFor(lang);
 
   const pl = document.getElementById('footer-privacy-link');
   if (pl && pl.getAttribute('href').startsWith('/privacy')) {
@@ -89,6 +98,21 @@ const supportedLocales = [
   { code: 'ro', name: 'Română' },
   { code: 'zh', name: '简体中文' },
 ];
+
+// The value for <html lang> (#2262). `lang` takes a BCP 47 tag; every code above is an ISO 639-1
+// primary subtag and therefore valid as-is. `zh` is accepted rather than narrowed to `zh-Hans`:
+// the bundle is Simplified, so `zh-Hans` would be more precise, but the codes are also the
+// persisted `lfr_lang` value and the `?lang=` query, and widening them is not this fix's job.
+//
+// Anything NOT in that list resolves to 'en' instead of being echoed. That case is reachable:
+// `?lang=` is arbitrary user input here, and Portal V2 seeds the shared `lfr_lang` preference
+// from navigator.language, so an Italian browser writes 'it'. The server answers an unknown
+// locale with the English bundle (handleGetI18n, pkg/server/i18n.go:164), so echoing 'it' would
+// declare a language the page is not rendering -- strictly worse than the hardcoded lang="en"
+// it replaces, because a screen reader would then read English prose with an Italian voice.
+function htmlLangFor(lang) {
+  return supportedLocales.some((l) => l.code === lang) ? lang : 'en';
+}
 
 // Status -> badge class for the user vocabulary, as data rather than as a ternary (#1866).
 //

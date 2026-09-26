@@ -51,6 +51,20 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
       document.documentElement.dir = 'ltr';
     }
 
+    // ...and the locale itself (#2262). Only `dir` was set here, so index.html's hardcoded
+    // <html lang="en"> survived every switch: a screen reader picked an English synthesiser for
+    // all nine non-English locales, and `aria-label` landmark names were announced half in each
+    // language. This effect is keyed on `language`, so it also runs on mount with the preference
+    // restored from localStorage -- the reload path is covered by the same line.
+    //
+    // Guarded against the supported set rather than assigned raw: `language` falls back to
+    // navigator.language's primary subtag, which can be any tag at all ('it-IT' -> 'it'), and
+    // /api/i18n answers an unknown locale with the English bundle (pkg/server/i18n.go:164).
+    // Echoing it would declare a language the page is not rendering. Every code in
+    // DEFAULT_LANGUAGES is an ISO 639-1 subtag and so valid BCP 47 as-is.
+    const isSupported = DEFAULT_LANGUAGES.some((l) => l.code === language);
+    document.documentElement.lang = isSupported ? language : 'en';
+
     // Fetch translations
     axios
       .get(`/api/i18n?lang=${language}`)

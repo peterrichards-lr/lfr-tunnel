@@ -53,7 +53,25 @@ services:
       lfr-tunneld:
         condition: service_healthy
 
-  # 5. Client CLI Container
+  # 5. WebSocket echo target (#2249)
+  #
+  # A second origin, alongside mock-target, because nginx serving a static file cannot be
+  # upgraded -- so the data plane's WebSocket path had no way to be driven end to end and broke
+  # in production for three and a half months (#2179, #2213) with CI green throughout. It also
+  # answers ordinary GETs, which is what lets a spec separate "the tunnel is down" from "the
+  # upgrade was refused".
+  #
+  # Published as well as exposed so a spec can dial it directly as a CONTROL: a failure there is
+  # the fixture, a failure only through the tunnel is the subject.
+  ws-echo:
+    build:
+      context: ./ws-echo
+    ports:
+      - "${E2E_WS_ECHO_PORT:-8090}:8090"
+    expose:
+      - "8090"
+
+  # 6. Client CLI Container
   lfr-tunnel:
     build:
       context: ../../

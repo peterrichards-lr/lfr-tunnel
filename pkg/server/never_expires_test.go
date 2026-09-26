@@ -431,12 +431,16 @@ func TestAnUnsetPolicyIsAdvertisedAsDisabledRatherThanBlank(t *testing.T) {
 func TestAPositiveLifetimeIsUnaffectedByAnyPolicy(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, policy := range []config.NeverExpiresPolicy{config.NeverExpiresDisabled, config.NeverExpiresApproval, config.NeverExpiresAllowed} {
-		got, err := resolvePATExpiry(policy, 90, now)
+		got, requested, err := resolvePATExpiry(policy, 90, now)
 		if err != nil {
 			t.Fatalf("policy %q refused a 90-day token: %v", policy, err)
 		}
 		if got == nil || !got.Equal(now.AddDate(0, 0, 90)) {
 			t.Errorf("policy %q: 90 days became %v", policy, got)
+		}
+		// And it raises no permanence request: the holder did not ask for one (#2267).
+		if requested {
+			t.Errorf("policy %q: a 90-day token queued a permanence request", policy)
 		}
 	}
 }
@@ -454,7 +458,21 @@ func TestAPositiveLifetimeIsUnaffectedByAnyPolicy(t *testing.T) {
 // a comment: the function has to name one of the resolvers or the config accessor, or the build
 // fails and the author has to decide which.
 
-var permanenceWriteRE = regexp.MustCompile(`ExpiresAt:\s*nil|ExpiresAt\s*=\s*nil|UpdatePATExpiry\([^)]*,\s*nil\s*\)`)
+// ANY write of an expiry, not only a literal nil.
+//
+// This matched `ExpiresAt: nil`, `ExpiresAt = nil` and UpdatePATExpiry(..., nil) -- the syntactic
+// shape of the five doors that had already been found. Review of #2267 found a sixth it could
+// not see: `res.ExpiresAt = s.getUserSubdomainExpiry(resOwner)`, a nil arriving through a
+// function call. The gate was green on a package containing the defect it was written to
+// prevent, which is a gate asserting the instance and not the class (github-workflow SKILL 5b).
+//
+// So the question the gate now asks is the useful one -- "does this function decide an expiry?"
+// -- and the answer has to be "yes, and it consults the policy to do it".
+var permanenceWriteRE = regexp.MustCompile(`ExpiresAt:\s*\S|ExpiresAt\s*=[^=]|UpdatePATExpiry\(`)
+
+// expiryCopyRE matches an expiry being carried from somewhere else -- `ExpiresAt: res.ExpiresAt`,
+// `pat.ExpiresAt = existing.ExpiresAt`. The value was decided by whoever set the source.
+var expiryCopyRE = regexp.MustCompile(`ExpiresAt\s*[:=]\s*[A-Za-z_][A-Za-z0-9_.]*\.ExpiresAt\b`)
 
 // policyAware reports whether a function body consults the never_expires policy at all.
 var policyMarkers = []string{
@@ -463,15 +481,39 @@ var policyMarkers = []string{
 	"resolveCustomDomainExpiry",
 	"permanenceGrantAllowed",
 	"NeverExpires",
+	// The two resolvers that apply a policy on the caller's behalf. A function that takes its
+	// expiry from one of these HAS consulted the policy -- indirectly, but through code that
+	// cannot forget to. reservationExpiryForKind is the one that picks by resource kind, which
+	// is the rule the sixth door broke.
+	"reservationExpiryFor",
+	"getUserSubdomainExpiry",
+	"roleExpiry",
 }
 
 func policyAware(funcBody string) bool {
+	// Comments stripped FIRST. They were not, and unguardedPermanenceWrites did strip them, so
+	// a function that wrote an unguarded nil and merely NAMED a resolver in a comment was
+	// judged guarded -- the gate vouching for prose (found reviewing #2267).
+	stripped := stripComments(funcBody)
 	for _, marker := range policyMarkers {
-		if strings.Contains(funcBody, marker) {
+		if strings.Contains(stripped, marker) {
 			return true
 		}
 	}
 	return false
+}
+
+// stripComments removes line comments, so neither half of this gate can be satisfied by prose.
+func stripComments(src string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(src, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // unguardedPermanenceWrites returns "func name: line" for every expiry-to-nil write in src that
@@ -479,24 +521,49 @@ func policyAware(funcBody string) bool {
 func unguardedPermanenceWrites(src string) []string {
 	var found []string
 	fn := "(file scope)"
-	for _, line := range strings.Split(src, "\n") {
+	for _, line := range strings.Split(stripComments(src), "\n") {
 		if strings.HasPrefix(line, "func ") {
 			fn = strings.TrimSpace(strings.TrimPrefix(line, "func "))
 			if i := strings.Index(fn, "{"); i > 0 {
 				fn = strings.TrimSpace(fn[:i])
 			}
 		}
-		if strings.Contains(line, "//") {
-			// A mention inside a comment is prose about the rule, not a write of it.
-			if idx := strings.Index(line, "//"); idx >= 0 {
-				line = line[:idx]
-			}
+		if !permanenceWriteRE.MatchString(line) {
+			continue
 		}
-		if permanenceWriteRE.MatchString(line) {
-			found = append(found, fn)
+		// Carrying a value that was already decided is not a second decision.
+		if expiryCopyRE.MatchString(line) {
+			continue
 		}
+		found = append(found, fn)
 	}
 	return found
+}
+
+// persistCalls are the four ways a governed row reaches the database. A function that calls one
+// of them is deciding what gets stored; one that does not is reading, formatting or serialising,
+// and its ExpiresAt is not a decision this policy governs.
+//
+// Scoped this way rather than by mentioning the TYPE, which was the first attempt and was still
+// too broad: CreateInvitation looks a reservation up to validate against it and then writes a
+// GuestInvitation's own expiry, and handleAdminListSubdomains copies res.ExpiresAt into a
+// response DTO. Neither decides a governed expiry, and a gate that shouts about them is one
+// nobody reads. Session cookies, guest invitations and IP bans all have an ExpiresAt and none of
+// them is never_expires's business.
+var persistCalls = []string{
+	"CreateSubdomainReservation",
+	"UpdateSubdomainReservation",
+	"CreatePAT",
+	"UpdatePATExpiry",
+}
+
+func persistsAGovernedRow(funcBody string) bool {
+	for _, call := range persistCalls {
+		if strings.Contains(funcBody, call+"(") {
+			return true
+		}
+	}
+	return false
 }
 
 // bodiesOf splits a Go source file into its top-level function bodies, keyed by signature. Crude
@@ -504,7 +571,7 @@ func unguardedPermanenceWrites(src string) []string {
 // real parser here would be more machinery than the rule is worth.
 func bodiesOf(src string) map[string]string {
 	out := map[string]string{}
-	lines := strings.Split(src, "\n")
+	lines := strings.Split(stripComments(src), "\n")
 	for i := 0; i < len(lines); i++ {
 		if !strings.HasPrefix(lines[i], "func ") {
 			continue
@@ -552,6 +619,9 @@ func TestNoUnguardedRouteToPermanenceInThisPackage(t *testing.T) {
 		}
 		scanned++
 		for sig, body := range bodiesOf(string(src)) {
+			if !persistsAGovernedRow(body) {
+				continue
+			}
 			if len(unguardedPermanenceWrites(body)) == 0 {
 				continue
 			}
@@ -599,6 +669,61 @@ func TestTheUnguardedPermanenceGateFiresAndIsNotVacuous(t *testing.T) {
 	return nil
 }
 `
+
+	// THE SIXTH DOOR, as it was actually written. A nil arriving through a function call, in a
+	// function that persists the row. The gate matched only the literal `= nil` and was green on
+	// this; that is the case it exists to fail now.
+	sixthDoor := `func (s *portalService) AdminDemoteReservation(actor, idStr, ip string) (*db.SubdomainReservation, error) {
+	res.ExpiresAt = s.somethingThatDoesNotConsultThePolicy(resOwner)
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		return nil, ErrInternalError
+	}
+	return res, nil
+}
+`
+	if got := unguardedPermanenceWrites(sixthDoor); len(got) == 0 {
+		t.Error("the gate cannot see an expiry written through a function call; that is the defect review of #2267 found")
+	}
+	if policyAware(sixthDoor) {
+		t.Error("a function that names no resolver was judged policy-aware")
+	}
+	if !persistsAGovernedRow(sixthDoor) {
+		t.Error("a function calling UpdateSubdomainReservation is not recognised as persisting a governed row")
+	}
+
+	// A policy marker in a COMMENT must not launder an unguarded write. policyAware read the
+	// raw body while the write scan stripped comments, so prose satisfied one half of the gate.
+	commented := `func grantForever(res *db.SubdomainReservation) {
+	// permanenceGrantAllowed is deliberately not called here
+	res.ExpiresAt = nil
+	_ = db.UpdateSubdomainReservation(res)
+}
+`
+	if policyAware(commented) {
+		t.Error("a policy marker inside a comment made an unguarded write look guarded")
+	}
+
+	// CONTROL for the scope: a guest invitation decides its own expiry and is none of this
+	// policy's business. Flagging it is how a gate becomes noise and stops being read.
+	invitation := `func (s *portalService) CreateInvitation(user *db.User) (*db.GuestInvitation, error) {
+	res, _ := s.db.GetSubdomainReservationByName(subdomain, domain)
+	inv := &db.GuestInvitation{ExpiresAt: expiresAt}
+	return inv, nil
+}
+`
+	if persistsAGovernedRow(invitation) {
+		t.Error("a function that writes a GuestInvitation is being treated as writing a governed row")
+	}
+
+	// CONTROL: carrying an already-decided value into a response is not a decision.
+	copying := `func view(res *db.SubdomainReservation) any {
+	_ = s.db.UpdateSubdomainReservation(res)
+	return map[string]any{"x": row{ExpiresAt: res.ExpiresAt}}
+}
+`
+	if got := unguardedPermanenceWrites(copying); len(got) != 0 {
+		t.Errorf("copying an expiry was read as deciding one: %v", got)
+	}
 
 	if got := unguardedPermanenceWrites(unguarded); len(got) == 0 {
 		t.Error("the gate did not see an unguarded `ExpiresAt: nil`; it would pass on the defect it exists for")

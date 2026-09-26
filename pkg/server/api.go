@@ -388,7 +388,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	// server-side gate on permanence anywhere, and it answered a question the operator was never
 	// asked: whether a non-expiring credential is acceptable on THIS gateway at all. An admin
 	// could always mint one, on every gateway, with nothing configurable about it.
-	expiresAt, err := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.ExpiresIn, time.Now())
+	expiresAt, permanenceRequested, err := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.ExpiresIn, time.Now())
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -410,6 +410,10 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		TokenPrefix: prefix,
 		Name:        req.Name,
 		ExpiresAt:   expiresAt,
+		// Recorded on the row at creation rather than left for the holder to raise
+		// separately: they already asked, by choosing "never", and making them ask twice
+		// is a request flow that loses requests (#2267).
+		PermanenceState: permanenceStateFor(permanenceRequested),
 	}
 
 	if err := s.db.CreatePAT(pat); err != nil {

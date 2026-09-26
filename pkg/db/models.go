@@ -7,6 +7,10 @@ import (
 
 var (
 	ErrNotFound = errors.New("not found")
+	// ErrStateChanged means a conditional write matched no row: the record is gone, or it is
+	// no longer in the state the caller believed it was (#2267). Distinct from ErrNotFound
+	// because the caller usually wants to re-read and say which it was.
+	ErrStateChanged = errors.New("record is not in the expected state")
 )
 
 type AuditEntry struct {
@@ -179,6 +183,14 @@ type PersonalAccessToken struct {
 	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
 	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+	// PermanenceState is where a request to make this token never expire has got to:
+	// PATPermanenceNone, Pending, Granted or Denied (#2267). Only ever set where the
+	// operator's never_expires.tokens policy is "approval".
+	//
+	// Serialised so both portal arms can show the holder that they asked and what came of it.
+	// Empty is omitted, which keeps every token created before this indistinguishable from one
+	// whose holder never asked -- because that is what they are.
+	PermanenceState string `json:"permanence_state,omitempty"`
 }
 
 type GatewayRun struct {

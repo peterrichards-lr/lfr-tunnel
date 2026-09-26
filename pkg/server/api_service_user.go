@@ -72,6 +72,7 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 	}
 
 	var expiresAt *time.Time
+	permanenceState := db.PATPermanenceNone
 	if rawExpiresAt != "" {
 		parsed, err := time.Parse(time.RFC3339, rawExpiresAt)
 		if err != nil {
@@ -83,11 +84,12 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 		// expires_in_days <= 0 is handleCreateToken's. Both go through resolvePATExpiry so
 		// there is one rule and not two implementations of it -- this method had no gate at
 		// all before #2264, and would have shipped that gap the day it was routed.
-		resolved, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), 0, time.Now())
+		resolved, requested, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), 0, time.Now())
 		if perr != nil {
 			return "", nil, perr
 		}
 		expiresAt = resolved
+		permanenceState = permanenceStateFor(requested)
 	}
 
 	pats, err := s.db.ListPATs(user.ID)
@@ -104,12 +106,13 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 	prefix := rawToken[:12]
 
 	pat := &db.PersonalAccessToken{
-		UserID:      user.ID,
-		Name:        name,
-		TokenHash:   hashStr,
-		TokenPrefix: prefix,
-		ExpiresAt:   expiresAt,
-		CreatedAt:   time.Now(),
+		UserID:          user.ID,
+		Name:            name,
+		TokenHash:       hashStr,
+		TokenPrefix:     prefix,
+		ExpiresAt:       expiresAt,
+		PermanenceState: permanenceState,
+		CreatedAt:       time.Now(),
 	}
 
 	if err := s.db.CreatePAT(pat); err != nil {
@@ -119,7 +122,7 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.created",
-		TargetType: "pat",
+		TargetType: auditTargetPAT,
 		TargetID:   "", // Will update properly if pat.ID was string, but it's an int64
 		Details:    "Personal Access Token created",
 		IPAddress:  ipAddress,
@@ -160,7 +163,7 @@ func (s *portalService) DeleteToken(user *db.User, tokenID string, ipAddress str
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.deleted",
-		TargetType: "pat",
+		TargetType: auditTargetPAT,
 		TargetID:   tokenID,
 		Details:    "Personal Access Token deleted",
 		IPAddress:  ipAddress,

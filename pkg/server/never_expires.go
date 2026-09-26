@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
 )
 
 // One home for every question of the form "may this be permanent, and if not, what expiry does it
@@ -34,19 +35,23 @@ const defaultRequestedPATExpiryDays = 30
 //
 // days <= 0 is the wire's spelling of "never" -- both portal arms send 0 -- so it is the
 // permanence request, not an invalid duration.
-func resolvePATExpiry(policy config.NeverExpiresPolicy, days int, now time.Time) (*time.Time, error) {
+// requested is true when the caller asked for "never" and the policy turned that into a pending
+// request rather than a grant or a refusal -- the one case where the token is created with an
+// expiry the holder did not choose, and so the one case where something has to be recorded for
+// an admin to act on (#2267).
+func resolvePATExpiry(policy config.NeverExpiresPolicy, days int, now time.Time) (expiry *time.Time, requested bool, err error) {
 	if days > 0 {
 		t := now.AddDate(0, 0, days)
-		return &t, nil
+		return &t, false, nil
 	}
 	switch {
 	case policy.GrantsImmediately():
-		return nil, nil
+		return nil, false, nil
 	case policy.RequiresApproval():
 		t := now.AddDate(0, 0, defaultRequestedPATExpiryDays)
-		return &t, nil
+		return &t, true, nil
 	default:
-		return nil, ErrPermanenceNotAllowed
+		return nil, false, ErrPermanenceNotAllowed
 	}
 }
 
@@ -134,4 +139,35 @@ func logNeverExpiresPolicy(cfg *config.ServerConfig) {
 			cfg.NeverExpiresSubdomains(), strings.Join(roles, ", "), defaultSubdomainExpiryDays,
 			config.NeverExpiresApproval, config.NeverExpiresAllowed))
 	}
+}
+
+// permanenceStateFor turns resolvePATExpiry's "a request was raised" into the state stored on the
+// row, so the two callers that create tokens cannot spell it differently (#2267).
+func permanenceStateFor(requested bool) string {
+	if requested {
+		return db.PATPermanencePending
+	}
+	return db.PATPermanenceNone
+}
+
+// resolveAdminGrantedExpiry is resolvePATExpiry for an action an ADMIN is taking directly.
+//
+// The difference is what `approval` means to each caller. To a holder it means "ask, and wait":
+// the token is created with an ordinary expiry and a request goes to a queue. To an admin it
+// means "you are the approval" -- there is nobody else to wait for, and the admin route through
+// the permanence queue already grants outright, so the extend route has to agree or the same
+// person gets two different answers to the same intent depending on which button they pressed.
+//
+// `disabled` still refuses. That is the state in which this gateway grants permanence by no
+// route at all, and an admin is not an exception to it -- a rule any admin can step around is a
+// preference (#2264).
+func resolveAdminGrantedExpiry(policy config.NeverExpiresPolicy, days int, now time.Time) (*time.Time, error) {
+	if days > 0 {
+		t := now.AddDate(0, 0, days)
+		return &t, nil
+	}
+	if !permanenceGrantAllowed(policy) {
+		return nil, ErrPermanenceNotAllowed
+	}
+	return nil, nil
 }

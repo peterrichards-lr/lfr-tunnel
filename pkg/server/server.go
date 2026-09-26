@@ -1630,6 +1630,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.handleCreateToken(w, r)
 			return
 		}
+		// Ordered BEFORE the DELETE prefix match below is irrelevant (different methods), but
+		// it must come before any future POST prefix on /api/tokens/ for the same reason the
+		// admin block orders /extend ahead of the bare prefix (#2267).
+		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/tokens/") && strings.HasSuffix(r.URL.Path, "/request-permanence") {
+			s.handleRequestTokenPermanence(w, r)
+			return
+		}
 		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/tokens/") {
 			s.handleDeleteToken(w, r)
 			return
@@ -3937,6 +3944,18 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Both ahead of the bare /api/admin/tokens/ DELETE prefix below, and the listing ahead of
+	// the decision so "permanence-requests" is never mistaken for a token id (#2267).
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/tokens/permanence-requests" {
+		s.handleAdminListTokenPermanenceRequests(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/tokens/") && strings.HasSuffix(r.URL.Path, "/permanence") {
+		s.handleAdminDecideTokenPermanence(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/admin/tokens/") {
 		s.handleAdminDeleteToken(w, r, actor)
 		return
@@ -5354,7 +5373,13 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 	// the reason resolvePATExpiry is shared rather than inlined at the create path (#2264).
 	// An admin is subject to the operator's policy: under `disabled` this gateway grants
 	// permanence by no route, admin routes included.
-	expiresAt, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.Days, time.Now())
+	//
+	// resolveAdminGrantedExpiry, not resolvePATExpiry: an ADMIN saying "never" under
+	// `approval` IS the approval, so it grants. Running an admin through the holder's resolver
+	// silently handed them 30 days and raised no request, while the same admin answering the
+	// same intent through the permanence queue got true permanence -- two admin routes, two
+	// answers, neither reported (#2267 review).
+	expiresAt, perr := resolveAdminGrantedExpiry(s.cfg.NeverExpiresTokens(), req.Days, time.Now())
 	if perr != nil {
 		respondWithError(w, perr)
 		return

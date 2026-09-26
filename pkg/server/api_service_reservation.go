@@ -225,7 +225,7 @@ func (s *portalService) CreateCustomDomain(user *db.User, domain, ip string) (*d
 		UserID:    user.ID,
 		Subdomain: "",
 		Domain:    domain,
-		ExpiresAt: resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), s.getUserSubdomainExpiry(user), time.Now()),
+		ExpiresAt: s.reservationExpiryForKind(resourceKindCustomDomain, user),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -520,17 +520,33 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 }
 
 // AdminListExtensions lists all reservations that have requested an extension.
-func (s *portalService) AdminListExtensions() ([]*db.SubdomainReservation, error) {
+//
+// Each entry says which kind of resource it is and whether permanence is on the table for it
+// (#2267). Both were previously left for the two portal arms to work out from `subdomain === ”`
+// and from nothing respectively -- the first is how the queue came to call a custom domain a
+// subdomain, and the second is how an admin came to be offered a "Permanent" button that, after
+// #2264, a gateway set to `disabled` answers with a 403.
+func (s *portalService) AdminListExtensions() ([]*ExtensionRequestView, error) {
 	all, err := s.db.ListAllSubdomainReservations()
 	if err != nil {
 		return nil, ErrInternalError
 	}
 
-	var list []*db.SubdomainReservation
+	list := make([]*ExtensionRequestView, 0)
 	for _, res := range all {
-		if res.ExtensionRequested {
-			list = append(list, res)
+		if !res.ExtensionRequested {
+			continue
 		}
+		kind := reservationResourceKind(res)
+		policy := s.cfg.NeverExpiresSubdomains()
+		if kind == resourceKindCustomDomain {
+			policy = s.cfg.NeverExpiresCustomDomains()
+		}
+		list = append(list, &ExtensionRequestView{
+			SubdomainReservation: res,
+			ResourceKind:         kind,
+			PermanenceAllowed:    permanenceGrantAllowed(policy),
+		})
 	}
 
 	return list, nil
@@ -554,8 +570,18 @@ func (s *portalService) AdminApproveExtension(actor, idStr string, days int, per
 	// An admin approving permanence is still subject to the operator's policy (#2264). A rule
 	// any admin can step around is a preference, not a rule -- and `disabled` is the state in
 	// which this gateway grants permanence by no route at all, which has to include this one.
-	if permanent && !permanenceGrantAllowed(s.cfg.NeverExpiresSubdomains()) {
-		return nil, ErrPermanenceNotAllowed
+	//
+	// Which policy depends on what the row IS: a custom domain is a reservation with an empty
+	// subdomain (#1004), and charging it against never_expires.subdomains would mean the two
+	// settings the owner asked to be independent were not (#2267).
+	if permanent {
+		policy := s.cfg.NeverExpiresSubdomains()
+		if reservationResourceKind(res) == resourceKindCustomDomain {
+			policy = s.cfg.NeverExpiresCustomDomains()
+		}
+		if !permanenceGrantAllowed(policy) {
+			return nil, ErrPermanenceNotAllowed
+		}
 	}
 
 	res.ExtensionRequested = false
@@ -608,7 +634,11 @@ func (s *portalService) AdminDemoteReservation(actor, idStr, ip string) (*db.Sub
 		return nil, ErrInternalError
 	}
 
-	res.ExpiresAt = s.getUserSubdomainExpiry(resOwner)
+	// By what the ROW is, not by which function is asking -- see reservationExpiryForKind.
+	// This read s.getUserSubdomainExpiry unconditionally, so demoting a custom domain applied
+	// never_expires.subdomains to it and could make it permanent on a gateway whose
+	// custom-domain policy forbids that (#2267 review).
+	res.ExpiresAt = s.reservationExpiryFor(res, resOwner)
 	res.ExtensionRequested = false
 	res.ExpiryWarningSent = 0
 
@@ -665,11 +695,17 @@ func (s *portalService) getUserMaxCustomDomains(u *db.User) int {
 
 // getUserSubdomainExpiry helper method
 func (s *portalService) getUserSubdomainExpiry(u *db.User) *time.Time {
-	days := defaultSubdomainExpiryDays
-	// A role whose subdomain_expiry_days is <= 0 gets permanence without anyone asking for it:
-	// no create handler sees a request it could refuse, because there is no request. That is the
-	// fourth door to a never-expiring reservation and the reason the policy is applied here
-	// rather than only where the portal offers a choice (#2264).
+	return s.reservationExpiryForKind(resourceKindSubdomain, u)
+}
+
+// roleExpiry resolves what the ROLE says, with no policy applied.
+//
+// Split out so the policy can be chosen by the caller (#2267). A role whose subdomain_expiry_days
+// is <= 0 gets permanence without anyone asking for it -- no create handler sees a request it
+// could refuse, because there is no request -- which is why the policy has to be applied to this
+// result rather than only where a portal offers a choice (#2264).
+func (s *portalService) roleExpiry(u *db.User) (expiry *time.Time, days int) {
+	days = defaultSubdomainExpiryDays
 	permanentByRole := false
 	if s.cfg.RoleSettings != nil {
 		if rs, ok := s.cfg.RoleSettings[u.Role]; ok && rs.SubdomainExpiryDays != nil {
@@ -680,13 +716,50 @@ func (s *portalService) getUserSubdomainExpiry(u *db.User) *time.Time {
 			}
 		}
 	}
-	var expiry *time.Time
 	if !permanentByRole {
 		t := time.Now().AddDate(0, 0, days)
 		expiry = &t
 	}
+	return expiry, days
+}
+
+// reservationExpiryForKind applies the policy that belongs to the KIND of resource named.
+//
+// The class rule, stated once because three functions in this file write a reservation's expiry
+// and two of them used to get it right by accident: **the policy is chosen by what the row IS,
+// not by which function is asking.** A custom domain is a subdomain reservation with an empty
+// Subdomain (#1004), so any function that reaches for getUserSubdomainExpiry without looking at
+// the row charges a custom domain to never_expires.subdomains -- and the three settings the
+// owner asked to be independent are quietly not.
+//
+// AdminDemoteReservation was exactly that: the "Reject" button on the extension queue, which
+// could hand a user a PERMANENT custom domain on a gateway whose custom-domain policy is
+// `disabled`, because subdomains happened to be `allowed` and the holder's role was configured
+// permanent. Found in review of #2267, in the same PR that fixed the other two.
+func (s *portalService) reservationExpiryForKind(kind string, owner *db.User) *time.Time {
+	if kind == resourceKindCustomDomain {
+		// The role's subdomain_expiry_days is NOT consulted here, and that is the point.
+		//
+		// It is a subdomain setting, and letting it decide how long a custom domain lives is
+		// the same misattribution as letting never_expires.subdomains decide whether one can
+		// be permanent -- just in days rather than in yes/no. A gateway with
+		// `developer.subdomain_expiry_days: 99` was handing out 99-day custom domains, which
+		// nobody configured and nobody could turn off independently.
+		//
+		// There is no custom-domain equivalent of that setting today, so a custom domain that
+		// may not be permanent gets the plain default. Naming the gap rather than papering
+		// over it with the nearest-looking number: if operators want to tune this, it wants
+		// its own key, not a borrowed one.
+		return resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), nil, time.Now())
+	}
+	expiry, days := s.roleExpiry(owner)
 	resolved, _ := resolveReservationExpiry(s.cfg.NeverExpiresSubdomains(), expiry, days, time.Now())
 	return resolved
+}
+
+// reservationExpiryFor is reservationExpiryForKind for a row that already exists.
+func (s *portalService) reservationExpiryFor(res *db.SubdomainReservation, owner *db.User) *time.Time {
+	return s.reservationExpiryForKind(reservationResourceKind(res), owner)
 }
 
 // PasscodeMask stands in for a passcode that is set, wherever one would otherwise be sent to a

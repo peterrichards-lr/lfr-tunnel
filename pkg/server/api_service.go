@@ -40,12 +40,21 @@ type PortalService interface {
 	ClaimInvitation(token, pfxPassword, ip string) ([]byte, *db.GuestInvitation, error)
 	CSRSignInvitation(token string, csr []byte, ip string) ([]byte, *db.GuestInvitation, error)
 
-	AdminListExtensions() ([]*db.SubdomainReservation, error)
+	// AdminListExtensions returns the queue, each entry naming what kind of resource it is
+	// and whether this gateway will accept a permanent grant for it (#2267).
+	AdminListExtensions() ([]*ExtensionRequestView, error)
 	AdminApproveExtension(actor, idStr string, days int, permanent bool, ip string) (*db.SubdomainReservation, error)
 	AdminDemoteReservation(actor, idStr, ip string) (*db.SubdomainReservation, error)
 	AdminOverrideLimit(actor, email string, maxReservations *int, ip string) (*db.User, error)
 	AdminOverrideTunnelsLimit(actor, email string, maxActiveTunnels *int, ip string) (*db.User, error)
 	AdminOverridePreferredDomain(actor, email, domain, ip string) (*db.User, error)
+
+	// The `approval` state of never_expires.tokens (#2267). Subdomains and custom domains
+	// reach the same place through RequestExtension/AdminApproveExtension above; tokens had
+	// no way for a holder to ask at all.
+	RequestTokenPermanence(user *db.User, tokenID, ip string) (*db.PersonalAccessToken, error)
+	AdminListTokenPermanenceRequests() ([]*db.PersonalAccessToken, error)
+	AdminDecideTokenPermanence(actor, idStr string, grant bool, ip string) (*db.PersonalAccessToken, error)
 }
 
 type portalService struct {

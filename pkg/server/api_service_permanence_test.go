@@ -453,3 +453,282 @@ func TestAnEmptyExtensionQueueIsAListAndNotNull(t *testing.T) {
 		t.Errorf("an empty queue encodes as %s", encoded)
 	}
 }
+
+// ---------------------------------------------------------------------------------------------
+// The sixth door, found reviewing this PR.
+//
+// The class rule: a function that writes a reservation's expiry must choose the policy from what
+// the ROW is, not from where the function lives. Three functions in api_service_reservation.go
+// write one, and two of them were fixed while the third -- the "Reject" button on the very queue
+// this change taught to display custom domains -- kept reaching for the subdomain policy.
+
+func TestDemotingACustomDomainUsesTheCustomDomainPolicy(t *testing.T) {
+	// The configuration that makes it visible: the two policies DISAGREE, and the holder's role
+	// is configured permanent. Under matching policies the bug is invisible, which is why it
+	// survived a suite that never set them apart.
+	zero := 0
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresAllowed, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {SubdomainExpiryDays: &zero}}
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	cd := &db.SubdomainReservation{UserID: dev.ID, Subdomain: "", Domain: "vanity.customer.com",
+		ExtensionRequested: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := srv.db.CreateSubdomainReservation(cd); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	// The admin presses REJECT.
+	got, err := srv.portalService.AdminDemoteReservation("admin@example.com", fmt.Sprintf("%d", cd.ID), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("demote: %v", err)
+	}
+	if got.ExpiresAt == nil {
+		t.Error("the admin pressed Reject and granted a PERMANENT custom domain on a gateway " +
+			"whose never_expires.custom_domains is disabled -- the subdomain policy was applied to it")
+	}
+
+	stored, err := srv.db.GetSubdomainReservation(cd.ID)
+	if err != nil {
+		t.Fatalf("re-reading: %v", err)
+	}
+	if stored.ExpiresAt == nil {
+		t.Error("the stored custom-domain row has no expiry")
+	}
+}
+
+// CONTROL. A SUBDOMAIN demoted on the same gateway keeps the subdomain policy's answer, which
+// here is permanent -- writing subdomain_expiry_days: 0 into the config IS the operator granting
+// that in advance. Without this the fix above could be "always give everything an expiry", which
+// is a different bug.
+func TestDemotingASubdomainStillUsesTheSubdomainPolicy(t *testing.T) {
+	zero := 0
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresAllowed, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {SubdomainExpiryDays: &zero}}
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	sub := &db.SubdomainReservation{UserID: dev.ID, Subdomain: "app", Domain: "example.com",
+		ExtensionRequested: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := srv.db.CreateSubdomainReservation(sub); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	got, err := srv.portalService.AdminDemoteReservation("admin@example.com", fmt.Sprintf("%d", sub.ID), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("demote: %v", err)
+	}
+	if got.ExpiresAt != nil {
+		t.Errorf("a subdomain whose role is configured permanent, on a gateway that allows it, "+
+			"came back expiring %v", got.ExpiresAt)
+	}
+}
+
+// The other half of the misattribution, with no permanence involved at all: a custom domain's
+// LIFETIME was being taken from role_settings.<role>.subdomain_expiry_days. Two settings the
+// owner asked to be independent, one of them silently driving the other.
+func TestADemotedCustomDomainDoesNotTakeTheSubdomainRoleLifetime(t *testing.T) {
+	ninetyNine := 99
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	srv.cfg.RoleSettings = map[string]config.RoleSetting{"developer": {SubdomainExpiryDays: &ninetyNine}}
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	cd := &db.SubdomainReservation{UserID: dev.ID, Subdomain: "", Domain: "vanity.customer.com",
+		ExtensionRequested: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := srv.db.CreateSubdomainReservation(cd); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	got, err := srv.portalService.AdminDemoteReservation("admin@example.com", fmt.Sprintf("%d", cd.ID), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("demote: %v", err)
+	}
+	if got.ExpiresAt == nil {
+		t.Fatal("permanent under a disabled custom-domain policy")
+	}
+	if days := int(time.Until(*got.ExpiresAt).Hours() / 24); days > 90 {
+		t.Errorf("the custom domain got %d days, which is role_settings.developer.subdomain_expiry_days (99) "+
+			"-- a subdomain setting deciding a custom domain's lifetime", days)
+	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// The rest of the review findings.
+
+// An ADMIN saying "never" must get the same answer whichever button they press. Under `approval`
+// the extend route ran the admin through the HOLDER's resolver and silently handed them 30 days
+// and no request, while the permanence queue granted outright.
+func TestTheTwoAdminRoutesToPermanenceAgree(t *testing.T) {
+	for _, policy := range []config.NeverExpiresPolicy{config.NeverExpiresApproval, config.NeverExpiresAllowed} {
+		t.Run(string(policy), func(t *testing.T) {
+			srv := serverWithPolicy(t, policy, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+			dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+			// Route one: extend to zero days.
+			viaExtend := tokenFor(t, srv, dev, "extend", in30Days())
+			if rec := postExtendToken(t, srv, viaExtend.ID, 0); rec.Code != http.StatusOK {
+				t.Fatalf("extend to never: got %d. Body: %s", rec.Code, rec.Body.String())
+			}
+			if got := mustToken(t, srv, viaExtend.ID); got.ExpiresAt != nil {
+				t.Errorf("policy %q: an admin extended to never and got an expiry of %v", policy, got.ExpiresAt)
+			}
+
+			// Route two: the permanence queue. Only reachable under `approval`, where a
+			// request can exist.
+			if !policy.RequiresApproval() {
+				return
+			}
+			viaQueue := tokenFor(t, srv, dev, "queue", in30Days())
+			if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", viaQueue.ID), "127.0.0.1"); err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", fmt.Sprintf("%d", viaQueue.ID), true, "127.0.0.1"); err != nil {
+				t.Fatalf("grant: %v", err)
+			}
+			if got := mustToken(t, srv, viaQueue.ID); got.ExpiresAt != nil {
+				t.Errorf("policy %q: the queue granted and the token still expires %v", policy, got.ExpiresAt)
+			}
+		})
+	}
+}
+
+// CONTROL. `disabled` still refuses both admin routes -- being an admin is not an exception to
+// a policy, or it is a preference rather than a policy.
+func TestNeitherAdminRouteEscapesTheDisabledPolicy(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+
+	if rec := postExtendToken(t, srv, pat.ID, 0); rec.Code != http.StatusForbidden {
+		t.Errorf("extend to never under disabled: got %d, want 403", rec.Code)
+	}
+	if got := mustToken(t, srv, pat.ID); got.ExpiresAt == nil {
+		t.Error("refused and removed the expiry anyway")
+	}
+}
+
+// An admin may still extend by a real number of days under any policy -- the policy is about
+// "never", and refusing a 60-day extension would be a different bug.
+func TestAnAdminCanStillExtendByRealDaysUnderEveryPolicy(t *testing.T) {
+	for _, policy := range []config.NeverExpiresPolicy{config.NeverExpiresDisabled, config.NeverExpiresApproval, config.NeverExpiresAllowed} {
+		srv := serverWithPolicy(t, policy, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+		dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+		pat := tokenFor(t, srv, dev, "ci", in30Days())
+
+		if rec := postExtendToken(t, srv, pat.ID, 60); rec.Code != http.StatusOK {
+			t.Fatalf("policy %q: extend by 60 days got %d", policy, rec.Code)
+		}
+		got := mustToken(t, srv, pat.ID)
+		if got.ExpiresAt == nil {
+			t.Errorf("policy %q: a 60-day extension made the token permanent", policy)
+			continue
+		}
+		if days := int(time.Until(*got.ExpiresAt).Hours() / 24); days < 59 || days > 60 {
+			t.Errorf("policy %q: 60 days became %d", policy, days)
+		}
+	}
+}
+
+// The queue excludes revoked tokens, but an admin can be looking at a page rendered a second
+// before the revoke. Granting there would put `granted` and a NULL expiry on a dead credential.
+func TestGrantingARevokedTokenIsRefused(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if err := srv.db.RevokePAT(pat.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", fmt.Sprintf("%d", pat.ID), true, "127.0.0.1"); !errors.Is(err, ErrConflict) {
+		t.Errorf("granting a revoked token: got %v, want ErrConflict", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.ExpiresAt == nil {
+		t.Error("a revoked credential was made permanent")
+	}
+}
+
+// The second admin to press a button on the same request loses, and the row is never left
+// saying one thing while the expiry says another.
+func TestASecondDecisionOnTheSameRequestLoses(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin-a@example.com", fmt.Sprintf("%d", pat.ID), true, "127.0.0.1"); err != nil {
+		t.Fatalf("first decision: %v", err)
+	}
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin-b@example.com", fmt.Sprintf("%d", pat.ID), false, "127.0.0.1"); !errors.Is(err, ErrConflict) {
+		t.Errorf("second decision: got %v, want ErrConflict", err)
+	}
+
+	got := mustToken(t, srv, pat.ID)
+	if got.PermanenceState != db.PATPermanenceGranted || got.ExpiresAt != nil {
+		t.Errorf("after a granted-then-denied pair the row says %q with expiry %v; the two must never disagree",
+			got.PermanenceState, got.ExpiresAt)
+	}
+}
+
+// The transition is conditional at the STATEMENT, which is what makes the guard above more than
+// a check-then-act race: SetMaxOpenConns(1) serialises statements, not sequences.
+func TestTheStateTransitionIsConditionalAtTheStatement(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+
+	// Not pending, so a transition FROM pending must not apply.
+	if err := srv.db.TransitionPATPermanenceState(pat.ID, db.PATPermanencePending, db.PATPermanenceGranted); !errors.Is(err, db.ErrStateChanged) {
+		t.Errorf("transition from the wrong state: got %v, want ErrStateChanged", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanenceNone {
+		t.Errorf("a refused transition still wrote %q", got.PermanenceState)
+	}
+
+	// And it does apply from the right one -- otherwise the test above passes on a method
+	// that never works.
+	if err := srv.db.SetPATPermanenceState(pat.ID, db.PATPermanencePending); err != nil {
+		t.Fatalf("seeding pending: %v", err)
+	}
+	if err := srv.db.TransitionPATPermanenceState(pat.ID, db.PATPermanencePending, db.PATPermanenceGranted); err != nil {
+		t.Fatalf("transition from the right state: %v", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanenceGranted {
+		t.Errorf("the transition did not apply: %q", got.PermanenceState)
+	}
+}
+
+// A denied holder may ask again, and this records that as the deliberate choice it is.
+//
+// The consequence is that `denied` does not survive a re-request, so it tells the HOLDER "no"
+// (which is the half that matters to them) but does not tell the next admin "your colleague
+// already refused this". Keeping the refusal would need somewhere to keep it; a holder whose
+// circumstances changed being unable to ask again is the worse of the two.
+func TestADeniedHolderMayAskAgain(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	id := fmt.Sprintf("%d", pat.ID)
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, id, "127.0.0.1"); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", id, false, "127.0.0.1"); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanenceDenied {
+		t.Fatalf("not denied: %q", got.PermanenceState)
+	}
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, id, "127.0.0.1"); err != nil {
+		t.Fatalf("re-request after denial: %v", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanencePending {
+		t.Errorf("a denied holder could not ask again: %q", got.PermanenceState)
+	}
+	if queue := mustQueue(t, srv); len(queue) != 1 {
+		t.Errorf("the re-request is not in the queue (%d)", len(queue))
+	}
+}

@@ -227,7 +227,37 @@ func (repo *SQLitePATRepo) ListAllPATs() ([]*PersonalAccessToken, error) {
 	return pats, rows.Err()
 }
 
-// SetPATPermanenceState records where a token's permanence request has got to.
+// TransitionPATPermanenceState moves a token from one permanence state to another, and reports
+// ErrStateChanged when it is not in the state the caller believed.
+//
+// One conditional statement rather than read-check-write. SetMaxOpenConns(1) serialises
+// STATEMENTS, not sequences: two admins deciding the same request each take the connection in
+// turn for their own read, both see "pending", and both proceed. The worst outcome is a row
+// recorded `denied` while its expiry has been removed -- refused on paper, permanent in fact,
+// out of the queue, with two contradictory audit entries (#2267 review).
+//
+// Unlikely on a single-node gateway with two admins and no bulk action, and cheap enough to
+// close that the argument for leaving it was never very good.
+func (repo *SQLitePATRepo) TransitionPATPermanenceState(patID int64, from, to string) error {
+	res, err := repo.conn.Exec(
+		`UPDATE personal_access_tokens SET permanence_state = ? WHERE id = ? AND permanence_state = ?`,
+		to, patID, from)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		// Either the token is gone or somebody else decided first. The caller distinguishes
+		// them with a read; from here they are the same answer -- this write did not happen.
+		return ErrStateChanged
+	}
+	return nil
+}
+
+// SetPATPermanenceState records where a token's permanence request has got to, unconditionally.
 func (repo *SQLitePATRepo) SetPATPermanenceState(patID int64, state string) error {
 	res, err := repo.conn.Exec(`UPDATE personal_access_tokens SET permanence_state = ? WHERE id = ?`, state, patID)
 	if err != nil {

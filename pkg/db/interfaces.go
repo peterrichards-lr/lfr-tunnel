@@ -60,6 +60,9 @@ type PATRepository interface {
 	GetPATByID(patID int64) (*PersonalAccessToken, error)
 	// SetPATPermanenceState records where a request to make a token never expire has got to.
 	SetPATPermanenceState(patID int64, state string) error
+	// TransitionPATPermanenceState is the same write made conditional on the state the caller
+	// believes the token is in, so two admins deciding at once cannot both proceed.
+	TransitionPATPermanenceState(patID int64, from, to string) error
 	// ListPATPermanenceRequests returns the tokens waiting on an admin decision.
 	ListPATPermanenceRequests() ([]*PersonalAccessToken, error)
 }

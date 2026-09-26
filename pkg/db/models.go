@@ -7,6 +7,10 @@ import (
 
 var (
 	ErrNotFound = errors.New("not found")
+	// ErrStateChanged means a conditional write matched no row: the record is gone, or it is
+	// no longer in the state the caller believed it was (#2267). Distinct from ErrNotFound
+	// because the caller usually wants to re-read and say which it was.
+	ErrStateChanged = errors.New("record is not in the expected state")
 )
 
 type AuditEntry struct {

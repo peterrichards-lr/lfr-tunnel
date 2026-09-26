@@ -157,7 +157,15 @@ func (s *portalService) AdminDecideTokenPermanence(actor, idStr string, grant bo
 	}
 	if pat.PermanenceState != db.PATPermanencePending {
 		// Deciding a request that is not pending would let a second admin silently reverse
-		// the first, with the queue showing nothing either time.
+		// the first, with the queue showing nothing either time. Read first so the caller
+		// gets this answer rather than a bare conflict from the write below.
+		return nil, ErrConflict
+	}
+	if pat.RevokedAt != nil {
+		// The queue excludes revoked tokens, but an admin can be looking at a page that was
+		// rendered a second before the revoke. Granting here would put expires_at = NULL and
+		// `granted` on a dead credential -- harmless, because revocation still wins at auth,
+		// and still a row that contradicts what the queue promised (#2267 review).
 		return nil, ErrConflict
 	}
 
@@ -168,14 +176,32 @@ func (s *portalService) AdminDecideTokenPermanence(actor, idStr string, grant bo
 		state = db.PATPermanenceGranted
 		action = "token.permanence_granted"
 		detail = fmt.Sprintf("Granted; token %q (%s) no longer expires", pat.Name, pat.TokenPrefix)
+	}
+
+	// CLAIM THE REQUEST FIRST, conditionally, and only then touch the expiry.
+	//
+	// The order matters and the condition matters. Read-check-write let two admins both pass
+	// the check above -- SetMaxOpenConns(1) serialises statements, not sequences -- and land a
+	// grant's UpdatePATExpiry alongside a denial's state write, leaving a row recorded `denied`
+	// with no expiry. Claiming the transition first means exactly one of them proceeds.
+	if err := s.db.TransitionPATPermanenceState(pat.ID, db.PATPermanencePending, state); err != nil {
+		if errors.Is(err, db.ErrStateChanged) {
+			return nil, ErrConflict
+		}
+		return nil, ErrInternalError
+	}
+
+	if grant {
 		if err := s.db.UpdatePATExpiry(pat.ID, nil); err != nil {
+			// The claim succeeded and the grant did not, so the row would read `granted`
+			// over a token that still expires. Put it back, and report the failure rather
+			// than leaving a decision recorded that did not happen.
+			if rerr := s.db.SetPATPermanenceState(pat.ID, db.PATPermanencePending); rerr != nil {
+				auditWriteFailed("token.permanence_rollback", strconv.FormatInt(pat.ID, 10), rerr)
+			}
 			return nil, ErrInternalError
 		}
 		pat.ExpiresAt = nil
-	}
-
-	if err := s.db.SetPATPermanenceState(pat.ID, state); err != nil {
-		return nil, ErrInternalError
 	}
 	pat.PermanenceState = state
 

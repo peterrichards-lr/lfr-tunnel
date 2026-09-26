@@ -149,3 +149,25 @@ func permanenceStateFor(requested bool) string {
 	}
 	return db.PATPermanenceNone
 }
+
+// resolveAdminGrantedExpiry is resolvePATExpiry for an action an ADMIN is taking directly.
+//
+// The difference is what `approval` means to each caller. To a holder it means "ask, and wait":
+// the token is created with an ordinary expiry and a request goes to a queue. To an admin it
+// means "you are the approval" -- there is nobody else to wait for, and the admin route through
+// the permanence queue already grants outright, so the extend route has to agree or the same
+// person gets two different answers to the same intent depending on which button they pressed.
+//
+// `disabled` still refuses. That is the state in which this gateway grants permanence by no
+// route at all, and an admin is not an exception to it -- a rule any admin can step around is a
+// preference (#2264).
+func resolveAdminGrantedExpiry(policy config.NeverExpiresPolicy, days int, now time.Time) (*time.Time, error) {
+	if days > 0 {
+		t := now.AddDate(0, 0, days)
+		return &t, nil
+	}
+	if !permanenceGrantAllowed(policy) {
+		return nil, ErrPermanenceNotAllowed
+	}
+	return nil, nil
+}

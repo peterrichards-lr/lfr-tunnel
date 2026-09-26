@@ -5373,7 +5373,13 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 	// the reason resolvePATExpiry is shared rather than inlined at the create path (#2264).
 	// An admin is subject to the operator's policy: under `disabled` this gateway grants
 	// permanence by no route, admin routes included.
-	expiresAt, _, perr := resolvePATExpiry(s.cfg.NeverExpiresTokens(), req.Days, time.Now())
+	//
+	// resolveAdminGrantedExpiry, not resolvePATExpiry: an ADMIN saying "never" under
+	// `approval` IS the approval, so it grants. Running an admin through the holder's resolver
+	// silently handed them 30 days and raised no request, while the same admin answering the
+	// same intent through the permanence queue got true permanence -- two admin routes, two
+	// answers, neither reported (#2267 review).
+	expiresAt, perr := resolveAdminGrantedExpiry(s.cfg.NeverExpiresTokens(), req.Days, time.Now())
 	if perr != nil {
 		respondWithError(w, perr)
 		return

@@ -75,6 +75,10 @@ type expiryInputs struct {
 	PermanentByRole bool
 	// Days is the lifetime to use when the reservation is not permanent.
 	Days int
+	// DefaultDays is this resource's own fallback, used when Days says nothing. Carried on
+	// the inputs rather than chosen inside the resolver, so the resolver never has to know
+	// which kind it is looking at -- which is the knowledge that kept getting lost.
+	DefaultDays int
 	// PermanentByDefault is the resource's behaviour when the role says nothing at all.
 	//
 	// The one real asymmetry between the two resources, and the reason this is a parameter
@@ -97,7 +101,14 @@ type expiryInputs struct {
 //     treating this case as Available() would make `approval` identical to `allowed` for the
 //     one resource that used to be permanent unconditionally.
 func resolveExpiryUnderPolicy(policy config.NeverExpiresPolicy, in expiryInputs, now time.Time) *time.Time {
+	// The fallback belongs to the RESOURCE. This clamped to defaultSubdomainExpiryDays for
+	// both kinds -- unreachable from expiryInputsFor today, and still the wrong contract on
+	// the one function that now decides every expiry: it would hand a custom domain 7 days the
+	// moment anyone routed a role value straight into Days (found reviewing #2276).
 	days := in.Days
+	if days <= 0 {
+		days = in.DefaultDays
+	}
 	if days <= 0 {
 		days = defaultSubdomainExpiryDays
 	}
@@ -200,20 +211,28 @@ func policyForKind(cfg *config.ServerConfig, kind string) config.NeverExpiresPol
 // copy stopped (#2264, #2267 review).
 func expiryInputsFor(cfg *config.ServerConfig, kind string, user *db.User) expiryInputs {
 	if kind == resourceKindCustomDomain {
-		in := expiryInputs{Days: defaultCustomDomainExpiryDays, PermanentByDefault: true}
+		// PermanentByDefault describes the resource when the ROLE SAYS NOTHING. It is not a
+		// property of custom domains in general, and setting it unconditionally made the new
+		// key inert on exactly the gateway it was written for: under `allowed`,
+		// resolveExpiryUnderPolicy returns permanent on PermanentByDefault before the
+		// lifetime is ever read, so `custom_domain_expiry_days: 200` was silently ignored
+		// (found reviewing #2276). An operator who names a number has said what they want.
+		in := expiryInputs{Days: defaultCustomDomainExpiryDays, DefaultDays: defaultCustomDomainExpiryDays, PermanentByDefault: true}
 		if cfg != nil && cfg.RoleSettings != nil {
 			if rs, ok := cfg.RoleSettings[user.Role]; ok && rs.CustomDomainExpiryDays != nil {
 				if *rs.CustomDomainExpiryDays <= 0 {
 					in.PermanentByRole = true
+					in.PermanentByDefault = false
 				} else {
 					in.Days = *rs.CustomDomainExpiryDays
+					in.PermanentByDefault = false
 				}
 			}
 		}
 		return in
 	}
 
-	in := expiryInputs{Days: defaultSubdomainExpiryDays}
+	in := expiryInputs{Days: defaultSubdomainExpiryDays, DefaultDays: defaultSubdomainExpiryDays}
 	if cfg == nil {
 		return in
 	}
@@ -227,13 +246,22 @@ func expiryInputsFor(cfg *config.ServerConfig, kind string, user *db.User) expir
 		}
 		return in
 	}
-	// No role_settings block at all: the owner's subdomains have never expired by default.
-	// Preserved rather than tidied away -- it is live behaviour on a gateway that has not
-	// configured roles, and it is a permanence route, so never_expires.subdomains governs it
-	// like any other.
-	if user.Role == "owner" {
-		in.PermanentByRole = true
-	}
+	// There used to be one more branch here: with NO role_settings block at all, an owner's
+	// subdomains never expired. It is gone, deliberately.
+	//
+	// Only ONE of the two copies of this logic had it -- Server (the registration path) did,
+	// portalService did not -- so an owner's subdomain was permanent when the client created
+	// it and seven days when the portal did. Collapsing the copies forced a choice, and
+	// keeping it would have WIDENED the portal: an owner reserving in the portal would go
+	// from 7 days to permanent, and an admin pressing Demote on such a reservation would find
+	// the button does nothing. That is a permanence route newly opened, which is the one thing
+	// #2264 exists to prevent.
+	//
+	// Narrow, and near-dead in practice: DefaultServerConfig always populates RoleSettings, so
+	// only a config that explicitly sets `role_settings:` to nothing reaches this path at all.
+	// An operator who wants permanent owner subdomains says so with
+	// `role_settings.owner.subdomain_expiry_days: 0`, which is governed by the policy like
+	// every other route (#2276 review).
 	return in
 }
 

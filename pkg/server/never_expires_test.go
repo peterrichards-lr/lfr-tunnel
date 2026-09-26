@@ -479,7 +479,6 @@ var policyMarkers = []string{
 	"resolvePATExpiry",
 	"resolveExpiryUnderPolicy",
 	"reservationExpiry",
-	"expiryInputsFor",
 	"permanenceGrantAllowed",
 	"NeverExpires",
 	// The two resolvers that apply a policy on the caller's behalf. A function that takes its
@@ -487,7 +486,6 @@ var policyMarkers = []string{
 	// cannot forget to. reservationExpiryForKind is the one that picks by resource kind, which
 	// is the rule the sixth door broke.
 	"reservationExpiryFor",
-	"getUserSubdomainExpiry",
 }
 
 func policyAware(funcBody string) bool {

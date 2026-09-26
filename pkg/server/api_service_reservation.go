@@ -98,7 +98,7 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 		}
 	}
 
-	expiry := s.getUserSubdomainExpiry(user)
+	expiry := s.reservationExpiryForKind(resourceKindSubdomain, user)
 	res := &db.SubdomainReservation{
 		UserID:    user.ID,
 		Subdomain: subdomain,
@@ -377,7 +377,7 @@ func (s *portalService) PromoteReservation(user *db.User, subdomain, domain, ip 
 		_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 	}
 
-	expiry := s.getUserSubdomainExpiry(user)
+	expiry := s.reservationExpiryForKind(resourceKindSubdomain, user)
 	res := &db.SubdomainReservation{
 		UserID:    user.ID,
 		Subdomain: subdomain,

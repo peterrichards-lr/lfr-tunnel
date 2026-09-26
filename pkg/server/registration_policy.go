@@ -408,7 +408,10 @@ func (s *Server) createSubdomainReservations(subdomain string, domainsToReserve 
 			UserID:    user.ID,
 			Subdomain: subdomain,
 			Domain:    d,
-			ExpiresAt: s.getUserSubdomainExpiry(user),
+			// The KIND, named. Subdomain is always non-empty on this path, so this is
+			// never a custom domain -- but saying so is what keeps it out of the class
+			// where a kind-blind helper decides (#2276).
+			ExpiresAt: reservationExpiry(s.cfg, resourceKindSubdomain, user, time.Now()),
 		}
 		if err := s.db.CreateSubdomainReservation(res); err != nil {
 			slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for %s on %s: %v", subdomain, d, err))

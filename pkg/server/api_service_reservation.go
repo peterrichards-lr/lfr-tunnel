@@ -520,17 +520,33 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 }
 
 // AdminListExtensions lists all reservations that have requested an extension.
-func (s *portalService) AdminListExtensions() ([]*db.SubdomainReservation, error) {
+//
+// Each entry says which kind of resource it is and whether permanence is on the table for it
+// (#2267). Both were previously left for the two portal arms to work out from `subdomain === ”`
+// and from nothing respectively -- the first is how the queue came to call a custom domain a
+// subdomain, and the second is how an admin came to be offered a "Permanent" button that, after
+// #2264, a gateway set to `disabled` answers with a 403.
+func (s *portalService) AdminListExtensions() ([]*ExtensionRequestView, error) {
 	all, err := s.db.ListAllSubdomainReservations()
 	if err != nil {
 		return nil, ErrInternalError
 	}
 
-	var list []*db.SubdomainReservation
+	list := make([]*ExtensionRequestView, 0)
 	for _, res := range all {
-		if res.ExtensionRequested {
-			list = append(list, res)
+		if !res.ExtensionRequested {
+			continue
 		}
+		kind := reservationResourceKind(res)
+		policy := s.cfg.NeverExpiresSubdomains()
+		if kind == resourceKindCustomDomain {
+			policy = s.cfg.NeverExpiresCustomDomains()
+		}
+		list = append(list, &ExtensionRequestView{
+			SubdomainReservation: res,
+			ResourceKind:         kind,
+			PermanenceAllowed:    permanenceGrantAllowed(policy),
+		})
 	}
 
 	return list, nil
@@ -554,8 +570,18 @@ func (s *portalService) AdminApproveExtension(actor, idStr string, days int, per
 	// An admin approving permanence is still subject to the operator's policy (#2264). A rule
 	// any admin can step around is a preference, not a rule -- and `disabled` is the state in
 	// which this gateway grants permanence by no route at all, which has to include this one.
-	if permanent && !permanenceGrantAllowed(s.cfg.NeverExpiresSubdomains()) {
-		return nil, ErrPermanenceNotAllowed
+	//
+	// Which policy depends on what the row IS: a custom domain is a reservation with an empty
+	// subdomain (#1004), and charging it against never_expires.subdomains would mean the two
+	// settings the owner asked to be independent were not (#2267).
+	if permanent {
+		policy := s.cfg.NeverExpiresSubdomains()
+		if reservationResourceKind(res) == resourceKindCustomDomain {
+			policy = s.cfg.NeverExpiresCustomDomains()
+		}
+		if !permanenceGrantAllowed(policy) {
+			return nil, ErrPermanenceNotAllowed
+		}
 	}
 
 	res.ExtensionRequested = false

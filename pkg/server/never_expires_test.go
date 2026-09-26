@@ -431,12 +431,16 @@ func TestAnUnsetPolicyIsAdvertisedAsDisabledRatherThanBlank(t *testing.T) {
 func TestAPositiveLifetimeIsUnaffectedByAnyPolicy(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, policy := range []config.NeverExpiresPolicy{config.NeverExpiresDisabled, config.NeverExpiresApproval, config.NeverExpiresAllowed} {
-		got, err := resolvePATExpiry(policy, 90, now)
+		got, requested, err := resolvePATExpiry(policy, 90, now)
 		if err != nil {
 			t.Fatalf("policy %q refused a 90-day token: %v", policy, err)
 		}
 		if got == nil || !got.Equal(now.AddDate(0, 0, 90)) {
 			t.Errorf("policy %q: 90 days became %v", policy, got)
+		}
+		// And it raises no permanence request: the holder did not ask for one (#2267).
+		if requested {
+			t.Errorf("policy %q: a 90-day token queued a permanence request", policy)
 		}
 	}
 }

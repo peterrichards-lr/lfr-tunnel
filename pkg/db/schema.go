@@ -81,6 +81,8 @@ func (db *DB) initSchema() error {
 		revoked_at DATETIME,
 		last_used_at DATETIME,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		-- '' | pending | granted | denied -- see the PATPermanence* constants (#2267).
+		permanence_state TEXT NOT NULL DEFAULT '',
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
@@ -490,4 +492,13 @@ var migrations = []migration{
 	// column never exist and every write silently no-op; here, an over-eager one would make
 	// every row opt out of the setting it is supposed to inherit.
 	{35, "ALTER TABLE users ADD COLUMN bandwidth_quota_bytes INTEGER DEFAULT NULL"},
+	// Where a request to make a Personal Access Token never expire has got to (#2267), for
+	// gateways whose never_expires.tokens policy is "approval".
+	//
+	// Defaults to '' -- PATPermanenceNone -- on every existing row, which is the honest
+	// backfill: none of those holders asked for anything, and marking them 'granted' because
+	// they happen to be permanent would invent an approval nobody gave. A token that is
+	// already permanent stays permanent either way; #2264's rule is that a policy governs new
+	// grants and never reaches back.
+	{36, "ALTER TABLE personal_access_tokens ADD COLUMN permanence_state TEXT NOT NULL DEFAULT ''"},
 }

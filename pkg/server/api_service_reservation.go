@@ -212,14 +212,20 @@ func (s *portalService) CreateCustomDomain(user *db.User, domain, ip string) (*d
 		return nil, ErrQuotaReached
 	}
 
-	// PERMANENT, matching what the registration path creates (#1009). The expiry/quarantine/
-	// extension model exists to reclaim a shared, contested namespace; nobody else can ever claim
-	// this exact name, because it belongs to the holder externally through DNS.
+	// Permanent only where the operator has said custom domains may be (#2264).
+	//
+	// This was an unconditional `ExpiresAt: nil`, matching what the registration path creates
+	// (#1009), and the reasoning behind it is still good: the expiry/quarantine/extension model
+	// exists to reclaim a shared, contested namespace, and nobody else can ever claim this exact
+	// name because it belongs to the holder externally through DNS. What changed is who gets to
+	// decide -- the argument is strong enough for an operator to accept, not strong enough for
+	// the code to assume on their behalf. A gateway that wants the old behaviour sets
+	// never_expires.custom_domains to "allowed"; the Liferay gateway does.
 	res := &db.SubdomainReservation{
 		UserID:    user.ID,
 		Subdomain: "",
 		Domain:    domain,
-		ExpiresAt: nil,
+		ExpiresAt: resolveCustomDomainExpiry(s.cfg.NeverExpiresCustomDomains(), s.getUserSubdomainExpiry(user), time.Now()),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -545,6 +551,13 @@ func (s *portalService) AdminApproveExtension(actor, idStr string, days int, per
 		return nil, ErrInternalError
 	}
 
+	// An admin approving permanence is still subject to the operator's policy (#2264). A rule
+	// any admin can step around is a preference, not a rule -- and `disabled` is the state in
+	// which this gateway grants permanence by no route at all, which has to include this one.
+	if permanent && !permanenceGrantAllowed(s.cfg.NeverExpiresSubdomains()) {
+		return nil, ErrPermanenceNotAllowed
+	}
+
 	res.ExtensionRequested = false
 	if permanent {
 		res.ExpiresAt = nil
@@ -652,17 +665,28 @@ func (s *portalService) getUserMaxCustomDomains(u *db.User) int {
 
 // getUserSubdomainExpiry helper method
 func (s *portalService) getUserSubdomainExpiry(u *db.User) *time.Time {
-	days := 7
+	days := defaultSubdomainExpiryDays
+	// A role whose subdomain_expiry_days is <= 0 gets permanence without anyone asking for it:
+	// no create handler sees a request it could refuse, because there is no request. That is the
+	// fourth door to a never-expiring reservation and the reason the policy is applied here
+	// rather than only where the portal offers a choice (#2264).
+	permanentByRole := false
 	if s.cfg.RoleSettings != nil {
 		if rs, ok := s.cfg.RoleSettings[u.Role]; ok && rs.SubdomainExpiryDays != nil {
 			if *rs.SubdomainExpiryDays <= 0 {
-				return nil
+				permanentByRole = true
+			} else {
+				days = *rs.SubdomainExpiryDays
 			}
-			days = *rs.SubdomainExpiryDays
 		}
 	}
-	t := time.Now().AddDate(0, 0, days)
-	return &t
+	var expiry *time.Time
+	if !permanentByRole {
+		t := time.Now().AddDate(0, 0, days)
+		expiry = &t
+	}
+	resolved, _ := resolveReservationExpiry(s.cfg.NeverExpiresSubdomains(), expiry, days, time.Now())
+	return resolved
 }
 
 // PasscodeMask stands in for a passcode that is set, wherever one would otherwise be sent to a

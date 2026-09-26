@@ -54,9 +54,12 @@ Two things worth knowing:
 
 - **You get one custom domain by default.** The quota is separate from your subdomain quota, and
   the panel shows how much of it you have used. Ask an admin if you need more.
-- **The reservation is permanent.** Unlike a subdomain, it never expires, is never quarantined and
-  never needs extending — nobody else can claim a name you control through DNS, so there is no
-  shared namespace to reclaim.
+- **The reservation is permanent on gateways configured for it.** The reasoning is that nobody
+  else can claim a name you control through DNS, so there is no shared namespace to reclaim and
+  nothing to expire for. Whether that reasoning is accepted is now the operator's setting rather
+  than a fixed rule (`never_expires.custom_domains`), so on some gateways a custom domain carries
+  an expiry like a subdomain does, and on others an admin grants the permanence on request. The
+  panel shows which of those applies to the domain you hold.
 
 ## 3. Connect
 
@@ -116,4 +119,4 @@ If the option is missing from your portal, that is why — see
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-25* | *Last Reviewed: 2026-09-25*
+*Last Updated: 2026-09-26* | *Last Reviewed: 2026-09-26*

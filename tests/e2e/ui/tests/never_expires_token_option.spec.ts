@@ -126,8 +126,15 @@ test.describe('the never-expiring token option follows the operator policy', () 
           .map((o) => o.value),
       );
 
-    await signInV2(page);
-    await page.getByRole('button', { name: /generate token/i }).click();
+    // Straight to V2, NOT a second sign-in. Both arms share the lfr_session cookie, so the
+    // context is already authenticated and /portalv2/ redirects past the login form -- there
+    // is no #email-input to fill, which is how the first version of this test timed out.
+    // Comparing the same session across the two arms is also closer to what a user does.
+    await page.goto('/portalv2/dashboard');
+    await page.waitForURL('**/portalv2/dashboard');
+    const generate = page.getByRole('button', { name: /generate token/i });
+    await expect(generate).toBeVisible({ timeout: 20000 });
+    await generate.click();
     const v2 = await page
       .locator('#expiration')
       .evaluate((el: HTMLSelectElement) =>

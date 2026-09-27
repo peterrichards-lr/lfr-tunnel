@@ -206,7 +206,105 @@ const CAPABILITIES = [
       needle: 'session_keys_unacked',
     },
   },
+  {
+    // #2259: the token-expiry select offered different options in each arm, and each arm
+    // decided the never-expiring one from `role === 'admin'` -- two gates that disagreed with
+    // each other for months while the server enforced neither.
+    //
+    // The marker is the POLICY, not the wording. Both arms must read never_expires from
+    // /api/version; an arm that renders the option from anything else is the defect, whatever
+    // it calls it.
+    // No `opener` here, deliberately: that mechanism asserts a BUTTON says what it does, and
+    // this capability is an <option> inside a select. The needle is the whole assertion --
+    // the option must be rendered from the advertised policy, in both arms.
+    name: 'render the never-expiring token option from the operator policy',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      // The CALL, not the variable. `neverExpiresPolicies` alone was satisfied by its own
+      // declaration -- and was satisfied while V1 never loaded the policy at all on the MFA
+      // path, which is the defect review of this PR found.
+      needle: 'applyTokenExpiryPolicy()',
+    },
+    v2: {
+      files: ['ui/src/pages/Dashboard.tsx'],
+      needle: "neverExpires.tokens !== 'disabled' &&",
+    },
+  },
+  {
+    // The admin extension queue offered "Approve Permanent" unconditionally, so on a gateway
+    // whose policy is `disabled` it was a button that always answered 403 -- and it called a
+    // custom domain a subdomain, because a custom domain IS a reservation with an empty
+    // subdomain (#1004) and neither arm said so.
+    name: 'gate the permanent approval on what the gateway will accept',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'item.permanence_allowed',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminExtensions.tsx'],
+      needle: 'req.permanence_allowed &&',
+    },
+  },
+  {
+    // Same queue: which resource each row is about.
+    name: 'name the resource an extension request is about',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: "item.resource_kind === 'custom_domain'",
+    },
+    v2: {
+      files: ['ui/src/pages/AdminExtensions.tsx'],
+      needle: "req.resource_kind === 'custom_domain'",
+    },
+  },
 ];
+
+/**
+ * Source with comments removed, string and template literals left intact.
+ *
+ * A needle found only in a COMMENT vouches for nothing, and the gate could not tell the two
+ * apart: commenting out the one call that applies the token-expiry policy left this check green,
+ * because the call text was still there behind a `//` (found reviewing #2266). That is the same
+ * defect as a marker satisfied by a rename -- the gate reporting a control it cannot see.
+ *
+ * Quote-aware, and it has to be: several needles here are URL paths, and a naive strip from the
+ * first `//` would cut `'https://...'` in half and make every one of them vanish.
+ */
+function stripComments(src) {
+  let out = '';
+  let quote = null;
+  for (let i = 0; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      out += c;
+      if (c === '\\') {
+        out += src[i + 1] ?? '';
+        i += 1;
+      } else if (c === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      quote = c;
+      out += c;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+      out += '\n';
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? src.length : end + 1;
+      out += ' ';
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
 
 /**
  * Whether `marker` is in any of `files` -- and, when it is not, whether a LOOSE match would have
@@ -221,7 +319,7 @@ function locateMarker(files, marker) {
   for (const rel of files) {
     const file = path.join(ROOT, rel);
     if (!fs.existsSync(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
+    const src = stripComments(fs.readFileSync(file, 'utf8'));
     if (findMarker(src, marker) !== -1)
       return { found: true, looseOnly: false };
     if (src.includes(marker)) looseOnly = true;
@@ -252,7 +350,7 @@ function openerLabel(spec) {
   for (const rel of spec.files) {
     const file = path.join(ROOT, rel);
     if (!fs.existsSync(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
+    const src = stripComments(fs.readFileSync(file, 'utf8'));
     const at = findMarker(src, spec.call);
     if (at === -1) continue;
     const open = src.lastIndexOf('<button', at);
@@ -372,6 +470,16 @@ for (const cap of CAPABILITIES) {
 // grouped by last_client_version, so V2's header was wrong on both words, and no gate could see
 // it: the string was hardcoded, so check-i18n-keys had no key to find missing.
 const SHARED_LABELS = [
+  {
+    // #2266. A custom domain is a reservation with an empty subdomain (#1004), so the
+    // extension queue called every row a subdomain and showed an admin a blank name cell.
+    // Both arms now render resource_kind, and an admin comparing the two portals must be
+    // reading one field under one name.
+    name: 'the extension queue Type column (/api/admin/reservations/extensions)',
+    key: 'th_type',
+    v1: 'pkg/server/dashboard.html',
+    v2: 'ui/src/pages/AdminExtensions.tsx',
+  },
   {
     name: 'the Client Versions count column (/api/admin/analytics/clients)',
     key: 'th_user_count',

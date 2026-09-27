@@ -966,6 +966,7 @@
                               <thead>
                                   <tr>
                                       <th data-i18n="th_user_email">User Email</th>
+                                      <th data-i18n="th_type">Type</th>
                                       <th data-i18n="th_subdomain">Subdomain</th>
                                       <th data-i18n="th_domain">Domain</th>
                                       <th data-i18n="th_expires_at">Expires At</th>
@@ -974,7 +975,7 @@
                               </thead>
                               <tbody id="admin-extensions-table-body">
                                   <tr>
-                                      <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No extension requests pending.</td>
+                                      <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);" data-i18n="no_pending_extension_requests">No pending extension requests.</td>
                                   </tr>
                               </tbody>
                           </table>
@@ -1499,8 +1500,8 @@
                 <select id="token-expiry" class="input-field" aria-label="Token expiry" data-i18n-aria-label="aria_token_expiry">
                     <option value="30" data-i18n="expiry_30_days">30 Days</option>
                     <option value="90" data-i18n="expiry_90_days">90 Days</option>
-                    <option value="365" data-i18n="expiry_1_year">1 Year</option>
-                    <option value="0" id="token-expiry-never" data-i18n="never">Never</option>
+                    <option value="365" data-i18n="expiry_365_days">365 Days</option>
+                    <option value="0" id="token-expiry-never" data-i18n="expiry_never">Never</option>
                 </select>
                 <button class="btn btn-primary" onclick="generateToken()" data-i18n="generate_token">Generate Token</button>
                 <button class="btn" onclick="closeModal()" data-i18n="btn_cancel">Cancel</button>

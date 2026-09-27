@@ -1117,7 +1117,7 @@ export default function AdminUsers() {
                                       changeStatus(u.email, 'revoked')
                                     }
                                   >
-                                    Reject
+                                    {t('reject_request', 'Reject')}
                                   </button>
                                 </>
                               ) : (

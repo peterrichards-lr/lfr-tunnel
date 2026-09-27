@@ -16,6 +16,12 @@ interface ExtRequest {
   domain: string;
   expires_at: string;
   created_at?: string;
+  // Which resource this row is about, and whether this gateway will accept a permanent grant
+  // for it. Both come from the server so the two portal arms cannot derive them differently
+  // (#2264) -- a custom domain is a reservation with an EMPTY subdomain (#1004), and deriving
+  // that from `subdomain === ''` in each arm separately is how they came to disagree.
+  resource_kind?: 'subdomain' | 'custom_domain';
+  permanence_allowed?: boolean;
 }
 
 export default function AdminExtensions() {
@@ -29,6 +35,7 @@ export default function AdminExtensions() {
   const columns: ColumnDef<ExtRequest>[] = useMemo(
     () => [
       { key: 'user_email', label: t('email', 'Email'), sortable: true },
+      { key: 'resource_kind', label: t('th_type', 'Type'), sortable: true },
       { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
       { key: 'domain', label: t('domain', 'Domain'), sortable: true },
       { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
@@ -60,7 +67,7 @@ export default function AdminExtensions() {
   } = useDataTable<ExtRequest>(
     'admin_extensions',
     requests,
-    ['user_email', 'subdomain', 'domain'],
+    ['user_email', 'subdomain', 'domain', 'resource_kind'],
     columns,
     10,
     ['created_at'],
@@ -99,10 +106,10 @@ export default function AdminExtensions() {
         permanent,
       });
       fetchRequests();
-      showToast('Request successfully approved.', 'success');
+      showToast(t('toast_request_approved', 'Request approved.'), 'success');
     } catch (err) {
       console.error(err);
-      showToast('Action failed', 'error');
+      showToast(t('action_failed', 'Action failed'), 'error');
     }
   };
 
@@ -110,10 +117,16 @@ export default function AdminExtensions() {
     try {
       await axios.post(`/api/admin/reservations/${id}/demote`);
       fetchRequests();
-      showToast('Request successfully rejected.', 'success');
+      showToast(
+        t(
+          'toast_request_rejected',
+          'Request rejected; the reservation keeps a normal expiry.',
+        ),
+        'success',
+      );
     } catch (err) {
       console.error(err);
-      showToast('Action failed', 'error');
+      showToast(t('action_failed', 'Action failed'), 'error');
     }
   };
 
@@ -143,6 +156,12 @@ export default function AdminExtensions() {
                   <th className="th-col">
                     <Skeleton width={80} />
                   </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
                   <th className="th-col text-right">
                     <Skeleton width={100} />
                   </th>
@@ -153,6 +172,12 @@ export default function AdminExtensions() {
                   <tr key={i} className="border-b">
                     <td className="td-cell">
                       <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
                     </td>
                     <td className="td-cell">
                       <Skeleton width="60%" height={16} />
@@ -192,7 +217,7 @@ export default function AdminExtensions() {
           <p className="page-header__desc">
             {t(
               'extension_requests_desc',
-              'Review and approve subdomain lease extension requests.',
+              'Review and approve reservation extension requests.',
             )}
           </p>
         </div>
@@ -227,6 +252,16 @@ export default function AdminExtensions() {
                   >
                     {t('email', 'Email')}
                     {getSortIndicator('user_email')}
+                  </th>
+                )}
+                {isColumnVisible('resource_kind') && (
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('resource_kind')}
+                    aria-sort={getAriaSort('resource_kind')}
+                  >
+                    {t('th_type', 'Type')}
+                    {getSortIndicator('resource_kind')}
                   </th>
                 )}
                 {isColumnVisible('subdomain') && (
@@ -275,8 +310,11 @@ export default function AdminExtensions() {
             <tbody>
               {paginatedRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="td-empty">
-                    No pending extension requests.
+                  <td colSpan={7} className="td-empty">
+                    {t(
+                      'no_pending_extension_requests',
+                      'No pending extension requests.',
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -285,9 +323,18 @@ export default function AdminExtensions() {
                     {isColumnVisible('user_email') && (
                       <td className="td-cell">{req.user_email}</td>
                     )}
+                    {isColumnVisible('resource_kind') && (
+                      <td className="td-cell text-xs">
+                        {req.resource_kind === 'custom_domain'
+                          ? t('resource_kind_custom_domain', 'Custom Domain')
+                          : t('resource_kind_subdomain', 'Subdomain')}
+                      </td>
+                    )}
                     {isColumnVisible('subdomain') && (
                       <td className="td-cell font-mono text-xs">
-                        {req.subdomain}
+                        {req.resource_kind === 'custom_domain'
+                          ? '—'
+                          : req.subdomain}
                       </td>
                     )}
                     {isColumnVisible('domain') && (
@@ -321,17 +368,25 @@ export default function AdminExtensions() {
                                   handleApprove(req.id, 30, false);
                                 }}
                               >
-                                Approve +30 Days
+                                {t('approve_30_days', 'Approve +30 Days')}
                               </button>
-                              <button
-                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                onClick={() => {
-                                  close();
-                                  handleApprove(req.id, 0, true);
-                                }}
-                              >
-                                Approve Permanent
-                              </button>
+                              {/*
+                                Offered only where the gateway will accept it. never_expires
+                                governs a permanent grant and AdminApproveExtension answers
+                                403 when it is `disabled`, so an unconditional button is one
+                                that always errors (#2264).
+                              */}
+                              {req.permanence_allowed && (
+                                <button
+                                  className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                  onClick={() => {
+                                    close();
+                                    handleApprove(req.id, 0, true);
+                                  }}
+                                >
+                                  {t('approve_permanent', 'Approve Permanent')}
+                                </button>
+                              )}
                             </>
                           )}
                         </ActionMenu>
@@ -339,7 +394,7 @@ export default function AdminExtensions() {
                           className="btn btn-secondary px-md py-xs text-xs"
                           onClick={() => handleReject(req.id)}
                         >
-                          Reject
+                          {t('reject_request', 'Reject')}
                         </button>
                       </div>
                     </td>

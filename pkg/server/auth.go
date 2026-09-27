@@ -97,14 +97,27 @@ type TunnelLease struct {
 	LastBytesOut uint64 `json:"-"`
 	// LastHeartbeatBytes is BytesIn+BytesOut as of the previous heartbeat, used to decide
 	// whether a lease carried traffic in the last interval (#2270). Read and written only
-	// under the registry lock, by the heartbeat path, and deliberately separate from the
+	// under the registry lock, by NoteHeartbeat, and deliberately separate from the
 	// LastBytes* pair above: those are the quota reporter's watermark, and one watermark
 	// with two consumers means each silently eats the other's deltas (#1958).
-	LastHeartbeatBytes uint64               `json:"-"`
-	CreatedAt          time.Time            `json:"created_at"`
-	NodeID             string               `json:"node_id,omitempty"`
-	VisitorIPsMu       sync.Mutex           `json:"-"`
-	VisitorIPs         map[string]time.Time `json:"-"`
+	LastHeartbeatBytes uint64 `json:"-"`
+	// offlineAlertPending is a down-transition that has not been reported yet, and
+	// offlineAlertSince is when it was first seen (#2270). Together they make the traffic
+	// check DEFER the alert rather than discard it.
+	//
+	// The distinction is the whole correctness of this feature. A status change happens on
+	// exactly ONE heartbeat, so a suppression that ran on that heartbeat and kept no record
+	// would mean the alert never fires at all -- and the shape that triggers it is the common
+	// one, because a target that dies mid-interval was by definition serving during it. The
+	// first review of #2270 found this; the first implementation had it.
+	//
+	// Under the registry lock, like Status.
+	offlineAlertPending bool
+	offlineAlertSince   time.Time
+	CreatedAt           time.Time            `json:"created_at"`
+	NodeID              string               `json:"node_id,omitempty"`
+	VisitorIPsMu        sync.Mutex           `json:"-"`
+	VisitorIPs          map[string]time.Time `json:"-"`
 	// How the client was launched (#2148), carried so the portal can say WHY a tunnel is
 	// where it is rather than leaving an operator to guess whether a flag, an env var or a
 	// config file chose its region, subdomain or ports.
@@ -966,70 +979,6 @@ func (r *Registry) KickLease(subdomainPrefix string) bool {
 	return false
 }
 
-// UpdateLeaseStatus updates the status string for all leases associated with a session token.
-// UpdateLeaseStatus sets the status and reports whether this gateway holds any lease for the
-// session. Unchanged meaning, kept for callers that only need that (#2270 added the richer one
-// below rather than redefining this, because "the session exists" and "the status changed" are
-// different questions and one of them was silently answering for the other).
-func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
-	known, _, _ := r.updateLeaseStatusReportingTraffic(sessionToken, status)
-	return known
-}
-
-// UpdateLeaseStatusReportingTraffic sets the status and answers the two questions the
-// tunnel-offline alert needs, which the old boolean did not (#2270):
-//
-//	known   -- this gateway holds leases for the session at all
-//	changed -- the status is not what it already was
-//	served  -- at least one of those leases carried bytes since the LAST heartbeat
-//
-// `changed` exists because the previous return value was "the session exists", so every single
-// heartbeat reporting "down" re-sent the admin alert. sendAdminAlert does not throttle, and the
-// heartbeat is every five seconds, so one tunnel stuck on "down" mailed the operator twelve
-// times a minute. An alert that repeats on a timer is one nobody reads.
-//
-// `served` is corroboration, and it is deliberately narrow: it says the tunnel CARRIED TRAFFIC,
-// not that the application behind it is healthy. Request and response header bytes are counted
-// on the way through (pkg/server/proxy.go), so a tunnel returning 502 to every visitor is still
-// "serving" by this measure. That is the right trade for what it is used for -- a client that
-// misreports itself down while visitors are being served normally should not page anybody -- and
-// it is why the client-side fix in this same change is the real one.
-func (r *Registry) UpdateLeaseStatusReportingTraffic(sessionToken, status string) (known, changed, served bool) {
-	return r.updateLeaseStatusReportingTraffic(sessionToken, status)
-}
-
-func (r *Registry) updateLeaseStatusReportingTraffic(sessionToken, status string) (known, changed, served bool) {
-	r.Lock()
-	defer r.Unlock()
-
-	leases, exists := r.sessionLeases[sessionToken]
-	if !exists {
-		return false, false, false
-	}
-
-	for _, lease := range leases {
-		if lease.Status != status {
-			changed = true
-		}
-		lease.Status = status
-
-		// The watermark is advanced on EVERY heartbeat, including the ones that do not
-		// alert, so "since the last heartbeat" stays a five-second window rather than
-		// growing to "since the last time we alerted" -- which would suppress the second
-		// alert of a genuinely dead tunnel that served one request an hour ago.
-		//
-		// Its own field, not LastBytesIn/LastBytesOut: those are the quota reporter's
-		// watermark, read and written by TakeByteDeltas, and sharing one would make each
-		// consumer silently consume the other's deltas (#1958).
-		total := atomic.LoadUint64(&lease.BytesIn) + atomic.LoadUint64(&lease.BytesOut)
-		if total > lease.LastHeartbeatBytes {
-			served = true
-		}
-		lease.LastHeartbeatBytes = total
-	}
-	return true, changed, served
-}
-
 // GetSessionLeases returns a copy of all leases associated with a session token.
 func (r *Registry) GetSessionLeases(sessionToken string) []*TunnelLease {
 	r.RLock()
@@ -1110,7 +1059,11 @@ func (s *Server) reservationAccessControls(subdomain, domain string) ([3]string,
 // helpers make elsewhere.
 func sessionTokenSuffix(token string) string {
 	const shown = 6
-	if len(token) <= shown {
+	// Withheld unless the token is comfortably longer than what would be shown. At `<= shown`
+	// a seven-character token rendered six of its seven characters, which is the token with a
+	// hat on. Real tokens are 32 hex characters, so this only ever fires for a malformed or
+	// test value -- and those are exactly the ones where printing it whole is least expected.
+	if len(token) <= 2*shown {
 		return "…"
 	}
 	return "…" + token[len(token)-shown:]

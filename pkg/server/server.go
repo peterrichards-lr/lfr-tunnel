@@ -2396,29 +2396,17 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		s.recordDiagnosticsAcks(leases, req.Ack, r)
 	}
 
-	known, statusChanged, servedTraffic := s.registry.UpdateLeaseStatusReportingTraffic(req.SessionToken, req.Status)
+	known, alertAction := s.registry.NoteHeartbeat(req.SessionToken, req.Status, time.Now())
 	if known {
-		// Two conditions the alert did not have (#2270).
-		//
-		// statusChanged: this read "the session exists", so every heartbeat reporting "down"
-		// re-sent the mail. sendAdminAlert does not throttle and the heartbeat is every five
-		// seconds, so one stuck tunnel mailed the operator twelve times a minute. The
-		// transition is the event worth telling somebody about; the steady state is not.
-		//
-		// !servedTraffic: a tunnel carrying bytes right now is not one to page anybody about,
-		// whatever its client believes. Corroboration rather than proof -- see
-		// UpdateLeaseStatusReportingTraffic for what byte movement does and does not mean --
-		// and logged rather than silent, so a suppressed alert is still findable.
-		if req.Status == "down" && statusChanged {
-			if servedTraffic {
-				slog.Info(fmt.Sprintf("[Alert] Tunnel session reported down but carried traffic "+
-					"since the last heartbeat; not sending the offline alert. Session token suffix: %s",
-					sessionTokenSuffix(req.SessionToken)))
-			} else {
-				body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
-				_ = _err //nolint:errcheck
-				s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
-			}
+		// The whole decision is NoteHeartbeat's, deliberately: see tunnel_offline.go for why
+		// the transition, the traffic check and the bound on it are one thing and not three
+		// (#2270).
+		switch alertAction {
+		case offlineAlertSend:
+			s.sendTunnelOfflineAlert()
+		case offlineAlertHeld:
+			s.logTunnelOfflineAlertHeld(req.SessionToken)
+		case offlineAlertNone:
 		}
 		// The body distinguishes this path from the no-lease one below: the client's
 		// gatewayHasNoLease treats {"status":"ok"} as "this gateway holds nothing for

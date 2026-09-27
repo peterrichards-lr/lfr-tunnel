@@ -206,6 +206,54 @@ const CAPABILITIES = [
       needle: 'session_keys_unacked',
     },
   },
+  {
+    // #2259: the token-expiry select offered different options in each arm, and each arm
+    // decided the never-expiring one from `role === 'admin'` -- two gates that disagreed with
+    // each other for months while the server enforced neither.
+    //
+    // The marker is the POLICY, not the wording. Both arms must read never_expires from
+    // /api/version; an arm that renders the option from anything else is the defect, whatever
+    // it calls it.
+    // No `opener` here, deliberately: that mechanism asserts a BUTTON says what it does, and
+    // this capability is an <option> inside a select. The needle is the whole assertion --
+    // the option must be rendered from the advertised policy, in both arms.
+    name: 'render the never-expiring token option from the operator policy',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'neverExpiresPolicies',
+    },
+    v2: {
+      files: ['ui/src/pages/Dashboard.tsx'],
+      needle: 'neverExpires.tokens',
+    },
+  },
+  {
+    // The admin extension queue offered "Approve Permanent" unconditionally, so on a gateway
+    // whose policy is `disabled` it was a button that always answered 403 -- and it called a
+    // custom domain a subdomain, because a custom domain IS a reservation with an empty
+    // subdomain (#1004) and neither arm said so.
+    name: 'gate the permanent approval on what the gateway will accept',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'permanence_allowed',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminExtensions.tsx'],
+      needle: 'permanence_allowed',
+    },
+  },
+  {
+    // Same queue: which resource each row is about.
+    name: 'name the resource an extension request is about',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'resource_kind',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminExtensions.tsx'],
+      needle: 'resource_kind',
+    },
+  },
 ];
 
 /**

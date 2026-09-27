@@ -879,6 +879,9 @@ async function init() {
   }
 
   await loadVersionDetails();
+  // Before any token modal can open, so the first open renders from the policy rather than
+  // from the safe default and then correcting itself (#2264).
+  await loadNeverExpiresPolicies();
   initSidebarSections();
   decorateSectionHeadings();
 }
@@ -4857,25 +4860,75 @@ async function submitInviteUser() {
   }
 }
 
+// The operator's never_expires policies, as advertised on /api/version (#2264).
+//
+// `disabled` for all three until the gateway says otherwise. A failed or in-flight fetch must
+// not make this arm offer something the server will refuse with a 403 -- offering too little is
+// a missing option somebody reports, offering too much is the button #2259 was about.
+let neverExpiresPolicies = {
+  tokens: 'disabled',
+  subdomains: 'disabled',
+  custom_domains: 'disabled',
+};
+
+// A value this build has never heard of reads as `disabled`, and so does a gateway older than
+// #2264, which sends no never_expires block at all. Both fail closed.
+function normaliseNeverExpires(value) {
+  return value === 'approval' || value === 'allowed' ? value : 'disabled';
+}
+
+async function loadNeverExpiresPolicies() {
+  try {
+    const res = await fetch('/api/version');
+    if (!res.ok) return;
+    const data = await res.json();
+    const advertised = data.never_expires;
+    if (!advertised) return;
+    neverExpiresPolicies = {
+      tokens: normaliseNeverExpires(advertised.tokens),
+      subdomains: normaliseNeverExpires(advertised.subdomains),
+      custom_domains: normaliseNeverExpires(advertised.custom_domains),
+    };
+  } catch {
+    // Left at the safe default.
+  }
+}
+
+// Shows, hides or re-words the "Never" option from the POLICY, not from the caller's role.
+//
+// The role gate that was here refused a non-admin any non-expiring token, disagreed with V2's
+// for months, and was never enforced by the server -- so the two arms told different users
+// different things about a rule neither of them actually applied (#2259). Under `approval` the
+// option is worded as a request, because that is what choosing it does.
+function applyTokenExpiryPolicy() {
+  const neverOption = document.getElementById('token-expiry-never');
+  const tokenExpiry = document.getElementById('token-expiry');
+  if (!neverOption || !tokenExpiry) return;
+
+  const policy = neverExpiresPolicies.tokens;
+  if (policy === 'disabled') {
+    neverOption.style.display = 'none';
+    // A value left selected from a previous, more permissive policy would be submitted and
+    // refused, so it is corrected rather than left to fail.
+    if (tokenExpiry.value === '0') tokenExpiry.value = '30';
+    return;
+  }
+
+  neverOption.style.display = 'block';
+  const key = policy === 'approval' ? 'expiry_never_request' : 'expiry_never';
+  neverOption.setAttribute('data-i18n', key);
+  neverOption.innerText = t(
+    key,
+    policy === 'approval' ? 'Never (needs approval)' : 'Never',
+  );
+}
+
 function openTokenModal() {
   document.getElementById('token-name').value = '';
   document.getElementById('token-form-step').classList.remove('hidden');
   document.getElementById('token-result-step').classList.add('hidden');
 
-  const neverOption = document.getElementById('token-expiry-never');
-  const tokenExpiry = document.getElementById('token-expiry');
-  if (
-    currentUser &&
-    currentUser.role !== 'admin' &&
-    currentUser.role !== 'owner'
-  ) {
-    if (neverOption) neverOption.style.display = 'none';
-    if (tokenExpiry.value === '0') {
-      tokenExpiry.value = '30';
-    }
-  } else {
-    if (neverOption) neverOption.style.display = 'block';
-  }
+  applyTokenExpiryPolicy();
 
   document.getElementById('token-modal').style.display = 'flex';
 }
@@ -7328,25 +7381,41 @@ async function loadAdminExtensions() {
       tbody.innerHTML = '';
 
       if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No pending extension requests.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">${t('no_pending_extension_requests', 'No pending extension requests.')}</td></tr>`;
       } else {
         list.forEach((item) => {
           const expiresVal = item.expires_at
             ? renderTimestamp(item.expires_at)
-            : 'Never';
+            : t('expiry_never', 'Never');
+          // A custom domain is a reservation with an EMPTY subdomain (#1004), so this queue
+          // used to show an admin a blank cell and call it a subdomain extension -- the wrong
+          // noun for the thing they were deciding about. resource_kind comes from the server
+          // so both arms cannot disagree about it (#2264).
+          const isCustomDomain = item.resource_kind === 'custom_domain';
+          const kindLabel = isCustomDomain
+            ? t('resource_kind_custom_domain', 'Custom Domain')
+            : t('resource_kind_subdomain', 'Subdomain');
+          const nameCell = isCustomDomain ? '—' : escapeHTML(item.subdomain);
+          // Offered only where the gateway will accept it. never_expires governs a permanent
+          // grant, and AdminApproveExtension answers 403 when it is `disabled` -- a button
+          // that always errors is worse than no button (#2264).
+          const permanentItem = item.permanence_allowed
+            ? `<button class="action-menu-item" onclick="approveExtension('${item.id}', 0, true)" data-i18n="approve_permanent">${t('approve_permanent', 'Approve Permanent')}</button>`
+            : '';
           const row = `
                                 <tr>
                                     <td><span style="font-weight: 500;">${escapeHTML(item.user_email || 'User ' + item.user_id)}</span></td>
-                                    <td style="font-family: monospace;">${escapeHTML(item.subdomain)}</td>
+                                    <td>${kindLabel}</td>
+                                    <td style="font-family: monospace;">${nameCell}</td>
                                     <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>
                                     <td>${expiresVal}</td>
                                     <td style="text-align: right;">
                                         <div class="action-menu">
                                             <button class="action-menu-btn" onclick="toggleActionMenu('menu-admin-ext-${item.id}', event)">⋮</button>
                                             <div id="menu-admin-ext-${item.id}" class="action-menu-dropdown">
-                                                <button class="action-menu-item" onclick="approveExtension('${item.id}', 30, false)">Approve +30 Days</button>
-                                                <button class="action-menu-item" onclick="approveExtension('${item.id}', 0, true)">Approve Permanent</button>
-                                                <button class="action-menu-item danger" onclick="demoteReservation('${item.id}')">Demote</button>
+                                                <button class="action-menu-item" onclick="approveExtension('${item.id}', 30, false)" data-i18n="approve_30_days">${t('approve_30_days', 'Approve +30 Days')}</button>
+                                                ${permanentItem}
+                                                <button class="action-menu-item danger" onclick="demoteReservation('${item.id}')" data-i18n="reject_request">${t('reject_request', 'Reject')}</button>
                                             </div>
                                         </div>
                                     </td>

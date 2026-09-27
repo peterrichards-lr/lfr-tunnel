@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import { useNeverExpires } from '../hooks/useNeverExpires';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import TunnelsPanel from '../components/TunnelsPanel';
@@ -63,6 +64,7 @@ type HandoffStatus = 'pending' | 'delivered' | 'unavailable';
 
 export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
+  const { policies: neverExpires } = useNeverExpires();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [serverConfig, setServerConfig] = useState<any>(null);
@@ -691,9 +693,22 @@ export default function Dashboard() {
                 >
                   <option value={30}>{t('expiry_30_days', '30 Days')}</option>
                   <option value={90}>{t('expiry_90_days', '90 Days')}</option>
-                  <option value={365}>365 Days</option>
-                  {(user?.role === 'admin' || user?.role === 'owner') && (
-                    <option value={0}>Never Expire</option>
+                  <option value={365}>
+                    {t('expiry_365_days', '365 Days')}
+                  </option>
+                  {/*
+                    From the operator's policy, not the caller's role (#2264). The role gate
+                    that was here disagreed with V1's for months and neither was enforced by
+                    the server, so a non-admin could mint what the UI said they could not
+                    (#2259). Under `approval` the option is worded as a request, because that
+                    is what submitting it does.
+                  */}
+                  {neverExpires.tokens !== 'disabled' && (
+                    <option value={0}>
+                      {neverExpires.tokens === 'approval'
+                        ? t('expiry_never_request', 'Never (needs approval)')
+                        : t('expiry_never', 'Never')}
+                    </option>
                   )}
                 </select>
               </div>

@@ -99,10 +99,16 @@ test.describe('V2 custom-domain release', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     // Asserted by name before it is confirmed, so a stray confirm on some other action cannot
-    // stand in for this one. Matched loosely because the copy is wrong on this path and should
-    // be free to change: the dialog, its message and the success toast all say "subdomain" when
-    // what is being released is a custom domain (#2273).
+    // stand in for this one.
     await expect(dialog).toContainText(/release/i);
+    // #2273, now fixed and pinned here. One handler serves both tables and every string it
+    // showed was written for a subdomain, so releasing a custom domain asked the user to
+    // confirm releasing "this subdomain". The dialog must name what is actually being
+    // released, and must NOT name the other thing -- the second half is the assertion that
+    // fails on the defect, since "release" alone was true throughout it.
+    await expect(dialog).toContainText(/custom domain/i);
+    await expect(dialog).not.toContainText(/subdomain/i);
+    await expect(dialog).toContainText(domain);
     await dialog.getByRole('button', { name: 'Confirm' }).click();
 
     // --- the quota is back ------------------------------------------------------------------

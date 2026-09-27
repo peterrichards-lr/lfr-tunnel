@@ -311,22 +311,38 @@ export default function ReservationsPanel() {
     'all',
   );
 
-  const deleteReservation = async (id: string) => {
-    if (
-      !(await showConfirm(
-        t('release_subdomain_title', 'Release Subdomain'),
-        t(
-          'confirm_release_subdomain',
-          'Are you sure you want to release this subdomain?',
-        ),
-      ))
-    )
-      return;
+  const deleteReservation = async (
+    id: string,
+    host: string,
+    isCustomDomain: boolean,
+  ) => {
+    // The noun follows the resource, not the handler. Both tables share this one function and
+    // all three of its strings said "subdomain", so releasing a custom domain asked the user
+    // to confirm releasing a subdomain and then told them one had been released (#2273).
+    const title = isCustomDomain
+      ? t('release_custom_domain_title', 'Release Custom Domain')
+      : t('release_subdomain_title', 'Release Subdomain');
+    const question = (
+      isCustomDomain
+        ? t(
+            'confirm_release_custom_domain',
+            'Are you sure you want to release the custom domain {0}? This cannot be undone.',
+          )
+        : t(
+            'confirm_release_subdomain',
+            'Are you sure you want to release the subdomain {0}? This cannot be undone.',
+          )
+    ).replace('{0}', host);
+
+    if (!(await showConfirm(title, question))) return;
     try {
       await axios.delete(`/api/portal/reservations/${encodeURIComponent(id)}`);
       fetchData();
       showToast(
-        t('success_delete_reservation', 'Subdomain released successfully'),
+        (isCustomDomain
+          ? t('success_delete_custom_domain', 'Custom domain {0} released.')
+          : t('success_delete_reservation', 'Subdomain {0} released.')
+        ).replace('{0}', host),
         'success',
       );
     } catch (err: any) {

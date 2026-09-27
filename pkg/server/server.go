@@ -2396,11 +2396,17 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		s.recordDiagnosticsAcks(leases, req.Ack, r)
 	}
 
-	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
-		if req.Status == "down" {
-			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
-			_ = _err //nolint:errcheck
-			s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
+	known, alertAction := s.registry.NoteHeartbeat(req.SessionToken, req.Status, time.Now())
+	if known {
+		// The whole decision is NoteHeartbeat's, deliberately: see tunnel_offline.go for why
+		// the transition, the traffic check and the bound on it are one thing and not three
+		// (#2270).
+		switch alertAction {
+		case offlineAlertSend:
+			s.sendTunnelOfflineAlert()
+		case offlineAlertHeld:
+			s.logTunnelOfflineAlertHeld(req.SessionToken)
+		case offlineAlertNone:
 		}
 		// The body distinguishes this path from the no-lease one below: the client's
 		// gatewayHasNoLease treats {"status":"ok"} as "this gateway holds nothing for

@@ -93,12 +93,31 @@ type TunnelLease struct {
 	// OnLeaseCleanup callback, which CleanLease invokes with that lock held. They are
 	// absent from ListLeases' snapshot on purpose: a copy cannot carry a watermark
 	// forward, and writing one back onto a copy is precisely the defect #1958 fixes.
-	LastBytesIn  uint64               `json:"-"`
-	LastBytesOut uint64               `json:"-"`
-	CreatedAt    time.Time            `json:"created_at"`
-	NodeID       string               `json:"node_id,omitempty"`
-	VisitorIPsMu sync.Mutex           `json:"-"`
-	VisitorIPs   map[string]time.Time `json:"-"`
+	LastBytesIn  uint64 `json:"-"`
+	LastBytesOut uint64 `json:"-"`
+	// LastHeartbeatBytes is BytesIn+BytesOut as of the previous heartbeat, used to decide
+	// whether a lease carried traffic in the last interval (#2270). Read and written only
+	// under the registry lock, by NoteHeartbeat, and deliberately separate from the
+	// LastBytes* pair above: those are the quota reporter's watermark, and one watermark
+	// with two consumers means each silently eats the other's deltas (#1958).
+	LastHeartbeatBytes uint64 `json:"-"`
+	// offlineAlertPending is a down-transition that has not been reported yet, and
+	// offlineAlertSince is when it was first seen (#2270). Together they make the traffic
+	// check DEFER the alert rather than discard it.
+	//
+	// The distinction is the whole correctness of this feature. A status change happens on
+	// exactly ONE heartbeat, so a suppression that ran on that heartbeat and kept no record
+	// would mean the alert never fires at all -- and the shape that triggers it is the common
+	// one, because a target that dies mid-interval was by definition serving during it. The
+	// first review of #2270 found this; the first implementation had it.
+	//
+	// Under the registry lock, like Status.
+	offlineAlertPending bool
+	offlineAlertSince   time.Time
+	CreatedAt           time.Time            `json:"created_at"`
+	NodeID              string               `json:"node_id,omitempty"`
+	VisitorIPsMu        sync.Mutex           `json:"-"`
+	VisitorIPs          map[string]time.Time `json:"-"`
 	// How the client was launched (#2148), carried so the portal can say WHY a tunnel is
 	// where it is rather than leaving an operator to guess whether a flag, an env var or a
 	// config file chose its region, subdomain or ports.
@@ -960,22 +979,6 @@ func (r *Registry) KickLease(subdomainPrefix string) bool {
 	return false
 }
 
-// UpdateLeaseStatus updates the status string for all leases associated with a session token.
-func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
-	r.Lock()
-	defer r.Unlock()
-
-	leases, exists := r.sessionLeases[sessionToken]
-	if !exists {
-		return false
-	}
-
-	for _, lease := range leases {
-		lease.Status = status
-	}
-	return true
-}
-
 // GetSessionLeases returns a copy of all leases associated with a session token.
 func (r *Registry) GetSessionLeases(sessionToken string) []*TunnelLease {
 	r.RLock()
@@ -1045,4 +1048,23 @@ func (s *Server) reservationAccessControls(subdomain, domain string) ([3]string,
 		return [3]string{}, false
 	}
 	return [3]string{res.Passcode, res.WhitelistIPs, res.AccessMode}, true
+}
+
+// sessionTokenSuffix renders the last few characters of a session token, enough to correlate two
+// log lines about the same tunnel and not enough to be one.
+//
+// A log line naming a session needs SOMETHING to name it by, and the token is the only handle
+// the heartbeat carries. Printing it whole would put a live credential in the log -- which is
+// what #2137 took out of the lease serialiser -- so this is the same compromise the redaction
+// helpers make elsewhere.
+func sessionTokenSuffix(token string) string {
+	const shown = 6
+	// Withheld unless the token is comfortably longer than what would be shown. At `<= shown`
+	// a seven-character token rendered six of its seven characters, which is the token with a
+	// hat on. Real tokens are 32 hex characters, so this only ever fires for a malformed or
+	// test value -- and those are exactly the ones where printing it whole is least expected.
+	if len(token) <= 2*shown {
+		return "…"
+	}
+	return "…" + token[len(token)-shown:]
 }

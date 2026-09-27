@@ -135,13 +135,7 @@ test.describe('A visitor WebSocket through a real tunnel', () => {
     }
     subdomain = SUBDOMAIN;
 
-    // Readiness is "the gateway holds a lease and the origin answers through it", NOT the
-    // lease's `status` field. The heartbeat that maintains that field dials the target host on
-    // the INTERCEPTOR's local port, so it reports `down` within one 5s tick for every tunnel
-    // whose target host is not the default -- a healthy tunnel included (#2270, found by this
-    // spec). Asserting `up` here would make this file fail for a defect it is not about;
-    // asserting the traffic is both the readiness signal and the thing that matters. Restore
-    // the status assertion when #2270 lands.
+    // Readiness is "the gateway holds a lease and the origin answers through it".
     await expect
       .poll(
         async () =>
@@ -155,6 +149,29 @@ test.describe('A visitor WebSocket through a real tunnel', () => {
       )
       .toBe(true);
     fullHost = (await ourLease()).full_host;
+  });
+
+  // #2270, restored. This spec found the defect and deliberately did not assert on it: the
+  // heartbeat dialled the target host on the INTERCEPTOR's local port, so every tunnel whose
+  // -target-host is not the default reported `down` within one 5s tick while serving traffic
+  // normally.
+  //
+  // This tunnel is the only one in the suite that sets -target-host, which is exactly why the
+  // assertion belongs here and why nothing else caught it. It waits past two heartbeat
+  // intervals on purpose: registration seeds `up`, so a check that ran immediately would pass
+  // against the seeded value whether or not the heartbeat works -- which is how
+  // analytics.spec.ts has been passing over this all along.
+  test('the heartbeat reports a tunnel with -target-host as up, not down', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 12_000));
+
+    await expect
+      .poll(async () => (await ourLease().catch(() => undefined))?.status, {
+        timeout: 20_000,
+        message:
+          `the lease for ${subdomain} never reported up. With -target-host set, the health ` +
+          `check must dial the TARGET's port, not the interceptor's rewritten local one`,
+      })
+      .toBe('up');
   });
 
   test.afterAll(async () => {

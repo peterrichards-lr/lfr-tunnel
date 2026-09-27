@@ -2396,11 +2396,29 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		s.recordDiagnosticsAcks(leases, req.Ack, r)
 	}
 
-	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
-		if req.Status == "down" {
-			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
-			_ = _err //nolint:errcheck
-			s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
+	known, statusChanged, servedTraffic := s.registry.UpdateLeaseStatusReportingTraffic(req.SessionToken, req.Status)
+	if known {
+		// Two conditions the alert did not have (#2270).
+		//
+		// statusChanged: this read "the session exists", so every heartbeat reporting "down"
+		// re-sent the mail. sendAdminAlert does not throttle and the heartbeat is every five
+		// seconds, so one stuck tunnel mailed the operator twelve times a minute. The
+		// transition is the event worth telling somebody about; the steady state is not.
+		//
+		// !servedTraffic: a tunnel carrying bytes right now is not one to page anybody about,
+		// whatever its client believes. Corroboration rather than proof -- see
+		// UpdateLeaseStatusReportingTraffic for what byte movement does and does not mean --
+		// and logged rather than silent, so a suppressed alert is still findable.
+		if req.Status == "down" && statusChanged {
+			if servedTraffic {
+				slog.Info(fmt.Sprintf("[Alert] Tunnel session reported down but carried traffic "+
+					"since the last heartbeat; not sending the offline alert. Session token suffix: %s",
+					sessionTokenSuffix(req.SessionToken)))
+			} else {
+				body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+				_ = _err //nolint:errcheck
+				s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
+			}
 		}
 		// The body distinguishes this path from the no-lease one below: the client's
 		// gatewayHasNoLease treats {"status":"ok"} as "this gateway holds nothing for

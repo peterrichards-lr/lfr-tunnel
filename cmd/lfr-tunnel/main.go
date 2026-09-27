@@ -733,10 +733,16 @@ func main() {
 		engine.SetFailoverAvailable(!isExplicitServer && len(cfg.Regions) > 0)
 
 		clientCtx, cancelClient := context.WithCancel(ctx)
-		healthCheckPorts := make([]int, 0, len(portMappings))
-		for _, pm := range portMappings {
-			healthCheckPorts = append(healthCheckPorts, pm.LocalPort)
-		}
+		// The TARGET's ports, from the un-mutated copy -- not portMappings, whose LocalPort
+		// was rewritten to the interceptor's dynamic port a few hundred lines above (#2270).
+		//
+		// localTargetStatus dials TargetHost:port. Pairing the target host with the
+		// interceptor's port addresses a socket that exists on neither: it is open on
+		// 127.0.0.1 and closed on the target. Invisible while TargetHost is its 127.0.0.1
+		// default, because the dial then lands on the interceptor itself and passes for the
+		// wrong reason -- and permanently "down" for anyone who sets -target-host, which the
+		// flag's own help text and the container docs both tell people to do.
+		healthCheckPorts := healthCheckPortsFor(regPortMappings)
 		engine.StartHealthChecks(clientCtx, cancelClient, cfg.ServerURL, cfg.Region, regResp.SessionToken, healthCheckPorts)
 		if primaryRegion != "" && primaryServerURL != "" {
 			engine.StartFailbackProber(clientCtx, cancelClient, primaryServerURL, primaryRegion)

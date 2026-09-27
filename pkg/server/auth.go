@@ -93,12 +93,18 @@ type TunnelLease struct {
 	// OnLeaseCleanup callback, which CleanLease invokes with that lock held. They are
 	// absent from ListLeases' snapshot on purpose: a copy cannot carry a watermark
 	// forward, and writing one back onto a copy is precisely the defect #1958 fixes.
-	LastBytesIn  uint64               `json:"-"`
-	LastBytesOut uint64               `json:"-"`
-	CreatedAt    time.Time            `json:"created_at"`
-	NodeID       string               `json:"node_id,omitempty"`
-	VisitorIPsMu sync.Mutex           `json:"-"`
-	VisitorIPs   map[string]time.Time `json:"-"`
+	LastBytesIn  uint64 `json:"-"`
+	LastBytesOut uint64 `json:"-"`
+	// LastHeartbeatBytes is BytesIn+BytesOut as of the previous heartbeat, used to decide
+	// whether a lease carried traffic in the last interval (#2270). Read and written only
+	// under the registry lock, by the heartbeat path, and deliberately separate from the
+	// LastBytes* pair above: those are the quota reporter's watermark, and one watermark
+	// with two consumers means each silently eats the other's deltas (#1958).
+	LastHeartbeatBytes uint64               `json:"-"`
+	CreatedAt          time.Time            `json:"created_at"`
+	NodeID             string               `json:"node_id,omitempty"`
+	VisitorIPsMu       sync.Mutex           `json:"-"`
+	VisitorIPs         map[string]time.Time `json:"-"`
 	// How the client was launched (#2148), carried so the portal can say WHY a tunnel is
 	// where it is rather than leaving an operator to guess whether a flag, an env var or a
 	// config file chose its region, subdomain or ports.
@@ -961,19 +967,67 @@ func (r *Registry) KickLease(subdomainPrefix string) bool {
 }
 
 // UpdateLeaseStatus updates the status string for all leases associated with a session token.
+// UpdateLeaseStatus sets the status and reports whether this gateway holds any lease for the
+// session. Unchanged meaning, kept for callers that only need that (#2270 added the richer one
+// below rather than redefining this, because "the session exists" and "the status changed" are
+// different questions and one of them was silently answering for the other).
 func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
+	known, _, _ := r.updateLeaseStatusReportingTraffic(sessionToken, status)
+	return known
+}
+
+// UpdateLeaseStatusReportingTraffic sets the status and answers the two questions the
+// tunnel-offline alert needs, which the old boolean did not (#2270):
+//
+//	known   -- this gateway holds leases for the session at all
+//	changed -- the status is not what it already was
+//	served  -- at least one of those leases carried bytes since the LAST heartbeat
+//
+// `changed` exists because the previous return value was "the session exists", so every single
+// heartbeat reporting "down" re-sent the admin alert. sendAdminAlert does not throttle, and the
+// heartbeat is every five seconds, so one tunnel stuck on "down" mailed the operator twelve
+// times a minute. An alert that repeats on a timer is one nobody reads.
+//
+// `served` is corroboration, and it is deliberately narrow: it says the tunnel CARRIED TRAFFIC,
+// not that the application behind it is healthy. Request and response header bytes are counted
+// on the way through (pkg/server/proxy.go), so a tunnel returning 502 to every visitor is still
+// "serving" by this measure. That is the right trade for what it is used for -- a client that
+// misreports itself down while visitors are being served normally should not page anybody -- and
+// it is why the client-side fix in this same change is the real one.
+func (r *Registry) UpdateLeaseStatusReportingTraffic(sessionToken, status string) (known, changed, served bool) {
+	return r.updateLeaseStatusReportingTraffic(sessionToken, status)
+}
+
+func (r *Registry) updateLeaseStatusReportingTraffic(sessionToken, status string) (known, changed, served bool) {
 	r.Lock()
 	defer r.Unlock()
 
 	leases, exists := r.sessionLeases[sessionToken]
 	if !exists {
-		return false
+		return false, false, false
 	}
 
 	for _, lease := range leases {
+		if lease.Status != status {
+			changed = true
+		}
 		lease.Status = status
+
+		// The watermark is advanced on EVERY heartbeat, including the ones that do not
+		// alert, so "since the last heartbeat" stays a five-second window rather than
+		// growing to "since the last time we alerted" -- which would suppress the second
+		// alert of a genuinely dead tunnel that served one request an hour ago.
+		//
+		// Its own field, not LastBytesIn/LastBytesOut: those are the quota reporter's
+		// watermark, read and written by TakeByteDeltas, and sharing one would make each
+		// consumer silently consume the other's deltas (#1958).
+		total := atomic.LoadUint64(&lease.BytesIn) + atomic.LoadUint64(&lease.BytesOut)
+		if total > lease.LastHeartbeatBytes {
+			served = true
+		}
+		lease.LastHeartbeatBytes = total
 	}
-	return true
+	return true, changed, served
 }
 
 // GetSessionLeases returns a copy of all leases associated with a session token.
@@ -1045,4 +1099,19 @@ func (s *Server) reservationAccessControls(subdomain, domain string) ([3]string,
 		return [3]string{}, false
 	}
 	return [3]string{res.Passcode, res.WhitelistIPs, res.AccessMode}, true
+}
+
+// sessionTokenSuffix renders the last few characters of a session token, enough to correlate two
+// log lines about the same tunnel and not enough to be one.
+//
+// A log line naming a session needs SOMETHING to name it by, and the token is the only handle
+// the heartbeat carries. Printing it whole would put a live credential in the log -- which is
+// what #2137 took out of the lease serialiser -- so this is the same compromise the redaction
+// helpers make elsewhere.
+func sessionTokenSuffix(token string) string {
+	const shown = 6
+	if len(token) <= shown {
+		return "…"
+	}
+	return "…" + token[len(token)-shown:]
 }

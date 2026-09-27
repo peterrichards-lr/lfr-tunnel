@@ -589,6 +589,19 @@ export default function Dashboard() {
                           {isColumnVisible('expires_at') && (
                             <td className="td-cell text-muted">
                               {formatDate(tItem.expires_at)}
+                              {tItem.permanence_state === 'pending' && (
+                                <span className="badge badge-warning ml-sm">
+                                  {t(
+                                    'permanence_pending',
+                                    'Never requested — awaiting approval',
+                                  )}
+                                </span>
+                              )}
+                              {tItem.permanence_state === 'denied' && (
+                                <span className="badge badge-danger ml-sm">
+                                  {t('permanence_denied', 'Never — declined')}
+                                </span>
+                              )}
                             </td>
                           )}
                           <td className="td-cell">

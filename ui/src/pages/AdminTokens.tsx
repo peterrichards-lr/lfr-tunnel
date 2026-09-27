@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useNeverExpires } from '../hooks/useNeverExpires';
 import { useUI } from '../contexts/UIContext';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
@@ -25,6 +26,7 @@ export default function AdminTokens() {
   const [loading, setLoading] = useState(true);
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const { policies: neverExpires } = useNeverExpires();
   const { showToast, showConfirm } = useUI();
 
   const columns: ColumnDef<PAT>[] = useMemo(
@@ -406,6 +408,24 @@ export default function AdminTokens() {
                             >
                               +30d
                             </button>
+                            {/*
+                              V1 had this and V2 did not -- an arm-only capability inside
+                              the feature this change exists to converge. Policy-gated in
+                              both: resolveAdminGrantedExpiry answers 403 under `disabled`
+                              (#2266 review).
+                            */}
+                            {neverExpires.tokens !== 'disabled' && (
+                              <button
+                                onClick={() => handleExtend(pat.id, 0)}
+                                className="btn btn-secondary py-xs px-sm text-xs"
+                                title={t(
+                                  'extend_permanent',
+                                  'Extend Permanent',
+                                )}
+                              >
+                                {t('expiry_never', 'Never')}
+                              </button>
+                            )}
                             <button
                               onClick={() =>
                                 handleRevoke(

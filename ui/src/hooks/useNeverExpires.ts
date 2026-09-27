@@ -41,14 +41,10 @@ export const NEVER_EXPIRES_UNKNOWN: NeverExpiresPolicies = {
  * they disagreed with each other for months, and neither was enforced by the server (#2259).
  * What may be granted is the operator's decision, and it arrives from the server or not at all.
  */
-export function useNeverExpires(): {
-  policies: NeverExpiresPolicies;
-  loaded: boolean;
-} {
+export function useNeverExpires(): { policies: NeverExpiresPolicies } {
   const [policies, setPolicies] = useState<NeverExpiresPolicies>(
     NEVER_EXPIRES_UNKNOWN,
   );
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,20 +60,19 @@ export function useNeverExpires(): {
             custom_domains: normalise(advertised.custom_domains),
           });
         }
-        setLoaded(true);
       })
       .catch(() => {
-        // Left at the safe default. `loaded` stays false so a caller can tell "the gateway
-        // says disabled" from "we never heard", which matters for whether to explain the
-        // absence to the user or just leave the option out.
-        if (!cancelled) setLoaded(false);
+        // Left at the safe default. No caller needs to tell "the gateway says disabled" from
+        // "we never heard" -- both mean do not offer the option -- so nothing reports which
+        // it was. A flag returned and destructured by nobody is a claim the code does not
+        // make (#2266 review).
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { policies, loaded };
+  return { policies };
 }
 
 /**

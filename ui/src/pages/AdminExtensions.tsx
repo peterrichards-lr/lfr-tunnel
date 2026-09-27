@@ -106,10 +106,10 @@ export default function AdminExtensions() {
         permanent,
       });
       fetchRequests();
-      showToast('Request successfully approved.', 'success');
+      showToast(t('toast_request_approved', 'Request approved.'), 'success');
     } catch (err) {
       console.error(err);
-      showToast('Action failed', 'error');
+      showToast(t('action_failed', 'Action failed'), 'error');
     }
   };
 
@@ -117,10 +117,16 @@ export default function AdminExtensions() {
     try {
       await axios.post(`/api/admin/reservations/${id}/demote`);
       fetchRequests();
-      showToast('Request successfully rejected.', 'success');
+      showToast(
+        t(
+          'toast_request_rejected',
+          'Request rejected; the reservation keeps a normal expiry.',
+        ),
+        'success',
+      );
     } catch (err) {
       console.error(err);
-      showToast('Action failed', 'error');
+      showToast(t('action_failed', 'Action failed'), 'error');
     }
   };
 
@@ -150,6 +156,12 @@ export default function AdminExtensions() {
                   <th className="th-col">
                     <Skeleton width={80} />
                   </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
                   <th className="th-col text-right">
                     <Skeleton width={100} />
                   </th>
@@ -160,6 +172,12 @@ export default function AdminExtensions() {
                   <tr key={i} className="border-b">
                     <td className="td-cell">
                       <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
                     </td>
                     <td className="td-cell">
                       <Skeleton width="60%" height={16} />
@@ -199,7 +217,7 @@ export default function AdminExtensions() {
           <p className="page-header__desc">
             {t(
               'extension_requests_desc',
-              'Review and approve subdomain lease extension requests.',
+              'Review and approve reservation extension requests.',
             )}
           </p>
         </div>
@@ -314,7 +332,9 @@ export default function AdminExtensions() {
                     )}
                     {isColumnVisible('subdomain') && (
                       <td className="td-cell font-mono text-xs">
-                        {req.subdomain || '—'}
+                        {req.resource_kind === 'custom_domain'
+                          ? '—'
+                          : req.subdomain}
                       </td>
                     )}
                     {isColumnVisible('domain') && (

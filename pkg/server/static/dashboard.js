@@ -879,9 +879,6 @@ async function init() {
   }
 
   await loadVersionDetails();
-  // Before any token modal can open, so the first open renders from the policy rather than
-  // from the safe default and then correcting itself (#2264).
-  await loadNeverExpiresPolicies();
   initSidebarSections();
   decorateSectionHeadings();
 }
@@ -1016,6 +1013,19 @@ async function showDashboard() {
     if (vRes.ok) {
       const vData = await vRes.json();
       window.latestVersionData = vData;
+      // From the body already in hand, here rather than in init() (#2266 review).
+      //
+      // init() RETURNS early on the mfa_required branch, before its own post-login calls, and
+      // the MFA verify handler reaches the dashboard by calling showDashboard() directly. A
+      // policy loaded in init() was therefore never loaded for an MFA sign-in -- which is
+      // every sign-in on a gateway with force_mfa -- so "Never" was unreachable in V1 for the
+      // whole session whatever the operator had configured. showDashboard is the one funnel
+      // both paths pass through.
+      //
+      // And it is the same fetch, not a second one: reading the policies out of vData removes
+      // the extra round trip the first version added, and with it the window in which a modal
+      // opened before the policy arrived and stayed wrong until it was reopened.
+      setNeverExpiresPolicies(vData);
       if (vData.force_mfa && !currentUser.totp_enabled) {
         showIntercept('mfa_setup');
         return;
@@ -4023,6 +4033,13 @@ async function loadTokens() {
         !t.expires_at.startsWith('0001-01-01') &&
         new Date(t.expires_at) < new Date();
 
+      let permanenceBadge = '';
+      if (t.permanence_state === 'pending') {
+        permanenceBadge = ` <span class="badge warning" data-i18n="permanence_pending">${window.t ? window.t('permanence_pending', 'Never requested — awaiting approval') : 'Never requested — awaiting approval'}</span>`;
+      } else if (t.permanence_state === 'denied') {
+        permanenceBadge = ` <span class="badge danger" data-i18n="permanence_denied">${window.t ? window.t('permanence_denied', 'Never — declined') : 'Never — declined'}</span>`;
+      }
+
       let statusBadge = '';
       if (isRevoked) {
         statusBadge = `<span class="badge danger">Revoked</span>`;
@@ -4040,9 +4057,19 @@ async function loadTokens() {
                                 ${
                                   isAdminOrOwner
                                     ? `
-                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 30)">Extend +30d</button>
-                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 90)">Extend +90d</button>
-                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 0)">Extend Permanent</button>
+                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 30)" data-i18n="extend_30_days">${window.t ? window.t('extend_30_days', 'Extend 30 Days') : 'Extend 30 Days'}</button>
+                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 90)" data-i18n="extend_90_days">${window.t ? window.t('extend_90_days', 'Extend 90 Days') : 'Extend 90 Days'}</button>
+                                    ${
+                                      // Admin-only AND policy-gated. Being an admin is what
+                                      // lets you reach /api/admin/tokens/{id}/extend at all;
+                                      // whether "never" is a lifetime this gateway grants is
+                                      // the operator's, and resolveAdminGrantedExpiry answers
+                                      // 403 under `disabled` -- so without this it is a button
+                                      // that always errors (#2266 review).
+                                      neverExpiresPolicies.tokens !== 'disabled'
+                                        ? `<button class="action-menu-item" onclick="extendToken(${t.id}, 0)" data-i18n="extend_permanent">${window.t ? window.t('extend_permanent', 'Extend Permanent') : 'Extend Permanent'}</button>`
+                                        : ''
+                                    }
                                 `
                                     : ''
                                 }
@@ -4058,7 +4085,7 @@ async function loadTokens() {
                             <td style="font-family: monospace;">${t.token_prefix}...</td>
                             ${isAdminOrOwner ? `<td style="font-family: monospace; font-size: 13px;">${escapeHTML(t.user_id || 'N/A')}</td>` : ''}
                             <td>${renderTimestamp(t.created_at)}</td>
-                            <td>${t.expires_at ? renderTimestamp(t.expires_at) : 'Never'}</td>
+                            <td>${t.expires_at ? renderTimestamp(t.expires_at) : `<span data-i18n="expiry_never">${window.t ? window.t('expiry_never', 'Never') : 'Never'}</span>`}${permanenceBadge}</td>
                             <td>${formatTimeRemaining(t.expires_at, isRevoked)}</td>
                             <td>${statusBadge}</td>
                             <td style="text-align: right;">
@@ -4325,7 +4352,7 @@ async function loadRegistrations() {
                                 <button class="action-menu-btn" onclick="toggleActionMenu('menu-reg-${u.id}', event)">⋮</button>
                                 <div id="menu-reg-${u.id}" class="action-menu-dropdown">
                                     <button class="action-menu-item" onclick="approveRegistration('${u.id}')">Approve</button>
-                                    <button class="action-menu-item danger" onclick="denyRegistration('${u.id}')">Deny</button>
+                                    <button class="action-menu-item danger" onclick="denyRegistration('${u.id}')" data-i18n="reject_request">${t('reject_request', 'Reject')}</button>
                                 </div>
                             </div>
                         </td>
@@ -4877,21 +4904,19 @@ function normaliseNeverExpires(value) {
   return value === 'approval' || value === 'allowed' ? value : 'disabled';
 }
 
-async function loadNeverExpiresPolicies() {
-  try {
-    const res = await fetch('/api/version');
-    if (!res.ok) return;
-    const data = await res.json();
-    const advertised = data.never_expires;
-    if (!advertised) return;
-    neverExpiresPolicies = {
-      tokens: normaliseNeverExpires(advertised.tokens),
-      subdomains: normaliseNeverExpires(advertised.subdomains),
-      custom_domains: normaliseNeverExpires(advertised.custom_domains),
-    };
-  } catch {
-    // Left at the safe default.
-  }
+// setNeverExpiresPolicies reads the policies out of an /api/version body.
+//
+// A setter over a body the caller already has, not a fetch: the one caller is showDashboard,
+// which fetches that body anyway. An absent block leaves the safe default, which is what a
+// gateway older than #2264 sends.
+function setNeverExpiresPolicies(versionData) {
+  const advertised = versionData && versionData.never_expires;
+  if (!advertised) return;
+  neverExpiresPolicies = {
+    tokens: normaliseNeverExpires(advertised.tokens),
+    subdomains: normaliseNeverExpires(advertised.subdomains),
+    custom_domains: normaliseNeverExpires(advertised.custom_domains),
+  };
 }
 
 // Shows, hides or re-words the "Never" option from the POLICY, not from the caller's role.
@@ -7381,20 +7406,27 @@ async function loadAdminExtensions() {
       tbody.innerHTML = '';
 
       if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">${t('no_pending_extension_requests', 'No pending extension requests.')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);" data-i18n="no_pending_extension_requests">${t('no_pending_extension_requests', 'No pending extension requests.')}</td></tr>`;
       } else {
         list.forEach((item) => {
           const expiresVal = item.expires_at
             ? renderTimestamp(item.expires_at)
-            : t('expiry_never', 'Never');
+            : `<span data-i18n="expiry_never">${t('expiry_never', 'Never')}</span>`;
           // A custom domain is a reservation with an EMPTY subdomain (#1004), so this queue
           // used to show an admin a blank cell and call it a subdomain extension -- the wrong
           // noun for the thing they were deciding about. resource_kind comes from the server
           // so both arms cannot disagree about it (#2264).
           const isCustomDomain = item.resource_kind === 'custom_domain';
+          // data-i18n, not a one-off lookup: applyTranslations only re-labels elements that
+          // carry it, so without this the Type cells stayed in the old language after a switch
+          // while the buttons in the same row flipped (#2266 review).
+          //
+          // The key is written out per branch rather than interpolated. check-i18n-keys reads
+          // the attribute as source text, so a computed one reads as the key "${kindKey}" --
+          // a key it cannot resolve, and rightly refuses to vouch for.
           const kindLabel = isCustomDomain
-            ? t('resource_kind_custom_domain', 'Custom Domain')
-            : t('resource_kind_subdomain', 'Subdomain');
+            ? `<span data-i18n="resource_kind_custom_domain">${t('resource_kind_custom_domain', 'Custom Domain')}</span>`
+            : `<span data-i18n="resource_kind_subdomain">${t('resource_kind_subdomain', 'Subdomain')}</span>`;
           const nameCell = isCustomDomain ? '—' : escapeHTML(item.subdomain);
           // Offered only where the gateway will accept it. never_expires governs a permanent
           // grant, and AdminApproveExtension answers 403 when it is `disabled` -- a button
@@ -7443,7 +7475,9 @@ async function approveExtension(id, days, permanent) {
 
     if (res.ok) {
       showToast('Extension approved successfully!', 'success');
-      loadReservations();
+      // The QUEUE, not the reservations list: the row this acted on lives here, and leaving
+      // it on screen with its menu made a second approval one click away (#2266 review).
+      loadAdminExtensions();
     } else {
       const err = await res.json();
       showToast(
@@ -7467,10 +7501,14 @@ async function demoteReservation(id) {
 
     if (res.ok) {
       showToast(
-        'Reservation successfully demoted to standard 7 days.',
+        t(
+          'toast_request_rejected',
+          'Request rejected; the reservation keeps a normal expiry.',
+        ),
         'success',
       );
-      loadReservations();
+      // The queue, not the reservations list -- see loadAdminExtensions (#2266 review).
+      loadAdminExtensions();
     } else {
       const err = await res.json();
       showToast(

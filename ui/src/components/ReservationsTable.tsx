@@ -59,7 +59,15 @@ interface ReservationsTableProps extends DataTableBag {
   copyText: (text: string, message: string) => void;
   requestExtension: (id: string) => void;
   openAcModal: (r: ReservationRow) => void;
-  deleteReservation: (id: string) => void;
+  // The host and the kind, not just the id. One handler serves both tables, and every string
+  // it showed was written for a subdomain -- so a user releasing demo.customer.com was asked
+  // to confirm releasing "this subdomain" and then told a subdomain was released (#2273). The
+  // caller is the only place that knows which table this is.
+  deleteReservation: (
+    id: string,
+    host: string,
+    isCustomDomain: boolean,
+  ) => void;
   totalUnfilteredCount: number;
   // Anchor target, so the Reservations Overview can link straight down to this table.
   id?: string;
@@ -279,7 +287,15 @@ export default function ReservationsTable({
                           <button
                             type="button"
                             className="btn btn-danger py-xs px-sm text-xs"
-                            onClick={() => deleteReservation(r.id)}
+                            onClick={() =>
+                              deleteReservation(
+                                r.id,
+                                r.subdomain
+                                  ? `${r.subdomain}.${r.domain}`
+                                  : r.domain,
+                                primaryColumnKey === 'domain',
+                              )
+                            }
                           >
                             {t('release', 'Release')}
                           </button>

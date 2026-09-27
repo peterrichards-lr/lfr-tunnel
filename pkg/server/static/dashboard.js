@@ -7159,7 +7159,7 @@ async function loadReservations() {
                                         <div id="menu-reservation-${item.id}" class="action-menu-dropdown">
                                             ${canExtend ? `<button class="action-menu-item" onclick="requestExtension('${item.id}')">Extend</button>` : ''}
                                             <button class="action-menu-item" onclick="openReservationAcModal('${item.id}')" data-i18n="access_control">🔒 Access Control</button>
-                                            <button class="action-menu-item danger" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}')">Release</button>
+                                            <button class="action-menu-item danger" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}', ${!item.subdomain})" data-i18n="release">${t('release', 'Release')}</button>
                                         </div>
                                     </div>
                                 </td>
@@ -7368,12 +7368,20 @@ async function requestExtension(id) {
   }
 }
 
-async function releaseReservation(id, fqdn) {
-  if (
-    confirm(
-      `Are you sure you want to release the subdomain "${fqdn}"? This cannot be undone.`,
-    )
-  ) {
+async function releaseReservation(id, fqdn, isCustomDomain) {
+  const question = (
+    isCustomDomain
+      ? t(
+          'confirm_release_custom_domain',
+          'Are you sure you want to release the custom domain {0}? This cannot be undone.',
+        )
+      : t(
+          'confirm_release_subdomain',
+          'Are you sure you want to release the subdomain {0}? This cannot be undone.',
+        )
+  ).replace('{0}', fqdn);
+
+  if (confirm(question)) {
     try {
       const res = await fetch(
         `/api/portal/reservations/${encodeURIComponent(id)}`,
@@ -7382,7 +7390,13 @@ async function releaseReservation(id, fqdn) {
         },
       );
       if (res.ok) {
-        showToast(`Released subdomain reservation "${fqdn}"`, 'success');
+        showToast(
+          (isCustomDomain
+            ? t('success_delete_custom_domain', 'Custom domain {0} released.')
+            : t('success_delete_reservation', 'Subdomain {0} released.')
+          ).replace('{0}', fqdn),
+          'success',
+        );
         loadReservations();
       } else {
         const err = await res.json();

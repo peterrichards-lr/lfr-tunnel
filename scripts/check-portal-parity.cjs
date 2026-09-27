@@ -246,6 +246,20 @@ const CAPABILITIES = [
     },
   },
   {
+    // #2273. One handler serves both the subdomain and custom-domain tables in each arm, and
+    // every string it showed was written for a subdomain -- so releasing demo.customer.com
+    // asked the user to confirm releasing "this subdomain" and then said one was released.
+    name: 'name the resource being released in the confirmation',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'confirm_release_custom_domain',
+    },
+    v2: {
+      files: ['ui/src/components/ReservationsPanel.tsx'],
+      needle: 'confirm_release_custom_domain',
+    },
+  },
+  {
     // Same queue: which resource each row is about.
     name: 'name the resource an extension request is about',
     v1: {

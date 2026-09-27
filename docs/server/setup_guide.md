@@ -1884,6 +1884,72 @@ client_reconnect_window: "60s" # how long a client should keep trying to reattac
   trusting it -- too short undoes the fix, too long starves failover. Leave it empty and clients
   use their own default of 60s.
 
+### 8.13. What May Never Expire (`never_expires`)
+
+Three things on this gateway can be granted permanently: a Personal Access Token, a subdomain
+reservation, and a custom domain. Before this setting they each answered the question
+differently and only one of the three had a rule you could configure — so the block below is
+where you say, once, what your gateway allows.
+
+```yaml
+never_expires:
+  tokens: disabled          # disabled | approval | allowed
+  subdomains: disabled
+  custom_domains: disabled
+```
+
+| State | What it means |
+|---|---|
+| `disabled` | Permanence cannot be granted by any route. The option does not appear in either portal arm, the server refuses it at every create path, **an admin cannot approve it either**, and a role configured permanent is clamped to a real expiry. |
+| `approval` | The option appears as a *request*. The resource is created with its ordinary expiry and an admin's grant is what removes it. |
+| `allowed` | The option appears plainly, to every role, granted on the spot. |
+
+Three separate settings because they are three different risks. A never-expiring credential is
+not a never-expiring DNS name, and an operator who wants one may well refuse the other.
+
+**All three default to `disabled`, and that is deliberate: upgrading a gateway must never widen
+what it grants.** Two consequences worth knowing before you upgrade:
+
+* **Custom domains used to be permanent unconditionally.** If you want that behaviour — and there
+  is a good argument for it, since nobody else can claim a name its holder proved through DNS —
+  set `custom_domains: allowed` **before** you upgrade, or new custom domains start expiring.
+* A **typo is a startup failure, not a silent default.** `allwoed` will not quietly become
+  `disabled`; the gateway refuses to start and names the key. An operator who believes a policy
+  is in force and is wrong is the failure this setting exists to prevent.
+
+The policy governs **new grants only**. Tokens and reservations that are already permanent stay
+permanent — nothing is retroactively expired. Tightening an existing grant is a separate,
+explicit admin action.
+
+#### What `approval` costs you
+
+Somebody has to work the queue. A request that nobody looks at is indistinguishable, to the
+person who made it, from one that was refused — so do not set `approval` and walk away.
+
+Reservation extension requests appear in the portal's admin queue in both arms. **Token
+permanence requests currently have an API and no portal UI** (#2280): a user can raise one and
+an admin cannot act on it except through the API directly. Until that lands, prefer `allowed` or
+`disabled` for `tokens`.
+
+#### How long a non-permanent reservation lives
+
+Per role, and each resource has its own key — a subdomain setting must not decide a custom
+domain's lifetime:
+
+```yaml
+role_settings:
+  developer:
+    subdomain_expiry_days: 7
+    custom_domain_expiry_days: 200
+```
+
+`0` or less means permanent, which is then subject to the matching policy above — so
+`subdomain_expiry_days: 0` under `never_expires.subdomains: disabled` is clamped, and the
+gateway says so at startup rather than doing it quietly. `null`, or omitting the key, is **not**
+the same as `0`: it means the role says nothing and the resource default applies — 7 days for a
+subdomain, 90 for a custom domain. They differ because a subdomain lives in a shared namespace
+the expiry exists to reclaim and a custom domain does not.
+
 ---
 
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
@@ -1936,4 +2002,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-20* | *Last Reviewed: 2026-09-20*
+*Last Updated: 2026-09-27* | *Last Reviewed: 2026-09-27*

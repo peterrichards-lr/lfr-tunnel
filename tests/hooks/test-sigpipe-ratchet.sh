@@ -30,11 +30,12 @@ if [ ! -x "$GATE" ]; then
     echo ""; echo "passed: $PASS  failed: $FAIL"; exit 1
 fi
 
-# Fixtures live beside the repo, not inside it: the gate globs tests/hooks/ and scripts/ from its
-# working directory, so a fixture planted in the real tree would be counted by the real run. And
-# /private/tmp is not visible to Docker on macOS (#1377), so one predictable place beside the repo
-# avoids relearning that per test.
-FIXTURE_BASE="$(dirname "$REPO_ROOT")/.lft-sigpipe-fixture-$$"
+# Fixtures must not land inside the repo: the gate globs tests/hooks/ and scripts/ from its working
+# directory, so a fixture planted in the real tree would be counted by the real run. mktemp rather
+# than a sibling of the repo -- this test runs no Docker, so the #1377 "/private/tmp is invisible to
+# Docker on macOS" reasoning that other hook tests carry does not apply here, and writing into
+# /Volumes/SanDisk/repos/ litters a directory holding other checkouts and agent worktrees.
+FIXTURE_BASE="$(mktemp -d "${TMPDIR:-/tmp}/lft-sigpipe-fixture.XXXXXX")"
 cleanup() { rm -rf "$FIXTURE_BASE"; }
 trap cleanup EXIT
 
@@ -68,10 +69,16 @@ fi
 empty="$(new_tree empty)"
 rm -f "$empty/scripts/"*.sh 2>/dev/null
 cp "$GATE" "$empty/scripts/"
-if ( cd "$empty" && ./scripts/check-sigpipe-ratchet.sh >/dev/null 2>&1 ); then
+empty_out="$( cd "$empty" && ./scripts/check-sigpipe-ratchet.sh 2>&1 )"
+empty_rc=$?
+if [ "$empty_rc" -eq 0 ]; then
     fail "PREMISE: the gate PASSED on a near-empty tree -- a scan of nothing must not be a clean bill"
+elif grep -q 'expected at least' <<<"$empty_out"; then
+    pass "PREMISE: a corpus below the floor is refused, and says why"
 else
-    pass "PREMISE: a corpus below the floor is refused rather than counted as zero"
+    # Non-zero is shared by a missing file (127), a syntax error (2) and a failed cp. Only the
+    # floor's own message proves the floor is what refused.
+    fail "PREMISE: the gate failed on a near-empty tree but not with the floor message -- exit $empty_rc"
 fi
 
 echo ""
@@ -83,11 +90,22 @@ cat > "$over/tests/hooks/test-planted.sh" <<'FIXEOF'
 set -uo pipefail
 if printf 'a\n' | grep -q a; then echo yes; fi
 FIXEOF
+# Planted in BOTH halves of the corpus, one each. With fixtures only in tests/hooks/, deleting
+# `scripts/*.sh` from the gate's glob left this whole suite 7/7 green while 14 real pipelines
+# silently dropped out -- and the gate then invited ratcheting the ceiling down to a number that
+# would never see them again. Coverage of a two-glob scan needs a fixture per glob.
+cat > "$over/scripts/planted-gate.sh" <<'FIXEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+if printf 'b\n' | grep -q b; then echo yes; fi
+FIXEOF
 read -r rc count <<<"$(LFT_SIGPIPE_CEILING=0 run_in "$over")"
-if [ "$rc" -ne 0 ] && [ "${count:-0}" -ge 1 ]; then
-    pass "FIRING: a planted pipeline is counted ($count) and breaks a ceiling of 0"
+if [ "$rc" -ne 0 ] && [ -n "$count" ] && [ "$count" -eq 2 ]; then
+    pass "FIRING: a pipeline planted in each corpus half is counted (2) and breaks a ceiling of 0"
+elif [ "$rc" -ne 0 ] && [ "${count:-0}" -eq 1 ]; then
+    fail "FIRING: only ONE of the two planted pipelines was counted -- half the corpus is unscanned"
 else
-    fail "FIRING: a planted pipeline did not break the ceiling (exit $rc, count ${count:-?})"
+    fail "FIRING: the planted pipelines did not break the ceiling (exit $rc, count ${count:-<none>})"
 fi
 
 echo ""
@@ -101,10 +119,10 @@ set -u
 if printf 'a\n' | grep -q a; then echo yes; fi
 FIXEOF
 read -r _ count <<<"$(run_in "$nopf")"
-if [ "${count:-0}" -eq 0 ]; then
+if [ -n "$count" ] && [ "$count" -eq 0 ]; then
     pass "BOUNDING: a pipeline in a file without pipefail is not counted"
 else
-    fail "BOUNDING: counted ${count} in a file with no pipefail -- the ceiling now measures style, not this defect"
+    fail "BOUNDING: count=${count:-<none>} in a file with no pipefail -- the ceiling now measures style, not this defect"
 fi
 
 # 2. Prose describing the idiom must not inflate the count. This is #2032's trap: a real removal
@@ -118,10 +136,10 @@ set -uo pipefail
 echo ok
 FIXEOF
 read -r _ count <<<"$(run_in "$prose")"
-if [ "${count:-0}" -eq 0 ]; then
+if [ -n "$count" ] && [ "$count" -eq 0 ]; then
     pass "BOUNDING: the idiom named in comments is not counted"
 else
-    fail "BOUNDING: counted ${count} from comment text -- describing the defect would raise the ceiling"
+    fail "BOUNDING: count=${count:-<none>} from comment text -- describing the defect would raise the ceiling"
 fi
 
 # 3. The gate must not count itself. It has to spell the pattern to search for it, and its own
@@ -131,10 +149,10 @@ self="$(new_tree selfmatch)"
 cp "$GATE" "$self/scripts/check-sigpipe-ratchet.sh"
 cp "${BASH_SOURCE[0]}" "$self/tests/hooks/test-sigpipe-ratchet.sh"
 read -r _ count <<<"$(run_in "$self")"
-if [ "${count:-0}" -eq 0 ]; then
+if [ -n "$count" ] && [ "$count" -eq 0 ]; then
     pass "BOUNDING: the gate and its own test are excluded from the count"
 else
-    fail "BOUNDING: counted ${count} from the gate or its test -- it is measuring itself"
+    fail "BOUNDING: count=${count:-<none>} from the gate or its test -- it is measuring itself"
 fi
 
 # 4. The safe idiom must NOT be counted, or the gate punishes the fix it recommends.
@@ -146,10 +164,28 @@ out="$(printf 'a\n')"
 if grep -q a <<<"$out"; then echo yes; fi
 FIXEOF
 read -r _ count <<<"$(run_in "$safe")"
-if [ "${count:-0}" -eq 0 ]; then
+if [ -n "$count" ] && [ "$count" -eq 0 ]; then
     pass "BOUNDING: the here-string idiom the gate recommends is not counted"
 else
-    fail "BOUNDING: counted ${count} for the recommended fix -- the gate would block its own advice"
+    fail "BOUNDING: count=${count:-<none>} for the recommended fix -- the gate would block its own advice"
+fi
+
+# 5. The corpus is deliberately one level deep. scripts/common/ holds 15 files that set pipefail,
+#    including the unattended gateway scripts, and they are NOT counted. Pinning that means
+#    widening the scan later is a decision someone makes, not an accident -- and if someone does
+#    widen it, this goes red and the ceiling has to be re-derived rather than silently jumping.
+deep="$(new_tree deepdir)"
+mkdir -p "$deep/scripts/common"
+cat > "$deep/scripts/common/planted-deep.sh" <<'FIXEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+if printf 'c\n' | grep -q c; then echo yes; fi
+FIXEOF
+read -r _ count <<<"$(run_in "$deep")"
+if [ -n "$count" ] && [ "$count" -eq 0 ]; then
+    pass "BOUNDING: scripts/common/ is outside the corpus and is not counted"
+else
+    fail "BOUNDING: count=${count:-<none>} -- the scan has been widened past one directory level; re-derive the ceiling"
 fi
 
 echo ""

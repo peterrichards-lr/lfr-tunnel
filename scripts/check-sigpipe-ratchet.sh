@@ -24,7 +24,7 @@ set -euo pipefail
 # WHY A RATCHET AND NOT A REWRITE.
 #
 # The fault is dormant almost everywhere: the producer only SIGPIPEs if it is still writing when
-# grep exits, and output that fits the pipe buffer never does. Rewriting 150 pipelines across 48
+# grep exits, and output that fits the pipe buffer never does. Rewriting 146 pipelines across 48
 # guard files to fix a fault latent in most of them is the cure being worse than the disease --
 # AGENTS.md's "Surgical Fixes & Minimal Diffs", and a bad transform here means guards that lie.
 #
@@ -38,12 +38,25 @@ set -euo pipefail
 #   if grep -q PATTERN <<<"$out"; then …
 #
 # A here-string is not a pipe, so there is no reader to close early and nothing to SIGPIPE.
+#
+# KNOWN LIMIT OF THE COUNT, and it errs in the unhelpful direction. `grep -c` counts matching
+# LINES, not pipelines: two on one line count once, and one split across a `\` continuation counts
+# zero. That is conservative about the existing backlog and PERMISSIVE ABOUT GROWTH -- a new
+# occurrence appended to an already-counted line does not move the number and this gate stays
+# green, which is the one thing a ratchet exists to prevent. It costs exactly 1 today (147
+# occurrences on 146 lines). Tightening it means a real parser rather than a grep, which is not
+# obviously worth it; knowing which way it fails is.
 
-# 148, not the 150 quoted in #2290. That first figure was a quick count that included comment
-# lines and this script's own two exclusions; the number below is what the counter above actually
-# measures. Recorded rather than quietly corrected, because a ceiling nobody can reproduce is a
-# ceiling nobody will lower.
-CEILING="${LFT_SIGPIPE_CEILING:-148}"
+# 146, against the 150 quoted in #2290. Two separate corrections, both recorded rather than
+# quietly applied, because a ceiling nobody can reproduce is a ceiling nobody will lower:
+#
+#   150 -> 148   comment lines. The issue's figure was a quick count that included prose about the
+#                idiom. NOT this script's own exclusions, as an earlier draft of this note said --
+#                neither file existed when #2290 was filed, so they could not have contributed.
+#   148 -> 146   `x || grep -q y` is not a pipeline. The old regex matched the second `|` of `||`,
+#                counting two lines (test-go-guard.sh, test-pull-images.sh) that have no pipe, can
+#                never SIGPIPE and can never be "fixed" -- a floor nobody could ever reach.
+CEILING="${LFT_SIGPIPE_CEILING:-146}"
 
 # SELF-MATCH. This script and its test both have to SPELL the pattern they are about -- in this
 # comment, and in the counting expression below -- so a naive scan counts its own documentation
@@ -51,24 +64,36 @@ CEILING="${LFT_SIGPIPE_CEILING:-148}"
 # the note: "the count above is a grep, so it counts the suppression's spelling in COMMENTS too
 # ... a real removal cancelled by prose about it."
 #
-# Two defences, both needed: skip this file and its test by name, and skip comment lines.
-SELF="$(basename "${BASH_SOURCE[0]}")"
+# Two defences, both needed: skip these two files BY PATH, and skip comment lines. By path rather
+# than by basename: a basename match would skip any file that happened to share the name wherever
+# it sat, which is a correctness bug in the exclusion even if contriving it is unlikely.
+SELF_GATE="scripts/check-sigpipe-ratchet.sh"
+SELF_TEST="tests/hooks/test-sigpipe-ratchet.sh"
+
+# CORPUS. One directory level: `tests/hooks/` and `scripts/`, NOT `scripts/common/`, `scripts/lib/`,
+# `scripts/liferay/` or `tests/e2e/`. That narrowness is deliberate -- those are the gate scripts
+# this ratchet is about -- but it is a real blind spot and it is asserted, not merely described:
+# `scripts/common/` holds 15 files that set pipefail, including the unattended gateway scripts
+# (gateway-watchdog.sh, drain-and-wait.sh, restore-backup.sh), where an inverted match means a
+# gateway is restarted or is not. They contribute 0 today. A BOUNDING case in the test pins the
+# exclusion, so widening the scan later is a decision rather than an accident (section 5b rule 6).
+CORPUS_GLOBS="tests/hooks/*.sh scripts/*.sh"
 
 count() {
-    local f n total=0
-    for f in tests/hooks/*.sh scripts/*.sh; do
-        [ -f "$f" ] || continue
-        case "$(basename "$f")" in
-            "$SELF"|test-sigpipe-ratchet.sh) continue ;;
-        esac
-        # Only files that actually set pipefail: without it the pipeline reports grep's status
-        # alone and the fault cannot occur. Counting them anyway would make the ceiling a measure
-        # of shell style rather than of this defect.
-        grep -q 'pipefail' "$f" || continue
-        # `grep -v '^[[:space:]]*#'` drops comment lines, so prose describing the idiom does not
-        # inflate the count -- the cancelled-removal trap from #2032.
-        n="$(grep -v '^[[:space:]]*#' "$f" | grep -cE '\| *grep -q' || true)"
-        total=$((total + n))
+    local f files total
+    # `grep -l` once over the whole corpus rather than a `grep -q` per file: the per-file loop was
+    # 2 forks x 79 files = 158 processes on every push. check-nolint-ratchet.sh, the precedent,
+    # does its whole job in two greps.
+    files="$(grep -lE 'pipefail' $CORPUS_GLOBS 2>/dev/null || true)"
+    [ -n "$files" ] || { printf '0'; return; }
+
+    total=0
+    for f in $files; do
+        case "$f" in "$SELF_GATE"|"$SELF_TEST") continue ;; esac
+        # Strip comment lines so prose about the idiom does not inflate the count -- the
+        # cancelled-removal trap from #2032. The regex requires a single `|`: `x || grep -q y` has
+        # no pipe and cannot SIGPIPE.
+        total=$((total + $(grep -vhE '^[[:space:]]*#' "$f" | grep -cE '(^|[^|])\| *grep -q' || true)))
     done
     printf '%s' "$total"
 }
@@ -80,13 +105,18 @@ count() {
 # gate reports success -- then invites LOWERING the ceiling to 0, which disarms it permanently.
 corpus_size() {
     local f n=0
-    for f in tests/hooks/*.sh scripts/*.sh; do
+    for f in $CORPUS_GLOBS; do
         [ -f "$f" ] && n=$((n + 1))
     done
     printf '%s' "$n"
 }
 
-MIN_FILES="${LFT_SIGPIPE_MIN_FILES:-40}"
+# 70, against a real corpus of 79. The old floor of 40 was barely half, which left #1779's shape
+# open at a smaller granularity: a tree holding tests/hooks/ but no scripts/ has 53 files, clears
+# a floor of 40, counts 14 fewer pipelines, and the gate then INVITES ratcheting down to a number
+# that can never see them again. A floor has to be close enough to the real corpus to notice half
+# of it missing.
+MIN_FILES="${LFT_SIGPIPE_MIN_FILES:-70}"
 CORPUS="$(corpus_size)"
 if [ "$CORPUS" -lt "$MIN_FILES" ]; then
     echo "FAILED: only $CORPUS shell files found under tests/hooks/ and scripts/ (expected at least $MIN_FILES)."

@@ -30,7 +30,7 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
   ```
 
 - **Pre-execution verification**: if you need to confirm where a test binary landed, verify it targets `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Anything running out of `/var/folders/...` or with an arbitrary binary filename means `make test` wasn't actually used.
-- **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
+- **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat`/`lfr-tunnel.ps1` wrappers. Also denied in `.claude/settings.json` -- as is **`lfr-tunneld`**, and `lfr-tunnel-edge-provisioner`, in every form (bare, `./`, `bin/`, `./bin/`, `go run ./cmd/...`). Until #2283 the deny list named only the client, so the daemon in two of the three incidents below was the one thing nothing enforced; `tests/hooks/test-edr-deny-list.sh` now derives the forbidden set from `cmd/*` (minus `lfr-tunnel-ops`) and the root wrappers, so a new binary fails the build until someone decides which side of the line it is on.
 - **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the `lfr-tunnel-ops` (deploy tooling) binary. **Not** `lfr-tunneld` -- see "Running the server locally" below, that claim was wrong. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
 - If ever unsure whether a command would build-and-run code outside `LFT_TEST_DIR`, stop and ask the user first rather than guessing.
 - **A tool you were told to build rather than `go run` can still spawn `go run` itself** (#1402). The rule had always been applied to how `lfr-tunnel-ops` is *invoked* — build it, never `go run ./cmd/lfr-tunnel-ops` — and never to what it *does*. `pkg/ops/sign.go` shelled out to `go run scripts/minisign_helper.go` on every `sign`, and `sign` is documented as being run directly (`op run -- lfr-tunnel-ops sign`), never through `make`, so `GOTMPDIR` was unset and it linked and executed out of `/var/folders` each time. Now done in-process via `pkg/minisign`.
@@ -121,6 +121,15 @@ locally on this machine, regardless of build location.** Only `make test`'s own 
 ever actually completed without being killed. Do not invent another script or path meant to
 make this safe -- that reasoning has now failed three times.
 
+**This paragraph is now enforced, not just stated (#2283).** For the eight months this section
+existed, the harness deny list named the client and never the daemon -- `Bash(lfr-tunnel *)`
+requires a space after `lfr-tunnel`, so it never matched `bin/lfr-tunneld`. Reading this file was
+the only thing standing between an agent and incidents 2 and 3, and on 2026-09-20 that failed
+again (`./bin/lfr-tunneld -h`). The deny list now covers every form of every `cmd/` binary except
+`lfr-tunnel-ops`, and `tests/hooks/test-edr-deny-list.sh` derives that set rather than listing it,
+so it cannot quietly fall behind. **None of that makes running the daemon safe** -- the conclusion
+above is unchanged. It only means the command is refused before the paragraph has to be recalled.
+
 **If a task seems to need running the server locally** (screenshot a UI change, smoke-test an
 endpoint): don't. Verify via `go build`/`tsc -b`/`make test`/code review instead, or use the
 Playwright E2E suite (`make e2e-ui`), which runs inside Docker -- a different risk profile,
@@ -129,4 +138,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*

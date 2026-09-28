@@ -145,7 +145,13 @@ jobs:
           #
           # ^tests/hooks/ is listed for its own sake rather than relying on those files all
           # happening to end in .sh, which is true today and is not a guarantee.
-          if echo "$CHANGED" | grep -qE '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.github/workflows/'; then
+          #
+          # ^\.claude/ is here because test-edr-deny-list.sh's subject is .claude/settings.json
+          # (#2283), which matches none of the other patterns. Without it, the one edit that gate
+          # exists to catch -- someone loosening the EDR deny list, and nothing else -- would skip
+          # the job that runs it. A gate that does not run on changes to its own subject is the
+          # #1929 shape: present in review, protecting nothing.
+          if echo "$CHANGED" | grep -qE '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.claude/|^\.github/workflows/'; then
             HOOKS=true
           else
             HOOKS=false

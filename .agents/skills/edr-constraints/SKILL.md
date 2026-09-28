@@ -30,7 +30,8 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
   ```
 
 - **Pre-execution verification**: if you need to confirm where a test binary landed, verify it targets `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Anything running out of `/var/folders/...` or with an arbitrary binary filename means `make test` wasn't actually used.
-- **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
+- **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat`/`lfr-tunnel.ps1` wrappers. The same goes for **`lfr-tunneld`** and `lfr-tunnel-edge-provisioner`, and for every artefact the build system writes -- `dist/lfr-tunnel-darwin-arm64` is a native, immediately runnable client, and the ops skill walks you into `dist/` every release to `codesign --verify` them.
+  Until #2283 the deny list named only the client, so the daemon in two of the three incidents below was the one thing nothing enforced. `tests/hooks/test-edr-deny-list.sh` now derives the forbidden set from `cmd/*` **and from the build system's `-o` targets** (both minus `lfr-tunnel-ops`) plus the root wrappers, so a new binary or a new artefact name fails the build until someone decides which side of the line it is on. Deriving from `cmd/` alone was the first version and it was wrong: directory names are not what gets built.
 - **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the `lfr-tunnel-ops` (deploy tooling) binary. **Not** `lfr-tunneld` -- see "Running the server locally" below, that claim was wrong. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
 - If ever unsure whether a command would build-and-run code outside `LFT_TEST_DIR`, stop and ask the user first rather than guessing.
 - **A tool you were told to build rather than `go run` can still spawn `go run` itself** (#1402). The rule had always been applied to how `lfr-tunnel-ops` is *invoked* — build it, never `go run ./cmd/lfr-tunnel-ops` — and never to what it *does*. `pkg/ops/sign.go` shelled out to `go run scripts/minisign_helper.go` on every `sign`, and `sign` is documented as being run directly (`op run -- lfr-tunnel-ops sign`), never through `make`, so `GOTMPDIR` was unset and it linked and executed out of `/var/folders` each time. Now done in-process via `pkg/minisign`.
@@ -121,6 +122,35 @@ locally on this machine, regardless of build location.** Only `make test`'s own 
 ever actually completed without being killed. Do not invent another script or path meant to
 make this safe -- that reasoning has now failed three times.
 
+**This paragraph is now enforced for Claude Code sessions (#2283). It is still prose everywhere
+else, and it is not a closed class.** For the six weeks this section existed, the harness deny list
+named the client and never the daemon -- `Bash(lfr-tunnel *)` matched neither `lfr-tunneld -h`
+(the pattern needs a space after `lfr-tunnel`) nor `bin/lfr-tunneld` (which does not begin with
+`lfr-tunnel` at all). Reading this file was the only thing standing between an agent and incidents
+2 and 3, and on 2026-09-20 that failed again (`./bin/lfr-tunneld -h`).
+
+What the deny list now covers: every `cmd/` binary except `lfr-tunnel-ops`, every `dist/` and
+`bin/*-linux` artefact, and the three root wrappers -- each in its bare and its with-arguments
+form. **What it does not cover, because a deny list enumerates spellings and cannot do otherwise:**
+
+| Not covered | Why it matters |
+|---|---|
+| a **prefix word** -- `sudo ./bin/lfr-tunneld`, `timeout 5 ./bin/lfr-tunneld`, `env FOO=1 …`, `nohup … &` | the pattern must match from the first word, so none of these hit any entry. `timeout` is the seductive one: it reads like bounding the risk |
+| an absolute path, or `$(pwd)/bin/lfr-tunneld` | how an agent addresses a binary from a worktree |
+| `bash -c "./bin/lfr-tunneld"`, `exec`, `xargs` | the documented escape once a deny fires |
+| a copy made anywhere else | nothing constrains the destination |
+
+**Nothing else in the repo closes those.** `make install-go-guard` refuses `go run` and `go test`
+only -- it says nothing about executing an already-built binary, which is exactly what incidents 2
+and 3 were. `scripts/check-edr-safety.sh` is a static scan of tracked source, not of an agent's
+ad-hoc command. And `.claude/settings.json` is a Claude Code mechanism: `github-workflow` §3 says
+Gemini works this same backlog from another machine, and **for Gemini this paragraph is still the
+entire control.**
+
+So the conclusion above is unchanged, and the deny list narrows the ways to run the daemon by
+accident rather than closing them. If you find yourself reaching for a prefix word to get past a
+refusal, that is the rule working and you are about to defeat it.
+
 **If a task seems to need running the server locally** (screenshot a UI change, smoke-test an
 endpoint): don't. Verify via `go build`/`tsc -b`/`make test`/code review instead, or use the
 Playwright E2E suite (`make e2e-ui`), which runs inside Docker -- a different risk profile,
@@ -129,4 +159,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*

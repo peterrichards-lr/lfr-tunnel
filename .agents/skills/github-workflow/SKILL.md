@@ -146,6 +146,106 @@ pool permanently.
 git log -1 --format='%cr' origin/fix/1323-escape-proxy-pages
 ```
 
+## 3a. Delegating to another agent
+
+§3 is written for agents that *discover* each other. When you **dispatch** one, you also choose
+what it gets, and choosing badly is not recoverable by the lock — the work comes back wrong, or
+comes back needing to be redone by hand, and the branch protocol never noticed anything was amiss.
+
+### What is delegable
+
+All three must hold:
+
+1. **The issue specifies the outcome, not just the symptom.** It names the FIRING case, the
+   control, and any BOUNDING case (§5b, §5c). If you would have to decide something while
+   implementing it, so will they — and they will decide it silently, in a PR you then have to
+   reverse-engineer.
+2. **A precedent exists in-tree to copy**, by path. "Do it like `scripts/verify-release-assets.sh`
+   and its hook test" is a brief. "Add a poll with backoff" is a research project.
+3. **Its territory is disjoint from every other agent's, at file level.** Issue-level disjointness
+   is not enough (§3 step 2): two agents holding unrelated issues that both edit
+   `pkg/client/dashboard.html` will collide.
+
+### What is not delegable
+
+- **A decision wearing an implementation's clothes.** If the issue's options are not equivalent —
+  if one of them needs no change at all — that is the owner's call, not an agent's.
+- **Architecture.** Anything touching a hot path, or where the issue itself asks whether a
+  different shape subsumes the problem.
+- **Work you cannot verify.** Translation quality is the standing example: a fourth agent
+  re-authoring what a second wrote and a third could not check is worse than not delegating.
+  It wants a native speaker. Do not put an agent on #2256, #2257, #2258, #2261, #2263 or their
+  successors.
+- **Anything whose test path is a shared serialisation point.** `tests/e2e/ui/tests/utils/mailpit.ts`
+  hardcodes `localhost:8025` and compose hardcodes `4040`, so two agents cannot run the e2e suite
+  concurrently however unique their project names are. Until that is parameterised, **at most one
+  agent at a time may hold e2e territory**, and the brief must say who holds it.
+
+### One checkout per agent
+
+Every dispatched agent gets its **own working tree**. Use whatever isolated-checkout mechanism your
+harness provides; where it has none, create a `git worktree` first. The branch-as-lock protocol in
+§3 assumes one filesystem per lock holder — agents sharing a checkout see each other's uncommitted
+files appear mid-run and the tree switch underneath them, and nothing is corrupted only by luck and
+explicit staging.
+
+Corollary: **never write a scratch file at `/tmp/<basename>.bak`.** The basename is exactly what
+two agents editing the same file will both choose.
+
+Put worktrees under the repo's own directory tree, not in a system temp dir — a scratchpad worktree
+mounts empty in Docker, which makes the containerised linter report a cheerful "0 issues" over
+nothing.
+
+### The brief
+
+Omit any of these and the work comes back needing to be redone:
+
+1. **The issue number**, and the instruction to claim it per §3 — *push the branch first*, then
+   label, then comment. The push is the lock; the label is only a signal.
+2. **Territory, both halves**: the files it may modify, **and** the files another agent holds.
+3. **The precedent to copy**, by path.
+4. **Repo-wide constraints it will otherwise trip**, because they are not derivable from the issue:
+   a new `.sh` wired into `make` joins the bash 3.2 portable set; the `//nolint:errcheck` ratchet is
+   at its ceiling, so adding one suppression goes red on a check unrelated to the subject; `errcheck`
+   runs `check-blank: true`, so `_ = x.Close()` does not satisfy it.
+5. **It may not merge.** A dispatched agent's finish line is a green PR, never a merge.
+6. **Verify a premise before it reaches the brief.** A wrong premise in a brief is executed, not
+   questioned — "all ten locales" was once written into an issue and repeated into a brief for a
+   file that has six.
+
+### Review before ready
+
+Every PR opens as a **draft**, gets an adversarial reviewer agent, and is marked ready only once
+that reviewer's findings are dealt with. See [`.agents/decisions/0005-review-before-ready.md`](../../decisions/0005-review-before-ready.md)
+for why, and for the four defects it caught that no CI check could see.
+
+Two rules about the reviewer itself:
+
+- **A reviewer reviews; it does not push to the branch it is reviewing.** It takes no lock and holds
+  no territory. If it could commit, its findings and its fixes would land together and nobody would
+  know which were which.
+- **Brief it adversarially and name the axes.** "Review this PR" returns prose. "Does the deny list
+  actually deny — enumerate the spellings it does *not* cover" returns a blocker. Tell it CI is
+  already green, so it does not spend the round suggesting you run the tests.
+
+### Reading a reviewer's findings
+
+Its report is **model output, not a verdict**. Check the load-bearing claims yourself before acting
+— a dated claim against `git log -S`, a "this file is uncovered" against the filesystem. A reviewer
+that is right about the defect can still be wrong about its cause, and a finding you cannot
+reproduce is a finding you should not fix.
+
+But do not discount it because it is inconvenient. The review that says the PR you have just
+finished is wrong is the one that is worth its cost.
+
+### When a dispatched agent dies
+
+A session limit can kill several mid-work. **The worktree is the handoff and it survives** —
+`git worktree list` finds them. Work committed but unpushed recovers exactly as it was. Work
+uncommitted recovers but is **unverified**: in both cases the agent may have left failing checks it
+had not reached. **Verify a dead agent's work before pushing it under your name**, and release the
+claim (§3 step 5, "Abandoned") for anything you do not adopt.
+
 ## 4. Resolving and Closing Tasks
 - **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
 - **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:
@@ -462,4 +562,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*

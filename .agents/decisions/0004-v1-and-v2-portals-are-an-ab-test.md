@@ -19,11 +19,12 @@ bundled arm, and verified in both. Several defects have been exactly this asymme
 `make check-portal-parity` (`scripts/check-portal-parity.cjs`), plus
 `make check-access-mode-parity` and `make check-tunnel-grouping` for two specific surfaces.
 
-**Known limit of that gate, stated so it is not mistaken for coverage:** it is a source scan, and a
-source-grep gate cannot assert that a function is *called*. It has been green on defects it was
-written to catch — needles satisfied by an interface field, a column definition, a `let`, and by a
-function's own definition while its call site was commented out. Behavioural coverage lives in
-`tests/e2e/ui/tests/`.
+**Known limit of that gate, stated so it is not mistaken for coverage:**
+`scripts/check-portal-parity.cjs:44` is a **closed, hand-written allow-list** — `CAPABILITIES`, one
+`{files, needle}` pair per arm per capability. A capability nobody added to that array is invisible
+to it, which is exactly the defect class this record says is enforced. **Adding a capability means
+adding an entry**, or the gate reports parity it never checked. Its boundary cases live in
+`tests/hooks/test-gate-scope-boundaries.sh`; behavioural coverage is in `tests/e2e/ui/tests/`.
 
 ## Revisit when
 

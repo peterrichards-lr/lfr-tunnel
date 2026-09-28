@@ -39,6 +39,7 @@ wrong failure. The prose bullets below carry each rule's reasoning; this table i
 | create or edit any `.md` | [`global-docs`](.agents/skills/global-docs/SKILL.md) |
 | touch in-memory tunnel or lease state | [`edge-sync`](.agents/skills/edge-sync/SKILL.md) |
 | build, sign, deploy, or run maintenance | [`lfr-tunnel-ops`](.agents/skills/lfr-tunnel-ops/SKILL.md) |
+| merge a PR, or tidy branches | [`CONTRIBUTING.md`](CONTRIBUTING.md) — the only home for several rules, incl. never deleting `checksums` |
 | reopen a settled trade-off, or wonder why something is the way it is | [`.agents/decisions/`](.agents/decisions/README.md) |
 
 ## Rules, by topic

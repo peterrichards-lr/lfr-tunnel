@@ -1,33 +1,40 @@
-STATUS: Accepted 2026-08-11
+STATUS: Accepted 2026-08-24
 
-# 0003. Release distribution is two-tier, and the public tier is unsigned on purpose
+# 0003. Release distribution is two-tier, and only the central tier carries an OS code signature
 
 ## Decision
 
-Binaries published to GitHub Releases, Homebrew and Scoop are **unsigned by deliberate choice**.
-The signed artefacts are the ones the central server distributes itself, together with its install
-scripts — that path is the Liferay-specific EDR-verification route and is not pushed onto other
-users.
+Two tiers, signed differently rather than signed-versus-unsigned:
+
+- **Public tier** (GitHub Releases, Homebrew, Scoop) carries a **minisign signature over
+  `checksums.txt`**, produced in CI. `--upgrade` refuses to install from a release without it.
+- **Central tier** (the binaries the server distributes itself, with its install scripts) carries
+  the **OS-level** signatures as well: macOS codesign, Windows Authenticode, Linux GPG. That is the
+  Liferay-specific EDR-verification path and is not pushed onto other users.
 
 ## Cost
 
-Anyone installing from the public tier gets no signature to verify, and the project cannot point at
-one. Accepted: signing the public tier would mean either publishing Liferay's signing identity or
-maintaining a second one for a community audience that does not need EDR attestation.
+A community user installing from the public tier can verify *what they downloaded* against a
+signed checksum, but gets no OS-level code signature — so macOS Gatekeeper and SmartScreen still
+treat the binary as unidentified. Accepted for the reason the release workflow itself gives: OS
+codesigning needs an Apple Developer ID or a Windows certificate, which are **per-distributor** and
+not something CI should hold on anyone's behalf.
 
 ## Enforced by
 
-`unenforced by design` for the public tier. The signed tier is real and checked:
-`.agents/skills/lfr-tunnel-ops/SKILL.md` §4 (signing) and §5 (deploying client binaries), and
-`make verify-release`, which re-checks that a published release carries every built artefact.
+`.github/workflows/release.yml` — the `Sign Checksums (minisign)` step and the `Publish Release`
+step that uploads `dist/*`, so the `.minisig` ships with the release; `scripts/update-tap-bucket.sh`
+carries the same checksums to Homebrew and Scoop. The OS-signing half is
+`.agents/skills/lfr-tunnel-ops/SKILL.md` §4, run locally rather than in CI.
 
-Note that `minisign` covers only self-upgrade integrity. macOS codesign, Windows Authenticode and
-Linux GPG are separate and still required — see §4 of the ops skill.
+`make verify-release` (`scripts/verify-release-assets.sh`) is **not** a signature check — it
+compares built artefact names against the published release's asset list, i.e. completeness of the
+public tier, and inspects no signature at all.
 
 ## Revisit when
 
-A distribution channel starts requiring a signature (a Homebrew or Scoop policy change), or a
-non-Liferay user has a genuine need to verify a public-tier download.
+A distributor identity becomes available to CI without being held on someone's behalf, or a
+channel starts requiring an OS-level signature.
 
 <!-- markdownlint-disable MD049 -->
 ---

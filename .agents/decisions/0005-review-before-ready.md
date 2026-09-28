@@ -8,13 +8,13 @@ Owner's instruction, 2026-09-26:
 
 > "Perhaps have an agent reviewing your work as you go to avoid issues."
 
-Every PR opens as a **draft**, gets an adversarial reviewer agent, and is marked ready only once
-that reviewer's findings are dealt with.
+The rule itself lives in `.agents/skills/github-workflow/SKILL.md` §3a, "Review before ready".
+This record is why it exists, not a second copy of it.
 
 ## Cost
 
 A second agent and a second round on every PR, including small ones. Accepted because the defects
-it catches are ones CI structurally cannot see. Four in its first week, all on green CI:
+it catches are ones CI structurally cannot see. Four inside the first 24 hours, all on green CI (these are PR numbers, not issues):
 
 - **#2275** — a sixth code path to permanence (the *Reject* button in `AdminDemoteReservation`),
   in the PR whose entire subject was closing permanence leaks.

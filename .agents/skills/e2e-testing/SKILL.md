@@ -239,6 +239,20 @@ So, when a helper reads mail:
 - **Check the response of every step and name it in the error.** An unchecked `/api/auth/verify`
   turns a session that was never established into a 401 attributed to the next call.
 
+## 4c. Two agents cannot run this suite at once
+
+`tests/e2e/ui/tests/utils/mailpit.ts` hardcodes `http://localhost:8025` and
+`tests/e2e/docker-compose.yml` maps `"4040:4040"`, so concurrent runs collide on the host ports
+however unique their compose project names are. It cost one agent about 1.5 hours to diagnose,
+because the symptom is another agent's mail and another agent's tunnel, not a port-bind error.
+
+**At most one agent may hold e2e territory at a time** (`github-workflow` §3 territory,
+§3a delegation). If you are dispatching, say in the brief who holds it.
+
+The fix both agents who hit this independently proposed — read the mailpit base URL from an env
+var, parameterise `4040` the way 8000/8025 already are — is small, and until it lands this
+constraint stands.
+
 ## 5. Running them -- Playwright runs in a container, not on your machine (#1858)
 
 ```bash
@@ -309,4 +323,4 @@ do not need. It runs `npm install` against a pnpm project (#1863) and installs `
 the container on every run; `scripts/run-e2e-ui.sh` is the maintained path.
 
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*

@@ -172,14 +172,14 @@ All three must hold:
   if one of them needs no change at all — that is the owner's call, not an agent's.
 - **Architecture.** Anything touching a hot path, or where the issue itself asks whether a
   different shape subsumes the problem.
-- **Work you cannot verify.** Translation quality is the standing example: a fourth agent
-  re-authoring what a second wrote and a third could not check is worse than not delegating.
-  It wants a native speaker. Do not put an agent on #2256, #2257, #2258, #2261, #2263 or their
-  successors.
-- **Anything whose test path is a shared serialisation point.** `tests/e2e/ui/tests/utils/mailpit.ts`
-  hardcodes `localhost:8025` and compose hardcodes `4040`, so two agents cannot run the e2e suite
-  concurrently however unique their project names are. Until that is parameterised, **at most one
-  agent at a time may hold e2e territory**, and the brief must say who holds it.
+- **Work you cannot verify.** The class: **anything whose deliverable is the CONTENT of the locale
+  bundles** — a translation, or a correction to one — as opposed to their mechanism (a missing key,
+  an unescaped placeholder, a `lang` attribute), which is ordinary delegable work. A fourth agent
+  re-authoring what a second wrote and a third could not check is worse than not delegating. It
+  wants a native speaker. Open examples at the time of writing: #2256, #2257, #2258, #2261, #2263.
+- **Anything whose test path is a shared serialisation point.** The e2e suite is one: see
+  [`e2e-testing`](../e2e-testing/SKILL.md) §4c for why, and for the constraint that **at most one
+  agent at a time may hold e2e territory**. The brief must say who holds it.
 
 ### One checkout per agent
 

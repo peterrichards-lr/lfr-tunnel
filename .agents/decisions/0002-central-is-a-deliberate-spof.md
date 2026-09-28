@@ -24,9 +24,15 @@ disable rather than clear.
 
 ## Revisit when
 
-**SQLite's single-writer file stops being the binding constraint.** That, not the node count, is
-what blocks a central cluster — so a proposal to cluster central that does not first address the
-storage layer is answering the wrong question.
+The storage layer stops being the first obstacle. Central's database is a local SQLite file opened
+with a single writer (`pkg/db/db.go`; `pkg/server/quota.go:49` reasons about it in as many words),
+so a clustering proposal has to say what happens to that file before node count is even the
+question.
+
+**Stated as inference, not as settled fact:** that the single-writer file is *the* binding
+constraint on clustering is not written down anywhere in this repo — it is my reading of the code.
+If you are here because you want to cluster central, treat it as the first thing to verify, not as
+a refusal.
 
 <!-- markdownlint-disable MD049 -->
 ---

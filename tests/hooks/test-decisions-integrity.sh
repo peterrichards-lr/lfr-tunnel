@@ -79,6 +79,18 @@ check_dir() {
                 ;;
         esac
 
+        # -- README rule 4: cite issues and PRs, never the gitignored state file. A record that
+        # cites it cannot be followed from a fresh clone, which is the exact problem this directory
+        # exists to fix, so a violation here reintroduces it.
+        if grep -q '\.agent-state\.md' "$f"; then
+            echo "$base: cites .agent-state.md, which is gitignored and unreadable from a fresh clone"
+        fi
+
+        # -- README rule 5: Revisit when is what separates a decision from a gag order.
+        grep -q '^## Revisit when' "$f" || echo "$base: has no '## Revisit when' section"
+
+        grep -q '^## Cost' "$f" || echo "$base: has no '## Cost' section"
+
         # -- Enforced by, and the paths it names
         if ! grep -q '^## Enforced by' "$f"; then
             echo "$base: has no '## Enforced by' section -- name the gate, or say 'unenforced by design'"
@@ -96,12 +108,17 @@ check_dir() {
             continue
         fi
 
-        for token in $(printf '%s' "$section" | grep -oE '`[^`]+`' | tr -d '`'); do
+        # The WHOLE record, not just this section. 0002's only named mechanism sat in `## Cost`
+        # and its `Enforced by` named no path at all, so renaming that skill would have left the
+        # record lying with the gate green.
+        for token in $(grep -oE '`[^`]+`' "$f" | tr -d '`'); do
             case "$token" in
                 */*) ;;   # only backticked tokens that look like paths
                 *) continue ;;
             esac
-            printf '%s' "$token" | grep -qE '\.[A-Za-z0-9]+$|\.[A-Za-z0-9]+:[0-9]+$' || continue
+            # A trailing "/" is a directory reference (`tests/e2e/ui/tests/`), which `[ -e ]`
+            # resolves perfectly well and the extension-only form silently skipped.
+            printf '%s' "$token" | grep -qE '\.[A-Za-z0-9]+$|\.[A-Za-z0-9]+:[0-9]+$|/$' || continue
             path="$(printf '%s' "$token" | sed -E 's/:[0-9]+$//')"
             [ -e "$path" ] || echo "$base: 'Enforced by' names $path, which does not exist"
         done
@@ -188,6 +205,48 @@ STATUS: Superseded by 0099 2026-01-01
 `unenforced by design`
 FIXEOF
 
+# 4. cites the gitignored state file (README rule 4)
+cat > "$FIXTURE/0004-cites-state.md" <<'FIXEOF'
+STATUS: Accepted 2026-01-01
+
+# 0004. A record whose reasoning points at a file a fresh clone does not have
+
+## Cost
+None stated.
+
+## Enforced by
+`unenforced by design`
+
+## Revisit when
+See .agent-state.md for the rest.
+FIXEOF
+
+# 5. no Revisit when -- a decision without one is a gag order (README rule 5)
+cat > "$FIXTURE/0005-no-revisit.md" <<'FIXEOF'
+STATUS: Accepted 2026-01-01
+
+# 0005. A record that closes a question permanently
+
+## Cost
+None stated.
+
+## Enforced by
+`unenforced by design`
+FIXEOF
+
+# 6. no Enforced by section at all -- the branch N11 left unproven
+cat > "$FIXTURE/0006-no-enforced.md" <<'FIXEOF'
+STATUS: Accepted 2026-01-01
+
+# 0006. A record that names no mechanism and does not say so
+
+## Cost
+None stated.
+
+## Revisit when
+Never.
+FIXEOF
+
 fixture_problems="$(check_dir "$FIXTURE")"
 
 if printf '%s\n' "$fixture_problems" | grep -q 'scripts/this-gate-was-deleted.cjs, which does not exist'; then
@@ -206,6 +265,24 @@ if printf '%s\n' "$fixture_problems" | grep -q 'superseded by 0099, but no 0099-
     pass "FIRING: a broken supersession chain is named"
 else
     fail "FIRING: a broken supersession chain was NOT detected"
+fi
+
+if printf '%s\n' "$fixture_problems" | grep -q '0004-cites-state.md: cites .agent-state.md'; then
+    pass "FIRING: a record citing the gitignored state file is named"
+else
+    fail "FIRING: a citation of .agent-state.md was NOT detected"
+fi
+
+if printf '%s\n' "$fixture_problems" | grep -q "0005-no-revisit.md: has no '## Revisit when'"; then
+    pass "FIRING: a missing 'Revisit when' is named"
+else
+    fail "FIRING: a missing 'Revisit when' was NOT detected"
+fi
+
+if printf '%s\n' "$fixture_problems" | grep -q "0006-no-enforced.md: has no '## Enforced by'"; then
+    pass "FIRING: a record naming no mechanism at all is named"
+else
+    fail "FIRING: a missing 'Enforced by' section was NOT detected"
 fi
 
 # --- BOUNDING -----------------------------------------------------------------------------

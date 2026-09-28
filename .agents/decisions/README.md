@@ -16,20 +16,24 @@ being written to two homes, and one kind had none:
 
 Before adding a record, apply it:
 
-- Can the decision be stated as **"always do X"** or **"never do X"**? Then it is a **constraint**.
-  It belongs in the skill that owns X, with its reasoning beside it. Do not write it here.
+- **Is there a skill whose subject already owns this?** Then the *rule* lives there, and the record
+  links to it and never restates it. `.agents/skills/edge-sync/` owns edge state; `github-workflow`
+  owns the PR lifecycle; `edr-constraints` owns local execution. A decision about how one of those
+  behaves is a decision *about* a rule that has a home — record the reasoning here, the instruction
+  there.
 - Does it name something **currently in progress** — a branch, an open PR, a release being cut?
-  Then it is **state**. It belongs in `.agent-state.md`.
-- Is it a choice that closed off alternatives, carries an ongoing cost, and that someone with no
-  context would reasonably reopen? **That is a decision. Write it here.**
+  Then it is **state**, and belongs in `.agent-state.md`.
+- Otherwise: a choice that closed off alternatives, carries an ongoing cost, and that someone with
+  no context would reasonably reopen. **That is a decision. Write it here.**
+
+An earlier draft of this test asked whether the decision could be phrased as "always/never do X",
+and treated a yes as proof it was a constraint. That does not work, and the seeds prove it: **three
+of the five original records failed it** while plainly belonging here. Any decision can be restated
+as an always/never about how to treat it — "never ship a capability into one arm", "never raise the
+SPOF unprompted" — so the test excluded nothing an author did not want it to exclude. Ownership is
+falsifiable in a way that grammatical form is not: either a skill owns the subject or it does not.
 
 If a record fails the test, the fix is to move it, not to widen the test.
-
-**This directory does not compete with the skills, and must not start.** `/AGENTS.md` already puts
-the "why" next to the rule and does it well — why `core.hooksPath` is rejected, why `golangci-lint`
-is deliberately not installed, why `make ops-bin` replaced a bare `go build`. Those are constraints
-with their reasoning attached, they are correctly filed, and pulling them in here would be the
-one-rule-one-home violation (#1412) that gutted `CLAUDE.md`.
 
 ## Format
 

@@ -298,11 +298,18 @@ STATUS: Accepted 2026-01-01
 
 # 0004. An accepted trade-off with nothing to enforce it
 
+## Cost
+Nothing enforces it, so it relies on being read.
+
 ## Enforced by
 `unenforced by design` -- this is a trade-off, not a rule an agent can violate.
+
+## Revisit when
+Someone proposes a mechanism that could enforce it.
 FIXEOF
 
-if check_dir "$FIXTURE" | grep -q '0004-unenforced.md'; then
+bounding_problems="$(check_dir "$FIXTURE")"
+if grep -q '0004-unenforced.md' <<<"$bounding_problems"; then
     fail "BOUNDING: 'unenforced by design' was rejected -- it is a legitimate answer (see README)"
 else
     pass "BOUNDING: 'unenforced by design' is accepted without naming a path"
@@ -310,7 +317,7 @@ fi
 
 # The README is the format spec, not a record. If it were ever treated as one it would fail every
 # assertion above, and the obvious "fix" would be to weaken them.
-if check_dir "$FIXTURE" | grep -q '^README.md:'; then
+if grep -q '^README.md:' <<<"$bounding_problems"; then
     fail "BOUNDING: README.md is being checked as a record -- it is the format spec"
 else
     pass "BOUNDING: README.md is excluded from the record set"

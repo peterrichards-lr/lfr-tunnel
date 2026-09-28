@@ -51,7 +51,7 @@ records_in() {
 # mostly false positives, which is how a gate ends up with exemptions bolted on until it says
 # nothing.
 check_dir() {
-    local dir="$1" f status body section token path base
+    local dir="$1" f status section token path base
 
     for f in $(records_in "$dir"); do
         base="$(basename "$f")"

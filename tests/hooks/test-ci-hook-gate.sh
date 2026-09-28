@@ -44,7 +44,7 @@ fi
 if [ -z "$HOOKS_PATTERN" ]; then
   fail "could not find the hooks filter pattern in $CI"
 else
-  for path in "Makefile" "tests/hooks/test-compile-check.sh" "scripts/run-e2e-ui.sh" ".claude/settings.json"; do
+  for path in "Makefile" "tests/hooks/test-compile-check.sh" "scripts/run-e2e-ui.sh" ".claude/settings.json" ".agents/decisions/0001-x.md"; do
     if echo "$path" | grep -qE "$HOOKS_PATTERN"; then
       pass "hooks filter matches '$path'"
     else

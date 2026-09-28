@@ -313,6 +313,7 @@ test-hooks:
 	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-make-help-covers-targets.sh
 	@./tests/hooks/test-gate-anti-vacuity.sh
+	@./tests/hooks/test-decisions-integrity.sh
 	@./tests/hooks/test-privacy-disclosures.sh
 	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh

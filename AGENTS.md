@@ -23,6 +23,25 @@ Keep the files themselves in `.agents/`, which is tool-neutral. Add a new skill 
 `.agents/skills/<name>/SKILL.md` with `name` and `description` frontmatter; the symlink picks it
 up with no further wiring. `/reload-skills` re-scans without restarting a session.
 
+## Preflight — what to load before you author
+
+Match what you are **about to do** against this table and load every row that applies, before
+writing anything. Most real tasks match two or more; loading one and skipping another is not the
+smaller risk, because much of what these files document are failures that are **silent** — a gate
+that passes over nothing, an edge that enforces a value nobody can change, a test satisfied by the
+wrong failure. The prose bullets below carry each rule's reasoning; this table is only the index.
+
+| About to … | Load first |
+|---|---|
+| run a Go test, or any local binary | [`edr-constraints`](.agents/skills/edr-constraints/SKILL.md) |
+| file an issue, open a PR, delegate to another agent | [`github-workflow`](.agents/skills/github-workflow/SKILL.md) |
+| write or run a browser test | [`e2e-testing`](.agents/skills/e2e-testing/SKILL.md) |
+| create or edit any `.md` | [`global-docs`](.agents/skills/global-docs/SKILL.md) |
+| touch in-memory tunnel or lease state | [`edge-sync`](.agents/skills/edge-sync/SKILL.md) |
+| build, sign, deploy, or run maintenance | [`lfr-tunnel-ops`](.agents/skills/lfr-tunnel-ops/SKILL.md) |
+| merge a PR, or tidy branches | [`CONTRIBUTING.md`](CONTRIBUTING.md) — the only home for several rules, incl. never deleting `checksums` |
+| reopen a settled trade-off, or wonder why something is the way it is | [`.agents/decisions/`](.agents/decisions/README.md) |
+
 ## Rules, by topic
 
 - **Local test/build safety (SentinelOne EDR)** — [`.agents/skills/edr-constraints/SKILL.md`](.agents/skills/edr-constraints/SKILL.md)
@@ -46,6 +65,14 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
   Read before modifying any in-memory tunnel/lease state on the control plane.
 - **Operations, deployment, builds, signing** — [`.agents/skills/lfr-tunnel-ops/SKILL.md`](.agents/skills/lfr-tunnel-ops/SKILL.md)
   Read before building, signing, deploying, or running maintenance operations.
+- **Settled trade-offs and why they were made** — [`.agents/decisions/`](.agents/decisions/README.md)
+  Read before reopening a choice that looks wrong, or before proposing something the repo appears
+  to have ignored. These are decisions with **no rule to attach them to** — central being a
+  deliberate SPOF, the public release tier being unsigned on purpose, V1/V2 being a live A/B test.
+  Each record names what the decision cost and, crucially, **what would reopen it**, so "don't
+  raise this" is a condition to watch for rather than an instruction to stop thinking.
+  Constraints stay in the skills above and state stays in `.agent-state.md`; the README's
+  admission test is what keeps the three from duplicating each other.
 - **Contribution workflow, branching and cleanup** — [`CONTRIBUTING.md`](CONTRIBUTING.md)
   Read before merging a PR or tidying branches. It is the only place several rules live, and
   they are not derivable from the code:
@@ -217,6 +244,20 @@ target (build the missing thing, if it's genuinely still wanted) or fix the
 reference (update or remove it) — don't leave it dangling for the next agent to
 trip over.
 
+**Resolving is the lower bar. The rule also has to be true.** A dangling path at least
+announces itself; a rule that resolves and misleads reads exactly like a correct one, and gets
+followed. `edr-constraints` carries a self-documented instance — *"**Not** `lfr-tunneld` — see
+'Running the server locally' below, **that claim was wrong**"* — where the file had told agents
+for weeks that running the daemon from `bin/` was fine, and three environment reinstalls came of
+it. So: **if a skill turns out to be wrong, or to omit the answer you needed, fix the skill as
+part of the task** rather than working around it locally and moving on. The next agent inherits
+whatever you leave, and it will read as current.
+
+The same applies to what a rule *claims* about its own enforcement. Saying a rule is "enforced"
+when the mechanism covers one spelling, one harness or one file type is a false sense of closure,
+and it stops the next agent looking. State the blind spot, and prefer asserting it — §5b rule 6
+in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not fail.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*

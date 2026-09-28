@@ -151,7 +151,13 @@ jobs:
           # exists to catch -- someone loosening the EDR deny list, and nothing else -- would skip
           # the job that runs it. A gate that does not run on changes to its own subject is the
           # #1929 shape: present in review, protecting nothing.
-          if echo "$CHANGED" | grep -qE '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.claude/|^\.github/workflows/'; then
+          # ^\.agents/ is here for test-decisions-integrity.sh (#2287), whose subject is
+          # .agents/decisions/. Adding it was missed on the PR that added the gate -- one PR after
+          # ^\.claude/ was added for exactly this reason, with a comment citing #1929. A record
+          # with a dangling `Enforced by` would have skipped the job that catches it, and the PR
+          # was green only because it also touched Makefile and tests/hooks/. The class is: a gate
+          # whose subject is a path this filter does not name.
+          if echo "$CHANGED" | grep -qE '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.claude/|^\.agents/|^\.github/workflows/'; then
             HOOKS=true
           else
             HOOKS=false

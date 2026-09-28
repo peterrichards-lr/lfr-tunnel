@@ -38,7 +38,7 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 # this whole issue is about.
 mkdir -p "$WORK/gates" "$WORK/empty"
 
-for gate in check-edr-safety.sh check-nolint-ratchet.sh check-test-home-isolation.sh; do
+for gate in check-edr-safety.sh check-nolint-ratchet.sh check-sigpipe-ratchet.sh check-test-home-isolation.sh; do
     cp "$REPO_ROOT/scripts/$gate" "$WORK/gates/"
     chmod +x "$WORK/gates/$gate"
 
@@ -56,7 +56,7 @@ done
 
 # The counterpart. A guard that fails everywhere is not a guard, it is an outage -- so each must
 # still pass against the real tree, where there genuinely is a corpus to examine.
-for gate in check-edr-safety.sh check-nolint-ratchet.sh check-test-home-isolation.sh; do
+for gate in check-edr-safety.sh check-nolint-ratchet.sh check-sigpipe-ratchet.sh check-test-home-isolation.sh; do
     if (cd "$REPO_ROOT" && "./scripts/$gate" >/dev/null 2>&1); then
         pass "$gate still passes against the real tree"
     else
@@ -70,6 +70,12 @@ if (cd "$REPO_ROOT" && LFT_EDR_MIN_FILES=999999 ./scripts/check-edr-safety.sh >/
     fail "check-edr-safety.sh ignores LFT_EDR_MIN_FILES, so its floor cannot be exercised"
 else
     pass "check-edr-safety.sh honours LFT_EDR_MIN_FILES"
+fi
+
+if (cd "$REPO_ROOT" && LFT_SIGPIPE_MIN_FILES=999999 ./scripts/check-sigpipe-ratchet.sh >/dev/null 2>&1); then
+    fail "check-sigpipe-ratchet.sh ignores LFT_SIGPIPE_MIN_FILES, so its floor cannot be exercised"
+else
+    pass "check-sigpipe-ratchet.sh honours LFT_SIGPIPE_MIN_FILES"
 fi
 
 if (cd "$REPO_ROOT" && LFT_NOLINT_MIN_FILES=999999 ./scripts/check-nolint-ratchet.sh >/dev/null 2>&1); then

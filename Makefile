@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -100,6 +100,7 @@ help:
 	@echo "  make check-access-mode-parity - Every access-control form and the server agree"
 	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
+	@echo "  make sigpipe-ratchet   - pipefail + grep -q pipelines have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
 	@echo "  make check-branches    - Report stale remote branches"
 	@echo "  make prune-branches    - Delete merged remote branches"
@@ -129,6 +130,11 @@ prune-branches:
 # anything failing.
 nolint-ratchet:
 	@./scripts/check-nolint-ratchet.sh
+
+# Ceiling on `producer | grep -q` under pipefail, which can report the opposite of the truth
+# (#2290). Runs beside nolint-ratchet in CI's Lint & Format Check.
+sigpipe-ratchet:
+	@./scripts/check-sigpipe-ratchet.sh
 
 # Every package whose tests resolve os.UserHomeDir() isolates it, so the suite does not read the
 # developer's own ~/.lfr-tunnel (#1798). Runs in CI's Lint & Format Check job too.
@@ -314,6 +320,7 @@ test-hooks:
 	@./tests/hooks/test-make-help-covers-targets.sh
 	@./tests/hooks/test-gate-anti-vacuity.sh
 	@./tests/hooks/test-decisions-integrity.sh
+	@./tests/hooks/test-sigpipe-ratchet.sh
 	@./tests/hooks/test-privacy-disclosures.sh
 	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh

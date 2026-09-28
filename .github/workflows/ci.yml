@@ -446,6 +446,13 @@ jobs:
       - name: Check the errcheck suppression ratchet
         run: ./scripts/check-nolint-ratchet.sh
 
+      # Ceiling on `producer | grep -q` under pipefail (#2290), which can report the OPPOSITE of
+      # the truth: grep -q exits on its first match, the producer takes SIGPIPE, and pipefail
+      # turns that into a non-zero status. Beside nolint-ratchet for the same reason it is here
+      # rather than a make target -- a ratchet nobody runs drifts, as #1498 measured.
+      - name: Check the pipefail/grep -q ratchet
+        run: ./scripts/check-sigpipe-ratchet.sh
+
       # A test that resolves the user's home must not read the real one (#1798). This fails in
       # the direction CI is worst at seeing -- the runner's home is empty, so an unisolated test
       # passes here and fails only on a machine that has actually configured the product.

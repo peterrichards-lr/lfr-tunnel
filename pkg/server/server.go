@@ -1815,6 +1815,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					if shell, readErr := fs.ReadFile(subFS, "index.html"); readErr == nil {
 						lang := s.ResolveLocale(r)
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")
+						w.Header().Set("Vary", "Accept-Language")
 						w.WriteHeader(http.StatusOK)
 						if _, err := w.Write([]byte(withDocumentLocale(string(shell), lang, GetDirection(lang)))); err != nil {
 							log.Printf("[Warning] Failed to write response: %v", err)
@@ -1864,6 +1865,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handles a switch with no reload -- so the server value only has to be right for the first paint.
 func (s *Server) serveDashboardHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The document now depends on a request HEADER, so it is no longer cacheable by URL alone
+	// (#2271). Without this a shared cache is free to hand the first visitor's locale to the next
+	// -- the `?lang=` form is already part of the cache key, Accept-Language is not.
+	w.Header().Set("Vary", "Accept-Language")
 	w.WriteHeader(http.StatusOK)
 	htmlContent := strings.ReplaceAll(dashboardHTML, "/static/dashboard.js", "/static/dashboard.js?v="+config.Version)
 	htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)

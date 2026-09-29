@@ -132,6 +132,14 @@ func serveDashboardShell(t *testing.T, srv *Server, path string, headers map[str
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET %s returned %d, want 200", path, w.Code)
 	}
+
+	// The document depends on a request header now, so a cache keyed on the URL alone could hand
+	// one visitor's locale to the next. `?lang=` is already part of that key; Accept-Language is
+	// not, and the whole point of resolving it server-side is that it reaches first paint.
+	if v := w.Header().Get("Vary"); !strings.Contains(v, "Accept-Language") {
+		t.Errorf("GET %s answered Vary: %q, want it to include Accept-Language", path, v)
+	}
+
 	body := w.Body.String()
 
 	// Anchor, per the rule that an absence check needs something present to stand on: every

@@ -81,5 +81,20 @@
       "Bash(./lfr-tunnel.sh *)",
       "Bash(go test*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD=\"${CLAUDE_PROJECT_DIR:-.}/scripts/edr-bash-guard.py\"; if [ -f \"$GUARD\" ]; then python3 \"$GUARD\"; else printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"EDR guard scripts/edr-bash-guard.py is missing, so Bash is refused rather than allowed. Restore it (git checkout -- scripts/) -- a vanished gate script is how the 2026-09-09 SentinelOne remediation presented. #2289\"}}'; fi",
+            "timeout": 10,
+            "statusMessage": "EDR guard"
+          }
+        ]
+      }
+    ]
   }
 }

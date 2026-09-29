@@ -130,22 +130,32 @@ named the client and never the daemon -- `Bash(lfr-tunnel *)` matched neither `l
 2 and 3, and on 2026-09-20 that failed again (`./bin/lfr-tunneld -h`).
 
 What the deny list now covers: every `cmd/` binary except `lfr-tunnel-ops`, every `dist/` and
-`bin/*-linux` artefact, and the three root wrappers -- each in its bare and its with-arguments
-form. **What it does not cover, because a deny list enumerates spellings and cannot do otherwise:**
+`bin/*-linux` artefact, and the three root wrappers -- each bare and with arguments.
 
-| Not covered | Why it matters |
+**A deny entry matches from the FIRST WORD, so a prefix word used to walk straight through it**
+(`timeout 5 ./bin/lfr-tunneld -h`, `sudo …`, `env FOO=1 …`, `nohup … &`). `scripts/edr-bash-guard.py`
+closes that: a `PreToolUse` hook on `Bash` that parses **command position** -- splitting on shell
+operators and stepping over prefix words -- and refuses when the executable's basename starts with
+`lfr-tunnel` and is not `lfr-tunnel-ops`. That rule needs no artefact list: it covers every
+`dist/lfr-tunnel-<os>-<arch>`, every `bin/lfr-tunneld-*-linux`, the wrappers, and anything a future
+release invents.
+
+It parses position rather than regexing the whole command **because mention is not execution**.
+`scp dist/lfr-tunnel-linux-amd64 host:` publishes a binary, `gofmt -w cmd/lfr-tunneld/main.go`
+formats source, `codesign --verify dist/lfr-tunnel-darwin-arm64` checks a signature -- all three are
+on the release path and all three must be allowed. `tests/hooks/test-edr-bash-guard.sh` holds both
+halves: 13 spellings that must be refused and 12 that must not.
+
+It **fails closed** -- on malformed input, on its own error, and when the script is missing, which is
+the shape the 2026-09-09 SentinelOne remediation presented when it took 61 tracked scripts.
+
+What remains uncovered, so this is not read as a closed class:
+
+| Not covered | Why |
 |---|---|
-| a **prefix word** -- `sudo ./bin/lfr-tunneld`, `timeout 5 ./bin/lfr-tunneld`, `env FOO=1 …`, `nohup … &` | the pattern must match from the first word, so none of these hit any entry. `timeout` is the seductive one: it reads like bounding the risk |
-| an absolute path, or `$(pwd)/bin/lfr-tunneld` | how an agent addresses a binary from a worktree |
-| `bash -c "./bin/lfr-tunneld"`, `exec`, `xargs` | the documented escape once a deny fires |
-| a copy made anywhere else | nothing constrains the destination |
-
-**Nothing else in the repo closes those.** `make install-go-guard` refuses `go run` and `go test`
-only -- it says nothing about executing an already-built binary, which is exactly what incidents 2
-and 3 were. `scripts/check-edr-safety.sh` is a static scan of tracked source, not of an agent's
-ad-hoc command. And `.claude/settings.json` is a Claude Code mechanism: `github-workflow` §3 says
-Gemini works this same backlog from another machine, and **for Gemini this paragraph is still the
-entire control.**
+| a shell that re-enters itself -- `bash -c "./bin/lfr-tunneld"`, `sh -c …`, `xargs sh -c` | the guard sees `bash`, not the daemon; the inner string is data to it |
+| a copy under another name -- `cp bin/lfr-tunneld /tmp/x && /tmp/x` | the basename rule is the whole mechanism |
+| **any harness that is not Claude Code** | `github-workflow` §3 says Gemini works this backlog from another machine. `.claude/settings.json` is inert there, and `make install-go-guard` covers `go run`/`go test` only -- **for Gemini this paragraph is still the entire control** |
 
 So the conclusion above is unchanged, and the deny list narrows the ways to run the daemon by
 accident rather than closing them. If you find yourself reaching for a prefix word to get past a
@@ -159,4 +169,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*
+*Last Updated: 2026-09-29* | *Last Reviewed: 2026-09-29*

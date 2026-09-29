@@ -306,6 +306,7 @@ test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
 	@./tests/hooks/test-edr-guard.sh
 	@./tests/hooks/test-edr-deny-list.sh
+	@./tests/hooks/test-edr-bash-guard.sh
 	@./tests/hooks/test-go-guard.sh
 	@./tests/hooks/test-shell-portability.sh
 	@./tests/hooks/test-drain-and-wait.sh

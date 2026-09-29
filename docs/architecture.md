@@ -133,7 +133,59 @@ Here is how `lfr-tunnel` resolves this:
 
 The `lfr-tunnel` routing system is designed to support any domains you control. The gateway operator configures the domains via the `domains` list parameter in `server-config.yaml`. All wildcard subdomain routing, registration validation, and public URL generation are driven by these values.
 
-Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on all configured domains. Requests arriving with a `Host` header that does not match either domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
+Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on the **issuable** domains — see below — and requests arriving with a `Host` header that does not match a configured domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
+
+### `domains` vs `tunnel_domains`: what a gateway *serves* is not what it *issues*
+
+Two lists, and the difference matters to anything that classifies a hostname:
+
+| Key | Meaning |
+|---|---|
+| `domains` | every name this gateway **answers on**. On an edge this includes regional names such as `in.example.com` and `aws-edge-in.example.com`, which it needs for direct and internal addressing. |
+| `tunnel_domains` | the subset a lease may actually be **issued on**. Empty (the default) means every entry in `domains` is eligible, which is correct for a single-gateway deployment and for the control plane. |
+
+An edge sets `tunnel_domains` to the shared apex on purpose. A lease issued on a regional name puts
+the serving node into the visitor's URL, so the URL would change the moment the client moved to
+another gateway — exactly what a planned move is meant to avoid. The region belongs in DNS
+resolution, not in the name a visitor types
+([#1285](https://github.com/peterrichards-lr/lfr-tunnel/issues/1285)).
+
+### Discovering them: `supported_domains` on `/api/version`
+
+`GET <server_url>/api/version` returns a `supported_domains` array. It is **unauthenticated** — no
+token, no session — because a client has to be able to ask before it has a tunnel, and it is
+**cacheable** and stable. Integrations should treat it as a supported field rather than an
+implementation detail.
+
+```bash
+curl -s https://tunnel.example.com/api/version | jq .supported_domains
+# ["example.com", "example.net"]
+```
+
+Three things about it that are not guessable from the name:
+
+1. **It is the issuable set, not the served set.** It resolves `tunnel_domains` when that is set and
+   falls back to `domains` otherwise. That is deliberately the more useful answer: the question an
+   integration is really asking is *"can a subdomain be leased here, so should I split this hostname
+   and request one?"* A name a gateway answers on but never issues from would make a caller split it
+   and advertise a public URL that no lease backs.
+2. **An absent key means "fall back", never "this gateway serves nothing."** A gateway older than
+   the field omits it. Treat missing as *use your own configured list*; treating it as an empty set
+   classifies every hostname as external against every older gateway.
+3. **It does not enumerate custom domains or subdomain leases**, and must not be extended to. Those
+   are user data on an endpoint that requires no credentials.
+
+**The integration pattern**, for something classifying a configured hostname into "a gateway base
+domain", "a host on one" or "an external domain":
+
+- Fetch once per gateway and cache it, **keyed on the gateway URL you fetched from** rather than on
+  the hostname you are classifying. Two gateways that share a bootstrap domain would otherwise
+  overwrite each other's entry.
+- A built-in list of domains survives as a **seed**, not as the answer: you need one domain to build
+  the URL you fetch from. What this removes is hardcoding the *complete* list, which is the part
+  that is wrong the moment a deployment adds a gateway you were never told about.
+- Never block a classification on the fetch. On a miss, use the seed and carry on — that also keeps
+  an offline or dry-run path working with no network at all.
 
 ---
 
@@ -456,4 +508,4 @@ Properties worth knowing when reading these figures:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-23* | *Last Reviewed: 2026-09-23*
+*Last Updated: 2026-09-29* | *Last Reviewed: 2026-09-29*

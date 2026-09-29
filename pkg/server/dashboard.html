@@ -1,6 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
+    <!-- The lang and dir above are a DEFAULT, not the served value (#2271). serveDashboardHTML
+         rewrites the root element per request to the locale ResolveLocale picks from ?lang= and
+         Accept-Language, so the document is not English-until-the-bundle-runs; dashboard.js then
+         takes over as the authority, because only it can see the stored `lfr_lang` preference.
+         Editing them here changes only what this file says when read on its own. -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
 
     <meta charset="UTF-8">

@@ -81,5 +81,20 @@
       "Bash(./lfr-tunnel.sh *)",
       "Bash(go test*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "D=\"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"deny\\\",\\\"permissionDecisionReason\\\":\\\"EDR guard could not run (missing script, or the interpreter failed), so Bash is refused rather than allowed. A corrupted-but-present guard is the shape the 2026-09-09 SentinelOne remediation took. Restore it and check python3. #2289\\\"}}\"; G=\"${CLAUDE_PROJECT_DIR:-.}/scripts/edr-bash-guard.py\"; if [ -f \"$G\" ]; then python3 \"$G\" || printf %s \"$D\"; else printf %s \"$D\"; fi",
+            "timeout": 10,
+            "statusMessage": "EDR guard"
+          }
+        ]
+      }
+    ]
   }
 }

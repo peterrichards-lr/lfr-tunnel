@@ -3,10 +3,12 @@ package server
 import (
 	"embed"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -180,4 +182,54 @@ func GetDirection(lang string) string {
 		return "rtl"
 	}
 	return "ltr"
+}
+
+// htmlOpenTagRe matches a document's opening root element tag, with or without attributes.
+// Deliberately not anchored: both shells carry a doctype ahead of it.
+var htmlOpenTagRe = regexp.MustCompile(`(?is)<html\b[^>]*>`)
+
+// htmlLangOrDirAttrRe matches a `lang=` or `dir=` attribute inside that tag, in any of the three
+// spellings HTML allows for a value (double-quoted, single-quoted, bare).
+var htmlLangOrDirAttrRe = regexp.MustCompile(`(?is)\s+(?:lang|dir)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)`)
+
+// withDocumentLocale rewrites the opening root element tag of doc so that it declares lang and dir.
+//
+// The portal shells are the two documents a browser parses BEFORE any of this project's JavaScript
+// runs, and both shipped a literal lang="en" that stayed wrong until the bundle assigned
+// document.documentElement.lang -- #2262 fixed the steady state, #2271 (this) is the window before
+// it. A screen reader that has begun announcing a document does not necessarily re-voice it when
+// the attribute changes underneath it, so the first thing read after every navigation could be
+// translated prose in an English voice, and an RTL layout painted LTR first.
+//
+// Rewriting the served bytes rather than templating the two files is what keeps locale resolution
+// in one place: the caller passes what ResolveLocale/GetDirection already decided, exactly as
+// /privacy and /cookies do. The alternative considered and rejected in #2271 was an inline
+// <script> reading localStorage ahead of the bundle, which would have been a third and fourth
+// implementation of the precedence rule (?lang= > lfr_lang > Accept-Language) with nothing holding
+// the copies in step.
+//
+// Any lang/dir already on the tag is REPLACED, not appended to. HTML's own rule is that the first
+// of a duplicated attribute wins, so appending would have been a silent no-op against precisely
+// the hardcoded lang="en" this exists to remove. Every other attribute is preserved.
+//
+// A document with no root element tag is returned unchanged. That case is reachable -- CI's Go
+// test jobs stub pkg/server/ui-dist/index.html as an empty file -- and an empty document is not
+// something to synthesise a tag into.
+func withDocumentLocale(doc, lang, dir string) string {
+	loc := htmlOpenTagRe.FindStringIndex(doc)
+	if loc == nil {
+		return doc
+	}
+	tag := doc[loc[0]:loc[1]]
+
+	rest := strings.TrimSuffix(tag[len("<html"):], ">")
+	rest = strings.TrimSpace(htmlLangOrDirAttrRe.ReplaceAllString(rest, ""))
+
+	rebuilt := `<html lang="` + html.EscapeString(lang) + `" dir="` + html.EscapeString(dir) + `"`
+	if rest != "" {
+		rebuilt += " " + rest
+	}
+	rebuilt += ">"
+
+	return doc[:loc[0]] + rebuilt + doc[loc[1]:]
 }

@@ -215,11 +215,26 @@ Omit any of these and the work comes back needing to be redone:
 
 ### Review before ready
 
-Every PR opens as a **draft**, gets an adversarial reviewer agent, and is marked ready only once
-that reviewer's findings are dealt with. See [`.agents/decisions/0005-review-before-ready.md`](../../decisions/0005-review-before-ready.md)
+**You** open the PR as a **draft**, **you** dispatch the adversarial reviewer agent, **you** deal
+with its findings, and then **you mark it ready.** All four are yours. See
+[`.agents/decisions/0005-review-before-ready.md`](../../decisions/0005-review-before-ready.md)
 for why, and for the four defects it caught that no CI check could see.
 
-Two rules about the reviewer itself:
+The passive version of that sentence — "is marked ready once the findings are dealt with" — stated
+the condition and omitted the duty, and on 2026-09-28 the owner had to ask three times — twice for
+PR #2284, once for PR #2288 — before finished work was published:
+
+> "I don't mind you using drafts but you need to publish them before I can merge them"
+
+So, explicitly:
+
+- **Do not ask whether to run the review.** This section *is* the instruction. Asking converts a
+  standing process into a request and parks your own PR while you wait for an answer you already
+  have.
+- **Do not wait to be asked to publish.** The review is the gate; the owner is the merger, and they
+  cannot merge a draft. A draft nobody publishes is indistinguishable from abandoned work.
+
+Two rules about the reviewer itself, and one about the draft:
 
 - **A reviewer reviews; it does not push to the branch it is reviewing.** It takes no lock and holds
   no territory. If it could commit, its findings and its fixes would land together and nobody would
@@ -227,6 +242,10 @@ Two rules about the reviewer itself:
 - **Brief it adversarially and name the axes.** "Review this PR" returns prose. "Does the deny list
   actually deny — enumerate the spellings it does *not* cover" returns a blocker. Tell it CI is
   already green, so it does not spend the round suggesting you run the tests.
+- **A draft is a working state you own, not a queue.** If a PR of yours is in draft, the reason is
+  that you are actively working it — the review is running, or its findings are not yet dealt with.
+  It is never in draft because it is waiting for somebody. When the work is done, the last step of
+  the work is `gh pr ready`.
 
 ### Reading a reviewer's findings
 
@@ -406,6 +425,77 @@ If several could, name the one you mean.
 
 ---
 
+## 5d. An assertion that covers one branch of what it names
+
+The third of the family. §5b is about a fix that is incomplete; §5c is about an assertion satisfied
+by the wrong failure. This one is an assertion that is complete, correct, and satisfied for exactly
+the intended reason — **on one branch of a subject that has several.** The other branches can be
+deleted outright and the suite stays green.
+
+Nothing about a passing run distinguishes that from real coverage, and the failure is structural
+rather than careless: a fixture has to live *somewhere*, and wherever it lives becomes the only
+covered path. The author picks one location for a good local reason; the remaining paths inherit no
+coverage at all, silently, because nothing enumerates them.
+
+Two instances, both in guards written on 2026-09-28 — in the PRs whose subject *was* guards:
+
+1. **`tests/hooks/test-sigpipe-ratchet.sh` (PR #2291).** The gate scans two globs,
+   `tests/hooks/*.sh` and `scripts/*.sh`. Every fixture in the suite planted into `tests/hooks/`.
+   Measured mutation — delete `scripts/*.sh` from the gate's corpus, against the then-ceiling
+   of 148:
+
+   ```
+   passed: 7  failed: 0
+   pipefail + 'grep -q' pipelines: 134 (ceiling 148)
+   The count has fallen. Lower the ceiling ... to 134   → exit 0
+   ```
+
+   14 real pipelines drop out, the suite reports full health, **and the gate then invites
+   ratcheting the ceiling down to a number that will never see them again.** The mirror mutation
+   (delete `tests/hooks/*.sh` instead) *was* caught. Coverage was asymmetric and nothing said so.
+
+2. **`tests/hooks/test-decisions-integrity.sh` (PR #2288).** Its BOUNDING fixture was non-compliant
+   for a reason unrelated to the property it pinned, so the case could not go red on that property
+   at all — it reported green locally and red on Linux CI, meaning it had been decorative from the
+   moment it was written.
+
+Both were found by an adversarial reviewer running mutations, not by the suites themselves. Both
+are fixed in-tree now, so both are worth reading as the shape to copy: the sigpipe suite's FIRING
+case plants a fixture in *each* glob and asserts `count -eq 2`, and its floor (`MIN_FILES`) is set
+close enough to the real corpus to notice half of it missing.
+
+### The rules
+
+1. **A gate reading N inputs needs a fixture per input.** Enumerate what the subject reads — every
+   glob, every directory, every file type, every config branch — and give each one a case. If you
+   cannot enumerate them, that is the finding.
+
+2. **The FIRING case asserts *how many*, not merely that something was counted.** `count -eq 2`
+   distinguishes "half the corpus is unscanned" from "the corpus is fully scanned"; `count -ge 1`
+   cannot, and it is the weaker assertion nobody notices writing.
+
+3. **An anti-vacuity floor is not this check.** `tests/hooks/test-gate-anti-vacuity.sh` asserts a
+   gate refuses an *empty* tree. A half-empty corpus is not an empty tree, which is precisely the
+   gap instance 1 fell through. Set the floor near the real corpus size so that losing half of it
+   trips it.
+
+4. **When the narrowness is deliberate, say so with a BOUNDING case** — that is §5b rule 6, and
+   the two work together: §5d is what you do when the blind spot is *unintentional*, rule 6 is what
+   you do once it is deliberate. The sigpipe gate carries both: a fixture per scanned glob, and a
+   BOUNDING case pinning `scripts/common/` as out of scope.
+
+No gate for this one. Nothing can mechanically tell a deliberately narrow fixture set from an
+accidentally narrow one; that judgement is the PR author's and the reviewer's, which is why it
+belongs here next to §5b and §5c rather than in a script.
+
+### The one-line check
+
+> **Delete half of what this gate reads. Does anything go red?**
+
+Run the mutation — do not reason about it. Instance 1 reported `passed: 7  failed: 0` under it.
+
+---
+
 ## 6. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`.
@@ -562,4 +652,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*
+*Last Updated: 2026-09-29* | *Last Reviewed: 2026-09-29*

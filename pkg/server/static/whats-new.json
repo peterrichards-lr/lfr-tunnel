@@ -1,5 +1,27 @@
 [
   {
+    "version": "v1.50.0",
+    "release_date": "2026-09-29",
+    "features": [
+      "docs(architecture): supported_domains, and why served is not issuable (#2295) (#2296)",
+      "feat(gates): a ceiling on pipefail + `grep -q`, which can report the opposite of the truth (#2290) (#2291)",
+      "feat(agents): a decisions directory, delegation rules, and a preflight table (#2287) (#2288)",
+      "fix(edr): the deny list covers the daemon, and a derived gate keeps it covering it (#2283) (#2284)",
+      "chore: remove the agent session transcript committed to the repo root (#2285) (#2286)",
+      "docs(server): what may never expire, and what `approval` costs an operator (#2268) (#2282)",
+      "fix(portal): the release confirmation names what is actually being released (#2273) (#2281)",
+      "feat(portal): both arms render the never-expires option from the policy, not the role (#2266) (#2279)",
+      "fix(client): the health check dials the target's port, and the gateway stops paging on a timer (#2270) (#2278)",
+      "feat(config): custom_domain_expiry_days, and one resolver for both resources (#2276) (#2277)",
+      "feat(server): a token permanence request can be raised, granted and denied (#2267) (#2275)",
+      "a11y(portal): both arms declare <html lang>, and the iron warning keeps its SSH sentence (#2262) (#2269)",
+      "test(e2e): point the expensive job at the data plane and a non-admin journey (#2249) (#2272)",
+      "feat(server): never_expires is three operator policies the server enforces (#2265) (#2274)",
+      "fix(portal): 70 new keys, ten locales, and the mechanism a title= needs (#2248) (#2260)",
+      "fix(portal-v1): split the emphasis out of two properties values (#2252) (#2255)"
+    ]
+  },
+  {
     "version": "v1.49.1",
     "release_date": "2026-09-25",
     "features": [
@@ -52,18 +74,6 @@
       "fix(server): a visitor's session survives the tunnel moving gateway (#2181) (#2188)",
       "fix(client): retire the gateway-shutdown warning when the session moves (#2180) (#2186)",
       "fix(client): the Inspector is no longer served without freshness information (#2185)"
-    ]
-  },
-  {
-    "version": "v1.48.51",
-    "release_date": "2026-09-23",
-    "features": [
-      "fix(server): count request headers as Data In, not only request bodies (#2177) (#2178)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/ec2 (#2173)",
-      "chore(deps): bump golang.org/x/time from 0.15.0 to 0.16.0 (#2174)",
-      "chore(deps): bump golang.org/x/crypto from 0.56.0 to 0.57.0 (#2171)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/sts (#2170)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#2169)"
     ]
   }
 ]

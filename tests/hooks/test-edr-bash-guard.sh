@@ -52,8 +52,14 @@ except Exception:
 # every *.sh for exactly those spellings -- the self-match in section 5c rule 6, which has now
 # bitten this repo four times. Do NOT exempt this file in check-edr-safety.sh instead; an
 # exemption would blind it to a genuine invocation added here later.
-GO_RUN="go run"
-GO_BUILD="go build"
+# Built from one token rather than written as three literals. Note the asymmetry that caught this:
+# check-edr-safety.sh's run/build patterns require a TRAILING SPACE, so `GO_RUN="go run"` slips
+# past them -- but its test pattern does not, so the same shape for test was flagged. Deriving all
+# three removes the inconsistency and the literals together.
+TOOLCHAIN="go"
+GO_RUN="$TOOLCHAIN run"
+GO_BUILD="$TOOLCHAIN build"
+GO_TEST="$TOOLCHAIN test"
 
 # Commands that MUST be refused. Every prefix-word row is a spelling the 79 deny entries cannot
 # reach; that is the whole reason this file exists.
@@ -69,7 +75,20 @@ cd bin && ./lfr-tunneld
 ./lfr-tunnel.sh
 ./lfr-tunnel.ps1
 bin/lfr-tunneld-central-linux
-bin/lfr-tunnel-edge-provisioner-linux"
+bin/lfr-tunnel-edge-provisioner-linux
+sudo -u ubuntu ./bin/lfr-tunneld
+sudo -u ubuntu -- ./bin/lfr-tunneld
+timeout -s KILL 5 ./bin/lfr-tunneld
+env -C /tmp ./bin/lfr-tunneld
+eval ./bin/lfr-tunneld
+( ./bin/lfr-tunneld )
+> /tmp/out ./bin/lfr-tunneld
+bash ./lfr-tunnel.sh
+source ./lfr-tunnel.sh
+timeout 600 ${GO_TEST} ./...
+env FOO=1 ${GO_TEST} ./pkg/server
+${GO_RUN} .
+${GO_RUN} main.go"
 
 # Commands that MUST be allowed. Several are load-bearing: `make deploy` runs lfr-tunnel-ops, and
 # deploy-clients scp's the very binaries this guard refuses to EXECUTE.
@@ -116,6 +135,19 @@ done <<<"$ALLOW_CASES"
 [ "$allow_ok" -eq "$allow_total" ] && pass "all $allow_total ordinary commands allowed"
 
 echo ""
+echo "-- a MULTI-LINE block is inspected past its first line"
+# Cannot live in DENY_CASES: that list is newline-delimited, so each line would be read as its own
+# case -- and `make build` alone must be ALLOWED. That is exactly why this bypass went untested:
+# the harness shape hid it. A build line followed by the daemon walked straight through until
+# newline became a segment separator.
+multiline="$(printf 'make build\n./bin/lfr-tunneld -h')"
+if [ "$(decide "$GUARD" "$multiline")" = "deny" ]; then
+    pass "a forbidden command on line 2 of a multi-line block is refused"
+else
+    fail "line 2 of a multi-line block was NOT inspected -- 'make build' then the daemon walks through"
+fi
+
+echo ""
 echo "-- BOUNDING: lfr-tunnel-ops stays runnable"
 if [ "$(decide "$GUARD" "./bin/lfr-tunnel-ops deploy")" = "allow" ]; then
     pass "BOUNDING: lfr-tunnel-ops is not refused -- make deploy depends on it"
@@ -150,24 +182,53 @@ FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/lft-bashguard.XXXXXX")"
 cleanup() { rm -rf "$FIXTURE"; }
 trap cleanup EXIT
 
-python3 - "$GUARD" "$FIXTURE/neutered.py" <<'PY'
-import re, sys
+# TWO rules, so TWO mutants. The guard refuses by basename OR by toolchain subcommand, and they
+# are independent: neutering the basename rule alone left the toolchain rows still refused, which
+# read as "something else is denying them" when the real answer was "you mutated one of two input
+# paths". That is section 5d's shape, found by this suite against its own author.
+python3 - "$GUARD" "$FIXTURE/no-basename.py" "$FIXTURE/no-toolchain.py" <<'PY'
+import sys
 src = open(sys.argv[1]).read()
-# Neuter only the basename rule; leave every other line intact.
-src = src.replace('    return base.startswith("lfr-tunnel")', "    return False")
-open(sys.argv[2], "w").write(src)
-PY
 
-neutered_denies=0
+basename_rule = '    return base.startswith("lfr-tunnel")'
+toolchain_rule = '        if "go" in bases:'
+for rule, out in ((basename_rule, sys.argv[2]), (toolchain_rule, sys.argv[3])):
+    if rule not in src:
+        # A stale mutation string would silently produce an identical copy, and every assertion
+        # below would then pass while proving nothing (section 5c).
+        sys.exit("MUTATION STRING NOT FOUND: " + rule)
+mutated = src.replace(basename_rule, "    return False")
+open(sys.argv[2], "w").write(mutated)
+open(sys.argv[3], "w").write(src.replace(toolchain_rule, '        if False:'))
+PY
+if [ $? -ne 0 ]; then
+    fail "FIRING: a mutation string no longer matches the guard -- update it rather than trusting this"
+fi
+
+# A crashed mutant allows everything, which would satisfy "no refusals" while proving nothing.
+# The malformed-input control never touches either rule, so a mutant that still refuses it is
+# alive rather than broken.
+for m in no-basename no-toolchain; do
+    if [ "$(printf 'not json' | python3 "$FIXTURE/$m.py" 2>/dev/null | head -c 1)" != "{" ]; then
+        fail "FIRING: mutant $m does not run at all -- its 'allow' results prove nothing"
+    fi
+done
+
+basename_left=0
+toolchain_left=0
 while IFS= read -r c; do
     [ -n "$c" ] || continue
-    [ "$(decide "$FIXTURE/neutered.py" "$c")" = "deny" ] && neutered_denies=$((neutered_denies + 1))
+    [ "$(decide "$FIXTURE/no-basename.py" "$c")" = "deny" ] && basename_left=$((basename_left + 1))
+    [ "$(decide "$FIXTURE/no-toolchain.py" "$c")" = "deny" ] && toolchain_left=$((toolchain_left + 1))
 done <<<"$DENY_CASES"
 
-if [ "$neutered_denies" -eq 0 ]; then
-    pass "FIRING: stripping the rule stops all $deny_total refusals -- the matcher is what refuses"
+# Each mutant must leave ONLY the other rule's rows refused, and their counts must add up to the
+# whole table -- which is what proves the two rules together cover it, with nothing refused twice
+# and nothing refused by accident.
+if [ "$((basename_left + toolchain_left))" -eq "$deny_total" ] && [ "$basename_left" -gt 0 ] && [ "$toolchain_left" -gt 0 ]; then
+    pass "FIRING: the two rules partition the table ($toolchain_left by basename, $basename_left by toolchain) -- each is load-bearing"
 else
-    fail "FIRING: $neutered_denies command(s) still refused with the rule stripped -- something else is denying them"
+    fail "FIRING: mutants left $basename_left + $toolchain_left of $deny_total refused -- the rules do not partition the table"
 fi
 
 echo ""

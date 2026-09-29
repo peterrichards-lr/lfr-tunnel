@@ -144,18 +144,32 @@ It parses position rather than regexing the whole command **because mention is n
 `scp dist/lfr-tunnel-linux-amd64 host:` publishes a binary, `gofmt -w cmd/lfr-tunneld/main.go`
 formats source, `codesign --verify dist/lfr-tunnel-darwin-arm64` checks a signature -- all three are
 on the release path and all three must be allowed. `tests/hooks/test-edr-bash-guard.sh` holds both
-halves: 13 spellings that must be refused and 12 that must not.
+halves: 26 spellings that must be refused and 12 that must not.
 
-It **fails closed** -- on malformed input, on its own error, and when the script is missing, which is
-the shape the 2026-09-09 SentinelOne remediation presented when it took 61 tracked scripts.
+**Where position cannot be determined, it stops guessing.** A prefix word's separated option *value*
+sits in command position (`sudo -u ubuntu …` put `ubuntu` there; `timeout -s KILL 5 …` put `KILL`
+there), so once any prefix word appears, **every** token in that segment is checked instead. That
+over-blocks slightly -- `sudo cp dist/…` is refused -- and that is the correct direction.
+
+It **fails closed**: on malformed input, on its own exception, when the script is missing, **and when
+the interpreter cannot run it**. That last one was the gap: a syntax error or a broken `python3`
+exited non-zero with empty stdout, which the harness treats as non-blocking, so a
+corrupted-but-present guard silently disarmed the whole control -- the exact shape the 2026-09-09
+remediation took, on the same Homebrew python tree it damaged in August.
 
 What remains uncovered, so this is not read as a closed class:
 
 | Not covered | Why |
 |---|---|
-| a shell that re-enters itself -- `bash -c "./bin/lfr-tunneld"`, `sh -c …`, `xargs sh -c` | the guard sees `bash`, not the daemon; the inner string is data to it |
+| a shell handed a command *string* -- `bash -c "<binary>"`, `sh -c …`, `xargs -I{} {}` | the inner string is data to the guard. A shell handed a wrapper *path* (`bash ./lfr-tunnel.sh`) **is** refused |
 | a copy under another name -- `cp bin/lfr-tunneld /tmp/x && /tmp/x` | the basename rule is the whole mechanism |
-| **any harness that is not Claude Code** | `github-workflow` §3 says Gemini works this backlog from another machine. `.claude/settings.json` is inert there, and `make install-go-guard` covers `go run`/`go test` only -- **for Gemini this paragraph is still the entire control** |
+| a branch or worktree cut before this landed | the guard ships as tracked files, so it is absent there exactly as a pre-#1425 hook was. "Hooks follow the branch" applies to this too |
+| **any harness that is not Claude Code** | `github-workflow` §3 says Gemini works this backlog from another machine. `.claude/settings.json` is inert there, and the go PATH shim covers the toolchain only -- **for Gemini this paragraph is still the entire control** |
+
+**Known false positive, because it bit the author within minutes:** a Bash command whose *body*
+documents one of these commands -- a heredoc writing a file that mentions them -- is refused. The
+body is part of the command string and the guard cannot tell a command from a document about one.
+Write such content with a file tool rather than a shell heredoc.
 
 So the conclusion above is unchanged, and the deny list narrows the ways to run the daemon by
 accident rather than closing them. If you find yourself reaching for a prefix word to get past a

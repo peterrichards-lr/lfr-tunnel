@@ -89,7 +89,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD=\"${CLAUDE_PROJECT_DIR:-.}/scripts/edr-bash-guard.py\"; if [ -f \"$GUARD\" ]; then python3 \"$GUARD\"; else printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"EDR guard scripts/edr-bash-guard.py is missing, so Bash is refused rather than allowed. Restore it (git checkout -- scripts/) -- a vanished gate script is how the 2026-09-09 SentinelOne remediation presented. #2289\"}}'; fi",
+            "command": "D=\"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"deny\\\",\\\"permissionDecisionReason\\\":\\\"EDR guard could not run (missing script, or the interpreter failed), so Bash is refused rather than allowed. A corrupted-but-present guard is the shape the 2026-09-09 SentinelOne remediation took. Restore it and check python3. #2289\\\"}}\"; G=\"${CLAUDE_PROJECT_DIR:-.}/scripts/edr-bash-guard.py\"; if [ -f \"$G\" ]; then python3 \"$G\" || printf %s \"$D\"; else printf %s \"$D\"; fi",
             "timeout": 10,
             "statusMessage": "EDR guard"
           }

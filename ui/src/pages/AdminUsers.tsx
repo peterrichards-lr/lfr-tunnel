@@ -161,7 +161,11 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [serverConfig, setServerConfig] = useState<any>(null);
+  // Read from the admin-only settings route, not from the public /api/version (#2297). Both
+  // carry it, but /api/version takes no credentials, so serving the owner's personal address
+  // there published it to anyone who could resolve the gateway. This page is admin-only and
+  // already authenticated, so the authenticated copy costs it nothing.
+  const [ownerEmail, setOwnerEmail] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'registrations'>(
     'users',
   );
@@ -490,13 +494,11 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     try {
-      const [res, confRes, domRes] = await Promise.all([
+      const [res, domRes] = await Promise.all([
         axios.get('/api/admin/users'),
-        axios.get('/api/version').catch(() => ({ data: null })),
         axios.get('/api/domains').catch(() => ({ data: [] })),
       ]);
       setUsers(res.data);
-      if (confRes.data) setServerConfig(confRes.data);
       if (domRes.data) _setDomains(domRes.data);
     } catch (e: any) {
       // An empty table is indistinguishable from "no results" (#1868). Say which.
@@ -518,6 +520,18 @@ export default function AdminUsers() {
     const interval = setInterval(fetchUsers, 5000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetched once rather than joining the five-second poll above: the owner cannot change
+  // while this page is open, and the settings route reads a row per declared alert on every
+  // GET. On failure the address stays empty, the owner's row renders a Delete button, and the
+  // server answers it with 403 "Cannot delete the system Owner account" -- cosmetic, with the
+  // correct outcome, which is why this value never needed to be public.
+  useEffect(() => {
+    axios
+      .get('/api/admin/settings')
+      .then((res) => setOwnerEmail(res.data?.owner_email || ''))
+      .catch(() => setOwnerEmail(''));
   }, []);
 
   const changeStatus = async (email: string, newStatus: string) => {
@@ -1167,7 +1181,7 @@ export default function AdminUsers() {
                                       )}
 
                                       {u.email.toLowerCase() !==
-                                        serverConfig?.owner_email?.toLowerCase() && (
+                                        ownerEmail.toLowerCase() && (
                                         <button
                                           className="btn btn-danger py-xs px-sm text-xs"
                                           onClick={() => deleteUser(u.email)}

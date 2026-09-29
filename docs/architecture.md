@@ -133,7 +133,9 @@ Here is how `lfr-tunnel` resolves this:
 
 The `lfr-tunnel` routing system is designed to support any domains you control. The gateway operator configures the domains via the `domains` list parameter in `server-config.yaml`. All wildcard subdomain routing, registration validation, and public URL generation are driven by these values.
 
-Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on the **issuable** domains — see below — and requests arriving with a `Host` header that does not match a configured domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
+Any dynamic registration request (`/api/register`) with a `subdomain_prefix` is mapped to a wildcard on **one** of the issuable domains — chosen by `domain_allocation_rule`, see below. Registering on every configured domain was [#1153](https://github.com/peterrichards-lr/lfr-tunnel/issues/1153): a user who never asked for a domain ended up holding all of them.
+
+A `Host` matching neither a **control host** (a configured domain, or `tunnel.`/`portal.`/`api.` on one, plus `localhost`, `127.0.0.1` and each edge node's own name) nor an active lease is answered by the offline page — HTML with a 404 or 503 — rather than routed. Note that a **custom domain** matches no configured domain and is served normally; see [custom_domains.md](custom_domains.md).
 
 ### `domains` vs `tunnel_domains`: what a gateway *serves* is not what it *issues*
 
@@ -153,8 +155,9 @@ resolution, not in the name a visitor types
 ### Discovering them: `supported_domains` on `/api/version`
 
 `GET <server_url>/api/version` returns a `supported_domains` array. It is **unauthenticated** — no
-token, no session — because a client has to be able to ask before it has a tunnel, and it is
-**cacheable** and stable. Integrations should treat it as a supported field rather than an
+token, no session — because a client has to be able to ask before it has a tunnel. Its value is
+stable, so cache it **in your own application**: the response is sent `no-store`, so an HTTP cache
+will not do it for you. Integrations should treat it as a supported field rather than an
 implementation detail.
 
 ```bash
@@ -169,11 +172,14 @@ Three things about it that are not guessable from the name:
    integration is really asking is *"can a subdomain be leased here, so should I split this hostname
    and request one?"* A name a gateway answers on but never issues from would make a caller split it
    and advertise a public URL that no lease backs.
-2. **An absent key means "fall back", never "this gateway serves nothing."** A gateway older than
-   the field omits it. Treat missing as *use your own configured list*; treating it as an empty set
-   classifies every hostname as external against every older gateway.
-3. **It does not enumerate custom domains or subdomain leases**, and must not be extended to. Those
-   are user data on an endpoint that requires no credentials.
+2. **A missing or `null` value means "fall back", never "this gateway serves nothing."** The key
+   was added in **v1.43.15**; every gateway since always sends it, and a gateway older than that
+   omits it entirely. `null` is also reachable, from a gateway with no `domains` configured. Treat
+   both as *use your own configured list* — treating either as an empty set classifies every
+   hostname as external.
+3. **It does not enumerate custom domains or subdomain leases**, and must not be extended to.
+   Those are per-user resources, and this endpoint takes no credentials — it advertises gateway-wide
+   configuration.
 
 **The integration pattern**, for something classifying a configured hostname into "a gateway base
 domain", "a host on one" or "an external domain":
@@ -181,6 +187,10 @@ domain", "a host on one" or "an external domain":
 - Fetch once per gateway and cache it, **keyed on the gateway URL you fetched from** rather than on
   the hostname you are classifying. Two gateways that share a bootstrap domain would otherwise
   overwrite each other's entry.
+- **That URL must be a control host.** `/api/version` is only served on the control hosts listed
+  above; a *tunnel* host proxies it to the developer's local application. Fetching
+  `https://foo.example.com/api/version` does not return a JSON error — it returns whatever that
+  laptop serves, or the offline page. Ask the gateway, never the tunnel.
 - A built-in list of domains survives as a **seed**, not as the answer: you need one domain to build
   the URL you fetch from. What this removes is hardcoding the *complete* list, which is the part
   that is wrong the moment a deployment adds a gateway you were never told about.

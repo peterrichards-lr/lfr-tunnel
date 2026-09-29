@@ -1069,7 +1069,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// not "/" -- so the V2 SPA is untouched.
 			for _, base := range []string{"/portal", "/admin"} {
 				if strings.HasPrefix(p, base+"/") {
-					s.serveDashboardHTML(w)
+					s.serveDashboardHTML(w, r)
 					return
 				}
 			}
@@ -1763,7 +1763,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
-			s.serveDashboardHTML(w)
+			s.serveDashboardHTML(w, r)
 			return
 		}
 
@@ -1801,6 +1801,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 				}
 
+				// The SPA shell is served with its root element rewritten to the resolved locale
+				// (#2271), the same contract V1 gets in serveDashboardHTML and /privacy has had
+				// since #1954. Every other file under ui-dist is a hashed asset and goes through
+				// the FileServer below untouched.
+				//
+				// Written directly rather than through http.ServeContent because the body is no
+				// longer the file: its length and modification time no longer describe what is on
+				// the wire, and a Last-Modified/ETag derived from the embedded file would let a
+				// cache serve one visitor's locale to the next. The no-store header above is
+				// already set for exactly this document.
+				if cleanPath == "index.html" {
+					if shell, readErr := fs.ReadFile(subFS, "index.html"); readErr == nil {
+						lang := s.ResolveLocale(r)
+						w.Header().Set("Content-Type", "text/html; charset=utf-8")
+						w.WriteHeader(http.StatusOK)
+						if _, err := w.Write([]byte(withDocumentLocale(string(shell), lang, GetDirection(lang)))); err != nil {
+							log.Printf("[Warning] Failed to write response: %v", err)
+						}
+						return
+					}
+				}
+
 				// Use StripPrefix to strip /portalv2 from the request path before serving from subFS
 				http.StripPrefix("/portalv2", http.FileServer(http.FS(subFS))).ServeHTTP(w, r)
 				return
@@ -1835,11 +1857,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // /portal/ and /admin/, so the cache-busting rewrite could no longer sit inline at one of
 // those call sites. Two copies of it would drift, and the failure mode is a stale
 // dashboard.js served to everyone after a release.
-func (s *Server) serveDashboardHTML(w http.ResponseWriter) {
+//
+// It takes the request for #2271: the shell's root element is rewritten to declare the locale
+// this request resolves to, so the document is not English-until-the-bundle-runs. dashboard.js
+// remains the authority once it does run -- it alone can see the `lfr_lang` preference, and it
+// handles a switch with no reload -- so the server value only has to be right for the first paint.
+func (s *Server) serveDashboardHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	htmlContent := strings.ReplaceAll(dashboardHTML, "/static/dashboard.js", "/static/dashboard.js?v="+config.Version)
 	htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
+	lang := s.ResolveLocale(r)
+	htmlContent = withDocumentLocale(htmlContent, lang, GetDirection(lang))
 	if _, err := w.Write([]byte(htmlContent)); err != nil {
 		log.Printf("[Warning] Failed to write response: %v", err)
 	}

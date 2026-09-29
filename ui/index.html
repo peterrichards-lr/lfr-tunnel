@@ -1,6 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
+    <!-- The lang and dir above are a DEFAULT, not the served value (#2271). The gateway rewrites
+         the root element of this shell per request to the locale ResolveLocale picks from ?lang=
+         and Accept-Language (pkg/server/server.go, the /portalv2 branch), so the document is not
+         English-until-the-bundle-runs; I18nProvider then takes over as the authority, because only
+         it can see the stored `lfr_lang` preference. Editing them here changes only what `vite
+         dev` serves and what this file says when read on its own. -->
     <meta charset="UTF-8" />
     <link id="lfr-tunnel-favicon" rel="icon" type="image/x-icon" href="/portalv2/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

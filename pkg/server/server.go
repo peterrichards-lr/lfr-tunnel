@@ -1323,7 +1323,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					"custom_domains": s.cfg.NeverExpiresCustomDomains().String(),
 				},
 				"enable_onboarding": s.cfg.EnableOnboarding,
-				"owner_email":       s.cfg.Owner.UserID,
+				// No owner_email here (#2297). This route takes no credentials, and the
+				// owner's address is personal data that is public by none of the routes the
+				// rest of this payload is public by -- supported_domains and regions are in
+				// DNS and in Certificate Transparency, an email address is in neither. Its
+				// only consumer hid a Delete button that api.go refuses independently, so
+				// publishing it to the internet bought a cosmetic saving. The admin-only
+				// handleAdminSettings still carries it, and that is what a portal reads.
 				"supported_domains": s.tunnelDomains(),
 				// How long a client should keep trying to reattach to this gateway before
 				// handing control back to its own region failover (#1946). Advertised so the

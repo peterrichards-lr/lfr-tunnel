@@ -93,3 +93,12 @@ tests/e2e/server-config-control.generated.yaml
 # Agent/session handoff scratch state -- local only, never committed (#1812).
 # Git-ignored in every other repo here; this one had drifted.
 .agent-state.md
+
+# One full checkout per dispatched agent (github-workflow SKILL §3a, "One checkout per agent").
+# Local only: they are working copies of this repo, and a merged one is landfill.
+#
+# This lived in .git/info/exclude, which is per-clone and untracked -- so a fresh clone, another
+# machine or another agent's checkout had no rule at all, and the first dispatched agent there
+# would offer nine worktrees' worth of files to `git add` (#2310). Two gates additionally exclude
+# the directory from their scans, because ignoring a copy is not the same as not reading it.
+.claude/worktrees/

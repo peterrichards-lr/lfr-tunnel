@@ -1161,5 +1161,122 @@ else
 fi
 
 echo ""
+echo "-- agent worktrees: a gate must not read copies of the repo it is checking"
+
+# A dispatched agent gets its own checkout under .claude/worktrees/ (github-workflow SKILL 3a).
+# They are full copies of this repository, they are untracked, and they outlive the branch. Any
+# gate whose scan root is `.` therefore reads the tree plus however many abandoned checkouts are
+# lying around -- nine of them on 2026-09-30, carrying ninety per cent of what two gates scanned.
+#
+# Two spelling constraints on the fixtures below, both from guards this repo already has:
+#
+#   - the toolchain word is assembled, not written. This file is itself a `*.sh` inside the corpus
+#     check-edr-safety.sh scans, so spelling the pattern would make that gate find its own fixture
+#     -- the self-match of github-workflow SKILL 5c rule 6, which has now bitten this repo four
+#     times. The planted file's contents are built with printf for the same reason.
+#   - the planted build targets `./cmd/example`, not a real command in this repo. The PreToolUse
+#     guard from #2289 refuses any Bash command that NAMES a forbidden binary, and it cannot tell
+#     a fixture from an invocation -- it refused this very edit when the target was spelled out.
+#     That is the known false positive in scripts/edr-bash-guard.py's header, not a bug here.
+WT_TOOLCHAIN="go"
+
+# ---------------------------------------------------------------------------
+# 25. FIRING. check-test-home-isolation.sh does not count worktree copies, and therefore cannot
+#     have its anti-vacuity floor satisfied by them.
+#
+#     Before the exclusion this was the live verdict of a directory containing `scripts/` and
+#     `.claude/worktrees/` and NO Go source at all:
+#
+#         All 5 packages whose tests resolve the user's home isolate it.   -> exit 0
+#
+#     Which is #1779 -- the shape the floor exists to refuse -- reached through a directory the
+#     floor's author had no reason to consider. The second half is the control (5c rule 5): the
+#     same two packages in a real pkg/ must still be SEEN, or this case would pass equally well
+#     against a gate that had simply stopped reading anything.
+# ---------------------------------------------------------------------------
+HOME_ISO="${REPO_ROOT}/scripts/check-test-home-isolation.sh"
+WT_WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-worktrees.XXXXXX")"
+mkdir -p "$WT_WORK/scripts"
+cp "$HOME_ISO" "$WT_WORK/scripts/"
+for a in agent-one agent-two; do
+  mkdir -p "$WT_WORK/.claude/worktrees/$a/pkg/client"
+  printf 'package client\n\nfunc x() { _, _ = os.UserHomeDir() }\n' \
+    >"$WT_WORK/.claude/worktrees/$a/pkg/client/home_test.go"
+done
+"$WT_WORK/scripts/check-test-home-isolation.sh" >"$OUT_FILE" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ]; then
+  fail "a tree whose only Go source is worktree copies passed the home-isolation gate -- that is #1779 again: $(cat "$OUT_FILE")"
+elif grep -q 'matched the home-reaching patterns' "$OUT_FILE"; then
+  # CONTROL: the identical packages outside .claude/worktrees/ must still be found, or the
+  # refusal above proves only that the gate stopped reading.
+  mkdir -p "$WT_WORK/pkg/client" "$WT_WORK/pkg/config"
+  cp "$WT_WORK/.claude/worktrees/agent-one/pkg/client/home_test.go" "$WT_WORK/pkg/client/"
+  printf 'package config\n\nfunc y() { _, _ = os.UserHomeDir() }\n' >"$WT_WORK/pkg/config/home_test.go"
+  "$WT_WORK/scripts/check-test-home-isolation.sh" >"$OUT_FILE" 2>&1
+  if grep -q 'testmain_home_test.go' "$OUT_FILE"; then
+    pass "FIRING   worktree copies are not counted, and the real tree still is"
+  else
+    fail "the gate ignored real packages too, so case 25's refusal was the scan reading nothing: $(cat "$OUT_FILE")"
+  fi
+else
+  harness "the gate failed for some reason other than the floor (rc=$RC): $(cat "$OUT_FILE")"
+fi
+
+# ---------------------------------------------------------------------------
+# 26. FIRING. check-edr-safety.sh does not report a toolchain invocation inside a worktree.
+#
+#     The direction that matters is the false FAIL: a worktree cut before a fix landed still
+#     holds the pre-fix file, so a clean master goes red naming
+#     `.claude/worktrees/agent-XXXX/...` -- a path nobody can edit and CI cannot see. The nine
+#     present when this was written all postdated their fixes, so it had not fired yet; that is
+#     timing, not design.
+#
+#     Same control as case 25, and it is doing more work here: the gate must still catch the
+#     byte-identical line one directory up.
+# ---------------------------------------------------------------------------
+EDR_WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-edr.XXXXXX")"
+mkdir -p "$EDR_WORK/scripts" "$EDR_WORK/.claude/worktrees/agent-one/scripts"
+cp "${REPO_ROOT}/scripts/check-edr-safety.sh" "$EDR_WORK/scripts/"
+# The real tree needs one includable file of its own. The gate excludes itself by name, so a
+# fixture holding only the gate plus a worktree scans ZERO files and dies on its own floor before
+# reaching the subject -- 5c rule 5, and it happened on the first run of this case.
+printf '#!/usr/bin/env bash\necho nothing to see here\n' >"$EDR_WORK/scripts/noop.sh"
+# The TEST subcommand, not the build one. The build scan runs `--include=*.md` only -- a
+# deliberate narrowness the gate explains where it calls scan() -- so a shell fixture spelling a
+# build would be ignored for a reason that has nothing to do with worktrees, and this case would
+# have passed while proving nothing (5c rule 5). The test subcommand is scanned in *.sh.
+printf '#!/usr/bin/env bash\n%s test ./...\n' "$WT_TOOLCHAIN" \
+  >"$EDR_WORK/.claude/worktrees/agent-one/scripts/stale-build.sh"
+(cd "$EDR_WORK" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
+RC=$?
+if [ "$RC" -ne 0 ] || grep -q 'stale-build.sh' "$OUT_FILE"; then
+  fail "a toolchain invocation inside a worktree was reported -- a clean master would go red at a path nobody can edit: $(cat "$OUT_FILE")"
+else
+  # CONTROL: the same line outside the worktree must be caught.
+  cp "$EDR_WORK/.claude/worktrees/agent-one/scripts/stale-build.sh" "$EDR_WORK/scripts/live-build.sh"
+  (cd "$EDR_WORK" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
+  if grep -q 'live-build.sh' "$OUT_FILE"; then
+    pass "FIRING   a worktree copy is out of scope; the identical line in the real tree is not"
+  else
+    fail "the gate missed the violation in the real tree too, so its silence on the worktree proves nothing: $(cat "$OUT_FILE")"
+  fi
+fi
+rm -rf "$WT_WORK" "$EDR_WORK"
+
+# ---------------------------------------------------------------------------
+# 27. BOUNDING. The exclusion is by directory NAME, so it holds wherever a harness puts its
+#     checkouts -- and it would equally skip a tracked directory that happened to be called
+#     `worktrees`. Nothing in this repo is. Pinned here so that adding one is a decision somebody
+#     makes rather than a hole two gates acquire silently.
+# ---------------------------------------------------------------------------
+WT_TRACKED="$(cd "$REPO_ROOT" && git ls-files | grep -c worktrees)"
+if [ "$WT_TRACKED" -eq 0 ]; then
+  pass "BOUNDING  no tracked path is named 'worktrees', so excluding the name costs no coverage"
+else
+  fail "$WT_TRACKED tracked path(s) contain 'worktrees' -- two gates skip that name, so those files are now unscanned; rename them or narrow the exclusion to a path"
+fi
+
+echo ""
 echo "  ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1

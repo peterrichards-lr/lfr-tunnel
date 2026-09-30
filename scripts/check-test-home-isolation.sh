@@ -21,11 +21,52 @@ HOME_REACHING='os\.UserHomeDir\(\)|ResolveDefaultConfigPath\(\)|(Load|Save)Clien
 # Anti-vacuity floor (#1779): a scan that examined nothing must not report success. Four
 # packages qualify today; the floor sits below that so an honest removal does not break the
 # build, but a glob that matches nothing does. Overridable so it can be exercised in place.
+#
+# The floor only means anything while the scan below reads THIS tree and not a copy of it, which
+# is why `worktrees` is excluded there. Agent worktrees are full checkouts living inside the repo,
+# and with nine of them present this script reported "All 40 packages" over the same four: the
+# four real ones plus thirty-six copies. That is not merely noisy -- it hands the floor a way to
+# be satisfied with no source in the tree at all. Reproduced on 2026-09-30 in a directory holding
+# `scripts/` and `.claude/worktrees/` and nothing else, no pkg/ and no cmd/ anywhere:
+#
+#     $ ./scripts/check-test-home-isolation.sh
+#     ✅ All 5 packages whose tests resolve the user's home isolate it.   → exit 0
+#
+# Which is #1779's shape exactly, arriving through a directory this gate's author had no reason
+# to think about. Case 25 of tests/hooks/test-gate-scope-boundaries.sh is that reproduction.
 MIN_PACKAGES="${LFT_HOME_ISOLATION_MIN_PACKAGES:-2}"
+
+# What the scan must not descend into. The NAME covers the convention agent checkouts follow;
+# the listing below covers the mechanism, and they are not redundant -- see the same pair, with
+# its reasoning, in scripts/check-edr-safety.sh. A nested worktree need not be under
+# `.claude/worktrees/`: tests/hooks/test-nested-worktree-scope.sh puts one at the repository root
+# for the duration of its run.
+#
+# Seeded rather than declared empty: under `set -u`, bash 3.2 treats "${arr[@]}" on an empty
+# array as an unbound variable, and this runs from a pre-push hook on macOS.
+SCAN_EXCLUDES=(--exclude-dir=worktrees)
+nested_worktree_excludes() {
+    local root line path
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    [ -n "$root" ] || return 0
+    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            worktree\ *) path="${line#worktree }" ;;
+            *) continue ;;
+        esac
+        [ "$path" = "$root" ] && continue
+        case "$path" in "$root"/*) ;; *) continue ;; esac
+        printf -- '--exclude-dir=%s\n' "${path##*/}"
+    done
+}
+while IFS= read -r wt_exclude; do
+    [ -n "$wt_exclude" ] || continue
+    SCAN_EXCLUDES+=("$wt_exclude")
+done < <(nested_worktree_excludes)
 
 # bash 3.2 on macOS has no mapfile, and this runs from a pre-push hook there.
 packages=$(
-    grep -rlE "$HOME_REACHING" --include='*_test.go' . 2>/dev/null |
+    grep -rlE "$HOME_REACHING" --include='*_test.go' "${SCAN_EXCLUDES[@]}" . 2>/dev/null |
         grep -v '/testmain_home_test\.go$' |
         xargs -n1 dirname 2>/dev/null |
         sort -u || true

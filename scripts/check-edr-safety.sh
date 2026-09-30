@@ -25,13 +25,67 @@ FAILED=0
 
 # Directories that never execute on the EDR-protected workstation. CI runners and container
 # builds are ephemeral and unmonitored, so excluding them keeps the signal about local risk.
+#
+# `worktrees` is excluded for a DIFFERENT reason, and the distinction matters: an agent worktree
+# very much does sit on the protected workstation. It is excluded because it is a second COPY of
+# this repository, and a gate's verdict must not depend on how many abandoned checkouts happen to
+# be lying around (#2310). Measured before this line existed: 7062 files scanned, of which 6345 --
+# ninety per cent -- were nine merged branches' worktrees. Either direction of error is available
+# from there: a worktree cut before a fix landed still holds the pre-fix file and fails a clean
+# master at a path nobody can edit, and the duplication inflates the anti-vacuity floor below
+# until a tree with no source at all can clear it.
+#
+# By directory NAME rather than by path, so it holds wherever the harness puts its checkouts.
+# Nothing tracked in this repo is called `worktrees`; case 27 of
+# tests/hooks/test-gate-scope-boundaries.sh asserts that, so adding one is a decision rather than
+# a silent hole.
 EXCLUDES=(
     --exclude-dir=.git
     --exclude-dir=node_modules
     --exclude-dir=ui-dist
     --exclude-dir=.github
+    --exclude-dir=worktrees
     --exclude=check-edr-safety.sh
 )
+
+# Every git worktree registered UNDER this tree, as --exclude-dir arguments.
+#
+# The name above covers the convention; this covers the mechanism, and the two are not
+# redundant. A nested worktree does not have to live in `.claude/worktrees/`:
+# tests/hooks/test-nested-worktree-scope.sh creates one at `.lft-nested-worktree-test-$$` in the
+# repository root, and while that fixture was live this gate reported three `go run` lines inside
+# it and blocked a commit that had nothing to do with them.
+#
+# This is #1815's rule, translated. The Python gates (check_docs_review.py, append_timestamps.py)
+# identify a nested worktree during their own walk -- its root carries `.git` as a FILE holding a
+# `gitdir:` pointer, where a repository root carries a directory. `grep -r` walks for us and
+# offers no such hook, so the same fact is asked of git up front instead.
+#
+# Conversely the static name is not redundant with this: a checkout git no longer knows about --
+# a `git worktree remove` that failed, or a plain `cp` of the tree -- appears in no listing.
+nested_worktree_excludes() {
+    local root line path base
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    [ -n "$root" ] || return 0
+    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            worktree\ *) path="${line#worktree }" ;;
+            *) continue ;;
+        esac
+        # Only worktrees nested inside the tree being scanned. Run from an agent's own checkout,
+        # its SIBLINGS are not under the scan root and must not be excluded -- excluding them
+        # would be harmless here but would quietly widen what this function claims to mean.
+        [ "$path" = "$root" ] && continue
+        case "$path" in "$root"/*) ;; *) continue ;; esac
+        base="${path##*/}"
+        printf -- '--exclude-dir=%s\n' "$base"
+    done
+}
+
+while IFS= read -r wt_exclude; do
+    [ -n "$wt_exclude" ] || continue
+    EXCLUDES+=("$wt_exclude")
+done < <(nested_worktree_excludes)
 
 INCLUDES=(
     --include=Makefile

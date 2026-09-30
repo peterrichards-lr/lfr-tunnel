@@ -27,13 +27,13 @@ jobs:
     name: Verify PR references an issue
     runs-on: ubuntu-latest
     steps:
-      # A negated closing reference still closes the issue: GitHub matches the keyword and the
+      # A reversed closing reference still closes the issue: GitHub matches the keyword and the
       # number and ignores the negation in front of them (#1540). Checked before the reference
       # requirement below so the specific message wins over the generic one.
       - name: Checkout Code
         uses: actions/checkout@v7
 
-      - name: Reject a negated closing reference
+      - name: Reject a reversed closing reference
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}

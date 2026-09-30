@@ -91,6 +91,31 @@ allows "the phrase in ordinary prose" "This is a check rather than another parag
 allows "the -ing form, which GitHub does not act on" "Filed instead of closing #2316"
 allows "fixing, likewise" "Documented rather than fixing #44"
 
+# The auxiliaries whose stem CHANGES, so neither the auxiliary list nor \bnot\b reaches inside
+# them. "Won't fix" is the most idiomatic way anyone declines an issue -- GitHub's own stock
+# label is wontfix -- and it passed both the original script and the first draft of this one.
+rejects "won't, the one everybody writes" "Won't fix #123"
+rejects "shan't" "Shan't close #7"
+allows "will not, which always worked" "Will not fix the parent; see the sub-issues."
+
+# DEGREE. The author wants the link and not the closure -- this repo's own "Part 2 of #<N>"
+# idiom, written the way GitHub acts on.
+rejects "partially" "Partially fixes #123"
+rejects "partly" "Partly closes #99"
+rejects "mostly" "Mostly resolved: #44"
+
+# WRAPPING. grep is line-based and GitHub is not, and commit bodies here are hard-wrapped, so a
+# reverser can end one line with its keyword starting the next. Every multi-word phrase adds
+# another place a wrap can land, which is why this arrived with the contrasts.
+rejects "wrapped mid-phrase" "filed rather
+than fixed: #2316"
+rejects "wrapped between phrase and keyword" "filed rather than
+fixed: #2316"
+rejects "the original shape, wrapped" "this does not
+close #1521"
+allows "a wrap with no reference at all" "filed rather than
+fixed; see the parent."
+
 # The second shape (#1543): a placeholder bridges the keyword to a real number. GitHub skips a
 # #token that is not a valid reference and matches the next one that is -- and every squashed
 # commit here gains a (#PR) trailer, so a title always has a real number at the end.

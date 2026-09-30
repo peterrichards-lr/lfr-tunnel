@@ -57,12 +57,41 @@ fi
 # has no "not", no "never" and no "without" anywhere in it, read as a refusal by every human
 # who saw it, and closed the issue on merge. This script ran on that commit and passed. It is
 # the third instance of the class (#1533, #1538, #2316) and the first where the gate existed.
-REVERSED='(does|do|did|will|would|can|could|should)( ?n.?t| not)|\bnot\b|\bnever\b|\bwithout\b'
-REVERSED="${REVERSED}|\brather than\b|\binstead of\b|\bother than\b|\bas opposed to\b|\bin place of\b"
+# `wo` and `sha` are in the auxiliary list for won't and shan't. They are not "will"/"shall"
+# plus n't -- the stem changes -- so neither the auxiliary alternation nor \bnot\b reaches
+# inside them, and "Won't fix #<N>" is the single most idiomatic way anyone declines an issue.
+# GitHub's own stock label is wontfix. "Will not fix" and "Cannot fix" were both already caught,
+# which is exactly what made this easy to miss.
+REVERSED='(does|do|did|will|would|can|could|should|wo|sha)( ?n.?t| not)|\bnot\b|\bnever\b|\bwithout\b'
+REVERSED="${REVERSED}|\brather than\b|\binstead of\b|\bother than\b|\bas opposed to\b"
+REVERSED="${REVERSED}|\bin place of\b|\bin lieu of\b"
+# DEGREE, not negation or contrast: the author wants the link and not the closure, which is this
+# repo's own "Part 2 of #<N>" idiom written the way GitHub acts on.
+REVERSED="${REVERSED}|\bpartially\b|\bpartly\b|\bmostly\b"
 KEYWORD='close[sd]?|fix(e[sd])?|resolve[sd]?'
 
 MATCHES=$(printf '%s\n' "$TEXT" \
     | grep -inE "(${REVERSED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
+
+# THE SAME SCAN OVER FLATTENED TEXT, because grep is line-based and GitHub is not.
+#
+# Commit bodies here are hard-wrapped, so a reverser can sit at the end of one line with its
+# keyword at the start of the next -- and GitHub, which parses the whole message, still closes
+# the issue. All three of these passed the line-based scan above:
+#
+#     filed rather\nthan fixed: #<N>
+#     filed rather than\nfixed: #<N>
+#     does not\nclose #<N>
+#
+# The multi-word contrasts make this worse in proportion to their length: each extra word is
+# another place a wrap can land. Run over a copy with every run of whitespace collapsed to one
+# space, which is what GitHub effectively sees.
+#
+# BRIDGED below stays line-based on purpose -- it is about a squashed TITLE and its (#PR)
+# trailer, which is a line-level fact.
+FLAT=$(printf '%s\n' "$TEXT" | tr '\n' ' ')
+WRAPPED=$(printf '%s\n' "$FLAT" \
+    | grep -oiE "(${REVERSED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
 
 # The second shape, which closed #1538 the same day this script was written (#1543).
 #
@@ -77,7 +106,7 @@ MATCHES=$(printf '%s\n' "$TEXT" \
 BRIDGED=$(printf '%s\n' "$TEXT" \
     | grep -inE "(${KEYWORD})[[:space:]]*:?[[:space:]]*#[^0-9[:space:]][^[:space:]]*.*#[0-9]+" || true)
 
-if [ -z "$MATCHES" ] && [ -z "$BRIDGED" ]; then
+if [ -z "$MATCHES" ] && [ -z "$WRAPPED" ] && [ -z "$BRIDGED" ]; then
     exit 0
 fi
 
@@ -90,6 +119,15 @@ if [ -n "$MATCHES" ]; then
     echo "CLOSE the issues they name:"
     echo
     printf '%s\n' "$MATCHES" | sed 's/^/    /'
+    echo
+fi
+
+# Only when the line-based scan missed it, so a wrapped hit is not reported twice.
+if [ -z "$MATCHES" ] && [ -n "$WRAPPED" ]; then
+    echo "A REVERSED closing reference SPLIT ACROSS LINES. grep is line-based; GitHub is not, so"
+    echo "a wrap between the phrase and the keyword hides it here and changes nothing there:"
+    echo
+    printf '%s\n' "$WRAPPED" | sed 's/^/    /'
     echo
 fi
 

@@ -64,6 +64,33 @@ allows "an ordinary body with no negation at all" "Closes #1540.
 
 Adds a check. Fixes the gap #1533 fell into."
 
+# CONTRASTS, not just negations (#2318). The first two shapes were enumerated from negations --
+# "not", "never", "without" -- and a contrast reverses the sense just as completely with none of
+# those words in it. The first case below is the EXACT text that closed an issue on 2026-09-30,
+# on a commit this script ran on and passed.
+rejects "the real one: 'Filed rather than fixed: #<real>'" \
+    'Filed rather than fixed: #2316, "Extend Permanent" clears the expiry'
+rejects "instead of" "Filed instead of fixed: #2316"
+rejects "other than" "Anything other than resolves #44"
+rejects "as opposed to" "Reported as opposed to fixed: #12"
+rejects "in place of" "A note in place of closes #7"
+
+# ...and the ordinary prose that must stay legal. "rather than" is a common phrase, and the whole
+# risk in widening this gate is tripping on a sentence that carries no closing directive at all.
+allows "a contrast with no issue number" "Filed rather than fixed; see the parent."
+allows "a contrast far from the reference" "Filed rather than fixed here. Closes #1540."
+allows "a contrast about something else entirely" "Uses a here-string rather than a pipe. Closes #123."
+allows "the phrase in ordinary prose" "This is a check rather than another paragraph."
+
+# BOUNDING. The -ing forms are NOT GitHub keywords, so they must not trip this.
+#
+# GitHub acts on close/closes/closed, fix/fixes/fixed, resolve/resolves/resolved and nothing
+# else. "Filed instead of closing #12" does not close #12, and rejecting it would make this gate
+# refuse a sentence that is both accurate and safe. Pinned because the obvious "improvement"
+# when adding contrasts is to widen KEYWORD too, and that turns a guard into an obstacle.
+allows "the -ing form, which GitHub does not act on" "Filed instead of closing #2316"
+allows "fixing, likewise" "Documented rather than fixing #44"
+
 # The second shape (#1543): a placeholder bridges the keyword to a real number. GitHub skips a
 # #token that is not a valid reference and matches the next one that is -- and every squashed
 # commit here gains a (#PR) trailer, so a title always has a real number at the end.

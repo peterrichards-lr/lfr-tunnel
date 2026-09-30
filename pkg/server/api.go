@@ -1583,7 +1583,7 @@ func (s *Server) handleAdminListSubdomains(w http.ResponseWriter, r *http.Reques
 	for _, res := range reservations {
 		email := userMap[res.UserID]
 		if email == "" {
-			email = "Unknown"
+			email = unknownUserEmail
 		}
 		resp = append(resp, SubdomainResponse{
 			ID:                 res.ID,

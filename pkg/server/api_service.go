@@ -53,7 +53,7 @@ type PortalService interface {
 	// reach the same place through RequestExtension/AdminApproveExtension above; tokens had
 	// no way for a holder to ask at all.
 	RequestTokenPermanence(user *db.User, tokenID, ip string) (*db.PersonalAccessToken, error)
-	AdminListTokenPermanenceRequests() ([]*db.PersonalAccessToken, error)
+	AdminListTokenPermanenceRequests() ([]*PermanenceRequestView, error)
 	AdminDecideTokenPermanence(actor, idStr string, grant bool, ip string) (*db.PersonalAccessToken, error)
 }
 

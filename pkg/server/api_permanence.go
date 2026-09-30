@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-
-	"lfr-tunnel/pkg/db"
 )
 
 // HTTP for the `approval` state of never_expires.tokens (#2267).
@@ -39,7 +37,7 @@ func (s *Server) handleAdminListTokenPermanenceRequests(w http.ResponseWriter, r
 	// An empty queue answers [] and not null: a portal that has to distinguish "no requests"
 	// from "the call failed" should not have to do it by reading a JSON literal.
 	if list == nil {
-		list = []*db.PersonalAccessToken{}
+		list = []*PermanenceRequestView{}
 	}
 	respondJSON(w, http.StatusOK, list)
 }

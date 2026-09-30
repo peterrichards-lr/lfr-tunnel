@@ -49,6 +49,15 @@ const (
 	// because three call sites spell it, and three copies of a string that has to match is the
 	// shape of an audit trail that silently splits in two after a typo.
 	auditTargetPAT = "pat"
+	// unknownUserEmail is what an admin queue shows for a user id that resolves to nobody.
+	//
+	// Named because two queues need it and goconst counts the literal package-wide, attributing
+	// every occurrence to the NEWEST file (#1655) -- so adding the second one turned it red here
+	// rather than where the duplication started. Deliberately NOT shared with the "Unknown" in
+	// edge_control_ws.go or server_edge.go: those mean an unknown edge VERSION, a different fact
+	// that happens to be spelled the same, and one constant for both would make a rename of
+	// either silently change the other.
+	unknownUserEmail = "Unknown"
 )
 
 // reservationResourceKind names what a reservation row actually is.
@@ -81,6 +90,17 @@ func (s *portalService) RequestTokenPermanence(user *db.User, tokenID, ip string
 		// Already permanent. Not an error worth surfacing as a failure, but not a request
 		// either: there is nothing for an admin to decide.
 		return pat, nil
+	}
+	if pat.ExpiresAt.Before(time.Now().UTC()) {
+		// ALREADY LAPSED. Granting this would not extend a credential, it would revive one --
+		// a grant writes expires_at = NULL, so a token that stopped authenticating last month
+		// works again (#2280).
+		//
+		// Refused HERE rather than only in the portal, because the portal is not the boundary:
+		// V1's action menu gates on `!isRevoked` and knows nothing about expiry, so it offered
+		// this on a lapsed token while V2 did not, and the API accepted it from either. A
+		// condition that only one arm applies is not a rule.
+		return nil, ErrTokenAlreadyExpired
 	}
 	if pat.PermanenceState == db.PATPermanencePending {
 		// Idempotent. A holder who clicks twice has one request, not two queue entries.
@@ -124,13 +144,54 @@ func (s *portalService) ownedToken(user *db.User, tokenID string) (*db.PersonalA
 	return pat, nil
 }
 
+// PermanenceRequestView is one row of the admin token permanence queue.
+//
+// The embedded pointer flattens in JSON, so every field the holder's own token list already
+// reads is unchanged and UserEmail is additive -- the same shape as ExtensionRequestView above,
+// deliberately, because these are two halves of one queue idea.
+//
+// UserEmail exists because PersonalAccessToken carries a UserID and nothing else. An admin
+// deciding "should this token never expire" was being shown an opaque id instead of who was
+// asking. The reservation queue this mirrors has the same hole and renders it differently in
+// each arm -- blank in V2, "User <id>" in V1 (#2314) -- which is exactly what deriving a missing
+// field separately in two places looks like. The server says it once.
+type PermanenceRequestView struct {
+	*db.PersonalAccessToken
+	// UserEmail is the holder's address, or "Unknown" for an id with no user. Never empty:
+	// a blank cell reads as a column that has not loaded yet, and this one never would.
+	UserEmail string `json:"user_email"`
+}
+
 // AdminListTokenPermanenceRequests returns every token waiting on a decision.
-func (s *portalService) AdminListTokenPermanenceRequests() ([]*db.PersonalAccessToken, error) {
+func (s *portalService) AdminListTokenPermanenceRequests() ([]*PermanenceRequestView, error) {
 	list, err := s.db.ListPATPermanenceRequests()
 	if err != nil {
 		return nil, ErrInternalError
 	}
-	return list, nil
+
+	// One ListUsers rather than a lookup per row: the queue is small but the pattern is
+	// handleAdminListSubdomains's, and a per-row GetUser turns a five-row queue into five
+	// queries against a database with SetMaxOpenConns(1).
+	users, err := s.db.ListUsers()
+	if err != nil {
+		return nil, ErrInternalError
+	}
+	emails := make(map[string]string, len(users))
+	for _, u := range users {
+		emails[u.ID] = u.Email
+	}
+
+	views := make([]*PermanenceRequestView, 0, len(list))
+	for _, pat := range list {
+		email := emails[pat.UserID]
+		if email == "" {
+			// A user deleted while their request sat in the queue. Named rather than blank,
+			// so the admin can tell "nobody by that id" from "this cell is still loading".
+			email = unknownUserEmail
+		}
+		views = append(views, &PermanenceRequestView{PersonalAccessToken: pat, UserEmail: email})
+	}
+	return views, nil
 }
 
 // AdminDecideTokenPermanence grants or denies one request.
@@ -171,6 +232,16 @@ func (s *portalService) AdminDecideTokenPermanence(actor, idStr string, grant bo
 		// `granted` on a dead credential -- harmless, because revocation still wins at auth,
 		// and still a row that contradicts what the queue promised (#2267 review).
 		return nil, ErrConflict
+	}
+	if grant && pat.ExpiresAt != nil && pat.ExpiresAt.Before(time.Now().UTC()) {
+		// Requested while live, LAPSED while queued. RequestTokenPermanence refuses an already
+		// expired token, so the only way to reach this is time passing with the row in the
+		// queue -- and an admin working a backlog sees a date in the Expires column with
+		// nothing to say it is in the past. A grant here revives the credential (#2280).
+		//
+		// Only a GRANT. Denying stays available, because an admin must be able to clear the
+		// row; a request that can be neither granted nor denied sits there for ever.
+		return nil, ErrTokenAlreadyExpired
 	}
 
 	state := db.PATPermanenceDenied

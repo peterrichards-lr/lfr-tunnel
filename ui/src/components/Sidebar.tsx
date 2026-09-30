@@ -107,7 +107,11 @@ export default function Sidebar({
       <nav
         ref={navRef}
         className={`sidebar ${isOpen ? 'active' : ''}`}
-        aria-label={t('aria_primary_nav', 'Primary')}
+        // 'Primary Navigation', matching aria_primary_nav's English exactly. A fallback that
+        // differs from the shipped value means a bundle that fails to load silently RENAMES the
+        // landmark -- and made `name: 'Primary'` in the e2e specs pass in both states, so
+        // nothing could tell them apart (#2311).
+        aria-label={t('aria_primary_nav', 'Primary Navigation')}
       >
         <div className="sidebar-brand flex items-center gap-sm px-lg py-md">
           <img

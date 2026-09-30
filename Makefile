@@ -1,4 +1,4 @@
-.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -82,6 +82,7 @@ help:
 	@echo "  make check-css         - Portal V2 BEM modifiers have a matching rule"
 	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
+	@echo "  make check-e2e-names   - e2e name assertions are not prefixes of other strings"
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
 	@echo "  make check-print       - Print stylesheets only target markup that exists"
@@ -316,6 +317,7 @@ test-hooks:
 	@./tests/hooks/test-stale-branches.sh
 	@./tests/hooks/test-pull-images.sh
 	@./tests/hooks/test-closing-refs.sh
+	@./tests/hooks/test-e2e-accessible-names.sh
 	@./tests/hooks/test-compile-check.sh
 	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-make-help-covers-targets.sh
@@ -448,6 +450,13 @@ check-contrast:
 # inline English fallback hides the gap from whoever added the string, so only a gate finds it.
 check-i18n:
 	@node scripts/check-i18n-keys.cjs
+
+# Catches an e2e name assertion that is a strict PREFIX of a different shipped string (#2311).
+# Playwright matches `name` as a substring unless exact: true, so `name: 'Primary'` passed
+# against both the untranslated fallback and the shipped "Primary Navigation" -- the three
+# landmark specs could not tell whether the i18n mechanism had run at all.
+check-e2e-names:
+	@python3 scripts/check-e2e-accessible-names.py
 
 # Catches an HTML document whose tags do not balance (#1791). Nothing else in this repo can:
 # it is not a parse error, *.html is in .prettierignore, and the browser silently recovers

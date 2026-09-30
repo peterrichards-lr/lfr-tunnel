@@ -1202,6 +1202,13 @@ for a in agent-one agent-two; do
   mkdir -p "$WT_WORK/.claude/worktrees/$a/pkg/client"
   printf 'package client\n\nfunc x() { _, _ = os.UserHomeDir() }\n' \
     >"$WT_WORK/.claude/worktrees/$a/pkg/client/home_test.go"
+  # COMPLIANT copies, which is what makes this case reproduce the verdict quoted above rather
+  # than merely go red. Without a testmain the copies are REPORTED, so the pre-fix gate exits 1
+  # naming them -- red, but for the wrong reason, and never demonstrating the exit-0 that is the
+  # whole finding. With one, the pre-fix gate prints "All 2 packages ... isolate it" and exits 0
+  # over a tree containing no Go source at all.
+  printf 'package client\n\nfunc TestPackageTestsCannotReachTheRealHome() { testhome.Isolate() }\n' \
+    >"$WT_WORK/.claude/worktrees/$a/pkg/client/testmain_home_test.go"
 done
 "$WT_WORK/scripts/check-test-home-isolation.sh" >"$OUT_FILE" 2>&1
 RC=$?
@@ -1248,18 +1255,27 @@ printf '#!/usr/bin/env bash\necho nothing to see here\n' >"$EDR_WORK/scripts/noo
 # have passed while proving nothing (5c rule 5). The test subcommand is scanned in *.sh.
 printf '#!/usr/bin/env bash\n%s test ./...\n' "$WT_TOOLCHAIN" \
   >"$EDR_WORK/.claude/worktrees/agent-one/scripts/stale-build.sh"
+# A SECOND fixture, for the gate's other scan branch. check-edr-safety.sh makes four scan()
+# calls; three use the full include set and the build one passes `--include=*.md`, taking the
+# override branch. A shell fixture exercises the first three and says nothing about the fourth --
+# section 5d, in the PR that is correcting 5d elsewhere. The uncovered branch is also the likely
+# one: a worktree cut before #1859 still holds a skill or AGENTS.md prescribing a build, which is
+# precisely the "false FAIL at a path nobody can edit" this case exists to stop.
+printf '# Stale doc\n\n```bash\n%s build ./cmd/example\n```\n' "$WT_TOOLCHAIN" \
+  >"$EDR_WORK/.claude/worktrees/agent-one/stale-prescription.md"
 (cd "$EDR_WORK" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
 RC=$?
-if [ "$RC" -ne 0 ] || grep -q 'stale-build.sh' "$OUT_FILE"; then
+if [ "$RC" -ne 0 ] || grep -q 'stale-build.sh' "$OUT_FILE" || grep -q 'stale-prescription.md' "$OUT_FILE"; then
   fail "a toolchain invocation inside a worktree was reported -- a clean master would go red at a path nobody can edit: $(cat "$OUT_FILE")"
 else
   # CONTROL: the same line outside the worktree must be caught.
   cp "$EDR_WORK/.claude/worktrees/agent-one/scripts/stale-build.sh" "$EDR_WORK/scripts/live-build.sh"
+  cp "$EDR_WORK/.claude/worktrees/agent-one/stale-prescription.md" "$EDR_WORK/live-prescription.md"
   (cd "$EDR_WORK" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
-  if grep -q 'live-build.sh' "$OUT_FILE"; then
-    pass "FIRING   a worktree copy is out of scope; the identical line in the real tree is not"
+  if grep -q 'live-build.sh' "$OUT_FILE" && grep -q 'live-prescription.md' "$OUT_FILE"; then
+    pass "FIRING   a worktree copy is out of scope on BOTH scan branches; the real tree is not"
   else
-    fail "the gate missed the violation in the real tree too, so its silence on the worktree proves nothing: $(cat "$OUT_FILE")"
+    fail "the gate missed a control violation in the real tree (shell and/or markdown scan), so its silence on the worktree proves nothing: $(cat "$OUT_FILE")"
   fi
 fi
 rm -rf "$WT_WORK" "$EDR_WORK"
@@ -1270,12 +1286,104 @@ rm -rf "$WT_WORK" "$EDR_WORK"
 #     `worktrees`. Nothing in this repo is. Pinned here so that adding one is a decision somebody
 #     makes rather than a hole two gates acquire silently.
 # ---------------------------------------------------------------------------
+# PREMISE first: `grep -c` over an empty listing returns 0, which is this case's PASS condition,
+# so "git told us nothing" and "nothing is named worktrees" were indistinguishable.
+WT_ALL_TRACKED="$(cd "$REPO_ROOT" && git ls-files | wc -l | tr -d ' ')"
 WT_TRACKED="$(cd "$REPO_ROOT" && git ls-files | grep -c worktrees)"
-if [ "$WT_TRACKED" -eq 0 ]; then
+if [ "${WT_ALL_TRACKED:-0}" -lt 100 ]; then
+  harness "git ls-files returned $WT_ALL_TRACKED paths -- too few to conclude anything; this case would otherwise pass on an empty listing"
+elif [ "$WT_TRACKED" -eq 0 ]; then
   pass "BOUNDING  no tracked path is named 'worktrees', so excluding the name costs no coverage"
 else
   fail "$WT_TRACKED tracked path(s) contain 'worktrees' -- two gates skip that name, so those files are now unscanned; rename them or narrow the exclusion to a path"
 fi
+
+# ---------------------------------------------------------------------------
+# 28. FIRING. The EDR gate's ANTI-VACUITY FLOOR counts the real tree, not the copies.
+#
+#     corpus_size() and scan() share one EXCLUDES array, so it is tempting to treat the floor as
+#     covered by case 26. It is not: cases 25 and 26 both pass LFT_EDR_MIN_FILES=1, which turns
+#     the floor off in the only place that would have exercised it. Deleting "${EXCLUDES[@]}"
+#     from corpus_size() alone leaves every other case in this file green.
+#
+#     The gate's own comment claims this property -- "the duplication inflates the anti-vacuity
+#     floor below until a tree with no source at all can clear it" -- and prose does not fail
+#     (5b rule 6). So: default floor, and a tree whose ONLY includable files are worktree copies.
+# ---------------------------------------------------------------------------
+FLOOR_WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-edrfloor.XXXXXX")"
+mkdir -p "$FLOOR_WORK/scripts" "$FLOOR_WORK/.claude/worktrees/agent-one/scripts"
+cp "${REPO_ROOT}/scripts/check-edr-safety.sh" "$FLOOR_WORK/scripts/"
+# Comfortably over the default floor of 50, and nothing else in the tree: the gate excludes
+# itself by name, so the real corpus here is zero.
+i=1
+while [ "$i" -le 60 ]; do
+  printf '#!/usr/bin/env bash\necho pad\n' >"$FLOOR_WORK/.claude/worktrees/agent-one/scripts/pad$i.sh"
+  i=$((i + 1))
+done
+(cd "$FLOOR_WORK" && ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ]; then
+  fail "the EDR gate reported success over a tree whose only files are worktree copies -- its floor is counting the copies: $(cat "$OUT_FILE")"
+elif grep -q 'matched the scan set' "$OUT_FILE"; then
+  pass "FIRING   the EDR gate's floor counts the real tree, so copies cannot clear it"
+else
+  harness "the EDR gate failed for some reason other than its floor (rc=$RC): $(cat "$OUT_FILE")"
+fi
+rm -rf "$FLOOR_WORK"
+
+# ---------------------------------------------------------------------------
+# 29. FIRING. A worktree whose NAME collides with a tracked directory is REFUSED, not excluded.
+#
+#     `--exclude-dir` takes a name, not a path. Deriving exclusions from `git worktree list`
+#     therefore reintroduced the exact defect this file is about: a worktree at
+#     `.claude/worktrees/scripts` removes the real `scripts/` from the scan, and the gate reports
+#     success over source it never read. Measured on the fixture below before the refusal
+#     existed -- exit 1 naming the violation without the worktree, exit 0 with it.
+#
+#     A real git repository, because the subject is what `git worktree list` reports.
+# ---------------------------------------------------------------------------
+COLLIDE_WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-collide.XXXXXX")"
+(
+  cd "$COLLIDE_WORK" || exit 1
+  git init -q .
+  git config user.email t@e.st
+  git config user.name t
+  mkdir -p scripts tools
+  cp "${REPO_ROOT}/scripts/check-edr-safety.sh" scripts/
+  # A genuine violation in the REAL tree, so "refused" and "silently clean" are distinguishable.
+  printf '#!/usr/bin/env bash\n%s run ./cmd/example\n' "$WT_TOOLCHAIN" >scripts/real-violation.sh
+  i=1
+  while [ "$i" -le 60 ]; do
+    printf '#!/usr/bin/env bash\necho pad\n' >"tools/pad$i.sh"
+    i=$((i + 1))
+  done
+  git add -A
+  git commit -qm init
+) >/dev/null 2>&1
+
+# A NON-colliding worktree first: the refusal must be about the collision, not about worktrees.
+(cd "$COLLIDE_WORK" && git worktree add --detach .claude/worktrees/agent-abc HEAD) >/dev/null 2>&1
+(cd "$COLLIDE_WORK" && ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
+if grep -q 'GATE SCOPE ERROR' "$OUT_FILE"; then
+  fail "an ordinary worktree name was refused -- every agent checkout would break: $(cat "$OUT_FILE")"
+elif grep -q 'real-violation.sh' "$OUT_FILE"; then
+  # Now the collision. `scripts` is a tracked path component in that fixture.
+  (cd "$COLLIDE_WORK" && git worktree add --detach .claude/worktrees/scripts HEAD) >/dev/null 2>&1
+  (cd "$COLLIDE_WORK" && ./scripts/check-edr-safety.sh) >"$OUT_FILE" 2>&1
+  RC=$?
+  if [ "$RC" -ne 0 ] && grep -q 'GATE SCOPE ERROR' "$OUT_FILE"; then
+    pass "FIRING   a worktree named after a tracked directory is refused, not silently excluded"
+  elif [ "$RC" -eq 0 ]; then
+    fail "the gate PASSED with a worktree named 'scripts' -- the real scripts/ was excluded and its violation went unread: $(cat "$OUT_FILE")"
+  else
+    fail "the gate failed with a colliding worktree but not with the scope error (rc=$RC): $(cat "$OUT_FILE")"
+  fi
+else
+  harness "the fixture's own violation was not reported before any collision existed, so case 29 proves nothing: $(cat "$OUT_FILE")"
+fi
+(cd "$COLLIDE_WORK" && git worktree remove --force .claude/worktrees/scripts) >/dev/null 2>&1
+(cd "$COLLIDE_WORK" && git worktree remove --force .claude/worktrees/agent-abc) >/dev/null 2>&1
+rm -rf "$COLLIDE_WORK"
 
 echo ""
 echo "  ${PASS} passed, ${FAIL} failed"

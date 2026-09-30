@@ -45,7 +45,7 @@ MIN_PACKAGES="${LFT_HOME_ISOLATION_MIN_PACKAGES:-2}"
 # Seeded rather than declared empty: under `set -u`, bash 3.2 treats "${arr[@]}" on an empty
 # array as an unbound variable, and this runs from a pre-push hook on macOS.
 SCAN_EXCLUDES=(--exclude-dir=worktrees)
-nested_worktree_excludes() {
+nested_worktree_names() {
     local root line path
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
     [ -n "$root" ] || return 0
@@ -56,13 +56,32 @@ nested_worktree_excludes() {
         esac
         [ "$path" = "$root" ] && continue
         case "$path" in "$root"/*) ;; *) continue ;; esac
-        printf -- '--exclude-dir=%s\n' "${path##*/}"
+        printf '%s\n' "${path##*/}"
     done
 }
-while IFS= read -r wt_exclude; do
-    [ -n "$wt_exclude" ] || continue
-    SCAN_EXCLUDES+=("$wt_exclude")
-done < <(nested_worktree_excludes)
+
+# A name that collides with a tracked directory is REFUSED, not excluded -- `--exclude-dir` takes
+# a name rather than a path, so a worktree called `config` would take the real pkg/config out of
+# the scan. Same reasoning, at more length, in scripts/check-edr-safety.sh; validated here in the
+# main shell for the same reason, since `exit` inside a process substitution ends the subshell
+# and nothing else.
+WORKTREE_NAMES="$(nested_worktree_names)"
+# `|| true` is load-bearing, exactly as in corpus_size() below. Outside a git repository
+# `git ls-files` exits 128; the pipeline's status is sort's, so `pipefail` promotes the failure
+# and `set -e` kills the gate with no message. Both gates ran fine anywhere before this block
+# existed, and this suite's own fixtures are plain directories -- they caught it immediately.
+TRACKED_NAMES="$(git ls-files 2>/dev/null | tr '/' '\n' | sort -u || true)"
+while IFS= read -r wt_name; do
+    [ -n "$wt_name" ] || continue
+    if grep -qx -- "$wt_name" <<<"$TRACKED_NAMES"; then
+        echo "GATE SCOPE ERROR: a git worktree is named '$wt_name', which is also a tracked path"
+        echo "component. Excluding it would also skip the real ./$wt_name, and this gate would"
+        echo "then report on fewer packages than it claims. Rename or remove that worktree."
+        echo "See #2310."
+        exit 1
+    fi
+    SCAN_EXCLUDES+=("--exclude-dir=$wt_name")
+done <<<"$WORKTREE_NAMES"
 
 # bash 3.2 on macOS has no mapfile, and this runs from a pre-push hook there.
 packages=$(

@@ -45,14 +45,16 @@ export default function AdminTokenPermanence() {
   const columns: ColumnDef<PermanenceRequest>[] = useMemo(
     () => [
       { key: 'user_email', label: t('email', 'Email'), sortable: true },
-      { key: 'name', label: t('token_name', 'Token Name'), sortable: true },
+      // th_name, not a new token_name key: V1's header uses th_name for the same column, and
+      // two keys for one header means a translator correcting it in one arm leaves the other
+      // wrong -- the drift this PR's data-i18n fix on "Administration Controls" was about.
+      { key: 'name', label: t('th_name', 'Name'), sortable: true },
       { key: 'token_prefix', label: t('th_prefix', 'Prefix'), sortable: true },
       { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
-      {
-        key: 'created_at',
-        label: t('created_at', 'Created Date'),
-        sortable: true,
-      },
+      // NO created_at column. It is the TOKEN's creation date, not the request's -- there is no
+      // requested_at anywhere -- and a sortable column labelled "Created Date" in a queue is
+      // read as request age by whoever is working it. V1 does not show it either, so dropping
+      // it also closes a column-set divergence between the arms.
     ],
     [t],
   );
@@ -79,13 +81,17 @@ export default function AdminTokenPermanence() {
     ['user_email', 'name', 'token_prefix'],
     columns,
     10,
-    ['created_at'],
+    ['expires_at'],
   );
 
   const fetchRequests = async () => {
     try {
       const res = await axios.get('/api/admin/tokens/permanence-requests');
       setRequests(res.data || []);
+      // Cleared on success, which the pages this was modelled on do not do. They load once;
+      // this one reloads after every decision, so a single transient failure would otherwise
+      // leave "what you see is not current" banner-ed over data that is.
+      setLoadError('');
     } catch (err: any) {
       console.error(err);
       setLoadError(
@@ -143,7 +149,13 @@ export default function AdminTokenPermanence() {
         );
         await fetchRequests();
       } else {
-        showToast(t('action_failed', 'Action failed'), 'error');
+        // The server's reason, not just "Action failed". A policy tightened to `disabled`
+        // answers 403 with a real explanation, and a grant on a token that lapsed while queued
+        // answers 409 with another -- neither of which an admin can guess.
+        showToast(
+          err.response?.data?.error || t('action_failed', 'Action failed'),
+          'error',
+        );
       }
     } finally {
       setDeciding(null);
@@ -165,10 +177,9 @@ export default function AdminTokenPermanence() {
               <thead>
                 <tr className="border-b text-left">
                   <th className="th-col">{t('email', 'Email')}</th>
-                  <th className="th-col">{t('token_name', 'Token Name')}</th>
+                  <th className="th-col">{t('th_name', 'Name')}</th>
                   <th className="th-col">{t('th_prefix', 'Prefix')}</th>
                   <th className="th-col">{t('expires', 'Expires')}</th>
-                  <th className="th-col">{t('created_at', 'Created Date')}</th>
                   <th className="th-col text-right">
                     {t('actions', 'Actions')}
                   </th>
@@ -185,9 +196,6 @@ export default function AdminTokenPermanence() {
                     </td>
                     <td className="td-cell">
                       <Skeleton width="50%" height={16} />
-                    </td>
-                    <td className="td-cell">
-                      <Skeleton width="60%" height={16} />
                     </td>
                     <td className="td-cell">
                       <Skeleton width="60%" height={16} />
@@ -264,7 +272,7 @@ export default function AdminTokenPermanence() {
                     onClick={() => requestSort('name')}
                     aria-sort={getAriaSort('name')}
                   >
-                    {t('token_name', 'Token Name')}
+                    {t('th_name', 'Name')}
                     {getSortIndicator('name')}
                   </th>
                 )}
@@ -288,23 +296,13 @@ export default function AdminTokenPermanence() {
                     {getSortIndicator('expires_at')}
                   </th>
                 )}
-                {isColumnVisible('created_at') && (
-                  <th
-                    className="th-col th-col--sortable"
-                    onClick={() => requestSort('created_at')}
-                    aria-sort={getAriaSort('created_at')}
-                  >
-                    {t('created_at', 'Created Date')}
-                    {getSortIndicator('created_at')}
-                  </th>
-                )}
                 <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="td-cell text-center text-muted">
+                  <td colSpan={5} className="td-cell text-center text-muted">
                     {t(
                       'no_pending_permanence_requests',
                       'No pending permanence requests.',
@@ -329,9 +327,6 @@ export default function AdminTokenPermanence() {
                           ? formatDate(req.expires_at)
                           : t('expiry_never', 'Never')}
                       </td>
-                    )}
-                    {isColumnVisible('created_at') && (
-                      <td className="td-cell">{formatDate(req.created_at)}</td>
                     )}
                     <td className="td-cell text-right">
                       <div className="flex gap-sm justify-end">

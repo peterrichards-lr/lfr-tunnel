@@ -22,6 +22,15 @@ var (
 	// than 400: the request is well formed and would have worked on a gateway configured
 	// differently, which is what "forbidden" means and "bad request" does not.
 	ErrPermanenceNotAllowed = errors.New("this gateway does not allow that to be set to never expire")
+	// ErrTokenAlreadyExpired is returned when something asks to make an ALREADY LAPSED token
+	// permanent (#2280). Granting that does not extend a credential, it revives one: the holder
+	// stopped being able to authenticate on the expiry date and a grant writes expires_at =
+	// NULL, so the token works again.
+	//
+	// 409 rather than 403: nothing about the gateway's configuration forbids it, and the same
+	// request a day earlier would have been fine. It is the resource's state that makes it
+	// impossible, which is what conflict means.
+	ErrTokenAlreadyExpired = errors.New("this token has already expired and cannot be made permanent")
 )
 
 // mapErrorToStatusCode converts our service errors into HTTP status codes.
@@ -38,7 +47,7 @@ func mapErrorToStatusCode(err error) int {
 	if errors.Is(err, ErrNotFound) {
 		return http.StatusNotFound
 	}
-	if errors.Is(err, ErrConflict) || errors.Is(err, ErrQuarantined) {
+	if errors.Is(err, ErrConflict) || errors.Is(err, ErrQuarantined) || errors.Is(err, ErrTokenAlreadyExpired) {
 		return http.StatusConflict
 	}
 	return http.StatusInternalServerError

@@ -4074,17 +4074,31 @@ async function loadTokens() {
                                     : ''
                                 }
                                 ${
-                                  // The HOLDER's route to permanence, and the three conditions
-                                  // are all load-bearing (#2280). `approval` is the only policy
-                                  // with anything to request: under `allowed` a holder creates a
-                                  // permanent token outright, under `disabled` nothing can be
-                                  // granted, and RequestTokenPermanence answers 403 for both. A
-                                  // token with no expiry has nothing to remove, and one that
-                                  // already carries a permanence_state has either been asked
-                                  // about or answered -- re-asking would reopen a decision.
+                                  // The HOLDER's route to permanence (#2280). `approval` is the
+                                  // only policy with anything to request: under `allowed` a
+                                  // holder creates a permanent token outright, under `disabled`
+                                  // nothing can be granted, and the server answers 403 for both.
+                                  //
+                                  // NOT EXPIRED, and this is the condition V1 was missing while
+                                  // V2 had it. The menu above gates on `!isRevoked` and knows
+                                  // nothing about expiry, so this offered a lapsed token to the
+                                  // queue -- and a grant writes expires_at = NULL, which revives
+                                  // a credential rather than extending one. The server refuses it
+                                  // now too; this keeps the button off a row that cannot work.
+                                  //
+                                  // `denied` IS still offered. Only pending and granted are
+                                  // withdrawn. TestADeniedHolderMayAskAgain pins the server
+                                  // behaviour and says why: "a holder whose circumstances changed
+                                  // being unable to ask again is the worse of the two". An
+                                  // earlier draft of this condition read `!t.permanence_state`,
+                                  // which removed from both arms a capability the server
+                                  // deliberately supports, with no admin control anywhere to
+                                  // reset `denied` -- a permanent lockout.
                                   neverExpiresPolicies.tokens === 'approval' &&
                                   t.expires_at &&
-                                  !t.permanence_state
+                                  !isExpired &&
+                                  t.permanence_state !== 'pending' &&
+                                  t.permanence_state !== 'granted'
                                     ? `<button class="action-menu-item" onclick="requestTokenPermanence(${t.id})" data-i18n="request_permanence">${window.t ? window.t('request_permanence', 'Request Permanence') : 'Request Permanence'}</button>`
                                     : ''
                                 }
@@ -4132,14 +4146,28 @@ async function loadTokens() {
 //
 // Modelled on loadAdminExtensions, deliberately: two halves of one idea, and an admin should not
 // have to learn a second set of controls for the second one.
+// renderQueueLoadFailure replaces the queue body with a visible failure.
+//
+// Without it the static "No pending permanence requests." from dashboard.html stays on screen
+// when the load FAILED, so an admin is told the queue is empty by a server that refused to
+// answer -- and after a decision, the just-decided row stays put, indistinguishable from a
+// decision that did not take. V2 has said this since it was written; V1 inherited the silence
+// from loadAdminExtensions, which has the same hole.
+function renderQueueLoadFailure(tbody) {
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--status-danger-text);" data-i18n="admin_load_failed">${t('admin_load_failed', 'Could not load this page. The server may be unreachable — what you see is not current.')}</td></tr>`;
+}
+
 async function loadAdminTokenPermanence() {
+  const tbody = document.getElementById('admin-token-permanence-table-body');
   try {
     const res = await fetch('/api/admin/tokens/permanence-requests');
-    if (res.ok) {
+    if (!res.ok) {
+      renderQueueLoadFailure(tbody);
+      return;
+    }
+    {
       const list = (await res.json()) || [];
-      const tbody = document.getElementById(
-        'admin-token-permanence-table-body',
-      );
       if (!tbody) return;
       tbody.innerHTML = '';
 
@@ -4178,6 +4206,7 @@ async function loadAdminTokenPermanence() {
     }
   } catch (e) {
     console.error('Failed to load token permanence requests', e);
+    renderQueueLoadFailure(tbody);
   }
 }
 
@@ -4185,6 +4214,7 @@ async function loadAdminTokenPermanence() {
 // 400 rather than a silent denial -- which means omitting it to mean "no" would look right here
 // and fail at the gateway.
 async function decideTokenPermanence(id, grant) {
+  setRowDeciding(id, true);
   try {
     const res = await fetch(
       `/api/admin/tokens/${encodeURIComponent(id)}/permanence`,
@@ -4222,15 +4252,47 @@ async function decideTokenPermanence(id, grant) {
       );
       loadAdminTokenPermanence();
     } else {
-      const err = await res.json();
       showToast(
-        t('action_failed', 'Action failed') + ': ' + (err.error || ''),
+        t('action_failed', 'Action failed') + ': ' + (await errorText(res)),
         'danger',
       );
     }
   } catch (e) {
     console.error('Failed to decide token permanence', e);
+    showToast(t('action_failed', 'Action failed'), 'danger');
+  } finally {
+    setRowDeciding(id, false);
   }
+}
+
+// errorText reads a server error without assuming it is JSON.
+//
+// `await res.json()` inside the try was the bug: http.NotFound and any proxy in front of the
+// gateway answer PLAIN TEXT, the parse throws, the catch logs, and the admin sees a button that
+// visibly does nothing. The status is always available and is better than silence.
+async function errorText(res) {
+  try {
+    const body = await res.json();
+    if (body && body.error) return body.error;
+  } catch (e) {
+    // Not JSON. Fall through to the status.
+  }
+  return String(res.status);
+}
+
+// setRowDeciding disables a queue row's buttons while its decision is in flight.
+//
+// V2 does this with `deciding === req.id`; V1 had nothing, and the two reloads afterwards are
+// not awaited, so both buttons stayed live across the whole round trip. A second click -- or
+// Grant then Deny -- sends a second POST, which the server correctly refuses with 409, and the
+// admin is then told "Already decided by someone else". Nobody else decided it; they did, half a
+// second earlier. Nothing is corrupted, and the message is a false statement about who acted.
+function setRowDeciding(id, busy) {
+  const menu = document.getElementById(`menu-token-perm-${id}`);
+  if (!menu) return;
+  menu.querySelectorAll('button').forEach((b) => {
+    b.disabled = busy;
+  });
 }
 
 // The HOLDER's request (#2280). Idempotent server-side, so a second click costs nothing; the
@@ -4252,14 +4314,14 @@ async function requestTokenPermanence(id) {
       );
       loadTokens();
     } else {
-      const err = await res.json();
       showToast(
-        t('action_failed', 'Action failed') + ': ' + (err.error || ''),
+        t('action_failed', 'Action failed') + ': ' + (await errorText(res)),
         'danger',
       );
     }
   } catch (e) {
     console.error('Failed to request token permanence', e);
+    showToast(t('action_failed', 'Action failed'), 'danger');
   }
 }
 

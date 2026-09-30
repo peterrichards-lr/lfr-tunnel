@@ -664,14 +664,18 @@ export default function Dashboard() {
                                 to grant, so the server refuses both with 403. A button that
                                 always errors is worse than no button (#2264).
 
-                                `granted` and `denied` are both excluded: granted tokens have no
-                                expires_at anyway, and re-asking after a decision would reopen a
-                                request an admin has already answered.
+                                `denied` is NOT excluded. Only pending and granted are, and
+                                TestADeniedHolderMayAskAgain pins why: "a holder whose
+                                circumstances changed being unable to ask again is the worse of
+                                the two". An earlier draft excluded it, which removed a capability
+                                the server deliberately supports -- and since nothing anywhere
+                                resets `denied`, that was a permanent lockout.
                               */}
                               {statusVal === 'active' &&
                                 neverExpires.tokens === 'approval' &&
                                 tItem.expires_at &&
-                                !tItem.permanence_state && (
+                                tItem.permanence_state !== 'pending' &&
+                                tItem.permanence_state !== 'granted' && (
                                   <button
                                     type="button"
                                     className="btn btn-secondary py-xs px-sm text-xs w-auto"

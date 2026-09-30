@@ -91,6 +91,17 @@ func (s *portalService) RequestTokenPermanence(user *db.User, tokenID, ip string
 		// either: there is nothing for an admin to decide.
 		return pat, nil
 	}
+	if pat.ExpiresAt.Before(time.Now().UTC()) {
+		// ALREADY LAPSED. Granting this would not extend a credential, it would revive one --
+		// a grant writes expires_at = NULL, so a token that stopped authenticating last month
+		// works again (#2280).
+		//
+		// Refused HERE rather than only in the portal, because the portal is not the boundary:
+		// V1's action menu gates on `!isRevoked` and knows nothing about expiry, so it offered
+		// this on a lapsed token while V2 did not, and the API accepted it from either. A
+		// condition that only one arm applies is not a rule.
+		return nil, ErrTokenAlreadyExpired
+	}
 	if pat.PermanenceState == db.PATPermanencePending {
 		// Idempotent. A holder who clicks twice has one request, not two queue entries.
 		return pat, nil
@@ -221,6 +232,16 @@ func (s *portalService) AdminDecideTokenPermanence(actor, idStr string, grant bo
 		// `granted` on a dead credential -- harmless, because revocation still wins at auth,
 		// and still a row that contradicts what the queue promised (#2267 review).
 		return nil, ErrConflict
+	}
+	if grant && pat.ExpiresAt != nil && pat.ExpiresAt.Before(time.Now().UTC()) {
+		// Requested while live, LAPSED while queued. RequestTokenPermanence refuses an already
+		// expired token, so the only way to reach this is time passing with the row in the
+		// queue -- and an admin working a backlog sees a date in the Expires column with
+		// nothing to say it is in the past. A grant here revives the credential (#2280).
+		//
+		// Only a GRANT. Denying stays available, because an admin must be able to clear the
+		// row; a request that can be neither granted nor denied sits there for ever.
+		return nil, ErrTokenAlreadyExpired
 	}
 
 	state := db.PATPermanenceDenied

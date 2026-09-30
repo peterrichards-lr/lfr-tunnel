@@ -1182,3 +1182,192 @@ func TestAPermanenceDecisionWithNoGrantFieldIsRefused(t *testing.T) {
 		t.Errorf("the request was decided anyway: state is %q, want pending", got.PermanenceState)
 	}
 }
+
+// The admin routes are closed to a non-admin BY THE ROUTER, not by the portal (#2280).
+//
+// Both arms hide the queue behind an isAdminOrOwner check, and a UI check is not a boundary --
+// the endpoint is one curl away. Asserted through srv.ServeHTTP for the same reason the
+// reachability test is: nothing had ever driven these two handlers through the mux at all, so
+// "requireAdmin runs before the dispatch" was a property of code nobody had exercised.
+//
+// The decision case asserts the STATE as well as the status. A refusal that still wrote would be
+// a 401 with the grant applied, and only the second half would show it.
+func TestTheAdminPermanenceRoutesRefuseANonAdmin(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, devSession := userWithSession(t, srv, "dev@example.com", "developer")
+
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/api/admin/tokens/permanence-requests", nil)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: devSession})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	// 401 or 403 SPECIFICALLY, not merely "not 200". A 404 is also not 200, and a route that
+	// had been deleted would satisfy the weaker assertion while proving nothing about the
+	// boundary -- section 5c, in the test written to close a boundary gap.
+	if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
+		t.Errorf("a developer reading the admin permanence queue got %d, want 401 or 403: %s", rec.Code, rec.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"grant":true}`)
+	req, _ = http.NewRequest(http.MethodPost, fmt.Sprintf("http://example.com/api/admin/tokens/%d/permanence", pat.ID), body)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: devSession})
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
+		t.Errorf("a developer deciding their own permanence request got %d, want 401 or 403: %s", rec.Code, rec.Body.String())
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanencePending || got.ExpiresAt == nil {
+		t.Errorf("the refused decision was applied anyway: state=%q expires=%v", got.PermanenceState, got.ExpiresAt)
+	}
+}
+
+// Somebody else's token is NOT FOUND through the router, and indistinguishably so.
+//
+// TestAnotherUsersTokenIsNotFoundRatherThanForbidden already pins this on the service. It calls
+// the service directly, which is the gap this PR's own argument is about: the answer a stranger
+// actually receives is the one the mux produces, including whatever the middleware does to it.
+//
+// The bodies are compared BYTE FOR BYTE. A 404 either way is not enough -- if the real id and
+// the invented one differed in wording, the id space would still be an enumeration oracle, which
+// is the whole reason ownedToken returns ErrNotFound rather than ErrForbidden.
+func TestAStrangersTokenIsNotFoundThroughTheRouter(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	owner, _ := userWithSession(t, srv, "owner@example.com", "developer")
+	_, strangerSession := userWithSession(t, srv, "stranger@example.com", "developer")
+
+	pat := tokenFor(t, srv, owner, "ci", in30Days())
+
+	ask := func(id string) (int, string) {
+		req, _ := http.NewRequest(http.MethodPost,
+			"http://example.com/api/tokens/"+id+"/request-permanence", bytes.NewBufferString("{}"))
+		req.AddCookie(&http.Cookie{Name: "lfr_session", Value: strangerSession})
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	realCode, realBody := ask(fmt.Sprintf("%d", pat.ID))
+	fakeCode, fakeBody := ask("999999")
+
+	if realCode != http.StatusNotFound {
+		t.Errorf("a stranger asking about a REAL token got %d, want 404: %s", realCode, realBody)
+	}
+	if realCode != fakeCode || realBody != fakeBody {
+		t.Errorf("a real id and an invented one are distinguishable -- that is an enumeration oracle:\n  real: %d %q\n  fake: %d %q",
+			realCode, realBody, fakeCode, fakeBody)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != "" {
+		t.Errorf("a stranger's request changed the owner's token: %q", got.PermanenceState)
+	}
+}
+
+// Deny works through the router too, and clears the queue.
+//
+// The reachability test drives grant only. Deny is the other half of the same handler and the
+// other button in both arms, and nothing had asserted it over HTTP -- section 5d, a branch of a
+// subject with two.
+func TestADenialThroughTheRouterIsHonoured(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	_, adminSession := userWithSession(t, srv, "admin@example.com", "admin")
+
+	expiry := in30Days()
+	pat := tokenFor(t, srv, dev, "ci", expiry)
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"grant":false}`)
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("http://example.com/api/admin/tokens/%d/permanence", pat.ID), body)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: adminSession})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deny: got %d, want 200. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	got := mustToken(t, srv, pat.ID)
+	if got.PermanenceState != db.PATPermanenceDenied {
+		t.Errorf("state is %q, want denied", got.PermanenceState)
+	}
+	if got.ExpiresAt == nil {
+		t.Error("a DENIAL removed the expiry -- the token was made permanent by being refused")
+	}
+	if q := mustQueue(t, srv); len(q) != 0 {
+		t.Errorf("after denying, the queue still holds %d request(s)", len(q))
+	}
+}
+
+// An ALREADY LAPSED token cannot be made permanent (#2280).
+//
+// A grant writes expires_at = NULL. On a token whose expiry has passed that does not extend a
+// credential, it REVIVES one: the holder stopped being able to authenticate on the expiry date
+// and afterwards can again.
+//
+// Found by review, and found as a PARITY defect first: V1's action menu gates on `!isRevoked`
+// and knew nothing about expiry, so it offered this on a lapsed token where V2 -- which gates on
+// a computed status -- did not. The fix is here rather than in the arm, because a condition only
+// one portal applies is not a rule and the API is reachable without either.
+func TestALapsedTokenCannotBeMadePermanent(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+
+	lapsed := time.Now().UTC().AddDate(0, 0, -5)
+	pat := tokenFor(t, srv, dev, "stale", &lapsed)
+
+	_, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1")
+	if !errors.Is(err, ErrTokenAlreadyExpired) {
+		t.Fatalf("requesting permanence on a lapsed token returned %v, want ErrTokenAlreadyExpired", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != "" {
+		t.Errorf("the refused request was recorded anyway: %q", got.PermanenceState)
+	}
+	if q := mustQueue(t, srv); len(q) != 0 {
+		t.Errorf("a lapsed token reached the queue (%d) -- an admin would see a past date with nothing marking it", len(q))
+	}
+}
+
+// BOUNDING. A token that lapses WHILE QUEUED cannot be granted, and can still be denied.
+//
+// This is the reachable half now that the request itself is refused: a token with thirty days
+// left is queued, the backlog takes longer than that, and the admin then sees a row whose Expires
+// column is a date in the past with nothing to say so.
+//
+// Deny must keep working. A request that can be neither granted nor denied sits in the queue for
+// ever, which is the state this whole feature exists to stop.
+func TestATokenThatLapsesWhileQueuedCanBeDeniedButNotGranted(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	id := ""
+
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	id = fmt.Sprintf("%d", pat.ID)
+	if _, err := srv.portalService.RequestTokenPermanence(dev, id, "127.0.0.1"); err != nil {
+		t.Fatalf("request while live: %v", err)
+	}
+
+	// Time passes. Rewriting the expiry is the only way to stage this without sleeping, and it
+	// is exactly what the clock would have done.
+	lapsed := time.Now().UTC().AddDate(0, 0, -1)
+	if err := srv.db.UpdatePATExpiry(pat.ID, &lapsed); err != nil {
+		t.Fatalf("staging the lapse: %v", err)
+	}
+
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", id, true, "127.0.0.1"); !errors.Is(err, ErrTokenAlreadyExpired) {
+		t.Errorf("granting a token that lapsed in the queue returned %v, want ErrTokenAlreadyExpired", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.ExpiresAt == nil {
+		t.Error("the refused grant removed the expiry anyway -- the credential is revived")
+	}
+
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", id, false, "127.0.0.1"); err != nil {
+		t.Fatalf("denying a lapsed request: %v -- it would sit in the queue for ever", err)
+	}
+	if q := mustQueue(t, srv); len(q) != 0 {
+		t.Errorf("after denying, the queue still holds %d request(s)", len(q))
+	}
+}

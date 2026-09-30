@@ -199,6 +199,20 @@ export default function Sidebar({
                 >
                   {t('extensions', 'Extensions')}
                 </NavLink>
+                {/*
+                  Beside Extensions, which is the queue this mirrors: an admin working pending
+                  requests should find both in one place rather than learning that tokens are
+                  somewhere else (#2280).
+                */}
+                <NavLink
+                  to="/admin/token-permanence"
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  {t('sidebar_token_permanence', 'Token Permanence')}
+                </NavLink>
                 <NavLink
                   to="/admin/users"
                   onClick={onClose}

@@ -418,6 +418,32 @@
                         <tbody id="tokens-table-body"></tbody>
                     </table>
                 </div>
+
+                <!-- Admin Section (Only for admin/owner) -->
+                <div id="admin-token-permanence-section" class="hidden" style="margin-top: 32px;">
+                    <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;" data-i18n="administration_controls">Administration Controls</div>
+
+                    <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="token_permanence_requests">Token Permanence Requests</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;" data-i18n="token_permanence_requests_desc">Holders have asked for these tokens never to expire. Granting removes the expiry; denying keeps it.</p>
+                    <div class="glass table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_user_email">User Email</th>
+                                    <th data-i18n="th_name">Name</th>
+                                    <th data-i18n="th_prefix">Prefix</th>
+                                    <th data-i18n="th_expires_at">Expires At</th>
+                                    <th style="text-align: right;" data-i18n="th_actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-token-permanence-table-body">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);" data-i18n="no_pending_permanence_requests">No pending permanence requests.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- Account Tab -->
@@ -963,7 +989,7 @@
 
                 <!-- Admin Section (Only for admin/owner) -->
                 <div id="admin-reservations-section" class="hidden">
-                    <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Administration Controls</div>
+                    <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;" data-i18n="administration_controls">Administration Controls</div>
                     
                     <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="extension_requests">Extension Requests</h3>
                     <div class="glass table-container">

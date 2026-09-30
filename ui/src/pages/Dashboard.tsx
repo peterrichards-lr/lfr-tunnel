@@ -13,6 +13,7 @@ import ClientInstallationModal from '../components/ClientInstallationModal';
 import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 import SectionHeading from '../components/SectionHeading';
 import ModalShell from '../components/ModalShell';
 
@@ -79,6 +80,7 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const { showToast } = useUI();
 
   const columns: ColumnDef<any>[] = useMemo(
     () => [
@@ -252,6 +254,41 @@ export default function Dashboard() {
     }
     if (rawToken) {
       await deliverTokenToCli(rawToken);
+    }
+  };
+
+  /**
+   * Ask for an existing token never to expire (#2280).
+   *
+   * Separate from creation because a holder's needs change: a token made for a fortnight's work
+   * that turns into a standing integration should not have to be replaced, and replacing it means
+   * a new secret in somebody's CI. Before this, asking was only possible at creation time -- so
+   * the holder's only route was to make a second token and move the secret.
+   *
+   * The server is idempotent on a second request, so a double click costs nothing. The button is
+   * still withdrawn once the state is pending, because an action that visibly does nothing reads
+   * as a broken button.
+   */
+  const handleRequestPermanence = async (
+    tokenId: string,
+    tokenName: string,
+  ) => {
+    try {
+      await axios.post(`/api/tokens/${tokenId}/request-permanence`);
+      fetchTokens();
+      showToast(
+        t(
+          'toast_permanence_requested',
+          'Requested. An administrator will decide.',
+        ),
+        'success',
+      );
+    } catch (err: any) {
+      showToast(
+        err.response?.data?.error ||
+          t('action_failed', 'Action failed') + `: ${tokenName}`,
+        'error',
+      );
     }
   };
 
@@ -618,17 +655,55 @@ export default function Dashboard() {
                             </span>
                           </td>
                           <td className="td-cell">
-                            {statusVal === 'active' && (
-                              <button
-                                type="button"
-                                className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
-                                onClick={() =>
-                                  handleRevokeToken(tItem.id, tItem.name)
-                                }
-                              >
-                                {t('revoke', 'Revoke')}
-                              </button>
-                            )}
+                            <div className="flex gap-sm">
+                              {/*
+                                Offered only where all three hold: the gateway takes requests at
+                                all, this token HAS an expiry to remove, and nobody has asked yet.
+                                Under `allowed` there is nothing to request -- a holder creates a
+                                permanent token outright -- and under `disabled` there is nothing
+                                to grant, so the server refuses both with 403. A button that
+                                always errors is worse than no button (#2264).
+
+                                `denied` is NOT excluded. Only pending and granted are, and
+                                TestADeniedHolderMayAskAgain pins why: "a holder whose
+                                circumstances changed being unable to ask again is the worse of
+                                the two". An earlier draft excluded it, which removed a capability
+                                the server deliberately supports -- and since nothing anywhere
+                                resets `denied`, that was a permanent lockout.
+                              */}
+                              {statusVal === 'active' &&
+                                neverExpires.tokens === 'approval' &&
+                                tItem.expires_at &&
+                                tItem.permanence_state !== 'pending' &&
+                                tItem.permanence_state !== 'granted' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary py-xs px-sm text-xs w-auto"
+                                    onClick={() =>
+                                      handleRequestPermanence(
+                                        tItem.id,
+                                        tItem.name,
+                                      )
+                                    }
+                                  >
+                                    {t(
+                                      'request_permanence',
+                                      'Request Permanence',
+                                    )}
+                                  </button>
+                                )}
+                              {statusVal === 'active' && (
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
+                                  onClick={() =>
+                                    handleRevokeToken(tItem.id, tItem.name)
+                                  }
+                                >
+                                  {t('revoke', 'Revoke')}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

@@ -532,6 +532,19 @@ func (s *portalService) AdminListExtensions() ([]*ExtensionRequestView, error) {
 		return nil, ErrInternalError
 	}
 
+	// One ListUsers rather than a lookup per row -- the pattern handleAdminListSubdomains uses
+	// for the neighbouring endpoint, which has always sent user_email correctly. A per-row
+	// GetUser turns a ten-row queue into ten queries against a database with
+	// SetMaxOpenConns(1).
+	users, err := s.db.ListUsers()
+	if err != nil {
+		return nil, ErrInternalError
+	}
+	emails := make(map[string]string, len(users))
+	for _, u := range users {
+		emails[u.ID] = u.Email
+	}
+
 	list := make([]*ExtensionRequestView, 0)
 	for _, res := range all {
 		if !res.ExtensionRequested {
@@ -542,10 +555,17 @@ func (s *portalService) AdminListExtensions() ([]*ExtensionRequestView, error) {
 		if kind == resourceKindCustomDomain {
 			policy = s.cfg.NeverExpiresCustomDomains()
 		}
+		email := emails[res.UserID]
+		if email == "" {
+			// Named rather than blank, so an admin can tell "nobody by that id" from "this
+			// cell is still loading" (#2314).
+			email = unknownUserEmail
+		}
 		list = append(list, &ExtensionRequestView{
 			SubdomainReservation: res,
 			ResourceKind:         kind,
 			PermanenceAllowed:    permanenceGrantAllowed(policy),
+			UserEmail:            email,
 		})
 	}
 

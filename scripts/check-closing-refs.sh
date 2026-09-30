@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# check-closing-refs.sh — reject a NEGATED closing reference, which GitHub reads as a closure
+# check-closing-refs.sh — reject a REVERSED closing reference, which GitHub reads as a closure
 #
-# GitHub's linked-issue parser matches close/fixes/resolves followed by #<N> and IGNORES any
-# negation in front of it. So this, written to be helpful:
+# GitHub's linked-issue parser matches close/fixes/resolves followed by #<N> and IGNORES
+# whatever stands in front of it. So this, written to be helpful:
 #
 #     Does not close #1521.
 #
@@ -25,7 +25,7 @@
 # Reads the text to check from a file argument, or from stdin.
 #
 # Exit codes:
-#   0  no negated closing reference
+#   0  no reversed closing reference
 #   1  found one
 set -uo pipefail
 
@@ -44,16 +44,54 @@ else
     TEXT=$(cat)
 fi
 
-# The negations people actually write, followed by a closing keyword and an issue number.
+# What people actually write in front of a closing keyword when they mean the opposite.
 # Deliberately narrow: it catches the adjacent forms that GitHub itself acts on, and does not
-# try to parse English. A sentence with words between the negation and the keyword ("does not,
-# in this case, close #12") is not caught -- and is also not a phrasing anyone reaches for by
-# accident.
-NEGATED='(does|do|did|will|would|can|could|should)( ?n.?t| not)|\bnot\b|\bnever\b|\bwithout\b'
+# try to parse English. A sentence with words between it and the keyword ("does not, in this
+# case, close #12") is not caught -- and is also not a phrasing anyone reaches for by accident.
+#
+# TWO KINDS, and the second was missing until it cost something. Negations were enumerated
+# from the start; CONTRASTS were not, and a contrast reverses the sense just as completely:
+#
+#     Filed rather than fixed: #<N>
+#
+# has no "not", no "never" and no "without" anywhere in it, read as a refusal by every human
+# who saw it, and closed the issue on merge. This script ran on that commit and passed. It is
+# the third instance of the class (#1533, #1538, #2316) and the first where the gate existed.
+# `wo` and `sha` are in the auxiliary list for won't and shan't. They are not "will"/"shall"
+# plus n't -- the stem changes -- so neither the auxiliary alternation nor \bnot\b reaches
+# inside them, and "Won't fix #<N>" is the single most idiomatic way anyone declines an issue.
+# GitHub's own stock label is wontfix. "Will not fix" and "Cannot fix" were both already caught,
+# which is exactly what made this easy to miss.
+REVERSED='(does|do|did|will|would|can|could|should|wo|sha)( ?n.?t| not)|\bnot\b|\bnever\b|\bwithout\b'
+REVERSED="${REVERSED}|\brather than\b|\binstead of\b|\bother than\b|\bas opposed to\b"
+REVERSED="${REVERSED}|\bin place of\b|\bin lieu of\b"
+# DEGREE, not negation or contrast: the author wants the link and not the closure, which is this
+# repo's own "Part 2 of #<N>" idiom written the way GitHub acts on.
+REVERSED="${REVERSED}|\bpartially\b|\bpartly\b|\bmostly\b"
 KEYWORD='close[sd]?|fix(e[sd])?|resolve[sd]?'
 
 MATCHES=$(printf '%s\n' "$TEXT" \
-    | grep -inE "(${NEGATED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
+    | grep -inE "(${REVERSED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
+
+# THE SAME SCAN OVER FLATTENED TEXT, because grep is line-based and GitHub is not.
+#
+# Commit bodies here are hard-wrapped, so a reverser can sit at the end of one line with its
+# keyword at the start of the next -- and GitHub, which parses the whole message, still closes
+# the issue. All three of these passed the line-based scan above:
+#
+#     filed rather\nthan fixed: #<N>
+#     filed rather than\nfixed: #<N>
+#     does not\nclose #<N>
+#
+# The multi-word contrasts make this worse in proportion to their length: each extra word is
+# another place a wrap can land. Run over a copy with every run of whitespace collapsed to one
+# space, which is what GitHub effectively sees.
+#
+# BRIDGED below stays line-based on purpose -- it is about a squashed TITLE and its (#PR)
+# trailer, which is a line-level fact.
+FLAT=$(printf '%s\n' "$TEXT" | tr '\n' ' ')
+WRAPPED=$(printf '%s\n' "$FLAT" \
+    | grep -oiE "(${REVERSED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
 
 # The second shape, which closed #1538 the same day this script was written (#1543).
 #
@@ -68,7 +106,7 @@ MATCHES=$(printf '%s\n' "$TEXT" \
 BRIDGED=$(printf '%s\n' "$TEXT" \
     | grep -inE "(${KEYWORD})[[:space:]]*:?[[:space:]]*#[^0-9[:space:]][^[:space:]]*.*#[0-9]+" || true)
 
-if [ -z "$MATCHES" ] && [ -z "$BRIDGED" ]; then
+if [ -z "$MATCHES" ] && [ -z "$WRAPPED" ] && [ -z "$BRIDGED" ]; then
     exit 0
 fi
 
@@ -76,10 +114,20 @@ echo "::error::This text would close an issue you did not mean to close."
 echo
 
 if [ -n "$MATCHES" ]; then
-    echo "A NEGATED closing reference. GitHub matches close/fixes/resolves followed by #<N> and"
-    echo "ignores the negation in front of it, so these would CLOSE the issues they name:"
+    echo "A REVERSED closing reference. GitHub matches close/fixes/resolves followed by #<N> and"
+    echo "ignores whatever stands in front of it -- a negation OR a contrast -- so these would"
+    echo "CLOSE the issues they name:"
     echo
     printf '%s\n' "$MATCHES" | sed 's/^/    /'
+    echo
+fi
+
+# Only when the line-based scan missed it, so a wrapped hit is not reported twice.
+if [ -z "$MATCHES" ] && [ -n "$WRAPPED" ]; then
+    echo "A REVERSED closing reference SPLIT ACROSS LINES. grep is line-based; GitHub is not, so"
+    echo "a wrap between the phrase and the keyword hides it here and changes nothing there:"
+    echo
+    printf '%s\n' "$WRAPPED" | sed 's/^/    /'
     echo
 fi
 
@@ -96,8 +144,9 @@ if [ -n "$BRIDGED" ]; then
 fi
 echo "If the PR genuinely does not finish that issue, name it without the keyword beside it:"
 echo
-echo "    Part 2 of #1521          instead of   Does not close #1521"
-echo "    Follow-up to #1521       instead of   Doesn't fix #1521"
+echo "    Part 2 of #1521          rather than   Does not close #1521"
+echo "    Follow-up to #1521       rather than   Doesn't fix #1521"
+echo "    Filed separately as #1521  rather than   Filed rather than fixed: #1521"
 echo
 echo "And give the PR its own sub-issue to close -- every PR here must close something, so an"
 echo "intermediate PR needs one of its own. See .agents/skills/github-workflow/SKILL.md."

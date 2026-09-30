@@ -1492,3 +1492,80 @@ func TestExtendPermanentOverturnsAnEarlierDenial(t *testing.T) {
 		t.Errorf("state is %q, want granted -- the holder is told they were declined while the token never expires", got.PermanenceState)
 	}
 }
+
+// The extension queue names WHO is asking (#2314).
+//
+// Both portal arms have read `user_email` on this queue since it was built and the field never
+// existed: SubdomainReservation carries a UserID and nothing else, and ExtensionRequestView
+// added only ResourceKind and PermanenceAllowed. So V2 rendered an empty first column --
+// sortable and searchable on a value that is always undefined -- and V1 fell back to
+// "User <id>". Two arms disagreeing about a field neither was being sent.
+//
+// Nothing caught it because nothing asserted it: `grep -rn user_email pkg/server/*_test.go`
+// returned nothing before this. The handler test asserted the list comes back, which a list of
+// emailless rows satisfies -- section 5c.
+//
+// An equality against a seeded address, not "non-empty": "Unknown" is non-empty too and is the
+// wrong answer for a user who exists.
+func TestTheExtensionQueueNamesTheHolder(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresApproval, config.NeverExpiresAllowed)
+	dev, _ := userWithSession(t, srv, "asker@example.com", "developer")
+
+	res := &db.SubdomainReservation{UserID: dev.ID, Subdomain: "app", Domain: "example.com", ExtensionRequested: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := srv.db.CreateSubdomainReservation(res); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	list, err := srv.portalService.AdminListExtensions()
+	if err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("queue holds %d entries, want 1", len(list))
+	}
+	if list[0].UserEmail != "asker@example.com" {
+		t.Errorf("queue row names %q, want %q: an admin is being asked to decide about an id",
+			list[0].UserEmail, "asker@example.com")
+	}
+	// The embedded pointer must still flatten, or every field the arms already read disappears.
+	if list[0].SubdomainReservation == nil || list[0].Subdomain != "app" {
+		t.Errorf("the embedded reservation did not survive: %+v", list[0])
+	}
+}
+
+// BOUNDING. Deleting the holder removes the request from the extension queue entirely.
+//
+// This case started life asserting that such a row renders as "Unknown". It cannot:
+// subdomain_reservations carries `FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE`
+// (pkg/db/schema.go:57), exactly as personal_access_tokens does, and foreign_keys is ON. Its own
+// PREMISE check caught that on the first run -- 0 rows, not 1 -- which is the only reason this
+// is not a test describing a state production cannot produce.
+//
+// So the "Unknown" fallback in AdminListExtensions covers one thing on both queues: the two
+// reads are not atomic, and a user deleted between ListAllSubdomainReservations and ListUsers
+// leaves a row in hand whose id resolves to nothing. Untested on purpose -- staging it needs a
+// seam that exists only for the test, and the branch is three lines that cannot do harm.
+func TestDeletingTheHolderClearsTheirExtensionRequest(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresDisabled, config.NeverExpiresApproval, config.NeverExpiresAllowed)
+	dev, _ := userWithSession(t, srv, "ghost@example.com", "developer")
+
+	res := &db.SubdomainReservation{UserID: dev.ID, Subdomain: "app", Domain: "example.com", ExtensionRequested: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := srv.db.CreateSubdomainReservation(res); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if list, err := srv.portalService.AdminListExtensions(); err != nil || len(list) != 1 {
+		t.Fatalf("PREMISE: the request is not in the queue (%d, %v), so its removal proves nothing", len(list), err)
+	}
+
+	if err := srv.db.DeleteUser(dev.ID); err != nil {
+		t.Fatalf("deleting the holder: %v", err)
+	}
+
+	list, err := srv.portalService.AdminListExtensions()
+	if err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("the queue still holds %d request(s) after the holder was deleted: %+v", len(list), list[0])
+	}
+}

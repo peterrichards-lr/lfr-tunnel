@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-hook.sh — reject a negated closing reference in a commit message (#1540)
+# commit-msg-hook.sh — reject a reversed closing reference in a commit message (#1540)
 #
 # GitHub matches close/fixes/resolves followed by #<N> and ignores any negation in front of it,
 # so "Does not close #1521" in a commit body closes #1521.
@@ -30,9 +30,9 @@ if [ ! -x "$CHECK" ]; then
     exit 0
 fi
 
-echo "[Git Hook] Checking the commit message for a negated closing reference..."
+echo "[Git Hook] Checking the commit message for a reversed closing reference..."
 if ! "$CHECK" "$MSG_FILE"; then
     exit 1
 fi
-echo "✅ No negated closing reference."
+echo "✅ No reversed closing reference."
 exit 0

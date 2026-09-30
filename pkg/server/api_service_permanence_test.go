@@ -52,7 +52,7 @@ func mustToken(t *testing.T, srv *Server, id int64) *db.PersonalAccessToken {
 }
 
 // mustQueue reads the pending-request queue, failing on the error for the same reason.
-func mustQueue(t *testing.T, srv *Server) []*db.PersonalAccessToken {
+func mustQueue(t *testing.T, srv *Server) []*PermanenceRequestView {
 	t.Helper()
 	queue, err := srv.portalService.AdminListTokenPermanenceRequests()
 	if err != nil {
@@ -1013,5 +1013,172 @@ func TestAnOwnerConfiguredPermanentStillIs(t *testing.T) {
 	if got := srv.getUserSubdomainExpiry(owner); got != nil {
 		t.Errorf("role_settings.owner.subdomain_expiry_days is 0 and subdomains are allowed, "+
 			"and the reservation still expires %v", got)
+	}
+}
+
+// The queue names WHO is asking (#2280).
+//
+// PersonalAccessToken carries a UserID and no address, so a queue built straight off the model
+// shows an admin an opaque id and asks them to decide about it. The reservation queue this one
+// mirrors has exactly that hole and renders it differently in each arm -- blank in V2, "User
+// <id>" in V1 (#2314) -- which is what a missing field derived separately in two places looks
+// like.
+//
+// Asserted on the VIEW the handler serialises rather than on the JSON, because the property is
+// that the server supplies it; a test that read the response body would also pass if some future
+// arm computed it. And asserted as an equality against a seeded address, not as "non-empty":
+// "Unknown" is non-empty too, and is the wrong answer for a user who exists.
+func TestThePermanenceQueueNamesTheHolder(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "asker@example.com", "developer")
+
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	queue := mustQueue(t, srv)
+	if len(queue) != 1 {
+		t.Fatalf("queue holds %d request(s), want 1 -- nothing below is about the right row", len(queue))
+	}
+	if queue[0].UserEmail != "asker@example.com" {
+		t.Errorf("queue row names %q, want %q: an admin is being asked to decide about an id",
+			queue[0].UserEmail, "asker@example.com")
+	}
+	// The embedded pointer must still flatten, or every field the arms already read disappears
+	// the moment this view is introduced.
+	if queue[0].PersonalAccessToken == nil || queue[0].Name != "ci" {
+		t.Errorf("the embedded token did not survive the view: %+v", queue[0])
+	}
+}
+
+// BOUNDING. Deleting the holder removes the request from the queue entirely -- it never becomes
+// an orphan row with nobody's name on it.
+//
+// This case started life asserting that such a row renders as "Unknown". It does not, because it
+// cannot exist: personal_access_tokens carries
+// `FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE` (pkg/db/schema.go:86) and
+// foreign_keys is ON in both the DSN and an explicit PRAGMA (pkg/db/db.go:34,46). The fixture
+// described a state production cannot produce, which is the trap this repo keeps finding -- so
+// it asserts the real behaviour instead, and pins the cascade this queue depends on.
+//
+// The "Unknown" fallback in AdminListTokenPermanenceRequests therefore covers exactly one thing:
+// the two reads are not atomic, so a user deleted BETWEEN ListPATPermanenceRequests and ListUsers
+// leaves a row in hand whose id resolves to nothing. That interleaving has no test, deliberately
+// -- staging it would need a seam in the service that exists only for the test, and the branch is
+// three lines that cannot do harm. Stated here rather than left for the next reader to wonder at.
+func TestDeletingTheHolderClearsTheirPermanenceRequest(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "ghost@example.com", "developer")
+
+	pat := tokenFor(t, srv, dev, "orphan", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if len(mustQueue(t, srv)) != 1 {
+		t.Fatal("PREMISE: the request is not in the queue, so its removal below proves nothing")
+	}
+
+	if err := srv.db.DeleteUser(dev.ID); err != nil {
+		t.Fatalf("deleting the holder: %v", err)
+	}
+
+	if queue := mustQueue(t, srv); len(queue) != 0 {
+		t.Errorf("the queue still holds %d request(s) after the holder was deleted: %+v -- an admin is being asked to decide about a token that no longer exists",
+			len(queue), queue[0])
+	}
+}
+
+// The admin queue and the decision are REACHABLE through the real router (#2280).
+//
+// Both handlers existed and were routed by #2275, and neither portal arm ever called them, so
+// nothing had driven them through the mux. An unrouted handler compiles, unit-tests green and
+// passes every gate in this repo -- the only thing that catches it is asking the router.
+//
+// Asserted as "not 404" separately from the status, because those are two different claims: a
+// wrong status is a bug in the handler, a 404 is the route not existing. Reading only the second
+// would have let a path typo look like an authorisation failure.
+func TestTheAdminPermanenceRoutesAreReachable(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	_, adminSession := userWithSession(t, srv, "admin@example.com", "admin")
+
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	// The queue.
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/api/admin/tokens/permanence-requests", nil)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: adminSession})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("GET /api/admin/tokens/permanence-requests is NOT ROUTED -- the portal shows an empty queue for ever")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("queue: got %d, want 200. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// And it carries what the arms render. Decoding into the view rather than a map keeps this
+	// honest about the contract: a renamed json tag fails here rather than silently rendering
+	// blank cells, which is #2314's failure exactly.
+	var queue []PermanenceRequestView
+	if err := json.Unmarshal(rec.Body.Bytes(), &queue); err != nil {
+		t.Fatalf("decoding the queue: %v. Body: %s", err, rec.Body.String())
+	}
+	if len(queue) != 1 || queue[0].UserEmail != "dev@example.com" || queue[0].Name != "ci" {
+		t.Fatalf("queue over the wire is %+v, want one row for dev@example.com's \"ci\"", queue)
+	}
+
+	// The decision. `grant` is sent explicitly, as both arms send it: server-side it is a
+	// pointer, so an absent field is a 400 rather than a silent denial.
+	body := bytes.NewBufferString(`{"grant":true}`)
+	req, _ = http.NewRequest(http.MethodPost, fmt.Sprintf("http://example.com/api/admin/tokens/%d/permanence", pat.ID), body)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: adminSession})
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("POST /api/admin/tokens/{id}/permanence is NOT ROUTED -- the queue has buttons that do nothing")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("decision: got %d, want 200. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// The EFFECT, not the status. A 200 is shared by every handler that returns early.
+	if got := mustToken(t, srv, pat.ID); got.ExpiresAt != nil {
+		t.Errorf("granted through the router and the token still expires at %v", got.ExpiresAt)
+	}
+	// And the queue empties, which is what the admin sees after the reload both arms do.
+	if q := mustQueue(t, srv); len(q) != 0 {
+		t.Errorf("after granting, the queue still holds %d request(s)", len(q))
+	}
+}
+
+// BOUNDING. An absent `grant` is a 400, never a denial by default.
+//
+// The field is a pointer server-side precisely so that "{}" cannot read as "deny". Pinned here
+// because it is the one thing a portal arm could get wrong without any visible symptom: a denial
+// it never intended, recorded against a holder who is then told "no" by a bug.
+func TestAPermanenceDecisionWithNoGrantFieldIsRefused(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	_, adminSession := userWithSession(t, srv, "admin@example.com", "admin")
+
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	body := bytes.NewBufferString("{}")
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("http://example.com/api/admin/tokens/%d/permanence", pat.ID), body)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: adminSession})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("a decision with no grant field got %d, want 400. Body: %s", rec.Code, rec.Body.String())
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanencePending {
+		t.Errorf("the request was decided anyway: state is %q, want pending", got.PermanenceState)
 	}
 }

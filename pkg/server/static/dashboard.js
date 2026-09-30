@@ -4073,6 +4073,21 @@ async function loadTokens() {
                                 `
                                     : ''
                                 }
+                                ${
+                                  // The HOLDER's route to permanence, and the three conditions
+                                  // are all load-bearing (#2280). `approval` is the only policy
+                                  // with anything to request: under `allowed` a holder creates a
+                                  // permanent token outright, under `disabled` nothing can be
+                                  // granted, and RequestTokenPermanence answers 403 for both. A
+                                  // token with no expiry has nothing to remove, and one that
+                                  // already carries a permanence_state has either been asked
+                                  // about or answered -- re-asking would reopen a decision.
+                                  neverExpiresPolicies.tokens === 'approval' &&
+                                  t.expires_at &&
+                                  !t.permanence_state
+                                    ? `<button class="action-menu-item" onclick="requestTokenPermanence(${t.id})" data-i18n="request_permanence">${window.t ? window.t('request_permanence', 'Request Permanence') : 'Request Permanence'}</button>`
+                                    : ''
+                                }
                                 <button class="action-menu-item danger" onclick="revokeToken(${t.id})">Revoke</button>
                             </div>
                         </div>
@@ -4094,6 +4109,157 @@ async function loadTokens() {
                         </tr>
                     `;
     });
+
+    // Admin checks, the same shape loadReservations uses for its own queue.
+    const permanenceSection = document.getElementById(
+      'admin-token-permanence-section',
+    );
+    if (isAdminOrOwner) {
+      if (permanenceSection) permanenceSection.classList.remove('hidden');
+      loadAdminTokenPermanence();
+    } else {
+      if (permanenceSection) permanenceSection.classList.add('hidden');
+    }
+  }
+}
+
+// THE ADMIN PERMANENCE QUEUE (#2280).
+//
+// #2275 built the lifecycle and routed it; #2279 showed the holder their own request. Neither arm
+// ever called this endpoint, so requests accumulated with nothing to act on them but the API --
+// or "Extend Permanent" on the token list, which grants without reference to the request and
+// leaves it pending for ever.
+//
+// Modelled on loadAdminExtensions, deliberately: two halves of one idea, and an admin should not
+// have to learn a second set of controls for the second one.
+async function loadAdminTokenPermanence() {
+  try {
+    const res = await fetch('/api/admin/tokens/permanence-requests');
+    if (res.ok) {
+      const list = (await res.json()) || [];
+      const tbody = document.getElementById(
+        'admin-token-permanence-table-body',
+      );
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);" data-i18n="no_pending_permanence_requests">${t('no_pending_permanence_requests', 'No pending permanence requests.')}</td></tr>`;
+        return;
+      }
+
+      list.forEach((item) => {
+        // user_email comes from the server, which resolves it once and sends "Unknown" for an
+        // id it cannot match. No `|| 'User ' + item.user_id` fallback here: the reservation
+        // queue has one, and it exists only because that endpoint never sends the field at all
+        // (#2314). A client-side fallback is a second source of truth for the same cell.
+        const expiresVal = item.expires_at
+          ? renderTimestamp(item.expires_at)
+          : `<span data-i18n="expiry_never">${t('expiry_never', 'Never')}</span>`;
+        const row = `
+                                <tr>
+                                    <td><span style="font-weight: 500;">${escapeHTML(item.user_email)}</span></td>
+                                    <td>${escapeHTML(item.name)}</td>
+                                    <td style="font-family: monospace;">${escapeHTML(item.token_prefix)}</td>
+                                    <td>${expiresVal}</td>
+                                    <td style="text-align: right;">
+                                        <div class="action-menu">
+                                            <button class="action-menu-btn" onclick="toggleActionMenu('menu-token-perm-${item.id}', event)">⋮</button>
+                                            <div id="menu-token-perm-${item.id}" class="action-menu-dropdown">
+                                                <button class="action-menu-item" onclick="decideTokenPermanence(${item.id}, true)" data-i18n="grant_permanence">${t('grant_permanence', 'Grant')}</button>
+                                                <button class="action-menu-item danger" onclick="decideTokenPermanence(${item.id}, false)" data-i18n="deny_permanence">${t('deny_permanence', 'Deny')}</button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+        tbody.innerHTML += row;
+      });
+    }
+  } catch (e) {
+    console.error('Failed to load token permanence requests', e);
+  }
+}
+
+// `grant` is sent EXPLICITLY on both paths. Server-side it is a pointer, so an absent field is a
+// 400 rather than a silent denial -- which means omitting it to mean "no" would look right here
+// and fail at the gateway.
+async function decideTokenPermanence(id, grant) {
+  try {
+    const res = await fetch(
+      `/api/admin/tokens/${encodeURIComponent(id)}/permanence`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grant: grant }),
+      },
+    );
+
+    if (res.ok) {
+      showToast(
+        grant
+          ? t(
+              'toast_permanence_granted',
+              'Granted; the token no longer expires.',
+            )
+          : t('toast_permanence_denied', 'Denied; the token keeps its expiry.'),
+        'success',
+      );
+      // Both lists: the queue because the row this acted on lives there and leaving it on
+      // screen makes a second decision one click away (the #2266 review note), and the token
+      // list because a grant changes the expiry it is displaying.
+      loadAdminTokenPermanence();
+      loadTokens();
+    } else if (res.status === 409) {
+      // Somebody else decided it first. "Action failed" would send an admin looking for a
+      // fault in work that is already done.
+      showToast(
+        t(
+          'toast_permanence_already_decided',
+          'Already decided by someone else. The queue has been refreshed.',
+        ),
+        'danger',
+      );
+      loadAdminTokenPermanence();
+    } else {
+      const err = await res.json();
+      showToast(
+        t('action_failed', 'Action failed') + ': ' + (err.error || ''),
+        'danger',
+      );
+    }
+  } catch (e) {
+    console.error('Failed to decide token permanence', e);
+  }
+}
+
+// The HOLDER's request (#2280). Idempotent server-side, so a second click costs nothing; the
+// button is withdrawn once the state is pending because an action that visibly does nothing
+// reads as a broken button.
+async function requestTokenPermanence(id) {
+  try {
+    const res = await fetch(
+      `/api/tokens/${encodeURIComponent(id)}/request-permanence`,
+      { method: 'POST' },
+    );
+    if (res.ok) {
+      showToast(
+        t(
+          'toast_permanence_requested',
+          'Requested. An administrator will decide.',
+        ),
+        'success',
+      );
+      loadTokens();
+    } else {
+      const err = await res.json();
+      showToast(
+        t('action_failed', 'Action failed') + ': ' + (err.error || ''),
+        'danger',
+      );
+    }
+  } catch (e) {
+    console.error('Failed to request token permanence', e);
   }
 }
 

@@ -13,6 +13,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminAuditLog from './pages/AdminAuditLog';
 import AdminBlacklist from './pages/AdminBlacklist';
 import AdminExtensions from './pages/AdminExtensions';
+import AdminTokenPermanence from './pages/AdminTokenPermanence';
 import AdminEdgeHealth from './pages/AdminEdgeHealth';
 import AdminMagicLinks from './pages/AdminMagicLinks';
 import AdminTelemetry from './pages/AdminTelemetry';
@@ -80,6 +81,10 @@ function App() {
                       element={<AdminTelemetry />}
                     />
                     <Route path="/admin/tokens" element={<AdminTokens />} />
+                    <Route
+                      path="/admin/token-permanence"
+                      element={<AdminTokenPermanence />}
+                    />
                     <Route path="/admin/settings" element={<AdminSettings />} />
                     <Route path="/admin/backups" element={<AdminBackups />} />
                     <Route

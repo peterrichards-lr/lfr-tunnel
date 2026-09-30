@@ -7678,7 +7678,7 @@ async function loadAdminExtensions() {
             : '';
           const row = `
                                 <tr>
-                                    <td><span style="font-weight: 500;">${escapeHTML(item.user_email || 'User ' + item.user_id)}</span></td>
+                                    <td><span style="font-weight: 500;">${escapeHTML(item.user_email)}</span></td>
                                     <td>${kindLabel}</td>
                                     <td style="font-family: monospace;">${nameCell}</td>
                                     <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>

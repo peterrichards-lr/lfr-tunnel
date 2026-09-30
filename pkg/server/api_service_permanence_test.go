@@ -1371,3 +1371,124 @@ func TestATokenThatLapsesWhileQueuedCanBeDeniedButNotGranted(t *testing.T) {
 		t.Errorf("after denying, the queue still holds %d request(s)", len(q))
 	}
 }
+
+// "Extend Permanent" answers a pending request rather than orphaning it (#2316).
+//
+// Before this, the extend route cleared the expiry and touched nothing else, so the token was
+// permanent AND still in the queue -- an admin being asked to decide about a token that already
+// never expires, with its Expires column reading "Never" in both arms. Denying that row returned
+// 200 and wrote `keeps its expiry` against a token with none.
+//
+// Driven through the ROUTER, because the resolution hangs off the handler and an unwired call is
+// invisible to a service-level test.
+func TestExtendPermanentAnswersAPendingRequest(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if len(mustQueue(t, srv)) != 1 {
+		t.Fatal("PREMISE: the request is not queued, so its disappearance below proves nothing")
+	}
+
+	if rec := postExtendToken(t, srv, pat.ID, 0); rec.Code != http.StatusOK {
+		t.Fatalf("extend permanent: got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	got := mustToken(t, srv, pat.ID)
+	if got.ExpiresAt != nil {
+		t.Fatalf("PREMISE: the extension did not make it permanent (%v)", got.ExpiresAt)
+	}
+	if got.PermanenceState != db.PATPermanenceGranted {
+		t.Errorf("state is %q, want granted -- the holder's badge still says nobody has answered", got.PermanenceState)
+	}
+	if q := mustQueue(t, srv); len(q) != 0 {
+		t.Errorf("the queue still holds %d request(s) for a token that already never expires", len(q))
+	}
+}
+
+// ...and the false audit entry is then unreachable: the row is no longer pending, so a Deny on
+// it is refused rather than recorded.
+//
+// Asserted as the CONSEQUENCE of the fix rather than as a separate guard, because that is what
+// it is -- there is no second code path here, only a state that can no longer be reached.
+func TestDenyingAnAlreadyPermanentTokenIsRefused(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	id := fmt.Sprintf("%d", pat.ID)
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, id, "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if rec := postExtendToken(t, srv, pat.ID, 0); rec.Code != http.StatusOK {
+		t.Fatalf("extend permanent: got %d", rec.Code)
+	}
+
+	_, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", id, false, "127.0.0.1")
+	if !errors.Is(err, ErrConflict) {
+		t.Errorf("denying an already-permanent token returned %v, want ErrConflict -- a 200 here writes \"keeps its expiry\" about a token with none", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.ExpiresAt != nil || got.PermanenceState != db.PATPermanenceGranted {
+		t.Errorf("the refused denial changed something: expires=%v state=%q", got.ExpiresAt, got.PermanenceState)
+	}
+}
+
+// BOUNDING. An ORDINARY extension leaves a pending request pending.
+//
+// Thirty more days is not an answer to "may this never expire", and resolving it would silently
+// convert a deferral into a refusal the admin never made. This is the edge that decides what
+// ResolvePermanenceAfterAdminGrant means, so crossing it should turn this suite red.
+func TestAnOrdinaryExtensionLeavesTheRequestPending(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, fmt.Sprintf("%d", pat.ID), "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if rec := postExtendToken(t, srv, pat.ID, 30); rec.Code != http.StatusOK {
+		t.Fatalf("extend 30 days: got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	got := mustToken(t, srv, pat.ID)
+	if got.ExpiresAt == nil {
+		t.Fatal("PREMISE: a 30-day extension made the token permanent")
+	}
+	if got.PermanenceState != db.PATPermanencePending {
+		t.Errorf("state is %q, want pending -- a deferral was turned into an answer", got.PermanenceState)
+	}
+	if len(mustQueue(t, srv)) != 1 {
+		t.Error("the request left the queue on an ordinary extension")
+	}
+}
+
+// A DENIED holder whose token an admin then makes permanent is recorded as granted.
+//
+// Otherwise the badge reads "declined" on a credential that never expires -- the same
+// contradiction as the orphaned queue row, pointing the other way.
+func TestExtendPermanentOverturnsAnEarlierDenial(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	dev, _ := userWithSession(t, srv, "dev@example.com", "developer")
+	pat := tokenFor(t, srv, dev, "ci", in30Days())
+	id := fmt.Sprintf("%d", pat.ID)
+
+	if _, err := srv.portalService.RequestTokenPermanence(dev, id, "127.0.0.1"); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if _, err := srv.portalService.AdminDecideTokenPermanence("admin@example.com", id, false, "127.0.0.1"); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanenceDenied {
+		t.Fatalf("PREMISE: not denied (%q)", got.PermanenceState)
+	}
+
+	if rec := postExtendToken(t, srv, pat.ID, 0); rec.Code != http.StatusOK {
+		t.Fatalf("extend permanent: got %d", rec.Code)
+	}
+	if got := mustToken(t, srv, pat.ID); got.PermanenceState != db.PATPermanenceGranted {
+		t.Errorf("state is %q, want granted -- the holder is told they were declined while the token never expires", got.PermanenceState)
+	}
+}

@@ -126,7 +126,7 @@ fi
 # 1. check_docs_review.py (full-repo mode) must not report a file inside the worktree.
 # ---------------------------------------------------------------------------
 DOCS_OUT=$(python3 scripts/check_docs_review.py --dir . 2>&1)
-if echo "$DOCS_OUT" | grep -q "$WT_DIR"; then
+if grep -q "$WT_DIR" <<<"$DOCS_OUT"; then
     fail "check_docs_review.py reported files inside the nested worktree:
 $(echo "$DOCS_OUT" | grep "$WT_DIR" | head -3)"
 else
@@ -160,10 +160,10 @@ fi
 GO_OUT=$(make test PKG=./pkg/config/... \
     TEST_FLAGS='-test.run TestEveryClientTokenAssignmentDeclaresItsProvenance' 2>&1)
 GO_RC=$?
-if [ "$GO_RC" -ne 0 ] && ! echo "$GO_OUT" | grep -q "TestEveryClientTokenAssignmentDeclaresItsProvenance"; then
+if [ "$GO_RC" -ne 0 ] && ! grep -q "TestEveryClientTokenAssignmentDeclaresItsProvenance" <<<"$GO_OUT"; then
     harness "the Go gate did not run (rc=$GO_RC); case 3 proves nothing:
 $(echo "$GO_OUT" | tail -3)"
-elif echo "$GO_OUT" | grep -q "$WT_DIR"; then
+elif grep -q "$WT_DIR" <<<"$GO_OUT"; then
     fail "the Go provenance gate reported offenders inside the nested worktree:
 $(echo "$GO_OUT" | grep "$WT_DIR" | head -3)"
 elif [ "$GO_RC" -ne 0 ]; then
@@ -177,7 +177,7 @@ fi
 # 4. The scope must be NARROW as well as correct: a gate that skipped the whole tree would pass
 #    every case above. Assert each gate still reads the real tree.
 # ---------------------------------------------------------------------------
-if echo "$DOCS_OUT" | grep -qE "Scanning [1-9][0-9]* markdown files"; then
+if grep -qE "Scanning [1-9][0-9]* markdown files" <<<"$DOCS_OUT"; then
     pass "check_docs_review.py still scanned the real tree (not an empty scan)"
 else
     fail "check_docs_review.py scanned nothing -- a skip that wide would satisfy case 1 vacuously:
@@ -201,7 +201,7 @@ printf '#!/usr/bin/env bash\n%s run ./cmd/example\n' "$NW_TOOLCHAIN" \
     >"$WT_PATH/scripts/nested-worktree-probe.sh"
 EDR_OUT=$(./scripts/check-edr-safety.sh 2>&1)
 EDR_RC=$?
-if echo "$EDR_OUT" | grep -q "$WT_DIR"; then
+if grep -q "$WT_DIR" <<<"$EDR_OUT"; then
     fail "check-edr-safety.sh reported a toolchain invocation inside the nested worktree:
 $(echo "$EDR_OUT" | grep "$WT_DIR" | head -3)"
 elif [ "$EDR_RC" -ne 0 ]; then
@@ -214,7 +214,7 @@ else
         >"$REPO_ROOT/scripts/.nested-worktree-control.sh"
     CTRL_OUT=$(./scripts/check-edr-safety.sh 2>&1)
     rm -f "$REPO_ROOT/scripts/.nested-worktree-control.sh"
-    if echo "$CTRL_OUT" | grep -q 'nested-worktree-control.sh'; then
+    if grep -q 'nested-worktree-control.sh' <<<"$CTRL_OUT"; then
         pass "check-edr-safety.sh skips the nested worktree and still reads the real tree"
     else
         fail "check-edr-safety.sh missed the control violation in the REAL tree, so its silence on the worktree proves nothing:
@@ -237,7 +237,7 @@ printf 'package nestedprobe\n\nfunc probe() { _, _ = os.UserHomeDir() }\n' \
     >"$WT_PATH/pkg/nestedprobe/probe_test.go"
 HOME_OUT=$(./scripts/check-test-home-isolation.sh 2>&1)
 HOME_RC=$?
-if echo "$HOME_OUT" | grep -q 'nestedprobe'; then
+if grep -q 'nestedprobe' <<<"$HOME_OUT"; then
     fail "check-test-home-isolation.sh reported a package inside the nested worktree:
 $(echo "$HOME_OUT" | grep 'nestedprobe' | head -3)"
 elif [ "$HOME_RC" -ne 0 ]; then
@@ -251,7 +251,7 @@ else
         >"$REPO_ROOT/pkg/.nestedprobectl/probe_test.go"
     CTRL_OUT=$(./scripts/check-test-home-isolation.sh 2>&1)
     rm -rf "$REPO_ROOT/pkg/.nestedprobectl"
-    if echo "$CTRL_OUT" | grep -q 'nestedprobectl'; then
+    if grep -q 'nestedprobectl' <<<"$CTRL_OUT"; then
         pass "check-test-home-isolation.sh skips the nested worktree and still reads the real tree"
     else
         fail "check-test-home-isolation.sh missed the control package in the REAL tree, so its silence on the worktree proves nothing:

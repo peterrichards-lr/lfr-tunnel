@@ -189,5 +189,31 @@ else
 fi
 
 echo ""
+echo "-- FIRING: the branch that the ratchet exists to reach"
+
+# A ratchet has three outcomes and this suite covered two: over the ceiling (the FIRING case
+# above) and below the floor (the PREMISE case). The third -- the count having FALLEN -- is the
+# one the whole design is for, and it was the uncovered one.
+#
+# It did not work. `$SELF` at the end of the gate was never assigned, so under `set -u` the
+# branch aborted with "SELF: unbound variable" and exit 1: the gate failed the build on a tree
+# strictly BETTER than its ceiling required, in CI and pre-push alike (#2312). It stayed hidden
+# for two days because the count sat exactly AT the ceiling the entire time, so nobody reached
+# the branch -- section 5d, an assertion covering one branch of a subject that has three.
+#
+# Asserts the advice NAMES the gate, not merely that the exit code is 0. "Exited zero" is shared
+# with every other way this could pass (5c rule 1), and the defect was inside the message.
+under="$(new_tree undercount)"
+under_out="$( cd "$under" && LFT_SIGPIPE_MIN_FILES=1 LFT_SIGPIPE_CEILING=99 ./scripts/check-sigpipe-ratchet.sh 2>&1 )"
+under_rc=$?
+if [ "$under_rc" -ne 0 ]; then
+    fail "FIRING: a count BELOW the ceiling exited $under_rc -- the gate fails a tree better than it asks for: $under_out"
+elif grep -q 'check-sigpipe-ratchet.sh' <<<"$under_out" && grep -q 'has fallen' <<<"$under_out"; then
+    pass "FIRING: a count below the ceiling succeeds and names the file whose ceiling to lower"
+else
+    fail "FIRING: the fallen-count advice did not name the gate, so nobody can act on it: $under_out"
+fi
+
+echo ""
 echo "passed: $PASS  failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -54,6 +54,7 @@ type PortalService interface {
 	// no way for a holder to ask at all.
 	RequestTokenPermanence(user *db.User, tokenID, ip string) (*db.PersonalAccessToken, error)
 	AdminListTokenPermanenceRequests() ([]*PermanenceRequestView, error)
+	ResolvePermanenceAfterAdminGrant(patID int64, actor, ip string)
 	AdminDecideTokenPermanence(actor, idStr string, grant bool, ip string) (*db.PersonalAccessToken, error)
 }
 

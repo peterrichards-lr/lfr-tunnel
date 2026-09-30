@@ -129,6 +129,59 @@ func (s *portalService) RequestTokenPermanence(user *db.User, tokenID, ip string
 	return pat, nil
 }
 
+// ResolvePermanenceAfterAdminGrant records that an admin granted permanence by the OTHER route.
+//
+// "Extend Permanent" on the admin token list clears the expiry and, until #2316, touched nothing
+// else. So a token whose holder had asked was made permanent and LEFT IN THE QUEUE, showing an
+// admin a request to decide about a token that already never expires -- with its Expires column
+// reading "Never" in both arms. Clicking Deny on that row returned 200 and wrote
+//
+//	Denied; token "ci" (pfx-ci) keeps its expiry
+//
+// against a token with no expiry, which is an audit entry recording an effect it did not have.
+//
+// The owner's call is that this resolves as GRANTED rather than leaving the two routes
+// independent: the request WAS granted, just through the other door, and the holder's badge
+// should say so. That also closes the queue row, so the false denial above becomes unreachable
+// -- AdminDecideTokenPermanence refuses anything that is not pending.
+//
+// DENIED is resolved too, and for the same reason rather than as an extra. A holder refused last
+// week whose token an admin then makes permanent would otherwise carry a "declined" badge on a
+// credential that never expires, which is the same contradiction pointing the other way.
+//
+// Best effort by design. The expiry is already written when this runs, and failing to update a
+// badge must not turn a successful extension into an error the admin has to retry.
+func (s *portalService) ResolvePermanenceAfterAdminGrant(patID int64, actor, ip string) {
+	pat, err := s.db.GetPATByID(patID)
+	if err != nil {
+		return
+	}
+	if pat.ExpiresAt != nil {
+		// Not a permanent grant -- an ordinary extension leaves a pending request pending,
+		// because thirty more days is not an answer to "may this never expire".
+		return
+	}
+
+	switch pat.PermanenceState {
+	case db.PATPermanencePending:
+		// Conditional, so two admins acting at once cannot both claim it. The queue decision
+		// path uses the same transition for the same reason.
+		if err := s.db.TransitionPATPermanenceState(pat.ID, db.PATPermanencePending, db.PATPermanenceGranted); err != nil {
+			return
+		}
+	case db.PATPermanenceDenied:
+		if err := s.db.SetPATPermanenceState(pat.ID, db.PATPermanenceGranted); err != nil {
+			return
+		}
+	default:
+		// No request to resolve, or already granted.
+		return
+	}
+
+	s.auditPermanence(actor, "token.permanence_granted", strconv.FormatInt(pat.ID, 10),
+		fmt.Sprintf("Granted via Extend Permanent; token %q (%s) no longer expires", pat.Name, pat.TokenPrefix), ip)
+}
+
 // ownedToken resolves a token id against the caller, refusing one that belongs to somebody else.
 //
 // ErrNotFound rather than ErrForbidden for another user's token, deliberately: a 403 confirms

@@ -40,6 +40,17 @@ type ExtensionRequestView struct {
 	// true -- under never_expires `disabled`, AdminApproveExtension refuses a permanent
 	// approval with 403, and a button that always errors is worse than no button.
 	PermanenceAllowed bool `json:"permanence_allowed"`
+	// UserEmail is the holder's address, or "Unknown" for an id that matches no user.
+	//
+	// Both portal arms have read `user_email` on this queue since it was built, and the field
+	// has never existed: SubdomainReservation carries a UserID and nothing else, and this view
+	// added only the two fields above. So V2 rendered an EMPTY first column -- sortable and
+	// searchable on a value that is always undefined -- and V1 fell back to "User <id>". Two
+	// arms disagreeing about a field neither of them was being sent (#2314).
+	//
+	// Never empty. A blank cell reads as a column that has not loaded yet, and this one never
+	// would.
+	UserEmail string `json:"user_email"`
 }
 
 const (

@@ -56,7 +56,12 @@ set -euo pipefail
 #   148 -> 146   `x || grep -q y` is not a pipeline. The old regex matched the second `|` of `||`,
 #                counting two lines (test-go-guard.sh, test-pull-images.sh) that have no pipe, can
 #                never SIGPIPE and can never be "fixed" -- a floor nobody could ever reach.
-CEILING="${LFT_SIGPIPE_CEILING:-146}"
+#
+# 146 -> 142 by #2310, which is the first real fall rather than a correction. All eight
+# `echo "$OUT" | grep -q ...` in tests/hooks/test-nested-worktree-scope.sh became here-strings
+# while that file was open for other reasons -- the opportunistic paydown this ratchet is for.
+# Four of the eight were being added by that change, which is how it went red in the first place.
+CEILING="${LFT_SIGPIPE_CEILING:-142}"
 
 # SELF-MATCH. This script and its test both have to SPELL the pattern they are about -- in this
 # comment, and in the counting expression below -- so a naive scan counts its own documentation
@@ -145,6 +150,10 @@ if [ "$ACTUAL" -gt "$CEILING" ]; then
     exit 1
 fi
 
+# $SELF_GATE, not $SELF. This branch aborted with "SELF: unbound variable" under `set -u` from
+# the day the script landed (#2312) -- the count sat exactly at its ceiling for two days, so the
+# one path the gate exists to encourage was also the one nobody had taken. It failed the build
+# on a tree strictly better than required, in CI and pre-push alike.
 if [ "$ACTUAL" -lt "$CEILING" ]; then
-    echo "The count has fallen. Lower the ceiling in $SELF to $ACTUAL so it cannot drift back up."
+    echo "The count has fallen. Lower the ceiling in $SELF_GATE to $ACTUAL so it cannot drift back up."
 fi

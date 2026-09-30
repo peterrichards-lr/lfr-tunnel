@@ -12,11 +12,22 @@
 # `make test`, so every push from the main checkout was rejected, naming a file that was not
 # wrong.
 #
-# Why this test asserts the PROPERTY rather than the three gates that had the bug: the next
+# The fixture is a real `git worktree add`, not a mock directory, because the thing being relied
+# on is git's own on-disk shape -- a worktree root carries `.git` as a FILE holding a `gitdir:`
+# pointer, where a repository root carries it as a directory.
+#
+# WHAT THIS FILE IS AND IS NOT, corrected on 2026-09-30. It used to open by saying it asserted
+# "the PROPERTY rather than the three gates that had the bug", on the reasoning that "the next
 # tree-walking gate anyone adds will have the same hole, and a per-gate assertion would not see
-# it. The fixture is a real `git worktree add`, not a mock directory, because the thing being
-# relied on is git's own on-disk shape -- a worktree root carries `.git` as a FILE holding a
-# `gitdir:` pointer, where a repository root carries it as a directory.
+# it". That reasoning is right and the file did not follow it: every case below IS a per-gate
+# assertion, and nothing enumerates the gates that walk the tree. Two that do were missed for
+# three weeks --  check-edr-safety.sh and check-test-home-isolation.sh, cases 5 and 6, added
+# under #2310 after the first of them reported three offences inside this suite's own fixture
+# and blocked an unrelated commit.
+#
+# So: this is a LIST, and a list has to be maintained. Add a case when you add a gate that walks
+# the repository tree. Nothing here will tell you that you forgot -- that limit is the honest
+# statement of what the file does, and github-workflow SKILL 5d is the general shape of it.
 #
 # The premise checks below ask git for that shape rather than testing "$REPO_ROOT/.git" (#1839).
 # The first version tested the path directly, which is true only from the main checkout: run
@@ -115,7 +126,7 @@ fi
 # 1. check_docs_review.py (full-repo mode) must not report a file inside the worktree.
 # ---------------------------------------------------------------------------
 DOCS_OUT=$(python3 scripts/check_docs_review.py --dir . 2>&1)
-if echo "$DOCS_OUT" | grep -q "$WT_DIR"; then
+if grep -q "$WT_DIR" <<<"$DOCS_OUT"; then
     fail "check_docs_review.py reported files inside the nested worktree:
 $(echo "$DOCS_OUT" | grep "$WT_DIR" | head -3)"
 else
@@ -149,10 +160,10 @@ fi
 GO_OUT=$(make test PKG=./pkg/config/... \
     TEST_FLAGS='-test.run TestEveryClientTokenAssignmentDeclaresItsProvenance' 2>&1)
 GO_RC=$?
-if [ "$GO_RC" -ne 0 ] && ! echo "$GO_OUT" | grep -q "TestEveryClientTokenAssignmentDeclaresItsProvenance"; then
+if [ "$GO_RC" -ne 0 ] && ! grep -q "TestEveryClientTokenAssignmentDeclaresItsProvenance" <<<"$GO_OUT"; then
     harness "the Go gate did not run (rc=$GO_RC); case 3 proves nothing:
 $(echo "$GO_OUT" | tail -3)"
-elif echo "$GO_OUT" | grep -q "$WT_DIR"; then
+elif grep -q "$WT_DIR" <<<"$GO_OUT"; then
     fail "the Go provenance gate reported offenders inside the nested worktree:
 $(echo "$GO_OUT" | grep "$WT_DIR" | head -3)"
 elif [ "$GO_RC" -ne 0 ]; then
@@ -166,11 +177,86 @@ fi
 # 4. The scope must be NARROW as well as correct: a gate that skipped the whole tree would pass
 #    every case above. Assert each gate still reads the real tree.
 # ---------------------------------------------------------------------------
-if echo "$DOCS_OUT" | grep -qE "Scanning [1-9][0-9]* markdown files"; then
+if grep -qE "Scanning [1-9][0-9]* markdown files" <<<"$DOCS_OUT"; then
     pass "check_docs_review.py still scanned the real tree (not an empty scan)"
 else
     fail "check_docs_review.py scanned nothing -- a skip that wide would satisfy case 1 vacuously:
 $(echo "$DOCS_OUT" | head -3)"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. check-edr-safety.sh. A grep-based gate, so it cannot apply the `.git`-is-a-FILE test during
+#    a walk it does not control; it asks `git worktree list` for the same fact up front instead.
+#
+#    This case is the one that was missing. On 2026-09-30 the fixture above was live when an
+#    unrelated commit ran the pre-commit hook, and this gate reported three `go run` lines inside
+#    .lft-nested-worktree-test-$$ and refused the commit -- the exact failure mode the header
+#    describes, from a gate this suite did not name (#2310).
+#
+#    The toolchain word is assembled rather than written: this file is a `*.sh` inside the corpus
+#    the gate scans, so spelling the pattern would plant a permanent violation in the real tree.
+# ---------------------------------------------------------------------------
+NW_TOOLCHAIN="go"
+printf '#!/usr/bin/env bash\n%s run ./cmd/example\n' "$NW_TOOLCHAIN" \
+    >"$WT_PATH/scripts/nested-worktree-probe.sh"
+EDR_OUT=$(./scripts/check-edr-safety.sh 2>&1)
+EDR_RC=$?
+if grep -q "$WT_DIR" <<<"$EDR_OUT"; then
+    fail "check-edr-safety.sh reported a toolchain invocation inside the nested worktree:
+$(echo "$EDR_OUT" | grep "$WT_DIR" | head -3)"
+elif [ "$EDR_RC" -ne 0 ]; then
+    fail "check-edr-safety.sh failed with a nested worktree present (rc=$EDR_RC):
+$(echo "$EDR_OUT" | head -5)"
+else
+    # NARROWNESS, the case 4 control applied here: a gate that had stopped reading the tree
+    # would satisfy the above just as well. The same line one directory up must still be caught.
+    printf '#!/usr/bin/env bash\n%s run ./cmd/example\n' "$NW_TOOLCHAIN" \
+        >"$REPO_ROOT/scripts/.nested-worktree-control.sh"
+    CTRL_OUT=$(./scripts/check-edr-safety.sh 2>&1)
+    rm -f "$REPO_ROOT/scripts/.nested-worktree-control.sh"
+    if grep -q 'nested-worktree-control.sh' <<<"$CTRL_OUT"; then
+        pass "check-edr-safety.sh skips the nested worktree and still reads the real tree"
+    else
+        fail "check-edr-safety.sh missed the control violation in the REAL tree, so its silence on the worktree proves nothing:
+$(echo "$CTRL_OUT" | head -5)"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 6. check-test-home-isolation.sh. Same mechanism, and the sharper consequence: its anti-vacuity
+#    floor (#1779) counts packages, so duplicates do not merely inflate the number -- they can
+#    satisfy the floor on their own in a tree with no source in it at all.
+#
+#    Asserted with a planted OFFENDER rather than a count: a package inside the worktree that
+#    reaches the home directory and has no testmain_home_test.go. Before the fix the gate names
+#    it and exits 1; after, it does not see it. A count assertion would have to encode 4, which
+#    changes whenever a package legitimately joins the class.
+# ---------------------------------------------------------------------------
+mkdir -p "$WT_PATH/pkg/nestedprobe"
+printf 'package nestedprobe\n\nfunc probe() { _, _ = os.UserHomeDir() }\n' \
+    >"$WT_PATH/pkg/nestedprobe/probe_test.go"
+HOME_OUT=$(./scripts/check-test-home-isolation.sh 2>&1)
+HOME_RC=$?
+if grep -q 'nestedprobe' <<<"$HOME_OUT"; then
+    fail "check-test-home-isolation.sh reported a package inside the nested worktree:
+$(echo "$HOME_OUT" | grep 'nestedprobe' | head -3)"
+elif [ "$HOME_RC" -ne 0 ]; then
+    fail "check-test-home-isolation.sh failed with a nested worktree present (rc=$HOME_RC):
+$(echo "$HOME_OUT" | head -5)"
+else
+    # NARROWNESS: the identical package in the real tree must still be reported, or this gate
+    # could have been skipping everything.
+    mkdir -p "$REPO_ROOT/pkg/.nestedprobectl"
+    printf 'package nestedprobectl\n\nfunc probe() { _, _ = os.UserHomeDir() }\n' \
+        >"$REPO_ROOT/pkg/.nestedprobectl/probe_test.go"
+    CTRL_OUT=$(./scripts/check-test-home-isolation.sh 2>&1)
+    rm -rf "$REPO_ROOT/pkg/.nestedprobectl"
+    if grep -q 'nestedprobectl' <<<"$CTRL_OUT"; then
+        pass "check-test-home-isolation.sh skips the nested worktree and still reads the real tree"
+    else
+        fail "check-test-home-isolation.sh missed the control package in the REAL tree, so its silence on the worktree proves nothing:
+$(echo "$CTRL_OUT" | head -5)"
+    fi
 fi
 
 echo

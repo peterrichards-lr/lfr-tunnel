@@ -25,13 +25,101 @@ FAILED=0
 
 # Directories that never execute on the EDR-protected workstation. CI runners and container
 # builds are ephemeral and unmonitored, so excluding them keeps the signal about local risk.
+#
+# `worktrees` is excluded for a DIFFERENT reason, and the distinction matters: an agent worktree
+# very much does sit on the protected workstation. It is excluded because it is a second COPY of
+# this repository, and a gate's verdict must not depend on how many abandoned checkouts happen to
+# be lying around (#2310). Measured before this line existed: 7062 files scanned, of which 6345 --
+# ninety per cent -- were nine merged branches' worktrees. Either direction of error is available
+# from there: a worktree cut before a fix landed still holds the pre-fix file and fails a clean
+# master at a path nobody can edit, and the duplication inflates the anti-vacuity floor below
+# until a tree with no source at all can clear it.
+#
+# By directory NAME rather than by path, so it holds wherever the harness puts its checkouts.
+# Nothing tracked in this repo is called `worktrees`; case 27 of
+# tests/hooks/test-gate-scope-boundaries.sh asserts that, so adding one is a decision rather than
+# a silent hole.
 EXCLUDES=(
     --exclude-dir=.git
     --exclude-dir=node_modules
     --exclude-dir=ui-dist
     --exclude-dir=.github
+    --exclude-dir=worktrees
     --exclude=check-edr-safety.sh
 )
+
+# Every git worktree registered UNDER this tree, as --exclude-dir arguments.
+#
+# The name above covers the convention; this covers the mechanism, and the two are not
+# redundant. A nested worktree does not have to live in `.claude/worktrees/`:
+# tests/hooks/test-nested-worktree-scope.sh creates one at `.lft-nested-worktree-test-$$` in the
+# repository root, and while that fixture was live this gate reported three `go run` lines inside
+# it and blocked a commit that had nothing to do with them.
+#
+# This is #1815's rule, translated. The Python gates (check_docs_review.py, append_timestamps.py)
+# identify a nested worktree during their own walk -- its root carries `.git` as a FILE holding a
+# `gitdir:` pointer, where a repository root carries a directory. `grep -r` walks for us and
+# offers no such hook, so the same fact is asked of git up front instead.
+#
+# Conversely the static name is not redundant with this: a checkout git no longer knows about --
+# a `git worktree remove` that failed, or a plain `cp` of the tree -- appears in no listing.
+nested_worktree_names() {
+    local root line path
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    [ -n "$root" ] || return 0
+    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            worktree\ *) path="${line#worktree }" ;;
+            *) continue ;;
+        esac
+        # Only worktrees nested inside the tree being scanned. Run from an agent's own checkout,
+        # its SIBLINGS are not under the scan root and must not be excluded -- excluding them
+        # would be harmless here but would quietly widen what this function claims to mean.
+        [ "$path" = "$root" ] && continue
+        case "$path" in "$root"/*) ;; *) continue ;; esac
+        printf '%s\n' "${path##*/}"
+    done
+}
+
+# THE COLLISION, which is why the names are validated before any of them is used.
+#
+# `--exclude-dir` matches a directory NAME, not a path. A worktree at
+# `.claude/worktrees/scripts` therefore removes the REAL `scripts/` from the scan, and the gate
+# reports success over source it never read -- the exact failure this whole section exists to
+# stop, reintroduced by the fix for it. Measured on a synthetic repo carrying one genuine
+# violation: exit 1 naming the file without the worktree, `EDR Safety Check Passed` and exit 0
+# with it.
+#
+# Refused rather than worked around. There is no way to exclude a nested path with grep, the
+# alternative (let it walk the copies and drop hits afterwards) costs ~12.6s against ~1.7s on
+# every commit, and a wrong name here is silent. A worktree that collides is easy to rename and
+# nothing legitimately needs one.
+#
+# Validated HERE, in the main shell, not inside the function: the emitting loop runs inside a
+# `< <(...)` process substitution, where `exit` would end only the subshell and leave the gate
+# running with a truncated exclusion list.
+WORKTREE_NAMES="$(nested_worktree_names)"
+# `|| true` is load-bearing, exactly as in corpus_size() below. Outside a git repository
+# `git ls-files` exits 128; the pipeline's status is sort's, so `pipefail` promotes the failure
+# and `set -e` kills the gate with no message. Both gates ran fine anywhere before this block
+# existed, and this suite's own fixtures are plain directories -- they caught it immediately.
+TRACKED_NAMES="$(git ls-files 2>/dev/null | tr '/' '\n' | sort -u || true)"
+while IFS= read -r wt_name; do
+    [ -n "$wt_name" ] || continue
+    if grep -qx -- "$wt_name" <<<"$TRACKED_NAMES"; then
+        echo "GATE SCOPE ERROR: a git worktree is named '$wt_name', which is also a tracked"
+        echo "path component in this repository."
+        echo
+        echo "Excluding it from the scan would also skip the real ./$wt_name, and this gate would"
+        echo "then report success over source it never read. Rename or remove that worktree:"
+        echo
+        echo "    git worktree list"
+        echo
+        echo "See #2310."
+        exit 1
+    fi
+    EXCLUDES+=("--exclude-dir=$wt_name")
+done <<<"$WORKTREE_NAMES"
 
 INCLUDES=(
     --include=Makefile

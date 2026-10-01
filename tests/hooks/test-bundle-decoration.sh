@@ -105,10 +105,13 @@ echo "-- BOUNDING: an icon in a bundle value NOBODY draws beside is left alone"
 lone="$(new_tree lone)"
 printf 'planted_lone_icon=\xf0\x9f\x94\x92 Nobody Draws This\n' >>"$lone/pkg/server/i18n/Language.properties"
 out="$( cd "$lone" && python3 scripts/check-bundle-decoration.py 2>&1 )"
-if [ $? -eq 0 ]; then
-    pass "BOUNDING  an icon with no view drawing one beside it is not a finding"
-else
+# Asserts THIS KEY is absent from the report, not that the gate exited 0. A bare fixture has no
+# ui/src or dashboard.html, so every ICON_ALLOWED entry reads as stale there -- an exit code is
+# shared by that and by the thing this case is about (5c rule 1).
+if grep -q 'planted_lone_icon' <<<"$out"; then
     fail "BOUNDING  a lone icon was reported -- the gate has become an opinion about which headings get icons: $out"
+else
+    pass "BOUNDING  an icon with no view drawing one beside it is not a finding"
 fi
 
 echo ""
@@ -123,10 +126,54 @@ mkdir -p "$v1/pkg/server"
 printf '<h4>\xf0\x9f\x94\x92 <span data-i18n="planted_v1_icon">V1 Heading</span></h4>\n' \
     >"$v1/pkg/server/dashboard.html"
 out="$( cd "$v1" && python3 scripts/check-bundle-decoration.py 2>&1 )"
-if [ $? -eq 0 ]; then
-    pass "BOUNDING  V1 markup is out of scope; innerText overwrites rather than doubles"
+# Same reasoning as above: the planted key must not appear under the DOUBLED-icon heading, which
+# is the rule V1 is exempt from. V1 is still read for rule 3, deliberately -- that is where four
+# of the headings carried their icons.
+if grep -q 'planted_v1_icon' <<<"$out"; then
+    fail "BOUNDING  V1 is being scanned for the doubling rule -- every correct V1 heading would be reported: $out"
 else
-    fail "BOUNDING  V1 is being scanned -- every correct V1 heading would now be reported: $out"
+    pass "BOUNDING  V1 markup is out of scope for doubling; innerText overwrites rather than appends"
+fi
+
+echo ""
+echo "-- FIRING: an icon on a heading that is not a modal title"
+
+# The rule (#2331): modal and dialog titles keep an icon, in-page section headings do not. The
+# gate found four headings nobody had counted -- their icons live in V1's markup, not the bundle,
+# so a bundle-only survey missed them entirely.
+rule="$(new_tree rule)"
+mkdir -p "$rule/pkg/server"
+printf 'planted_section_title=A Section\n' >>"$rule/pkg/server/i18n/Language.properties"
+printf '<h4>\xf0\x9f\x94\x91 <span data-i18n="planted_section_title">A Section</span></h4>\n' \
+    >"$rule/pkg/server/dashboard.html"
+out="$( cd "$rule" && python3 scripts/check-bundle-decoration.py 2>&1 )"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+    fail "FIRING: an icon on an in-page heading was accepted -- the rule is not enforced"
+elif grep -q 'planted_section_title' <<<"$out"; then
+    pass "FIRING: an icon outside a modal title is reported, and the key is named"
+else
+    fail "FIRING: the gate failed without naming the key: $out"
+fi
+
+echo ""
+echo "-- BOUNDING: the allowed list cannot go stale quietly"
+
+# ICON_ALLOWED is a ratchet, not an exclusion (5b rule 5): an entry that no longer carries an icon
+# anywhere is reported, so the list can only shrink.
+stale="$(new_tree stale)"
+# sed, not an embedded python heredoc: this file is already inside one layer of heredoc in the
+# tooling that writes it, and a second layer mangled the escaping.
+sed -i.bak 's/^    "detail_modal_title": "modal",$/    "detail_modal_title": "modal",\n    "planted_absent_title": "contrived",/' \
+    "$stale/scripts/check-bundle-decoration.py"
+rm -f "$stale/scripts/check-bundle-decoration.py.bak"
+out="$( cd "$stale" && python3 scripts/check-bundle-decoration.py 2>&1 )"
+if [ $? -eq 0 ]; then
+    fail "BOUNDING: an ICON_ALLOWED entry carrying nothing was accepted -- the list can grow stale"
+elif grep -q 'STALE ICON_ALLOWED' <<<"$out"; then
+    pass "BOUNDING  an exemption that holds nothing is reported, so the list can only shrink"
+else
+    fail "BOUNDING: the gate failed for some other reason: $out"
 fi
 
 echo ""

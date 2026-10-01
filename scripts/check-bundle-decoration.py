@@ -46,6 +46,32 @@ LEADING_ICON = re.compile("^" + ICON)
 V2_ICON_BEFORE_KEY = re.compile(ICON + r"+\s*\{?'?\s*'?\}?\s*\n?\s*\{?\s*t\(\s*'([a-z0-9_]+)'")
 
 
+# RULE 3: which headings may carry an icon at all (#2331).
+#
+# 14 of 84 headings had one, with no rule separating them from the other 70. The owner chose:
+# modal and dialog titles keep an icon, in-page section headings do not. These nine are the
+# whole allowed set, and the list works both ways -- an entry that no longer carries an icon
+# anywhere is reported as stale, so it can only shrink (SKILL 5b rule 5).
+#
+# NOT an aesthetic judgement about which icon. Only about where one may appear.
+ICON_ALLOWED = {
+    "mfa_setup_title": "modal",
+    "mfa_intercept_title": "modal",
+    "detail_modal_title": "modal",
+    "user_modal_title": "modal",
+    "tunnel_override_modal_title": "modal",
+    "guide_title": "modal (client installation)",
+    "guide_macos_title": "modal (client installation)",
+    "guide_windows_title": "modal (client installation)",
+    "guide_linux_title": "modal (client installation)",
+}
+
+HEADING_KEY = re.compile(r"(_title|_heading)$")
+# An icon sitting immediately before a translated span in V1's markup, where #2327 put the ones
+# the view owns.
+V1_ICON_BEFORE_KEY = re.compile(ICON + r"+\s*<span data-i18n=\"([a-z0-9_]+)\"")
+
+
 def read_bundle(path):
     out = {}
     for line in io.open(path, encoding="utf-8"):
@@ -93,10 +119,31 @@ def main():
         if v and LEADING_ICON.match(v):
             double_hits.append((where, key, v[:50]))
 
-    if not markup_hits and not double_hits:
+    # Rule 3. A heading carries an icon if the bundle value starts with one, or either arm draws
+    # one beside it.
+    iconed = set()
+    for k, v in english.items():
+        if HEADING_KEY.search(k) and LEADING_ICON.match(v):
+            iconed.add(k)
+    for k in drawn:
+        if HEADING_KEY.search(k):
+            iconed.add(k)
+    try:
+        v1 = io.open("pkg/server/dashboard.html", encoding="utf-8").read()
+        for m in V1_ICON_BEFORE_KEY.finditer(v1):
+            if HEADING_KEY.search(m.group(1)):
+                iconed.add(m.group(1))
+    except OSError:
+        pass
+
+    rule_hits = sorted(k for k in iconed if k not in ICON_ALLOWED)
+    stale_allowed = sorted(k for k in ICON_ALLOWED if k not in iconed)
+
+    if not markup_hits and not double_hits and not rule_hits and not stale_allowed:
         print("check-bundle-decoration: OK -- %d bundle(s), %d V2 file(s); no markup in any value, "
-              "and none of the %d icon-drawn key(s) supplies one of its own."
-              % (len(bundles), len(specs), len(drawn)))
+              "none of the %d icon-drawn key(s) supplies one of its own, and all %d iconed "
+              "heading(s) are modal titles."
+              % (len(bundles), len(specs), len(drawn), len(iconed)))
         return 0
 
     print("check-bundle-decoration: FAILED")
@@ -116,6 +163,23 @@ def main():
             print("  %-34s %-26s %r" % (where, k, v))
         print()
         print("Put the icon in the view and leave the words in the bundle.")
+    if rule_hits:
+        print()
+        print("A heading carrying an icon that is NOT a modal or dialog title. The rule (#2331) is")
+        print("that modal titles keep an icon and in-page section headings do not:")
+        print()
+        for k in rule_hits:
+            print("  %s" % k)
+        print()
+        print("Remove it, or add the key to ICON_ALLOWED here with the reason it is a dialog.")
+    if stale_allowed:
+        print()
+        print("STALE ICON_ALLOWED entries -- these are permitted an icon and no longer carry one")
+        print("anywhere, so the exemption is holding nothing. Remove them:")
+        print()
+        for k in stale_allowed:
+            print("  %s" % k)
+
     return 1
 
 

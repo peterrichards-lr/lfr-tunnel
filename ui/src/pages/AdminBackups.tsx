@@ -172,7 +172,7 @@ export default function AdminBackups() {
       <div className="alert-banner alert-banner--info mb-xl">
         <div>
           <strong>
-            🛡 {t('backups_restore_cli_title', 'Restore via CLI only.')}
+            {t('backups_restore_cli_title', 'Restore via CLI only.')}
           </strong>{' '}
           {t(
             'backups_restore_cli_body',

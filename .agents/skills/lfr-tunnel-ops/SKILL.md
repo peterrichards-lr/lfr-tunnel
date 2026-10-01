@@ -132,6 +132,32 @@ To automate the release lifecycle (bumping the version in `pkg/config/version.go
   - *Note: the script creates and pushes a `release/<version>` branch and PR only (a slash, matching `git checkout -b release/$NEW_VERSION` in the script itself and the `startswith("release/")` guard it uses to refuse a second open release PR). It does not create or push a git tag — tagging is a manual step the script prints as its final instruction.*
   - **CRITICAL COMPLIANCE NOTE**: Never use `--admin` to bypass branch protection rules to merge the resulting PR, or any other PR. The AI assistant must let CI/CD checks pass naturally and follow the repository rules to the letter.
 
+### Before the tag: run the hook suite against master
+
+`git push origin <tag>` cannot be undone (see below), so the last check before it has to happen
+*before* it, not in the PR that preceded it:
+
+```bash
+git switch master && git pull --ff-only && make test-hooks    # ~50s
+```
+
+**v1.51.0 was cut from a master whose hook suite was failing** (#2329, #2331). The sequence:
+
+```
+08:11   a PR merges, touching only pkg/client/ and cmd/      Hook Tests: skipping
+08:34   the release PR merges, version.go + whats-new.json   Hook Tests: skipping
+09:41   the next PR touches a filtered path — the red surfaces
+```
+
+Both skips were correct under the path filter of the day. Every required check that *ran* was
+green, twice, including on the release itself. #2330 has since removed that filter so the suite
+runs on every PR and that exact sequence cannot repeat — but a release is cut from **master**, not
+from a PR, and nothing else looks at master at the moment of tagging.
+
+Prose rather than a script, deliberately: `create-release-tag.sh` raises the version-bump PR and
+explicitly does *not* tag, so there is no single command to wrap. The check belongs where a human
+or an agent types `git tag`.
+
 ### Pushing the tag is one-shot — verify the run started
 
 `git push origin <tag>` is the only thing that triggers `.github/workflows/release.yml`. Its
@@ -868,4 +894,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-21* | *Last Reviewed: 2026-09-21*
+*Last Updated: 2026-10-01* | *Last Reviewed: 2026-10-01*

@@ -162,7 +162,7 @@ export default function WhatsNewHelpBar({
                   window.dispatchEvent(new CustomEvent('start-onboarding-tour'))
                 }
               >
-                🧭 {t('onboarding_guide_title', 'Onboarding Tour')}
+                {t('onboarding_guide_title', 'Onboarding Tour')}
               </button>
             </div>
           </div>

@@ -202,7 +202,7 @@ export default function AdminMaintenance() {
       <div className="card p-xl mb-xl">
         <div className="flex items-center justify-between gap-md mb-md flex-wrap">
           <h3 className="text-lg fw-bold m-0">
-            🛠️ {t('maint_soft_title', 'Gateway Soft Maintenance Mode')}
+            {t('maint_soft_title', 'Gateway Soft Maintenance Mode')}
           </h3>
           <div data-testid="soft-status">{statusBadge()}</div>
         </div>
@@ -319,7 +319,6 @@ export default function AdminMaintenance() {
         <div className="card p-xl border-danger" data-testid="iron-curtain">
           <div className="flex items-center justify-between gap-md mb-md flex-wrap">
             <h3 className="text-lg fw-bold m-0 text-danger">
-              🔒{' '}
               {t(
                 'maint_iron_title',
                 'Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)',

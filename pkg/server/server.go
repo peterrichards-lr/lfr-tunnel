@@ -2994,9 +2994,19 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	// This page is the one of the three in #2302 the SERVER can answer for: it is served
+	// per-request and its own script defers to the server's negotiation via /api/i18n, so
+	// rewriting the root tag here makes the document agree with the bundle it is about to
+	// fetch -- and with no pre-script window at all, unlike the client-side fix the other two
+	// need. Same helper the portal shells use (#2271).
+	lang := s.ResolveLocale(r)
+	html := withDocumentLocale(string(data), lang, GetDirection(lang))
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Accept-Language is now part of what varies the response body, and was not before.
+	w.Header().Set("Vary", "Accept-Language")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(data); err != nil {
+	if _, err := w.Write([]byte(html)); err != nil {
 		log.Printf("[Warning] Failed to write response: %v", err)
 	}
 }

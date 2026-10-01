@@ -33,7 +33,7 @@ test.describe('Portal V1 landmarks and skip navigation', () => {
 
   test('the page exposes navigation and main landmarks', async ({ page }) => {
     await expect(
-      page.getByRole('navigation', { name: 'Primary' }),
+      page.getByRole('navigation', { name: 'Primary Navigation', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('main')).toBeVisible();
   });

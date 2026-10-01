@@ -319,3 +319,69 @@ func TestWithDocumentLocaleRewritesRatherThanAppends(t *testing.T) {
 		}
 	}
 }
+
+// The setup page declares the locale it negotiated (#2302).
+//
+// It is the one of that issue's three pages the server can answer for: served per-request, and
+// its own script already defers to the server by fetching /api/i18n. So the rewrite makes the
+// document agree with the bundle it is about to ask for, with no pre-script window at all.
+//
+// The other two are fixed in the page, and deliberately: offline.html chooses from
+// navigator.language, which the server cannot see, and maintenance.html is written to disk by
+// pkg/nginx/maintenance.go and served by NGINX to every visitor with no negotiation at all. A
+// server rewrite there would bake one locale for everyone on the path where the page is most
+// seen. tests/hooks/test-standalone-page-locale.sh covers those.
+func TestSetupPageDeclaresTheResolvedLocale(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro", "ar"}
+
+	// serveDashboardShell asserts the body IS the V1 dashboard, so it cannot be reused here.
+	// The Vary check is kept, because it is the same hazard: the document now depends on a
+	// request header, and a cache keyed on the URL alone would hand one visitor's locale to the
+	// next.
+	get := func(t *testing.T, path string, headers map[string]string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "http://example.com"+path, nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s returned %d, want 200", path, w.Code)
+		}
+		if vary := w.Header().Get("Vary"); !strings.Contains(vary, "Accept-Language") {
+			t.Errorf("GET %s: Vary is %q, want it to include Accept-Language", path, vary)
+		}
+		return w.Body.String()
+	}
+
+	t.Run("honours ?lang=", func(t *testing.T) {
+		for _, lang := range locales {
+			body := get(t, "/setup?lang="+lang, nil)
+			assertRootElementDeclares(t, body, "/setup?lang="+lang, lang, GetDirection(lang))
+		}
+	})
+
+	t.Run("honours Accept-Language", func(t *testing.T) {
+		// The half the server can do for a visitor who has never chosen. Without it, every
+		// first-time Arabic visitor completes registration in an LTR document.
+		for _, lang := range locales {
+			body := get(t, "/setup", map[string]string{
+				"Accept-Language": lang + "-XX," + lang + ";q=0.9,en;q=0.8",
+			})
+			assertRootElementDeclares(t, body, "/setup with Accept-Language: "+lang, lang, GetDirection(lang))
+		}
+	})
+
+	// CONTROL. The rewrite must not be the only thing that changed: the page still has to be the
+	// setup page. A helper that returned an empty document would satisfy every assertion above.
+	t.Run("it is still the setup page", func(t *testing.T) {
+		body := get(t, "/setup?lang=ar", nil)
+		if !strings.Contains(body, "data-i18n") {
+			t.Error("the served setup page carries no data-i18n elements -- something other than the locale changed")
+		}
+	})
+}

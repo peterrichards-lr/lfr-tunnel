@@ -168,10 +168,20 @@ So for every capability named in an announcement, name two things:
 
 1. **The doc that describes it**, and confirm it is current:
    `python3 scripts/check_docs_review.py --changed-files <doc>`
-2. **The test that exercises its happy path.**
+2. **The evidence that it works** — exactly one of:
+   - a test that **asserts on the capability's user-visible output**, or
+   - a manual or production exercise, **named, with the date it was last run**, or
+   - nothing — in which case **leave the capability out of the post.**
 
-**If you cannot name the test, either exercise it by hand before posting or leave it out.**
 "It is in the changelog" is evidence that it shipped, not that it works.
+
+**"A test whose filename matches" is not evidence, and this is the step that gets faked.**
+Twenty-odd `*_test.go` files match `failover`; none of them exercises a client actually moving
+region and coming back — that gap was closed by a *production capture*, not a test. Naming
+`reelection_test.go` for cross-region failover would satisfy a careless reading of this rule with
+a true statement while the announced capability has no test at all. For anything above unit scope
+the second option is usually the honest answer, which is why it is listed as an equal rather than
+a fallback.
 
 **v1.51.1's announcement led with the MCP server.** Within the hour, reconciling `docs/mcp.md`
 against the code turned up #2336: `start_tunnel` has never been able to report success. It

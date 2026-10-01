@@ -494,8 +494,23 @@
             return translations[prefix] ? prefix : "en";
         }
 
+        function directionFor(lang) {
+            return (lang === "ar" || lang === "he") ? "rtl" : "ltr";
+        }
+
         function initI18n() {
             const lang = detectLanguage();
+
+            // The DOCUMENT declares what it was translated into (#2302).
+            //
+            // Client-side, NOT a server rewrite, and that is the interesting part: under iron
+            // curtain this file is written to disk by pkg/nginx/maintenance.go and served by
+            // NGINX to every visitor, with no per-request negotiation and often with the Go
+            // server unreachable. A withDocumentLocale() pass at the in-app serve site would
+            // therefore bake one locale for everyone on the path where this page is most seen,
+            // and make the two paths disagree. Doing it here is right for both.
+            document.documentElement.lang = lang;
+            document.documentElement.dir = directionFor(lang);
 
             // Translate static elements
             document.querySelectorAll("[data-i18n]").forEach(el => {

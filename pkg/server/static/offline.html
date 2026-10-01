@@ -403,11 +403,27 @@
             return translations[prefix] ? prefix : "en";
         }
 
+        // Kept in step with GetDirection() in pkg/server/i18n.go, which is the server's answer
+        // for the same question. Two lists, because this page is also served by nginx during an
+        // outage when the Go server may be unreachable -- so it cannot ask.
+        function directionFor(lang) {
+            return (lang === "ar" || lang === "he") ? "rtl" : "ltr";
+        }
+
         function initI18n() {
             const lang = detectLanguage();
-            if (lang === 'ar') {
-                document.body.style.direction = "rtl";
-            }
+
+            // The DOCUMENT declares what it was translated into (#2302). This page set
+            // `document.body.style.direction` and nothing else, so an Arabic visitor got Arabic
+            // prose in a document declaring English, laid out by a style rather than the `dir`
+            // attribute -- which is what :lang(), hyphenation, font fallback and every screen
+            // reader's speech synthesiser actually read.
+            //
+            // Client-side rather than a server rewrite, because the locale is chosen HERE from
+            // navigator.language: the server cannot see it, so a rewrite would declare one
+            // locale while the page rendered another.
+            document.documentElement.lang = lang;
+            document.documentElement.dir = directionFor(lang);
             document.querySelectorAll("[data-i18n]").forEach(el => {
                 const key = el.getAttribute("data-i18n");
                 if (translations[lang] && translations[lang][key]) {

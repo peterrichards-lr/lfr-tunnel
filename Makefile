@@ -316,6 +316,7 @@ test-hooks:
 	@./tests/hooks/test-stale-branches.sh
 	@./tests/hooks/test-pull-images.sh
 	@./tests/hooks/test-closing-refs.sh
+	@./tests/hooks/test-standalone-page-locale.sh
 	@./tests/hooks/test-compile-check.sh
 	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-make-help-covers-targets.sh

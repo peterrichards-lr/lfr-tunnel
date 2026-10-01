@@ -3,23 +3,26 @@
 # test-mcp-tool-coverage.sh -- scripts/check-mcp-tool-coverage.sh can actually fire (#2337).
 #
 # The gate exists because #2336 sat unnoticed for ~36 releases: `start_tunnel` could never report
-# success, and no test in pkg/mcp ever mentioned it. A gate that would not have caught that is
-# worth nothing, so each detection is exercised against a fixture:
+# success, and no test in pkg/mcp ever mentioned that name. A gate that would not have caught that
+# is worth nothing, so each detection is exercised against a fixture.
 #
-#   FIRING        a newly advertised tool that no test mentions is reported
-#   BOUNDING      a KNOWN_UNCOVERED entry that gains a test is reported STALE -- the ratchet
-#                 tightens, so the list can only shrink
-#   BOUNDING      a KNOWN_UNCOVERED entry naming a tool that is no longer advertised is reported
-#   ANTI-VACUITY  an extraction that matches nothing reports WHY, rather than dying silently
+# TWO CASES ARE REGRESSION GUARDS FOR THE GATE'S OWN FIRST DRAFT, which review broke:
 #
-# That last case is the reason this file asserts on OUTPUT and not on exit codes. During
-# development the anti-vacuity control "passed" on exit status alone while the diagnostic never
-# ran -- the script was dying at the `grep` under `set -e`, one line before the check whose job
-# was to explain it. Right code, wrong reason (AGENTS.md §5c). Asserting the message is what
-# distinguishes the two.
+#   RELOCATION  the first version read only server.go. Moving the tool list to tools.go -- a
+#               plain refactor -- made it report every real tool as "no longer advertised", and
+#               following its own repair advice emptied the ratchet and turned it GREEN over an
+#               untested tool. Now the whole package is scanned.
+#   NAME SHAPE  the first version matched [a-z_]+ only, so start_tunnel_v2, replay_request2 and
+#               startTunnel were invisible -- and a MIN_TOOLS lower bound cannot see a tool it
+#               failed to read. A versioned successor to the broken start_tunnel is the single
+#               most likely next tool name here. Now [A-Za-z0-9_]+, checked as an exact SET.
 #
-# Fixtures live in a temp tree: the gate resolves pkg/mcp/ from its working directory, so anything
-# planted in the real tree would be read by the real run.
+# The gate's lists are injected per case. Without that, every "X is STALE" assertion would depend
+# on the real KNOWN_UNCOVERED still naming X -- so the commit that legitimately pays the debt down
+# would turn this suite red while reporting a regression that did not happen. That is the "right
+# code, wrong reason" class (AGENTS.md §5c), and it is why these cases assert on OUTPUT rather
+# than on exit status: during development an anti-vacuity control "passed" on exit status alone
+# while its diagnostic never ran.
 #
 # bash 3.2 compatible (macOS /bin/bash). See AGENTS.md.
 set -uo pipefail
@@ -34,6 +37,7 @@ PASS=0
 FAIL=0
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS=$((PASS + 1)); }
 fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL=$((FAIL + 1)); }
+show() { printf '%s\n' "$1" | sed 's/^/        /'; }
 
 if [ ! -x "$GATE" ]; then
     fail "PREMISE: $GATE is missing or not executable -- if it moved, move this test with it"
@@ -50,102 +54,162 @@ fi
 FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/lft-mcp-coverage.XXXXXX")"
 cleanup() { rm -rf "$FIXTURE"; }
 trap cleanup EXIT
-
 mkdir -p "$FIXTURE/pkg/mcp"
 
-# Plants a fixture tree. $1 = extra tool name advertised (may be empty).
-# $2 = extra tool name mentioned by the test file (may be empty).
+# plant <src-basename> <tools...> -- writes a source file advertising exactly those tool names,
+# plus a non-tool "name" key of the shape pkg/mcp/server.go really carries.
 plant() {
-    local extra_tool="$1" extra_mention="$2" f="$FIXTURE/pkg/mcp/server.go"
+    local base="$1"; shift
+    rm -f "$FIXTURE"/pkg/mcp/*.go
     {
         echo 'package mcp'
-        echo 'var tools = []map[string]interface{}{'
-        for t in get_tunnel_status start_tunnel stop_tunnel list_requests replay_request; do
+        echo '"name":    "lfr-tunnel",'
+        for t in "$@"; do
             printf '\t{"name":        "%s", "description": "x"},\n' "$t"
         done
-        if [ -n "$extra_tool" ]; then
-            printf '\t{"name":        "%s", "description": "x"},\n' "$extra_tool"
-        fi
-        echo '}'
-    } > "$f"
+    } > "$FIXTURE/pkg/mcp/$base"
+}
 
-    # The real test file mentions exactly the two tools that are covered today.
+# mentions <tool...> -- the test file names exactly these tools.
+mentions() {
     {
         echo 'package mcp'
-        echo '// mentions: get_tunnel_status list_requests'
-        if [ -n "$extra_mention" ]; then
-            echo "// mentions: $extra_mention"
-        fi
+        for t in "$@"; do echo "// mentions: $t"; done
     } > "$FIXTURE/pkg/mcp/server_test.go"
 }
 
-# Runs the gate inside the fixture and captures combined output.
+# run_gate <expected-set> <known-uncovered> -- newline-separated, may be empty.
 run_gate() {
-    ( cd "$FIXTURE" && "$GATE" 2>&1 )
+    ( cd "$FIXTURE" \
+      && LFT_MCP_EXPECTED_TOOLS="$1" LFT_MCP_KNOWN_UNCOVERED="$2" LFT_MCP_KNOWN_UNCOVERED_MAX=9 \
+         "$GATE" 2>&1 )
 }
 
-echo ""
-echo "-- FIRING: a newly advertised tool that nothing tests"
-plant "totally_new_tool" ""
-OUT="$(run_gate)"
-if grep -q "UNCOVERED MCP TOOL: 'totally_new_tool'" <<<"$OUT"; then
-    pass "FIRING: an unexamined new tool is named"
-else
-    fail "FIRING: a new tool with no test went unreported -- the gate would not have caught #2336"
-    printf '%s\n' "$OUT" | sed 's/^/        /'
-fi
+FIVE='get_tunnel_status
+list_requests
+replay_request
+start_tunnel
+stop_tunnel'
 
 echo ""
-echo "-- BOUNDING: the ratchet tightens when a recorded tool gains a test"
-plant "" "start_tunnel"
-OUT="$(run_gate)"
-if grep -q "STALE KNOWN_UNCOVERED: 'start_tunnel'" <<<"$OUT"; then
-    pass "BOUNDING: a covered entry must leave the list, so it can only shrink"
-else
-    fail "BOUNDING: a now-covered entry was not reported stale -- the list could grow forever"
-    printf '%s\n' "$OUT" | sed 's/^/        /'
-fi
-
-echo ""
-echo "-- BOUNDING: an entry naming a tool that is no longer advertised"
-# Drop replay_request from the advertised set while it is still in KNOWN_UNCOVERED.
-#
-# A substitute tool is planted first so the count stays at five. Deleting one outright drops below
-# MIN_TOOLS, and the anti-vacuity floor fires before the check this case is about -- masking it
-# with a different, correct-looking failure. The substitute is mentioned by the test file so it
-# does not trip the FIRING rule either; the only thing left for the gate to report is the stale
-# entry.
-plant "substitute_tool" "substitute_tool"
-sed -i.bak '/replay_request/d' "$FIXTURE/pkg/mcp/server.go" && rm -f "$FIXTURE/pkg/mcp/server.go.bak"
-OUT="$(run_gate)"
-if grep -q "STALE KNOWN_UNCOVERED: 'replay_request' is not advertised" <<<"$OUT"; then
-    pass "BOUNDING: a dead entry is reported rather than silently excusing a future namesake"
-else
-    fail "BOUNDING: an entry for a removed tool was not reported"
-    printf '%s\n' "$OUT" | sed 's/^/        /'
-fi
-
-echo ""
-echo "-- ANTI-VACUITY: an extraction that reads nothing says so"
-plant "" ""
-echo 'package mcp' > "$FIXTURE/pkg/mcp/server.go"   # no tool names at all
-OUT="$(run_gate)"
-if grep -q 'GATE ERROR: extracted only 0 tool name' <<<"$OUT"; then
-    pass "ANTI-VACUITY: the floor reports the cause, not just a non-zero exit"
-else
-    fail "ANTI-VACUITY: a gate reading zero tools did not explain itself -- a silent pass is next"
-    printf '%s\n' "$OUT" | sed 's/^/        /'
-fi
-
-echo ""
-echo "-- CONTROL: the untouched fixture is green, so the failures above are the mutations"
-plant "" ""
-OUT="$(run_gate)"
+echo "-- CONTROL: the untouched fixture is green, so every failure below is its mutation"
+plant server.go get_tunnel_status list_requests replay_request start_tunnel stop_tunnel
+mentions get_tunnel_status list_requests
+OUT="$(run_gate "$FIVE" 'replay_request
+start_tunnel
+stop_tunnel')"
 if grep -q '✅' <<<"$OUT"; then
     pass "CONTROL: an unmutated fixture passes"
 else
-    fail "CONTROL: the baseline fixture fails, so every result above is suspect"
-    printf '%s\n' "$OUT" | sed 's/^/        /'
+    fail "CONTROL: the baseline fixture fails, so every result below is suspect"; show "$OUT"
+fi
+
+echo ""
+echo "-- FIRING: an advertised tool whose name nothing mentions"
+OUT="$(run_gate "$FIVE" '')"
+if grep -q "UNCOVERED MCP TOOL: 'start_tunnel'" <<<"$OUT"; then
+    pass "FIRING: an unexamined tool is named -- the #2336 shape"
+else
+    fail "FIRING: a tool with no mention went unreported"; show "$OUT"
+fi
+
+echo ""
+echo "-- FIRING: a tool name with a digit or a capital is SEEN (the [a-z_] blind spot)"
+plant server.go get_tunnel_status list_requests replay_request start_tunnel start_tunnel_v2
+mentions get_tunnel_status list_requests
+OUT="$(run_gate 'get_tunnel_status
+list_requests
+replay_request
+start_tunnel
+start_tunnel_v2' '')"
+if grep -q "UNCOVERED MCP TOOL: 'start_tunnel_v2'" <<<"$OUT"; then
+    pass "FIRING: start_tunnel_v2 is visible -- the old regex could not see it at all"
+else
+    fail "FIRING: a _v2 tool was invisible, which is how a successor to #2336 would ship"; show "$OUT"
+fi
+
+echo ""
+echo "-- BOUNDING: whole-word matching, so start_tunnel does not cover start_tunnel_v2"
+mentions get_tunnel_status list_requests start_tunnel
+OUT="$(run_gate 'get_tunnel_status
+list_requests
+replay_request
+start_tunnel
+start_tunnel_v2' '')"
+if grep -q "UNCOVERED MCP TOOL: 'start_tunnel_v2'" <<<"$OUT"; then
+    pass "BOUNDING: a prefix does not satisfy a longer name"
+else
+    fail "BOUNDING: mentioning start_tunnel wrongly covered start_tunnel_v2"; show "$OUT"
+fi
+
+echo ""
+echo "-- RELOCATION: the tool list moved to another file is still read"
+plant tools.go get_tunnel_status list_requests replay_request start_tunnel stop_tunnel
+mentions get_tunnel_status list_requests
+OUT="$(run_gate "$FIVE" 'replay_request
+start_tunnel
+stop_tunnel')"
+if grep -q '✅' <<<"$OUT"; then
+    pass "RELOCATION: a refactor to tools.go does not blind the gate"
+else
+    fail "RELOCATION: moving the tool list broke the gate -- the exact fault review found"; show "$OUT"
+fi
+
+echo ""
+echo "-- SET: a tool the code advertises but the expected set does not know about"
+plant server.go get_tunnel_status list_requests replay_request start_tunnel stop_tunnel brand_new_tool
+mentions get_tunnel_status list_requests
+OUT="$(run_gate "$FIVE" '')"
+if grep -q 'does not match EXPECTED_TOOLS' <<<"$OUT" && grep -q 'brand_new_tool' <<<"$OUT"; then
+    pass "SET: an unexpected tool is refused and named, not silently counted"
+else
+    fail "SET: a new tool slipped past the set check"; show "$OUT"
+fi
+
+echo ""
+echo "-- SET: an expected tool the code no longer advertises (removal, or extraction rot)"
+plant server.go get_tunnel_status list_requests replay_request start_tunnel
+mentions get_tunnel_status list_requests
+OUT="$(run_gate "$FIVE" '')"
+if grep -q 'does not match EXPECTED_TOOLS' <<<"$OUT" && grep -q 'stop_tunnel' <<<"$OUT"; then
+    pass "SET: a vanished tool is refused -- a lower bound could not have seen this"
+else
+    fail "SET: a missing tool did not fail the set check"; show "$OUT"
+fi
+
+echo ""
+echo "-- BOUNDING: the ratchet tightens when a recorded tool gains a mention"
+plant server.go get_tunnel_status list_requests replay_request start_tunnel stop_tunnel
+mentions get_tunnel_status list_requests start_tunnel
+OUT="$(run_gate "$FIVE" 'start_tunnel')"
+if grep -q "STALE KNOWN_UNCOVERED: 'start_tunnel'" <<<"$OUT"; then
+    pass "BOUNDING: a covered entry must leave the list, so it can only shrink"
+else
+    fail "BOUNDING: a now-covered entry was not reported stale"; show "$OUT"
+fi
+
+echo ""
+echo "-- BOUNDING: an entry naming a tool that is not advertised"
+mentions get_tunnel_status list_requests
+OUT="$(run_gate "$FIVE" 'ghost_tool')"
+if grep -q "STALE KNOWN_UNCOVERED: 'ghost_tool' is not advertised" <<<"$OUT"; then
+    pass "BOUNDING: a dead entry cannot sit there excusing a future namesake"
+else
+    fail "BOUNDING: an entry for a non-existent tool was not reported"; show "$OUT"
+fi
+
+echo ""
+echo "-- CEILING: the list cannot grow silently"
+OUT="$( cd "$FIXTURE" \
+        && LFT_MCP_EXPECTED_TOOLS="$FIVE" \
+           LFT_MCP_KNOWN_UNCOVERED='replay_request
+start_tunnel
+stop_tunnel' \
+           LFT_MCP_KNOWN_UNCOVERED_MAX=2 "$GATE" 2>&1 )"
+if grep -q 'KNOWN_UNCOVERED has grown to 3, above the ceiling of 2' <<<"$OUT"; then
+    pass "CEILING: adding an entry means raising a number in the same diff"
+else
+    fail "CEILING: the list grew past its ceiling without a word"; show "$OUT"
 fi
 
 echo ""

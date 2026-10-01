@@ -60,7 +60,7 @@ test.describe('Portal V1 sidebar accessibility', () => {
 
   test('the sidebar is a navigation landmark', async ({ page }) => {
     await expect(
-      page.getByRole('navigation', { name: 'Primary' }),
+      page.getByRole('navigation', { name: 'Primary Navigation', exact: true }),
     ).toBeVisible();
   });
 

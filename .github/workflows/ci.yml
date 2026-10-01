@@ -540,6 +540,14 @@ jobs:
       - name: Portal i18n keys must be defined and translated
         run: node scripts/check-i18n-keys.cjs
 
+      # Playwright matches getByRole's `name` as a SUBSTRING unless exact: true, so an
+      # assertion that is a strict prefix of a different shipped string passes against either
+      # one. `name: 'Primary'` matched both the untranslated fallback and the shipped
+      # "Primary Navigation", so the three landmark specs could not tell whether the i18n
+      # mechanism had run -- which is the one thing they were positioned to catch (#2311).
+      - name: e2e name assertions must not be prefixes of other shipped strings
+        run: python3 scripts/check-e2e-accessible-names.py
+
       # Tags that do not balance. Unlike the three gates above this one models nesting, which
       # is the only way to see the defect: a dropped closing tag is not a parse error, *.html
       # is prettier-ignored, and the browser recovers into a different DOM rather than

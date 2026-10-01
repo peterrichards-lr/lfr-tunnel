@@ -146,10 +146,10 @@ ports:
 
 ### 1. Host Header rewrite vs Ingress matching
 - We route requests based on the `Host` header of the incoming HTTP request.
-- The proxy must preserve the original Host header in `X-Forwarded-Host` but rewrite the `Host` header in the forwarded request to the target (or preserve it, depending on Liferay configuration). By default, Liferay expects the original host header to match its virtual host settings or uses `X-Forwarded-Host`. We will support forwarding the host header transparently.
+- The proxy must preserve the original Host header in `X-Forwarded-Host` but rewrite the `Host` header in the forwarded request to the target (or preserve it, depending on Liferay configuration). By default, Liferay expects the original host header to match its virtual host settings or uses `X-Forwarded-Host`. Forwarding the host header transparently is supported.
 
 ### 2. Auto SSL Management
-- We will support using pre-provisioned wildcard certificates (great for SE teams with custom domains) or auto Let's Encrypt for subdomains.
+- Pre-provisioned wildcard certificates (great for SE teams with custom domains) and automatic Let's Encrypt for subdomains are both supported.
 - For Let's Encrypt wildcard certificates, DNS-01 challenge is required, which requires provider-specific APIs. To avoid requiring DNS credentials on the server, we recommend using a pre-installed wildcard certificate or utilizing HTTP-01 challenge for individual subdomains on the fly as they are registered.
 - Dynamic HTTP-01 challenges: When a subdomain is registered, our server can dynamically handle Let's Encrypt HTTP-01 challenge requests on port 80.
 
@@ -162,4 +162,4 @@ ports:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-10-01* | *Last Reviewed: 2026-10-01*

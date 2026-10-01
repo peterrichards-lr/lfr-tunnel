@@ -157,11 +157,23 @@ jobs:
           # with a dangling `Enforced by` would have skipped the job that catches it, and the PR
           # was green only because it also touched Makefile and tests/hooks/. The class is: a gate
           # whose subject is a path this filter does not name.
-          if echo "$CHANGED" | grep -qE '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.claude/|^\.agents/|^\.github/workflows/'; then
-            HOOKS=true
-          else
-            HOOKS=false
-          fi
+          #
+          # SO IT IS NO LONGER FILTERED (#2329). Three instances was enough. The third one shipped:
+          # test-install-paths.sh asserts agreement between scripts/install.{sh,ps1},
+          # pkg/server/server.go and pkg/client/service_installer.go, and THREE of those four were
+          # outside the pattern. #2325 refactored the fourth, Hook Tests skipped, master went red,
+          # and the release PR 23 minutes later skipped it again -- so v1.51.0 was cut from a tree
+          # whose hook suite failed, with every check that ran reporting green.
+          #
+          # The pattern is kept below, commented, because it is the record of what was believed to
+          # be the suite's subject each time somebody looked. Every entry after the first two was
+          # added by an incident.
+          #
+          #   '\.sh$|^Makefile$|^tests/hooks/|^scripts/|^\.claude/|^\.agents/|^\.github/workflows/'
+          #
+          # The suite runs in about 50 seconds. Four PRs' worth of that is cheaper than one red
+          # master nobody can see, and the filter has now cost more than it has saved.
+          HOOKS=true
 
           # Documentation: what mkdocs actually reads. `docs_dir` defaults to `docs/`, so
           # mkdocs cannot see anything outside it -- which is the whole shape of #1721: a link

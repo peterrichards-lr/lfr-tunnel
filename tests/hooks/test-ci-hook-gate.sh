@@ -41,20 +41,36 @@ if [ -z "$HOOKS_PATTERN" ]; then
   HOOKS_PATTERN=$(grep -B 2 'HOOKS=true' "$CI" | grep -oE "grep -qE '[^']+'" | head -1 | sed "s/grep -qE '//;s/'$//")
 fi
 
-if [ -z "$HOOKS_PATTERN" ]; then
-  fail "could not find the hooks filter pattern in $CI"
+# The suite is UNFILTERED as of #2329, which is strictly stronger than any pattern: it runs on
+# every PR, so no change can skip it. The pattern checks below are kept for whoever reinstates a
+# filter -- reinstating one that does not name the gates' subjects is the failure this file
+# exists for, and it has now happened three times.
+#
+# Why it was removed rather than extended a fourth time: test-install-paths.sh asserts agreement
+# between scripts/install.{sh,ps1}, pkg/server/server.go and pkg/client/service_installer.go, and
+# three of those four were outside the pattern. #2325 refactored the fourth, Hook Tests skipped,
+# master went red, and the release PR 23 minutes later skipped it again -- so v1.51.0 was cut from
+# a tree whose hook suite failed, with every check that RAN reporting green.
+if [ -z "$HOOKS_PATTERN" ] && grep -qE '^\s+HOOKS=true\s*$' "$CI"; then
+  pass "the hook suite is unfiltered -- it runs on every PR, so no change can skip it"
+elif [ -z "$HOOKS_PATTERN" ]; then
+  fail "there is no hooks filter AND no unconditional HOOKS=true -- the job may never run"
 else
-  for path in "Makefile" "tests/hooks/test-compile-check.sh" "scripts/run-e2e-ui.sh" ".claude/settings.json" ".agents/decisions/0001-x.md"; do
+  # A filter is back. It must name every path a hook test actually reads, including the four
+  # that test-install-paths.sh compares.
+  for path in "Makefile" "tests/hooks/test-compile-check.sh" "scripts/run-e2e-ui.sh" \
+              ".claude/settings.json" ".agents/decisions/0001-x.md" \
+              "pkg/client/service_installer.go" "pkg/server/server.go" "docs/infosec.md"; do
     if echo "$path" | grep -qE "$HOOKS_PATTERN"; then
       pass "hooks filter matches '$path'"
     else
-      fail "hooks filter does NOT match '$path' -- a change there would skip the hook tests"
+      fail "hooks filter does NOT match '$path' -- a change there would skip the hook tests (#2329)"
     fi
   done
 
-  # A path it must NOT match, or the filter is just "always true" and proves nothing.
-  if echo "docs/README.md" | grep -qE "$HOOKS_PATTERN"; then
-    fail "hooks filter matches docs/README.md -- it is too broad to mean anything"
+  # A path it must NOT match, or the filter is just "always true" wearing a pattern's clothes.
+  if echo "README.md" | grep -qE "$HOOKS_PATTERN"; then
+    fail "hooks filter matches README.md -- it is too broad to mean anything"
   else
     pass "hooks filter ignores unrelated paths"
   fi

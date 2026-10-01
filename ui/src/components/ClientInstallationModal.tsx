@@ -105,7 +105,8 @@ export default function ClientInstallationModal({
         {activeTab === 'macos' && (
           <div className="animation-fade-in">
             <h4 className="text-xs fw-bold mb-xs">
-              🚀 {t('guide_macos_title', 'macOS (Apple Silicon & Intel)')}
+              🚀{' '}
+              {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}
             </h4>
 
             {!serverConfig?.disable_brew && (

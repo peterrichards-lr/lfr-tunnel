@@ -163,18 +163,18 @@ export default function AdminMaintenance() {
     if (softActive)
       return (
         <span className="badge badge-danger">
-          {t('maint_status_active', 'Active')}
+          {t('maint_status_active', 'ACTIVE')}
         </span>
       );
     if (softPending)
       return (
         <span className="badge badge-warning">
-          {t('maint_status_scheduled', 'Scheduled')}
+          {t('maint_status_scheduled', 'SCHEDULED')}
         </span>
       );
     return (
       <span className="badge badge-success">
-        {t('maint_status_inactive', 'Inactive')}
+        {t('maint_status_inactive', 'INACTIVE (All welcome)')}
       </span>
     );
   };
@@ -322,15 +322,15 @@ export default function AdminMaintenance() {
               🔒{' '}
               {t(
                 'maint_iron_title',
-                'Nginx Iron Curtain Mode (Hard Maintenance — Owner Only)',
+                'Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)',
               )}
             </h3>
             <span
               className={`badge ${state?.iron_curtain ? 'badge-danger' : 'badge-success'}`}
             >
               {state?.iron_curtain
-                ? t('maint_status_active', 'Active')
-                : t('maint_status_inactive', 'Inactive')}
+                ? t('maint_status_active', 'ACTIVE')
+                : t('maint_status_inactive', 'INACTIVE (All welcome)')}
             </span>
           </div>
 

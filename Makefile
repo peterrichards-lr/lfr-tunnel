@@ -1,4 +1,4 @@
-.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -84,6 +84,7 @@ help:
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
 	@echo "  make check-e2e-names   - e2e name assertions are not prefixes of other strings"
 	@echo "  make check-bundle-decoration - bundle values carry words, not markup or icons"
+	@echo "  make check-mcp-coverage - every advertised MCP tool is mentioned by a test"
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
 	@echo "  make check-print       - Print stylesheets only target markup that exists"
@@ -320,6 +321,7 @@ test-hooks:
 	@./tests/hooks/test-closing-refs.sh
 	@./tests/hooks/test-e2e-accessible-names.sh
 	@./tests/hooks/test-bundle-decoration.sh
+	@./tests/hooks/test-mcp-tool-coverage.sh
 	@./tests/hooks/test-standalone-page-locale.sh
 	@./tests/hooks/test-compile-check.sh
 	@./tests/hooks/test-test-lock.sh
@@ -466,6 +468,9 @@ check-e2e-names:
 # the user two. Both reported from the live Gateway Maintenance page in V2.
 check-bundle-decoration:
 	@python3 scripts/check-bundle-decoration.py
+
+check-mcp-coverage:
+	@./scripts/check-mcp-tool-coverage.sh
 
 # Catches an HTML document whose tags do not balance (#1791). Nothing else in this repo can:
 # it is not a parse error, *.html is in .prettierignore, and the browser silently recovers

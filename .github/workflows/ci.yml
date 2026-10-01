@@ -567,6 +567,13 @@ jobs:
       - name: Bundle values must carry words, not markup or icons
         run: python3 scripts/check-bundle-decoration.py
 
+      # The v1.51.1 announcement led with the MCP server. Reconciling its docs the same hour
+      # turned up #2336: start_tunnel had never been able to report success, since v1.15.0.
+      # Nothing was red -- a tool with no tests is green by default, and no test in pkg/mcp
+      # had ever written the name 'start_tunnel'. This makes that gap visible (#2337).
+      - name: Every advertised MCP tool must be mentioned by a test
+        run: ./scripts/check-mcp-tool-coverage.sh
+
       # Tags that do not balance. Unlike the three gates above this one models nesting, which
       # is the only way to see the defect: a dropped closing tag is not a parse error, *.html
       # is prettier-ignored, and the browser recovers into a different DOM rather than

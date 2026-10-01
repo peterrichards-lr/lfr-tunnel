@@ -158,6 +158,42 @@ Prose rather than a script, deliberately: `create-release-tag.sh` raises the ver
 explicitly does *not* tag, so there is no single command to wrap. The check belongs where a human
 or an agent types `git tag`.
 
+### Before the announcement: name the test for every capability you name
+
+A release announcement is a claim that something works. The release gates do not check that —
+they check that master is **green**, and *a capability with no tests is green by default.* The
+cleaner the board looks, the more confident the post gets.
+
+So for every capability named in an announcement, name two things:
+
+1. **The doc that describes it**, and confirm it is current:
+   `python3 scripts/check_docs_review.py --changed-files <doc>`
+2. **The test that exercises its happy path.**
+
+**If you cannot name the test, either exercise it by hand before posting or leave it out.**
+"It is in the changelog" is evidence that it shipped, not that it works.
+
+**v1.51.1's announcement led with the MCP server.** Within the hour, reconciling `docs/mcp.md`
+against the code turned up #2336: `start_tunnel` has never been able to report success. It
+matches the state file against the PID of the process it spawned, but `-background` spawns a
+further process and *that* one writes the state file, so the success branch — the one carrying
+the public URLs — is unreachable. It shipped that way in v1.15.0 and survived ~36 releases.
+
+Two signals were already there and both were misread:
+
+- `docs/mcp.md` still called the feature *"the proposed design and specification"*. That was
+  treated as tidying-up to do afterwards, rather than as **nobody has looked at this since it was
+  written**.
+- `grep -rn start_tunnel pkg/mcp/*_test.go` returned nothing. Nobody asked.
+
+The bug was old and not a regression. **Announcing it was the new mistake**, and the cost is
+paid by whoever follows the post into a tool that cannot work.
+
+`make check-mcp-coverage` now enforces the second signal for MCP specifically — every advertised
+tool must be mentioned by a test, as a ratchet that can only shrink (#2337). The rule above is
+the general form, and it is prose because the set of capabilities an announcement names is not
+derivable from the tree.
+
 ### Pushing the tag is one-shot — verify the run started
 
 `git push origin <tag>` is the only thing that triggers `.github/workflows/release.yml`. Its

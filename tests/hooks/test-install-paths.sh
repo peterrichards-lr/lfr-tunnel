@@ -119,10 +119,36 @@ fi
 
 # 7. The service installer. A service pointed elsewhere runs an unexcluded binary even when the
 #    interactive client is fine, which is the harder version of this bug to notice.
-if grep -q 'filepath.Join(home, "liferay", "lfr-tunnel", "lfr-tunnel")' "${REPO_ROOT}/pkg/client/service_installer.go"; then
-  pass "the service installer resolves the same path"
+#
+#    ASSERTED ON THE PATH, NOT ON ONE SPELLING OF IT (#2329). This used to grep for the literal
+#    `filepath.Join(home, "liferay", "lfr-tunnel", "lfr-tunnel")`. #2324 factored that into
+#    named helpers while resolving the identical path, and the grep went red over characters --
+#    SKILL section 5b rule 2, "search for the shape, not the symbol", in a gate written to
+#    enforce path agreement. Worse, the hooks filter did not name pkg/client/, so Hook Tests
+#    skipped the PR that changed it AND the release that shipped past it.
+#
+#    So: resolve the two parts the path is actually made of, and compare the result. A rename of
+#    the helper is invisible here; a change to either part is not.
+SI="${REPO_ROOT}/pkg/client/service_installer.go"
+
+# The binary's basename, which is also the directory under ~/liferay and the leaf of the EDR
+# exclusion wildcard. Written as a constant since #2324 precisely because those three must agree.
+si_name="$(sed -n 's/^const clientBinaryName = "\([^"]*\)".*/\1/p' "$SI" | head -1)"
+[ -n "$si_name" ] || si_name="$(sed -n 's/.*filepath\.Join(home, "liferay", "\([^"]*\)".*/\1/p' "$SI" | head -1)"
+
+# The directory it joins under the home folder, accepting the binary name through either
+# spelling -- the constant, or the literal it replaced. grep -E rather than sed: BSD sed has no
+# \| alternation in a basic regex, and this suite runs on macOS as well as CI.
+si_dir=""
+if grep -qE "filepath\.Join\(home, \"liferay\", (clientBinaryName|\"${si_name}\")" "$SI"; then
+  si_dir="liferay"
+fi
+
+si_path="${si_dir}/${si_name}"
+if [ "$si_path" = "liferay/lfr-tunnel" ]; then
+  pass "the service installer resolves the same path (~/${si_path}/${si_name})"
 else
-  fail "the service installer resolves a different path from the installers"
+  fail "the service installer resolves ~/${si_path:-<unparsed>} -- the installers use ~/liferay/lfr-tunnel, and only that is inside the EDR exclusion"
 fi
 
 # 8. The document InfoSec is handed. This is the one that was wrong before, and being wrong here

@@ -166,7 +166,7 @@ JS_GATES="$(find scripts -maxdepth 1 \( -name 'check-*.cjs' -o -name 'check-*.mj
 GATE_FAILED=0
 
 # Shell gates first: no interpreter to find, and the ratchet is the one that bites most often.
-for gate in check-nolint-ratchet.sh check-sigpipe-ratchet.sh check-test-home-isolation.sh check-required-contexts.sh; do
+for gate in check-nolint-ratchet.sh check-sigpipe-ratchet.sh check-test-home-isolation.sh check-required-contexts.sh check-mcp-tool-coverage.sh; do
     if [ -x "scripts/$gate" ]; then
         if ! "./scripts/$gate"; then
             echo "❌ scripts/$gate failed."

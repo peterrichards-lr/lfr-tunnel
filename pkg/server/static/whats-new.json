@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.51.1",
+    "release_date": "2026-10-01",
+    "features": [
+      "fix(portal): one rule for heading icons, a status that survives a language switch (#2331) (#2332)",
+      "fix(i18n): a translated value carries words, not decoration (#2327) (#2328)",
+      "fix(ci): assert the install path, not its spelling, and stop filtering the hook suite (#2329) (#2330)"
+    ]
+  },
+  {
     "version": "v1.51.0",
     "release_date": "2026-10-01",
     "features": [
@@ -79,14 +88,6 @@
       "fix(tap): tell a failed push apart from a contents API that has not caught up (#2204) (#2207)",
       "fix(client): every client the upgrade starts is one it can find again (#2194) (#2206)",
       "fix(release): tell a missing artefact apart from a listing that has not caught up (#2203) (#2205)"
-    ]
-  },
-  {
-    "version": "v1.48.53",
-    "release_date": "2026-09-23",
-    "features": [
-      "feat(portal): rotate the visitor session keys, and show what the last rotation did (#2196) (#2200)",
-      "feat(server): rotate the visitor session-signing key without ending a session (#2195) (#2199)"
     ]
   }
 ]

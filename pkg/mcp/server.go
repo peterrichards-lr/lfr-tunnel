@@ -305,6 +305,61 @@ func getTunnelStatus() (interface{}, error) {
 	return map[string]interface{}{"active_tunnels": activeTunnels}, nil
 }
 
+// readStates returns every readable tunnel state file, keyed by subdomain.
+//
+// Unlike getTunnelStatus this does NOT prune state files whose process has gone: it is used to
+// tell "before" from "after" around a spawn, and deleting as a side effect of taking a snapshot
+// would make the two reads disagree about a tunnel that nobody started or stopped.
+func readStates() map[string]ClientState {
+	states := make(map[string]ClientState)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return states
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return states
+	}
+
+	for _, f := range files {
+		if f.IsDir() || !strings.HasPrefix(f.Name(), "lfr-tunnel-") || !strings.HasSuffix(f.Name(), ".state") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil {
+			continue
+		}
+		var cs ClientState
+		if err := json.Unmarshal(data, &cs); err != nil {
+			continue
+		}
+		states[cs.Subdomain] = cs
+	}
+	return states
+}
+
+// newStateSince returns the first live tunnel that is not in the given snapshot -- a subdomain
+// that was not there before, or one whose PID has changed because the tunnel was replaced.
+//
+// The PID check matters as much as the subdomain one: restarting a tunnel on a subdomain that
+// already had a state file is otherwise indistinguishable from nothing having happened.
+func newStateSince(before map[string]ClientState) *ClientState {
+	for sub, cs := range readStates() {
+		prev, existed := before[sub]
+		if existed && prev.PID == cs.PID {
+			continue
+		}
+		if !isPIDRunning(cs.PID) {
+			continue
+		}
+		found := cs
+		return &found
+	}
+	return nil
+}
+
 // startTunnel starts a background tunnel.
 func startTunnel(subdomain, ports, targetHost string) (interface{}, error) {
 	execPath, err := os.Executable()
@@ -323,43 +378,45 @@ func startTunnel(subdomain, ports, targetHost string) (interface{}, error) {
 		args = append(args, "-target-host", targetHost)
 	}
 
+	// Snapshot BEFORE spawning. A tunnel started earlier -- by this agent, by another, or from
+	// the terminal -- must not be mistaken for the one we are about to start.
+	before := readStates()
+
 	cmd := exec.Command(execPath, args...)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start background tunnel: %w", err)
 	}
 
-	// Wait up to 2 seconds for state file to materialize
+	// Wait up to 2 seconds for the new tunnel's state file to materialise.
+	//
+	// WHY NOT `cs.PID == cmd.Process.Pid`, which is what this did until #2336.
+	//
+	// `-background` is not the tunnel. handleBackground strips the flag and spawns a FURTHER
+	// process, then exits; that grandchild writes the state file with its own os.Getpid(). So
+	// comparing against the PID we just started compared the intermediate with the grandchild.
+	// It never matched -- the success branch below was unreachable for ~36 releases, and the
+	// `pid` reported on the pending path belonged to a process that had already exited.
+	//
+	// Matching on the requested subdomain is not enough either: it is optional, and when it is
+	// omitted the client derives one we cannot predict. So instead, snapshot the tunnels that
+	// already exist and look for one that is NEW -- a subdomain that was not there before, or
+	// one whose PID has changed because it was just replaced.
 	var state *ClientState
-	home, _ := os.UserHomeDir()
-	stateDir := filepath.Join(home, ".lfr-tunnel")
-
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
-		files, err := os.ReadDir(stateDir)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if !f.IsDir() && strings.HasPrefix(f.Name(), "lfr-tunnel-") && strings.HasSuffix(f.Name(), ".state") {
-				var cs ClientState
-				statePath := filepath.Join(stateDir, f.Name())
-				data, err := os.ReadFile(statePath)
-				if err == nil && json.Unmarshal(data, &cs) == nil && cs.PID == cmd.Process.Pid {
-					state = &cs
-					break
-				}
-			}
-		}
-		if state != nil {
+		if found := newStateSince(before); found != nil {
+			state = found
 			break
 		}
 	}
 
 	if state == nil {
+		// Deliberately no `pid`: the only one in hand is the intermediate's, which has exited.
+		// Reporting a dead number as the tunnel's is worse than reporting none -- an agent may
+		// correlate or signal it, and by then the OS may have reused it.
 		return map[string]interface{}{
 			"status":  "pending",
-			"message": "Tunnel spawned in background, status unknown.",
-			"pid":     cmd.Process.Pid,
+			"message": "Tunnel spawned in background; it had not registered within 2s. Call get_tunnel_status for its PID and public URLs.",
 		}, nil
 	}
 

@@ -135,24 +135,34 @@ Spawns a new background tunnel by re-invoking the client binary.
     client works down its normal discovery chain: Liferay Workspace detection first, then
     Docker/listener auto-discovery, then a fallback to port 8080.
   * `target_host` (string): Local hostname or IP to route traffic to.
-* **Response**:
+* **Response** once the tunnel has registered:
+  ```json
+  {
+    "status": "success",
+    "pid": 51234,
+    "subdomain": "peterrichards-se",
+    "public_urls": ["https://peterrichards-se.lfr-demo.se"]
+  }
+  ```
+* **Response** if it has not registered within 2 seconds:
   ```json
   {
     "status": "pending",
-    "message": "Tunnel spawned in background, status unknown.",
-    "pid": 51234
+    "message": "Tunnel spawned in background; it had not registered within 2s. Call get_tunnel_status for its PID and public URLs."
   }
   ```
 
-> **`pending` is currently the only outcome, and `pid` is not the tunnel's.** The code also has a
-> `status: "success"` branch carrying `subdomain` and `public_urls`, but it is unreachable: the
-> server matches the state file against the PID of the process it spawned, while `-background`
-> spawns a further process and *that* one writes the state file. The PIDs never match, so the call
-> always falls through to `pending` after blocking the full ~2s poll. The `pid` returned is the
-> intermediate process, which has already exited.
->
-> Tracked as **#2336**. Until it is fixed, treat `start_tunnel` as fire-and-forget and call
-> `get_tunnel_status` to learn the public URLs and the real PID.
+`pending` is not a failure — the tunnel is usually still coming up. Call `get_tunnel_status` to
+find out how it settled. **`pending` carries no `pid`**, deliberately: the only PID in hand at that
+point belongs to an intermediate process that has already exited, and reporting a dead number as
+the tunnel's is worse than reporting none.
+
+> **Fixed in #2336.** From v1.15.0 until then, `success` was unreachable and `pending` was the only
+> outcome: the server matched the state file against the PID of the process it spawned, while
+> `-background` spawns a *further* process and that one writes the state file. The PIDs never
+> matched. It now looks for a tunnel that is **new** since the moment before the spawn, which does
+> not depend on knowing the subdomain in advance. On an older client, treat `start_tunnel` as
+> fire-and-forget.
 
 ---
 
@@ -257,8 +267,8 @@ None of these are regressions — the tools were built this way from the start. 
 rather than quietly corrected so that the next reader can tell the difference between a gap and a
 bug, and so a request for `rate_limit` or `filter_path` is recognisable as a feature request.
 
-The one genuine bug found while reconciling this page is **#2336** (`start_tunnel` can never report
-success), documented under that tool above.
+The one genuine bug found while reconciling this page was **#2336** (`start_tunnel` could never
+report success). It is fixed; the behaviour above is the fixed behaviour.
 
 <!-- markdownlint-disable MD049 -->
 ---

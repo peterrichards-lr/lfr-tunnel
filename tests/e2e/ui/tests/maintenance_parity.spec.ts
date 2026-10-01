@@ -176,17 +176,23 @@ test.describe('Gateway Maintenance renders words, not markup (#2327)', () => {
     expect(body).not.toContain('style="color:');
   });
 
-  test('the Iron Curtain heading carries exactly one padlock', async ({
-    page,
-  }) => {
+  test('the Iron Curtain heading carries no icon at all', async ({ page }) => {
     await loginV2(page, adminOnly);
     await page.goto('/portalv2/admin/maintenance');
 
     const heading = page.getByTestId('iron-curtain').getByRole('heading');
     const text = await heading.innerText();
-    // Counted rather than matched: `toContain('🔒')` is satisfied by one AND by two, which is
-    // precisely how this shipped.
+
+    // Was `toBe(1)` when this was written for #2327, which fixed a DOUBLED padlock here. #2331
+    // then settled the rule the doubling exposed -- icons on modal and dialog titles, not on
+    // in-page section headings -- and this heading is a section, so the answer is now zero.
+    //
+    // Counted rather than matched either way: `toContain('🔒')` is satisfied by one AND by two,
+    // which is precisely how the doubling shipped.
+    //
+    // The doubling property itself is no longer this spec's job. scripts/check-bundle-decoration.py
+    // asserts it for EVERY key in both arms, which is stronger than one page in one browser.
     const padlocks = (text.match(/🔒/gu) || []).length;
-    expect(padlocks, `heading read: ${text}`).toBe(1);
+    expect(padlocks, `heading read: ${text}`).toBe(0);
   });
 });

@@ -22,6 +22,20 @@ function applyTranslations(bundle, lang) {
       el.innerText = bundle[key];
     }
   });
+  // The maintenance status, for the same reason as the geo credit above and with a second one.
+  //
+  // #maint-status-text carries data-i18n="maint_status_loading" for its first paint, and
+  // dashboard.js then overwrites it with the live status. So the loop above puts "Status:
+  // Loading..." back over a status that is already known, every time somebody switches language
+  // (#2331). It self-corrected on the next poll, which made it look like a flicker rather than a
+  // bug.
+  //
+  // Re-rendering here fixes both halves: the stale placeholder goes, and the status itself --
+  // which the loop cannot retranslate, because dashboard.js composes it from three keys -- comes
+  // back in the new language rather than waiting for the poll.
+  if (typeof retranslateMaintenanceStatus === 'function') {
+    retranslateMaintenanceStatus();
+  }
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     const key = el.getAttribute('data-i18n-placeholder');
     if (bundle[key]) {
@@ -5760,6 +5774,16 @@ function renderMaintStatus(stateKey, fallbackState, colour, dot) {
   const label = t['maint_status_label'] || 'Status';
   const state = t[stateKey] || fallbackState;
   return `${escapeHTML(label)}: <span style="color: ${colour}; font-weight: 600;">${escapeHTML(state)} ${dot}</span>`;
+}
+
+// retranslateMaintenanceStatus re-renders the status line in the current language.
+//
+// Called from applyTranslations, which cannot do it through its [data-i18n] loop: the status is
+// composed from three keys by renderMaintStatus, and the element it lives in carries
+// data-i18n="maint_status_loading" for its first paint only. Declared here rather than inlined at
+// the call site so it reads the two globals below from their own scope.
+function retranslateMaintenanceStatus() {
+  updateMaintenanceModeUI(globalMaintenanceActive, globalHardMaintenanceActive);
 }
 
 function updateMaintenanceModeUI(active, hardActive) {

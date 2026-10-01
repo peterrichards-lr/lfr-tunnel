@@ -657,11 +657,7 @@ export default function AccountSettings() {
           {user?.role !== 'owner' && (
             <div className="card p-xl mt-xl border border-danger">
               <h3 className="m-0 mb-xs text-md text-danger">
-                ⚠️{' '}
-                {t(
-                  'danger_zone_title',
-                  'Danger Zone (GDPR / Right to Be Forgotten)',
-                )}
+                ⚠️ {t('danger_zone_title', 'Danger Zone (GDPR)')}
               </h3>
               <p className="text-muted text-sm mb-lg">
                 {t(

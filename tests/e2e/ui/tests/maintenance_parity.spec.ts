@@ -146,3 +146,47 @@ test.describe('Gateway Maintenance in V2', () => {
     await expect(page.locator('#btn-toggle-maint')).toHaveCount(0);
   });
 });
+
+/**
+ * A translated value carries words, not decoration (#2327).
+ *
+ * Reported from production: the Gateway Maintenance page showed
+ *
+ *   Status: <span style="color: var(--text-muted);">INACTIVE (All welcome) 🟢</span>
+ *   🔒 🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)
+ *
+ * Three bundle values were finished HTML, which renders in V1's innerHTML and reaches V2 through
+ * React, which escapes it. Eight began with an icon V2 also draws in JSX.
+ *
+ * The suite above passed throughout, because it asserts the page WORKS and never what it reads.
+ * That is section 5c: an assertion satisfied by something other than the thing it names. These
+ * two assert the rendered text itself.
+ */
+test.describe('Gateway Maintenance renders words, not markup (#2327)', () => {
+  const adminOnly = 'admin@lfr-demo.local';
+
+  test('the status badge shows no HTML tags', async ({ page }) => {
+    await loginV2(page, adminOnly);
+    await page.goto('/portalv2/admin/maintenance');
+
+    const body = await page.locator('main').innerText();
+    // The exact shape of the defect: a bundle value that is markup arrives as literal text.
+    expect(body).not.toContain('<span');
+    expect(body).not.toContain('</span>');
+    expect(body).not.toContain('style="color:');
+  });
+
+  test('the Iron Curtain heading carries exactly one padlock', async ({
+    page,
+  }) => {
+    await loginV2(page, adminOnly);
+    await page.goto('/portalv2/admin/maintenance');
+
+    const heading = page.getByTestId('iron-curtain').getByRole('heading');
+    const text = await heading.innerText();
+    // Counted rather than matched: `toContain('🔒')` is satisfied by one AND by two, which is
+    // precisely how this shipped.
+    const padlocks = (text.match(/🔒/gu) || []).length;
+    expect(padlocks, `heading read: ${text}`).toBe(1);
+  });
+});

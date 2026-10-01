@@ -5743,6 +5743,25 @@ async function changeUserRole(id, role) {
 let globalMaintenanceActive = 'false';
 let globalHardMaintenanceActive = false;
 
+// renderMaintStatus builds the maintenance status line from PLAIN translated values (#2327).
+//
+// These three values used to arrive from the bundle as finished HTML --
+// `Status: <span style="...">ACTIVE 🔴</span>` -- which worked here and only here. V2 renders the
+// same keys as text in a coloured badge, so React escaped the tags and an admin saw the markup.
+//
+// Decoration belongs to the view: V1 supplies the caption, the colour and the dot; the bundle
+// supplies the words. The caption is its own key because it was translated inside those values
+// (Estado, Statut, ステータス, الحالة) and hard-coding "Status" here would have dropped that.
+//
+// escapeHTML on the state, because it is now interpolated into innerHTML rather than being
+// trusted markup, and a bundle is a file somebody edits.
+function renderMaintStatus(stateKey, fallbackState, colour, dot) {
+  const t = window.translations || {};
+  const label = t['maint_status_label'] || 'Status';
+  const state = t[stateKey] || fallbackState;
+  return `${escapeHTML(label)}: <span style="color: ${colour}; font-weight: 600;">${escapeHTML(state)} ${dot}</span>`;
+}
+
 function updateMaintenanceModeUI(active, hardActive) {
   globalMaintenanceActive = active;
   globalHardMaintenanceActive = !!hardActive;
@@ -5755,10 +5774,12 @@ function updateMaintenanceModeUI(active, hardActive) {
 
   if (statusText && toggleBtn) {
     if (active === 'true') {
-      statusText.innerHTML =
-        window.translations && window.translations['maint_status_active']
-          ? window.translations['maint_status_active']
-          : `Status: <span style=\"color: #ef4444; font-weight: 600;\">ACTIVE 🔴</span>`;
+      statusText.innerHTML = renderMaintStatus(
+        'maint_status_active',
+        'ACTIVE',
+        '#ef4444',
+        '🔴',
+      );
       toggleBtn.innerHTML =
         window.translations && window.translations['maint_btn_disable_soft']
           ? window.translations['maint_btn_disable_soft']
@@ -5770,10 +5791,12 @@ function updateMaintenanceModeUI(active, hardActive) {
       if (countdownSelect) countdownSelect.style.display = 'none';
       if (softInputs) softInputs.style.display = 'none';
     } else if (active === 'pending') {
-      statusText.innerHTML =
-        window.translations && window.translations['maint_status_scheduled']
-          ? window.translations['maint_status_scheduled']
-          : `Status: <span style=\"color: #f59e0b; font-weight: 600;\">SCHEDULED 🟡</span>`;
+      statusText.innerHTML = renderMaintStatus(
+        'maint_status_scheduled',
+        'SCHEDULED',
+        '#f59e0b',
+        '🟡',
+      );
       toggleBtn.innerHTML =
         window.translations && window.translations['maint_btn_disable_soft']
           ? window.translations['maint_btn_disable_soft']
@@ -5785,10 +5808,12 @@ function updateMaintenanceModeUI(active, hardActive) {
       if (countdownSelect) countdownSelect.style.display = 'none';
       if (softInputs) softInputs.style.display = 'none';
     } else {
-      statusText.innerHTML =
-        window.translations && window.translations['maint_status_inactive']
-          ? window.translations['maint_status_inactive']
-          : `Status: <span style=\"color: var(--text-muted);\">INACTIVE (All welcome) 🟢</span>`;
+      statusText.innerHTML = renderMaintStatus(
+        'maint_status_inactive',
+        'INACTIVE (All welcome)',
+        'var(--text-muted)',
+        '🟢',
+      );
       toggleBtn.innerHTML =
         window.translations && window.translations['maint_btn_enable_soft']
           ? window.translations['maint_btn_enable_soft']

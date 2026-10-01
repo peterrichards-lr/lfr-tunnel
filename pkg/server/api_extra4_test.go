@@ -23,9 +23,14 @@ func TestServer_HandleGetI18n(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", w.Code)
 	}
 
+	// The subject here is LOCALE SELECTION -- that ?lang= picks the right bundle -- and the tour
+	// title is only the probe. The expectations used to carry a leading 👋, which #2327 moved out
+	// of the value and into the view, so this went red over decoration it was never testing.
+	// Values still spelled out rather than compared against the bundle file, because reading the
+	// same file the server read would assert nothing about what the server did with it.
 	var enBundle map[string]string
 	_ = json.Unmarshal(w.Body.Bytes(), &enBundle) //nolint:errcheck
-	if enBundle["onboarding_guide_title"] != "👋 Onboarding Tour" {
+	if enBundle["onboarding_guide_title"] != "Onboarding Tour" {
 		t.Errorf("expected English tour title, got %s", enBundle["onboarding_guide_title"])
 	}
 
@@ -39,11 +44,19 @@ func TestServer_HandleGetI18n(t *testing.T) {
 
 	var deBundle map[string]string
 	_ = json.Unmarshal(wDE.Body.Bytes(), &deBundle) //nolint:errcheck
-	if deBundle["onboarding_guide_title"] != "👋 Onboarding-Tour" {
+	if deBundle["onboarding_guide_title"] != "Onboarding-Tour" {
 		t.Errorf("expected German tour title, got %s", deBundle["onboarding_guide_title"])
 	}
 	if deBundle["mfa_setup_title"] != "🔒 Multi-Faktor-Authentisierung einrichten" {
 		t.Errorf("expected German MFA setup title, got %s", deBundle["mfa_setup_title"])
+	}
+
+	// The claim this test is actually making. Two literal comparisons are each satisfied by a
+	// server that ignored ?lang= entirely, as long as the two strings happen to differ -- so say
+	// so directly rather than leaving it to be inferred from the pair above.
+	if enBundle["onboarding_guide_title"] == deBundle["onboarding_guide_title"] {
+		t.Errorf("en and de served the same value (%q) -- ?lang= is not selecting a bundle",
+			enBundle["onboarding_guide_title"])
 	}
 }
 

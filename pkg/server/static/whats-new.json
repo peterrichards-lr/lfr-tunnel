@@ -1,5 +1,29 @@
 [
   {
+    "version": "v1.51.0",
+    "release_date": "2026-10-01",
+    "features": [
+      "fix(client): autostart stops guessing a path, and can be removed on Windows (#2324) (#2325)",
+      "test(e2e): the landmark specs assert a name rather than a prefix of one (#2311) (#2323)",
+      "a11y(pages): three self-translating pages say what they translated to (#2302) (#2322)",
+      "fix(server): a permanent extension answers the request instead of orphaning it (#2316) (#2321)",
+      "fix(api): the extension queue tells an admin who is asking (#2314) (#2320)",
+      "fix(gates): a contrast reverses a closing keyword as completely as a negation (#2318) (#2319)",
+      "fix(i18n): three descriptions that told a translated admin a third of the story (#2256) (#2257) (#2317)",
+      "feat(portal): the permanence queue an admin can actually work, in both arms (#2280) (#2315)",
+      "fix(gates): two gates stop reading copies of the repo they are checking (#2310) (#2312) (#2313)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/ec2 (#2309)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#2307)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#2306)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/route53 (#2305)",
+      "fix(i18n): one register for pt, and values that stop contradicting their own bundle (#2258) (#2261) (#2263) (#2304)",
+      "fix(portal): both shells declare the resolved locale before the bundle runs (#2271) (#2303)",
+      "feat(edr): a PreToolUse guard that refuses execution, not mention (#2289) (#2301)",
+      "fix(api): stop publishing the owner's email address to anonymous callers (#2300)",
+      "docs(agents): name who publishes a draft, and a third test-coverage shape (#2292, #2293) (#2299)"
+    ]
+  },
+  {
     "version": "v1.50.0",
     "release_date": "2026-09-29",
     "features": [
@@ -63,17 +87,6 @@
     "features": [
       "feat(portal): rotate the visitor session keys, and show what the last rotation did (#2196) (#2200)",
       "feat(server): rotate the visitor session-signing key without ending a session (#2195) (#2199)"
-    ]
-  },
-  {
-    "version": "v1.48.52",
-    "release_date": "2026-09-23",
-    "features": [
-      "fix(client): the upgrade no longer leaves two tunnel clients running (#2189) (#2193)",
-      "fix(client): the Inspector page names the port it actually bound (#2190) (#2192)",
-      "fix(server): a visitor's session survives the tunnel moving gateway (#2181) (#2188)",
-      "fix(client): retire the gateway-shutdown warning when the session moves (#2180) (#2186)",
-      "fix(client): the Inspector is no longer served without freshness information (#2185)"
     ]
   }
 ]

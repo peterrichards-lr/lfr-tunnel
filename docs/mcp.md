@@ -152,17 +152,29 @@ Spawns a new background tunnel by re-invoking the client binary.
   }
   ```
 
-`pending` is not a failure — the tunnel is usually still coming up. Call `get_tunnel_status` to
-find out how it settled. **`pending` carries no `pid`**, deliberately: the only PID in hand at that
-point belongs to an intermediate process that has already exited, and reporting a dead number as
-the tunnel's is worse than reporting none.
+A **refusal is an error, not a `pending`.** If the client declines to start — most commonly
+*"a background tunnel for subdomain X is already running"*, which is easy to hit because repeated
+calls with no `subdomain` derive the same one — the tool returns an error carrying the client's own
+message. It does not report a tunnel that was never started.
+
+`pending` therefore means only that the spawn succeeded and registration had not finished inside
+2s. Call `get_tunnel_status` to see how it settled. **`pending` carries no `pid`**, deliberately:
+the only PID in hand at that point belongs to an intermediate process that has already exited, and
+a dead number presented as the tunnel's is worse than none.
+
+`subdomain` in a `success` response is the prefix the **gateway assigned**, which may differ from
+the one requested.
 
 > **Fixed in #2336.** From v1.15.0 until then, `success` was unreachable and `pending` was the only
 > outcome: the server matched the state file against the PID of the process it spawned, while
 > `-background` spawns a *further* process and that one writes the state file. The PIDs never
-> matched. It now looks for a tunnel that is **new** since the moment before the spawn, which does
-> not depend on knowing the subdomain in advance. On an older client, treat `start_tunnel` as
-> fire-and-forget.
+> matched.
+>
+> It now waits for the client and reads back the PID the client reports, which is exactly the one
+> the state file will carry — so the tunnel is identified rather than guessed at. That matters
+> beyond the original bug: identifying by "whichever tunnel appeared while we waited" would let a
+> call that started nothing claim a tunnel somebody else had just started, and report success with
+> their public URLs. On an older client, treat `start_tunnel` as fire-and-forget.
 
 ---
 

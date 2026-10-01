@@ -3,7 +3,9 @@ package mcp
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -143,5 +145,106 @@ func TestReadStates_DoesNotDeleteStaleStateFiles(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dir, "lfr-tunnel-dead-tunnel.state")); err != nil {
 		t.Errorf("readStates removed a state file it should only have read: %v", err)
+	}
+}
+
+// --- #2336, second pass: identify the tunnel by the PID the client reports ---
+//
+// Review of the first fix found that a snapshot diff alone is not enough. The MCP caller usually
+// passes no subdomain, so repeated calls derive the SAME one; the second call then hits
+// handleBackground's "already running" refusal and starts nothing -- and under a snapshot diff it
+// would claim the FIRST call's tunnel and report success with its URLs. The client already prints
+// the grandchild's PID, which is exactly the PID the state file will carry.
+
+func TestParseBackgroundPID_ReadsTheClientsOwnReport(t *testing.T) {
+	out := []byte("[Client] Tunnel started in background for subdomain 'peter-se' (PID: 51234).\n" +
+		"[Client] Logs: /tmp/x.log\n")
+	if got := parseBackgroundPID(out); got != 51234 {
+		t.Errorf("got %d, want 51234", got)
+	}
+}
+
+func TestParseBackgroundPID_ZeroWhenAbsentOrUnusable(t *testing.T) {
+	for name, out := range map[string]string{
+		"no line at all":    "[Client] something else entirely\n",
+		"no digits":         "[Client] Tunnel started (PID: none).\n",
+		"empty output":      "",
+		"zero is not a pid": "[Client] Tunnel started (PID: 0).\n",
+	} {
+		if got := parseBackgroundPID([]byte(out)); got != 0 {
+			t.Errorf("%s: got %d, want 0 so the caller falls back", name, got)
+		}
+	}
+}
+
+// FIRING: the misattribution the snapshot diff allowed. A tunnel registers during our window that
+// is NOT the one we started -- findRegistered must not claim it.
+func TestFindRegistered_DoesNotClaimAnotherTunnelThatRegisteredMeanwhile(t *testing.T) {
+	dir := stateDir(t)
+
+	before := readStates()
+
+	// Somebody else's tunnel appears during our 2s window. It is live and it is new.
+	writeState(t, dir, "someone-elses", os.Getpid())
+
+	// Our client reported a different PID, which has not registered yet.
+	const ourPID = 999101
+	if found := findRegistered(before, ourPID); found != nil {
+		t.Errorf("claimed a tunnel we did not start: %q (pid %d) -- a snapshot diff alone "+
+			"reports success with somebody else's public URLs", found.Subdomain, found.PID)
+	}
+}
+
+// BOUNDING: with the reported PID, our own tunnel is found exactly.
+func TestFindRegistered_FindsOurTunnelByTheReportedPID(t *testing.T) {
+	dir := stateDir(t)
+	before := readStates()
+
+	writeState(t, dir, "not-ours", 999102)
+	writeState(t, dir, "ours", os.Getpid())
+
+	found := findRegistered(before, os.Getpid())
+	if found == nil {
+		t.Fatal("our own tunnel was not found by the PID the client reported")
+	}
+	if found.Subdomain != "ours" {
+		t.Errorf("found %q, want \"ours\"", found.Subdomain)
+	}
+}
+
+// BOUNDING: with no usable PID the snapshot diff is the documented fallback, not an error.
+func TestFindRegistered_FallsBackToTheSnapshotWhenThePIDIsUnknown(t *testing.T) {
+	dir := stateDir(t)
+	before := readStates()
+	writeState(t, dir, "new-one", os.Getpid())
+
+	if found := findRegistered(before, 0); found == nil {
+		t.Error("with no reported PID the snapshot diff should still find a new tunnel")
+	}
+}
+
+// FIRING: a client that refuses to start must surface as an ERROR, not as "pending".
+//
+// Every refusal in handleBackground is a log.Fatalf -- "already running", a bad log directory, a
+// spawn failure. Before this, startTunnel used Start() and ignored the exit status, so all of
+// them were reported as "pending": the agent was told to wait for a tunnel that would never come.
+func TestStartTunnel_ANonZeroExitIsAnErrorNotPending(t *testing.T) {
+	stateDir(t)
+
+	falseBin, err := exec.LookPath("false")
+	if err != nil {
+		t.Skipf("no `false` on PATH to stand in for a refusing client: %v", err)
+	}
+	orig := osExecutable
+	osExecutable = func() (string, error) { return falseBin, nil }
+	t.Cleanup(func() { osExecutable = orig })
+
+	res, err := startTunnel("", "", "")
+	if err == nil {
+		t.Fatalf("a client that exited non-zero was reported as %v, not as an error -- an agent "+
+			"would wait for a tunnel that was never started", res)
+	}
+	if !strings.Contains(err.Error(), "refused to start") {
+		t.Errorf("the error does not say what happened: %v", err)
 	}
 }

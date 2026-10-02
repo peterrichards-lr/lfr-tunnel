@@ -53,10 +53,9 @@ readonly SRC_DIR="pkg/mcp"
 # diagnosis pointing at a regression that did not happen. Review of this PR caught that; it is
 # the same "right code, wrong reason" class the gate is meant to prevent (§5c).
 KNOWN_UNCOVERED="${LFT_MCP_KNOWN_UNCOVERED-replay_request
-start_tunnel
 stop_tunnel}"
 
-readonly KNOWN_UNCOVERED_MAX="${LFT_MCP_KNOWN_UNCOVERED_MAX:-3}"
+readonly KNOWN_UNCOVERED_MAX="${LFT_MCP_KNOWN_UNCOVERED_MAX:-2}"   # 3 -> 2: start_tunnel covered by #2336
 
 # The exact set of tools the server is expected to advertise, sorted.
 #

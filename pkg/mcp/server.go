@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -305,9 +307,118 @@ func getTunnelStatus() (interface{}, error) {
 	return map[string]interface{}{"active_tunnels": activeTunnels}, nil
 }
 
+// readStates returns every readable tunnel state file, keyed by subdomain.
+//
+// Unlike getTunnelStatus this does NOT prune state files whose process has gone: it is used to
+// tell "before" from "after" around a spawn, and deleting as a side effect of taking a snapshot
+// would make the two reads disagree about a tunnel that nobody started or stopped.
+func readStates() map[string]ClientState {
+	states := make(map[string]ClientState)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return states
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return states
+	}
+
+	for _, f := range files {
+		if f.IsDir() || !strings.HasPrefix(f.Name(), "lfr-tunnel-") || !strings.HasSuffix(f.Name(), ".state") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil {
+			continue
+		}
+		var cs ClientState
+		if err := json.Unmarshal(data, &cs); err != nil {
+			continue
+		}
+		states[cs.Subdomain] = cs
+	}
+	return states
+}
+
+// backgroundPIDPattern matches the PID the client prints after spawning a background tunnel:
+//
+//	[Client] Tunnel started in background for subdomain 'peter-se' (PID: 51234).
+//
+// That number is the GRANDCHILD's -- handleBackground writes the same value to the pidfile, and
+// the grandchild writes it again into its own state file as os.Getpid(). So it is the one
+// identifier that ties this call to the tunnel it created.
+var backgroundPIDPattern = regexp.MustCompile(`\(PID:\s*(\d+)\)`)
+
+// parseBackgroundPID extracts the spawned tunnel's PID from the client's output, or 0 if the
+// line is absent or unparseable.
+func parseBackgroundPID(out []byte) int {
+	m := backgroundPIDPattern.FindSubmatch(out)
+	if m == nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(string(m[1]))
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
+}
+
+// findRegistered returns the tunnel this call started, once it has written its state file.
+//
+// WITH wantPID this is exact: only the process the client told us about can match, so a tunnel
+// that registers concurrently -- another agent, another IDE, a terminal, or a slow earlier call
+// of our own -- cannot be mistaken for ours.
+//
+// That distinction is not academic. The MCP caller usually passes no subdomain, so repeated calls
+// derive the SAME one; a second call then hits handleBackground's "already running" refusal and
+// starts nothing. Identifying by "a subdomain that is new since the snapshot" would have let that
+// failed call claim the first call's tunnel, and report success with its URLs.
+//
+// WITHOUT wantPID -- the client's output changed, or it said nothing -- fall back to the snapshot
+// diff. It is best-effort by construction, which is why it is the fallback and not the rule.
+func findRegistered(before map[string]ClientState, wantPID int) *ClientState {
+	if wantPID > 0 {
+		for _, cs := range readStates() {
+			if cs.PID == wantPID {
+				found := cs
+				return &found
+			}
+		}
+		return nil
+	}
+	return newStateSince(before)
+}
+
+// newStateSince returns the first live tunnel that is not in the given snapshot -- a subdomain
+// that was not there before, or one whose PID has changed because the tunnel was replaced.
+//
+// Best-effort only, and used solely as findRegistered's fallback. Map iteration is unordered, so
+// with two tunnels registering at once the choice between them is arbitrary.
+func newStateSince(before map[string]ClientState) *ClientState {
+	for sub, cs := range readStates() {
+		prev, existed := before[sub]
+		if existed && prev.PID == cs.PID {
+			continue
+		}
+		if !isPIDRunning(cs.PID) {
+			continue
+		}
+		found := cs
+		return &found
+	}
+	return nil
+}
+
+// osExecutable is a seam for tests. Production always resolves the running client binary; a test
+// cannot, because running the client locally is forbidden here (see .agents/skills/edr-constraints)
+// and os.Executable() inside `go test` is the test binary itself.
+var osExecutable = os.Executable
+
 // startTunnel starts a background tunnel.
 func startTunnel(subdomain, ports, targetHost string) (interface{}, error) {
-	execPath, err := os.Executable()
+	execPath, err := osExecutable()
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate executable: %w", err)
 	}
@@ -323,43 +434,73 @@ func startTunnel(subdomain, ports, targetHost string) (interface{}, error) {
 		args = append(args, "-target-host", targetHost)
 	}
 
+	// Snapshot BEFORE spawning, as a fallback for the case where the client's report cannot be
+	// parsed. On its own a snapshot is NOT enough to identify our tunnel -- see findRegistered.
+	before := readStates()
+
+	// WAIT for the intermediate, and capture what it says.
+	//
+	// `-background` returns almost immediately: handleBackground spawns the real tunnel, writes
+	// its pidfile, logs, and exits. It hands the grandchild a real *os.File for stdout and
+	// stderr, so nothing inherits this pipe and CombinedOutput cannot block on the tunnel.
+	//
+	// Not waiting was the deeper half of #2336. Two things are thrown away by `Start()` alone:
+	//
+	//   THE GRANDCHILD'S PID, which the intermediate prints and which is exactly the PID the
+	//   state file will carry. Without it there is no way to tell our tunnel from one that
+	//   registered concurrently, and `success` could name somebody else's.
+	//
+	//   THE FAILURE. Every refusal in handleBackground is a log.Fatalf -- "already running",
+	//   a bad log directory, a spawn error. With Start() all of them are silent, and the call
+	//   reported "pending", telling an agent to wait for a tunnel that would never exist.
+	//
+	// stopTunnel in this same file already does it this way.
 	cmd := exec.Command(execPath, args...)
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start background tunnel: %w", err)
+	out, runErr := cmd.CombinedOutput()
+	if runErr != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail == "" {
+			detail = runErr.Error()
+		}
+		return nil, fmt.Errorf("the client refused to start a background tunnel: %s", detail)
 	}
 
-	// Wait up to 2 seconds for state file to materialize
-	var state *ClientState
-	home, _ := os.UserHomeDir()
-	stateDir := filepath.Join(home, ".lfr-tunnel")
+	// Wait up to 2 seconds for the new tunnel's state file to materialise.
+	//
+	// WHY NOT `cs.PID == cmd.Process.Pid`, which is what this did until #2336.
+	//
+	// `-background` is not the tunnel. handleBackground strips the flag and spawns a FURTHER
+	// process, then exits; that grandchild writes the state file with its own os.Getpid(). So
+	// comparing against the PID we just started compared the intermediate with the grandchild.
+	// It never matched -- the success branch below was unreachable for ~36 releases, and the
+	// `pid` reported on the pending path belonged to a process that had already exited.
+	//
+	// Matching on the requested subdomain is not enough either: it is optional, and when it is
+	// omitted the client derives one we cannot predict. So instead, snapshot the tunnels that
+	// already exist and look for one that is NEW -- a subdomain that was not there before, or
+	// one whose PID has changed because it was just replaced.
+	// The PID the intermediate reported IS the one the state file will carry.
+	wantPID := parseBackgroundPID(out)
 
+	var state *ClientState
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
-		files, err := os.ReadDir(stateDir)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if !f.IsDir() && strings.HasPrefix(f.Name(), "lfr-tunnel-") && strings.HasSuffix(f.Name(), ".state") {
-				var cs ClientState
-				statePath := filepath.Join(stateDir, f.Name())
-				data, err := os.ReadFile(statePath)
-				if err == nil && json.Unmarshal(data, &cs) == nil && cs.PID == cmd.Process.Pid {
-					state = &cs
-					break
-				}
-			}
-		}
-		if state != nil {
+		if found := findRegistered(before, wantPID); found != nil {
+			state = found
 			break
 		}
 	}
 
 	if state == nil {
+		// The spawn SUCCEEDED -- a non-zero exit returned an error above -- so this really is
+		// "still coming up" rather than a failure being passed off as one.
+		//
+		// Deliberately no `pid`: the only one in hand is the intermediate's, which has exited.
+		// Reporting a dead number as the tunnel's is worse than reporting none -- an agent may
+		// correlate or signal it, and by then the OS may have reused it.
 		return map[string]interface{}{
 			"status":  "pending",
-			"message": "Tunnel spawned in background, status unknown.",
-			"pid":     cmd.Process.Pid,
+			"message": "The client started a background tunnel; it had not finished registering within 2s. Call get_tunnel_status for its PID and public URLs.",
 		}, nil
 	}
 

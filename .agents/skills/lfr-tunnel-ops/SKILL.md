@@ -184,10 +184,10 @@ the second option is usually the honest answer, which is why it is listed as an 
 a fallback.
 
 **v1.51.1's announcement led with the MCP server.** Within the hour, reconciling `docs/mcp.md`
-against the code turned up #2336: `start_tunnel` has never been able to report success. It
-matches the state file against the PID of the process it spawned, but `-background` spawns a
+against the code turned up #2336: `start_tunnel` **could never** report success. It
+matched the state file against the PID of the process it spawned, but `-background` spawns a
 further process and *that* one writes the state file, so the success branch — the one carrying
-the public URLs — is unreachable. It shipped that way in v1.15.0 and survived ~36 releases.
+the public URLs — was unreachable. It shipped that way in v1.15.0 and survived ~36 releases.
 
 Two signals were already there and both were misread:
 
@@ -195,6 +195,9 @@ Two signals were already there and both were misread:
   treated as tidying-up to do afterwards, rather than as **nobody has looked at this since it was
   written**.
 - `grep -rn start_tunnel pkg/mcp/*_test.go` returned nothing. Nobody asked.
+
+#2336 is fixed (#2339) and `start_tunnel` now has tests. The lesson is kept in the past tense
+because the sequence is what this section is for, not the defect.
 
 The bug was old and not a regression. **Announcing it was the new mistake**, and the cost is
 paid by whoever follows the post into a tool that cannot work.

@@ -135,24 +135,46 @@ Spawns a new background tunnel by re-invoking the client binary.
     client works down its normal discovery chain: Liferay Workspace detection first, then
     Docker/listener auto-discovery, then a fallback to port 8080.
   * `target_host` (string): Local hostname or IP to route traffic to.
-* **Response**:
+* **Response** once the tunnel has registered:
+  ```json
+  {
+    "status": "success",
+    "pid": 51234,
+    "subdomain": "peterrichards-se",
+    "public_urls": ["https://peterrichards-se.lfr-demo.se"]
+  }
+  ```
+* **Response** if it has not registered within 2 seconds:
   ```json
   {
     "status": "pending",
-    "message": "Tunnel spawned in background, status unknown.",
-    "pid": 51234
+    "message": "Tunnel spawned in background; it had not registered within 2s. Call get_tunnel_status for its PID and public URLs."
   }
   ```
 
-> **`pending` is currently the only outcome, and `pid` is not the tunnel's.** The code also has a
-> `status: "success"` branch carrying `subdomain` and `public_urls`, but it is unreachable: the
-> server matches the state file against the PID of the process it spawned, while `-background`
-> spawns a further process and *that* one writes the state file. The PIDs never match, so the call
-> always falls through to `pending` after blocking the full ~2s poll. The `pid` returned is the
-> intermediate process, which has already exited.
+A **refusal is an error, not a `pending`.** If the client declines to start — most commonly
+*"a background tunnel for subdomain X is already running"*, which is easy to hit because repeated
+calls with no `subdomain` derive the same one — the tool returns an error carrying the client's own
+message. It does not report a tunnel that was never started.
+
+`pending` therefore means only that the spawn succeeded and registration had not finished inside
+2s. Call `get_tunnel_status` to see how it settled. **`pending` carries no `pid`**, deliberately:
+the only PID in hand at that point belongs to an intermediate process that has already exited, and
+a dead number presented as the tunnel's is worse than none.
+
+`subdomain` in a `success` response is the prefix the **gateway assigned**, which may differ from
+the one requested.
+
+> **Fixed in #2336.** From v1.15.0 until then, `success` was unreachable and `pending` was the only
+> outcome: the server matched the state file against the PID of the process it spawned, while
+> `-background` spawns a *further* process and that one writes the state file. The PIDs never
+> matched.
 >
-> Tracked as **#2336**. Until it is fixed, treat `start_tunnel` as fire-and-forget and call
-> `get_tunnel_status` to learn the public URLs and the real PID.
+> It now waits for the client and reads back the PID the client reports, which is exactly the one
+> the state file will carry — so the tunnel is identified rather than guessed at. That matters
+> beyond the original bug: identifying by "whichever tunnel appeared while we waited" would let a
+> call that started nothing claim a tunnel somebody else had just started, and report success with
+> their public URLs. On an older client, treat `start_tunnel` as fire-and-forget.
 
 ---
 
@@ -257,8 +279,8 @@ None of these are regressions — the tools were built this way from the start. 
 rather than quietly corrected so that the next reader can tell the difference between a gap and a
 bug, and so a request for `rate_limit` or `filter_path` is recognisable as a feature request.
 
-The one genuine bug found while reconciling this page is **#2336** (`start_tunnel` can never report
-success), documented under that tool above.
+The one genuine bug found while reconciling this page was **#2336** (`start_tunnel` could never
+report success). It is fixed; the behaviour above is the fixed behaviour.
 
 <!-- markdownlint-disable MD049 -->
 ---

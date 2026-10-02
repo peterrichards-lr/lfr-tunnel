@@ -7,7 +7,7 @@ import (
 
 // Version is the current version of lfr-tunnel
 // This is overridden by ldflags during the build process
-var Version = "v1.51.1"
+var Version = "v1.51.2"
 
 // CompareVersions returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
 //

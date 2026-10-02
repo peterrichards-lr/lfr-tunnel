@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.51.2",
+    "release_date": "2026-10-02",
+    "features": [
+      "fix(mcp): start_tunnel reports the tunnel it started, not a PID that never matches (#2339)",
+      "feat(gates): a capability nobody has tested cannot be announced quietly (#2338)",
+      "docs(mcp): describe the server that shipped, not the one proposed (#2335)"
+    ]
+  },
+  {
     "version": "v1.51.1",
     "release_date": "2026-10-01",
     "features": [
@@ -64,30 +73,6 @@
       "fix(tests): the handshake precondition is established, not raced (#2234) (#2245)",
       "fix(portal-v1): a user can see their own custom domain provisioning (#2233) (#2243)",
       "fix(portal-v2): the custom-domain control is disabled at the quota, not removed (#2241) (#2242)"
-    ]
-  },
-  {
-    "version": "v1.49.0",
-    "release_date": "2026-09-25",
-    "features": [
-      "fix(tests): the release-asset suite no longer measures the machine (#2238) (#2239)",
-      "fix(server): the custom-domain refusal names a place both portals have (#2236) (#2237)",
-      "feat(portal): a user can register a custom domain from either portal arm (#2223, #2224) (#2235)",
-      "docs: how to use your own domain, starting with the CNAME (#2225) (#2232)",
-      "fix(tests): wait for the upgraded-connection counters instead of sampling once (#2230) (#2231)",
-      "feat(portal): a user can register a custom domain without being an admin (#2222) (#2229)",
-      "fix(tests): one skip list for every filesystem-walking gate (#2217) (#2227)",
-      "fix(tests): the tap confirmation suite no longer measures the machine (#2220) (#2226)",
-      "fix(server): the gateway tells a client what it already knows (#2187, #2210) (#2219)",
-      "fix(client): a WebSocket survives the interceptor, and is recorded as one (#2213) (#2218)",
-      "fix(gates): two scanning gates read the corpus they think they have (#2211, #2208) (#2216)",
-      "fix(client): the Inspector's details pane names the host it proxied to (#2191) (#2215)",
-      "fix(server): a WebSocket through the proxy connects again, and is counted (#2179) (#2214)",
-      "fix(server): a rotation refused at the accepted bound says when it clears (#2198) (#2212)",
-      "fix(gates): a marker renamed longer no longer satisfies check-portal-parity (#2201) (#2209)",
-      "fix(tap): tell a failed push apart from a contents API that has not caught up (#2204) (#2207)",
-      "fix(client): every client the upgrade starts is one it can find again (#2194) (#2206)",
-      "fix(release): tell a missing artefact apart from a listing that has not caught up (#2203) (#2205)"
     ]
   }
 ]

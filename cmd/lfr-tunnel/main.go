@@ -1653,15 +1653,20 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 	if client.IsDocker() {
 		clientOS += " (Docker)"
 	}
-	// No token can never register: the gateway answers an empty one with the same bare 401 as a
-	// bad one, so asking only spends a round trip to learn what is already known here (#2342).
+	// No token can never register: the gateway answers an empty one with the same 401 as a bad
+	// one, so asking only spends a round trip to learn what is already known here (#2342).
 	if cfg.AuthToken == "" {
 		return nil, missingTokenFailure(cfg)
 	}
 
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
-		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == http.StatusUnauthorized {
+		// Only the gateway's token refusal, not every 401. An edge relays central's edge-auth
+		// refusals ("missing edge token", "invalid edge token") with the same status, and those
+		// are an edge misconfigured mid-rotation -- another region can serve this user, and
+		// their token is fine. Matching the message reveals nothing: it is the one string all
+		// five token causes share.
+		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == http.StatusUnauthorized && regErr.Message == gatewayTokenRefusal {
 			return nil, unauthorizedFailure(cfg, err, portalURLForAdvice(cfg, regErr.PortalURL))
 		}
 
@@ -1745,12 +1750,17 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 // nowhere else -- see TokenSourceDefaultFile for why that limits when it can be advised.
 const loginCommand = "lfr-tunnel login"
 
-// unauthorizedFailure describes a 401 from registration (#2342).
+// gatewayTokenRefusal is the body of the gateway's refusal of a user token -- the same for a
+// missing, unknown, revoked or expired token and an unapproved account (validatePAT, and the
+// isValidToken checks in handleRegister and handleEdgeRegister).
+const gatewayTokenRefusal = "unauthorized"
+
+// unauthorizedFailure describes the gateway refusing the user's token (#2342).
 //
-// Terminal: tokens are checked on central, and an edge relays central's answer unchanged
-// (handleEdgeRegisterProxy), so no region can accept a token another refused. Before this a 401
-// was retried against every region and ended "Failover exhausted every candidate region" -- a
-// credential problem reported as an outage -- and a pinned client retried it forever.
+// Terminal: user tokens are checked on central, and an edge relays that answer, so no region can
+// accept a token another refused. Before this it was retried against every region and ended
+// "Failover exhausted every candidate region" -- a credential problem reported as an outage --
+// and a pinned client retried it forever.
 //
 // The advice is deliberately the same whatever the cause. The gateway folds a missing,
 // unknown, revoked or expired token and an unapproved account into one 401 (validatePAT), so
@@ -1763,15 +1773,15 @@ func unauthorizedFailure(cfg *config.ClientConfig, err error, portalURL string) 
 		"[Client] The gateway did not accept this access token. It may have expired or been revoked, or the account may not be active.",
 		fmt.Sprintf("[Client] The token was read from: %s", tokenSourceOrNone(cfg.TokenSource)),
 	}
-	if strings.HasPrefix(cfg.TokenSource, config.TokenSourceDefaultFile+" (") {
+	if loginReplacesToken(cfg.TokenSource) {
 		advice = append(advice,
 			"[Client] Sign in again to replace it:",
 			fmt.Sprintf("         👉 %s", loginCommand),
-			fmt.Sprintf("[Client] Or create a new token in the User Portal: %s\n", portalURL),
+			fmt.Sprintf("[Client] Or create a new token in the User Portal: %s (Cmd/Ctrl+Click to open)\n", portalURL),
 		)
 	} else {
-		// Any other source outranks the file login writes, so login would save a new token
-		// and this one would go on being used.
+		// Every other source outranks the file login writes, or points the client elsewhere,
+		// so login would save a new token and this one would go on being used.
 		advice = append(advice,
 			"[Client] Create a new token in the User Portal and put it there in place of this one:",
 			fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL),
@@ -1780,11 +1790,22 @@ func unauthorizedFailure(cfg *config.ClientConfig, err error, portalURL string) 
 	return &registrationFailure{err: err, terminal: true, advice: advice}
 }
 
+// loginReplacesToken reports whether `lfr-tunnel login` would replace a token read from source.
+// Login writes ~/.lfr-tunnel/token, which is read only when nothing above it in the loader's
+// ladder supplied a token -- so it replaces the token it was read from, and LDM's credentials
+// file, which is consulted only after it. Everything else outranks it.
+func loginReplacesToken(source string) bool {
+	return strings.HasPrefix(source, config.TokenSourceDefaultFile+" (") ||
+		strings.HasPrefix(source, config.TokenSourceLDMFile+" (")
+}
+
 // missingTokenFailure is the refusal for a client with no token at all, decided without
 // contacting the gateway (#2342). Terminal for the same reason a 401 is.
 func missingTokenFailure(cfg *config.ClientConfig) *registrationFailure {
-	advice := []string{"[Client] No access token was found, so the gateway was not contacted."}
-	if path := strings.TrimSpace(os.Getenv("LFT_TOKEN_FILE")); path != "" {
+	advice := []string{"[Client] No access token was found, so registration was not attempted."}
+	// Tested exactly as the loader tests it, untrimmed, so the two cannot disagree about whether
+	// the default file was read.
+	if path := os.Getenv("LFT_TOKEN_FILE"); path != "" {
 		// LFT_TOKEN_FILE replaces the default path, so the file login writes is never read.
 		advice = append(advice,
 			fmt.Sprintf("[Client] LFT_TOKEN_FILE points at %s, which holds no token. Put one there, or unset LFT_TOKEN_FILE and run:", path),
@@ -1796,7 +1817,7 @@ func missingTokenFailure(cfg *config.ClientConfig) *registrationFailure {
 			fmt.Sprintf("         👉 %s", loginCommand),
 		)
 	}
-	advice = append(advice, fmt.Sprintf("[Client] Or create a token in the User Portal and pass it with -token: %s\n", portalURLForAdvice(cfg, "")))
+	advice = append(advice, fmt.Sprintf("[Client] Or create a token in the User Portal and pass it with -token: %s (Cmd/Ctrl+Click to open)\n", portalURLForAdvice(cfg, "")))
 	return &registrationFailure{
 		err:      errors.New("no access token configured"),
 		terminal: true,

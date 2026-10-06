@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,14 +22,13 @@ import (
 // test sees only the token source it sets up and never the developer's own.
 func isolateClientTokenEnvironment(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("os.UserHomeDir reads USERPROFILE on Windows; the HOME override does not apply")
-	}
 	for _, k := range []string{"LFT_CLIENT_TOKEN", "LFT_TOKEN", "LFT_TOKEN_FILE"} {
 		t.Setenv(k, "")
 	}
 	home := t.TempDir()
+	// Both, because os.UserHomeDir reads USERPROFILE on Windows and HOME everywhere else.
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	return home
 }
 
@@ -68,11 +66,12 @@ func TestUnauthorizedRegistrationIsTerminal(t *testing.T) {
 }
 
 // The gateway answers every token failure with the same 401 so the answer cannot reveal whether
-// a token exists. The client must not undo that by varying its advice on whatever the response
-// says -- so two 401s that differ in everything the gateway controls must read identically.
-func TestUnauthorizedAdviceDoesNotDependOnTheRefusal(t *testing.T) {
-	a := registrationServer(t, http.StatusUnauthorized, `{"status":"error","error":"unauthorized","portal_url":"https://portal.example"}`, nil)
-	b := registrationServer(t, http.StatusUnauthorized, `{"status":"error","error":"token expired","portal_url":"https://portal.example"}`, nil)
+// a token exists. The client must not undo that by varying its advice on anything else in the
+// response -- so two token refusals that differ in every field but the refusal itself must read
+// identically, and the advice must not repeat the gateway's message.
+func TestUnauthorizedAdviceDoesNotDependOnTheResponse(t *testing.T) {
+	a := registrationServer(t, http.StatusUnauthorized, `{"status":"error","error":"unauthorized","portal_url":"https://portal.example","server_version":"v1.0.0"}`, nil)
+	b := registrationServer(t, http.StatusUnauthorized, `{"status":"denied","error":"unauthorized","portal_url":"https://portal.example","server_version":"v9.9.9","warning":"extra"}`, nil)
 
 	advice := func(url string) *registrationFailure {
 		cfg := &config.ClientConfig{ServerURL: url, AuthToken: "t", TokenSource: "-token flag"}
@@ -92,8 +91,37 @@ func TestUnauthorizedAdviceDoesNotDependOnTheRefusal(t *testing.T) {
 	if !reflect.DeepEqual(fa.advice, fb.advice) {
 		t.Errorf("advice varied with the gateway's response:\n%s\n---\n%s", adviceText(fa), adviceText(fb))
 	}
-	if strings.Contains(adviceText(fb), "token expired") {
-		t.Error("the advice echoed the gateway's reason; it must name every cause, never a diagnosed one")
+	for _, line := range fa.advice {
+		if strings.Contains(line, "v1.0.0") || strings.Contains(line, `"`+gatewayTokenRefusal+`"`) {
+			t.Errorf("the advice repeated part of the gateway's response: %q", line)
+		}
+	}
+}
+
+// The client recognises a token refusal by its message, so the two must agree: if the gateway's
+// wording changed, every token failure would silently fall back to a retryable, advice-free 401
+// and nothing else would go red. Read from the server's source rather than restated, because a
+// restated copy is what would drift. Covers both places a user token is refused at registration:
+// directly, and on central for an edge.
+func TestGatewayTokenRefusalMatchesTheServer(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "pkg", "server", "server.go"))
+	if err != nil {
+		t.Fatalf("reading the server source: %v", err)
+	}
+	src := string(raw)
+	for _, handler := range []string{"func (s *Server) handleRegister(", "func (s *Server) handleEdgeRegister("} {
+		body := funcSource(t, src, handler)
+		check := strings.Index(body, "s.isValidToken(")
+		if check < 0 {
+			t.Fatalf("%s no longer calls isValidToken -- re-derive where it refuses a user token", handler)
+		}
+		refusal := body[check:]
+		if end := strings.Index(refusal, "return"); end > 0 {
+			refusal = refusal[:end]
+		}
+		if !strings.Contains(refusal, `"`+gatewayTokenRefusal+`"`) {
+			t.Errorf("%s refuses a user token with something other than %q:\n%s", handler, gatewayTokenRefusal, refusal)
+		}
 	}
 }
 
@@ -151,6 +179,31 @@ func TestUnauthorizedAdviceNamesTheRemedyForTheTokenSource(t *testing.T) {
 		}
 		if !strings.Contains(got, "LFT_TOKEN environment variable") {
 			t.Errorf("the advice must name the environment variable the token came from:\n%s", got)
+		}
+	})
+
+	// LDM's credentials file is read only when ~/.lfr-tunnel/token supplied nothing, so the
+	// token login writes there outranks it: login is the right advice here too.
+	t.Run("LDM credentials file: login fixes it", func(t *testing.T) {
+		home := isolateClientTokenEnvironment(t)
+		secrets := filepath.Join(home, ".config", "lfr", "secrets")
+		if err := os.MkdirAll(filepath.Dir(secrets), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(secrets, []byte("LFT_TOKEN=lft_pat_expired\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.LoadClientConfig(tokenlessConfigFile(t, home))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(cfg.TokenSource, config.TokenSourceLDMFile) {
+			t.Fatalf("the fixture did not exercise the LDM source; TokenSource = %q", cfg.TokenSource)
+		}
+
+		got := refuse(t, cfg)
+		if !strings.Contains(got, loginCommand) {
+			t.Errorf("login outranks the LDM credentials file, so it fixes this token, which the advice did not say:\n%s", got)
 		}
 	})
 
@@ -268,5 +321,69 @@ func TestReregisterSameGatewayStopsOnUnauthorized(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&hits); got != 1 {
 		t.Errorf("expected one attempt before stopping, got %d", got)
+	}
+}
+
+// An edge relays central's refusal of its OWN credential with the same 401 status (#2342 review).
+// That is an edge misconfigured mid-rotation, not the user's token: another region can serve
+// them, and telling them to replace a working token would be the outage-as-credential mirror
+// image of the defect this issue fixed.
+func TestEdgeAuthRefusalIsNotATokenProblem(t *testing.T) {
+	for _, body := range []string{
+		`{"status":"error","error":"invalid edge token"}`,
+		`{"status":"error","error":"missing edge token"}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			srv := registrationServer(t, http.StatusUnauthorized, body, nil)
+
+			cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t", TokenSource: "token file (/x)"}
+			_, failure := attemptRegistration(cfg, nil, "sub", nil)
+			if failure == nil {
+				t.Fatal("expected a failure")
+			}
+			if failure.terminal {
+				t.Error("an edge's own credential failure must stay retryable on another region")
+			}
+			if strings.Contains(adviceText(failure), "access token") || strings.Contains(adviceText(failure), loginCommand) {
+				t.Errorf("an edge's credential failure was reported as the user's token:\n%s", adviceText(failure))
+			}
+		})
+	}
+}
+
+// The same, end to end through failover: the misconfigured edge is set aside and the user lands
+// on a region that can serve them.
+func TestFailoverMovesPastAnEdgeAuthRefusal(t *testing.T) {
+	resetCooldowns(t)
+	shortenBackoff(t)
+
+	var badHits int32
+	badSrv := registrationServer(t, http.StatusUnauthorized, `{"status":"error","error":"invalid edge token"}`, &badHits)
+	goodSrv := registrationServer(t, http.StatusOK, `{"status":"success","session_token":"tok","subdomain_prefix":"sub"}`, nil)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	// Only the bad edge is advertised on the first election, so it is certainly tried; the
+	// election is by latency and would otherwise be free to skip it, passing this vacuously.
+	var fetches int32
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		if atomic.AddInt32(&fetches, 1) == 1 {
+			c.Regions = map[string]string{"edge": badSrv.URL}
+			return
+		}
+		c.Regions = map[string]string{"edge": badSrv.URL, "central": goodSrv.URL}
+	}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
+
+	cfg := &config.ClientConfig{ServerURL: badSrv.URL, AuthToken: "t"}
+	resp, ok, refused := reregisterAcrossRegions(cfg, nil, "sub", nil)
+	if got := atomic.LoadInt32(&badHits); got != 1 {
+		t.Fatalf("the misconfigured edge must be tried once and then set aside, got %d attempts", got)
+	}
+	if !ok {
+		t.Fatalf("expected failover to reach the healthy region; refused=%v", refused)
+	}
+	if resp.SessionToken != "tok" {
+		t.Errorf("expected the healthy region's session, got %+v", resp)
 	}
 }

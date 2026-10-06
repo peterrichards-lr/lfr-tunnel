@@ -566,6 +566,7 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 * **Common Errors:**
   * `gateway error (401): unauthorized`: the gateway did not accept your token. It may have expired or been revoked, it may have been copied incorrectly, or your account may not be active. The gateway deliberately gives the same answer for all of these, so that nobody can use it to find out whether a token exists. The client prints where it read the token from. If that was `~/.lfr-tunnel/token` or LDM's credentials file, run `lfr-tunnel login` to replace it. If it came from `-token`, an environment variable, `LFT_TOKEN_FILE` or your config file, create a new token in the User Portal and put it in that same place: `login` writes only `~/.lfr-tunnel/token`, which those sources take priority over.
+  * `[Warning] Your access token expires in N days`: replace it before then, the same way as for a `401` above. You will also have had one email about it. How far ahead this starts is set by the gateway (`token_expiry_warning_days`, 7 by default).
   * `no access token configured`: the client found no token, so it did not contact the gateway. Run `lfr-tunnel login`, or pass a token from the User Portal with `-token`.
   * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag.
 * **Detailed Guides:**

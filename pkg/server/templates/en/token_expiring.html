@@ -1,0 +1,4 @@
+<p>Hi {{.Name}},</p>
+<p>Your access token <strong>{{.TokenName}}</strong> ({{.TokenPrefix}}) expires on <strong>{{.ExpiresAt}}</strong>. After that, tunnels started with it will be refused.</p>
+<p>To replace it, run <code>{{.LoginCommand}}</code>, or create a new token in the Liferay Tunnel Portal.</p>
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>

@@ -197,10 +197,15 @@ type RegisterResponse struct {
 	// Nil from a gateway that predates this, which reads as "nothing to say" -- and in that
 	// case the client's own pre-flight check against /api/version is still the enforcement,
 	// exactly as before.
-	MinVersion         *MinVersionState `json:"min_version,omitempty"`
-	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string           `json:"node_stop_time,omitempty"`
-	NodeTimezone       string           `json:"node_timezone,omitempty"`
+	MinVersion *MinVersionState `json:"min_version,omitempty"`
+	// TokenExpiresAt is when the token this client registered with stops working (RFC 3339),
+	// and TokenExpiryWarningDays how far ahead the gateway wants that said (#2344). Absent for
+	// a token that never expires, and from a gateway that predates them.
+	TokenExpiresAt         string `json:"token_expires_at,omitempty"`
+	TokenExpiryWarningDays int    `json:"token_expiry_warning_days,omitempty"`
+	NodeStopsInSeconds     int    `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime           string `json:"node_stop_time,omitempty"`
+	NodeTimezone           string `json:"node_timezone,omitempty"`
 	// The reservation's access control as the GATEWAY holds it (#2130). Empty from a gateway
 	// that predates this, which reads as "nothing to say" -- and the Inspector then falls back
 	// to what it always showed.

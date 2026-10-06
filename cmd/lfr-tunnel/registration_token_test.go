@@ -111,9 +111,9 @@ func TestGatewayTokenRefusalMatchesTheServer(t *testing.T) {
 	src := string(raw)
 	for _, handler := range []string{"func (s *Server) handleRegister(", "func (s *Server) handleEdgeRegister("} {
 		body := funcSource(t, src, handler)
-		check := strings.Index(body, "s.isValidToken(")
+		check := strings.Index(body, "s.authenticateToken(")
 		if check < 0 {
-			t.Fatalf("%s no longer calls isValidToken -- re-derive where it refuses a user token", handler)
+			t.Fatalf("%s no longer calls authenticateToken -- re-derive where it refuses a user token", handler)
 		}
 		refusal := body[check:]
 		if end := strings.Index(refusal, "return"); end > 0 {

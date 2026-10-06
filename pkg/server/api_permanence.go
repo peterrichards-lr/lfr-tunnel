@@ -63,5 +63,7 @@ func (s *Server) handleAdminDecideTokenPermanence(w http.ResponseWriter, r *http
 		respondWithError(w, err)
 		return
 	}
+	// Only after the decision is recorded, so the holder is never told of one that failed.
+	s.sendTokenPermanenceDecisionEmail(r, pat, *req.Grant)
 	respondJSON(w, http.StatusOK, pat)
 }

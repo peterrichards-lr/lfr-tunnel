@@ -654,6 +654,18 @@ type ClientConfig struct {
 // literal at each site so the save guard and the loader cannot drift apart silently.
 const TokenSourceConfigFile = "config file"
 
+// TokenSourceDefaultFile prefixes the TokenSource of a token read from the implicit
+// ~/.lfr-tunnel/token, the file `lfr-tunnel login` writes. The client's 401 advice keys on it
+// (#2342): login only fixes a rejected token when this is where the token came from, because
+// every other source either outranks that file or points the client somewhere else, and would
+// go on supplying the rejected token after login had saved a new one.
+const TokenSourceDefaultFile = "token file"
+
+// TokenSourceLDMFile prefixes the TokenSource of a token read from LDM's credentials file. It is
+// consulted only when ~/.lfr-tunnel/token supplied nothing, so it is the one other source that
+// `lfr-tunnel login` does replace (#2342).
+const TokenSourceLDMFile = "LDM credentials file"
+
 // defaultQuotaThrottlePercent is the share of the allowance at which the soft stage starts.
 // 80% leaves a fifth of the allowance to be consumed at the throttled rate, which is enough
 // for a user to notice and ask before anything is terminated.
@@ -1295,7 +1307,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		tokenFilePath := os.Getenv("LFT_TOKEN_FILE")
 		source := "LFT_TOKEN_FILE"
 		if tokenFilePath == "" {
-			source = "token file"
+			source = TokenSourceDefaultFile
 			homeDir, err := os.UserHomeDir()
 			if err == nil {
 				tokenFilePath = filepath.Join(homeDir, ".lfr-tunnel", "token")
@@ -1331,7 +1343,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 			for _, p := range paths {
 				if val, parseErr := parseSecretsFile(p); parseErr == nil && val != "" {
 					cfg.AuthToken = val
-					cfg.TokenSource = fmt.Sprintf("LDM credentials file (%s)", p)
+					cfg.TokenSource = fmt.Sprintf("%s (%s)", TokenSourceLDMFile, p)
 					checkInsecurePermissions(p, "Secrets")
 					break
 				}

@@ -34,6 +34,19 @@ func isolateClientTokenEnvironment(t *testing.T) string {
 	return home
 }
 
+// tokenlessConfigFile is passed to LoadClientConfig explicitly, as pkg/config's own tests do, rather
+// than relying on the default location: the token sources under test still resolve through the
+// HOME set above, but nothing reads the default config path of whoever runs the suite.
+func tokenlessConfigFile(t *testing.T, home string) string {
+	t.Helper()
+	// One unrelated key, because an empty file is not a valid config: the decoder reports EOF.
+	path := filepath.Join(home, "config.yaml")
+	if err := os.WriteFile(path, []byte("subdomain: token-test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func adviceText(f *registrationFailure) string {
 	return strings.Join(f.advice, "\n")
 }
@@ -110,7 +123,7 @@ func TestUnauthorizedAdviceNamesTheRemedyForTheTokenSource(t *testing.T) {
 		if err := os.WriteFile(tokenPath, []byte("lft_pat_expired\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := config.LoadClientConfig("")
+		cfg, err := config.LoadClientConfig(tokenlessConfigFile(t, home))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,9 +138,9 @@ func TestUnauthorizedAdviceNamesTheRemedyForTheTokenSource(t *testing.T) {
 	})
 
 	t.Run("environment variable: login would be ignored", func(t *testing.T) {
-		isolateClientTokenEnvironment(t)
+		home := isolateClientTokenEnvironment(t)
 		t.Setenv("LFT_TOKEN", "lft_pat_expired")
-		cfg, err := config.LoadClientConfig("")
+		cfg, err := config.LoadClientConfig(tokenlessConfigFile(t, home))
 		if err != nil {
 			t.Fatal(err)
 		}

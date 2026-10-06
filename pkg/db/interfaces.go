@@ -54,6 +54,11 @@ type PATRepository interface {
 	UpdatePATExpiry(patID int64, expiresAt *time.Time) error
 	ListAllPATs() ([]*PersonalAccessToken, error)
 	PruneExpiredOrRevokedPATs(retentionDays int) error
+	// ListPATsDueExpiryWarning returns live tokens expiring after now and no later than
+	// before, whose holder has not yet been warned (#2344).
+	ListPATsDueExpiryWarning(now, before time.Time) ([]*PersonalAccessToken, error)
+	// MarkPATExpiryWarned records that a token's holder has been warned.
+	MarkPATExpiryWarned(patID int64) error
 	// GetPATByID resolves one token by its primary key (#2267). Every caller before the
 	// permanence flow worked from ListPATs and filtered in Go, which is fine for a user's
 	// ten tokens and wrong for an admin acting on one out of every token on the gateway.

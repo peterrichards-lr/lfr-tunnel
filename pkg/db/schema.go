@@ -83,6 +83,8 @@ func (db *DB) initSchema() error {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		-- '' | pending | granted | denied -- see the PATPermanence* constants (#2267).
 		permanence_state TEXT NOT NULL DEFAULT '',
+		-- 1 once the holder has been warned this token is about to expire (#2344).
+		expiry_warning_sent INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
@@ -501,4 +503,10 @@ var migrations = []migration{
 	// already permanent stays permanent either way; #2264's rule is that a policy governs new
 	// grants and never reaches back.
 	{36, "ALTER TABLE personal_access_tokens ADD COLUMN permanence_state TEXT NOT NULL DEFAULT ''"},
+	// Whether a token's holder has been warned it is about to expire (#2344). The same
+	// once-only stage as subdomain_reservations.expiry_warning_sent, so an hourly sweep sends
+	// one email, not one an hour. 0 on every existing row: none of them has been warned, and
+	// the sweep only ever selects tokens inside the warning window, so this does not send
+	// anything to a token with weeks left.
+	{37, "ALTER TABLE personal_access_tokens ADD COLUMN expiry_warning_sent INTEGER NOT NULL DEFAULT 0"},
 }

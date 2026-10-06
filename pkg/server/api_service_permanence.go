@@ -151,15 +151,19 @@ func (s *portalService) RequestTokenPermanence(user *db.User, tokenID, ip string
 //
 // Best effort by design. The expiry is already written when this runs, and failing to update a
 // badge must not turn a successful extension into an error the admin has to retry.
-func (s *portalService) ResolvePermanenceAfterAdminGrant(patID int64, actor, ip string) {
+//
+// Returns the token when a request was answered, and nil otherwise, so the handler can email the
+// holder: this is a grant through the other admin door, and the decision email has to go out
+// whichever door it came through (#2344).
+func (s *portalService) ResolvePermanenceAfterAdminGrant(patID int64, actor, ip string) *db.PersonalAccessToken {
 	pat, err := s.db.GetPATByID(patID)
 	if err != nil {
-		return
+		return nil
 	}
 	if pat.ExpiresAt != nil {
 		// Not a permanent grant -- an ordinary extension leaves a pending request pending,
 		// because thirty more days is not an answer to "may this never expire".
-		return
+		return nil
 	}
 
 	switch pat.PermanenceState {
@@ -167,19 +171,21 @@ func (s *portalService) ResolvePermanenceAfterAdminGrant(patID int64, actor, ip 
 		// Conditional, so two admins acting at once cannot both claim it. The queue decision
 		// path uses the same transition for the same reason.
 		if err := s.db.TransitionPATPermanenceState(pat.ID, db.PATPermanencePending, db.PATPermanenceGranted); err != nil {
-			return
+			return nil
 		}
 	case db.PATPermanenceDenied:
 		if err := s.db.SetPATPermanenceState(pat.ID, db.PATPermanenceGranted); err != nil {
-			return
+			return nil
 		}
 	default:
 		// No request to resolve, or already granted.
-		return
+		return nil
 	}
 
 	s.auditPermanence(actor, "token.permanence_granted", strconv.FormatInt(pat.ID, 10),
 		fmt.Sprintf("Granted via Extend Permanent; token %q (%s) no longer expires", pat.Name, pat.TokenPrefix), ip)
+	pat.PermanenceState = db.PATPermanenceGranted
+	return pat
 }
 
 // ownedToken resolves a token id against the caller, refusing one that belongs to somebody else.

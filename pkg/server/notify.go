@@ -134,6 +134,14 @@ var (
 		"subdomain_demoted",
 		"this user is not told their permanent reservation was demoted",
 	}
+	notifyTokenExpiring = notificationKind{
+		"token_expiring",
+		"this user has no warning before their access token stops working and their next tunnel is refused",
+	}
+	notifyTokenPermanenceDecided = notificationKind{
+		"token_permanence_decided",
+		"this user is not told whether their access token will expire, and after a denial will assume it will not",
+	}
 	notifyAdminAlert = notificationKind{
 		"admin_alert",
 		"the owner is not being told about the thing this alert was raised for",

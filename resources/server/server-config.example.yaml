@@ -126,6 +126,9 @@ never_expires:
 max_tunnel_rate_limit: 0
 disable_api_rate_limit: false
 pat_retention_days: 0
+# How many days before a Personal Access Token expires its holder is warned: one email and a
+# warning from the client on each tunnel started inside the window. 0 or less means the default.
+token_expiry_warning_days: 7
 
 # --- Owner and notifications ---
 owner:

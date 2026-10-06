@@ -141,10 +141,17 @@ type RegisterResponse struct {
 	//
 	// Present on the refusal too, for the same reason consent is: a client told only that it
 	// was rejected has nothing to act on.
-	MinVersion         *MinVersionState `json:"min_version,omitempty"`
-	NodeStopsInSeconds int              `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string           `json:"node_stop_time,omitempty"`
-	NodeTimezone       string           `json:"node_timezone,omitempty"`
+	MinVersion *MinVersionState `json:"min_version,omitempty"`
+	// TokenExpiresAt is when the token this client registered with stops working, RFC 3339,
+	// and TokenExpiryWarningDays is how far ahead of that the client should start saying so
+	// (#2344). Both are sent only on success, to a caller that has just proved it holds the
+	// token, so neither tells anyone anything about a token they do not have. Omitted for a
+	// token that never expires; an older gateway omits both.
+	TokenExpiresAt         string `json:"token_expires_at,omitempty"`
+	TokenExpiryWarningDays int    `json:"token_expiry_warning_days,omitempty"`
+	NodeStopsInSeconds     int    `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime           string `json:"node_stop_time,omitempty"`
+	NodeTimezone           string `json:"node_timezone,omitempty"`
 	// The reservation's access control, so the client can SHOW it (#2130).
 	//
 	// It could not before. The client set AccessMode to the literal "or" at startup and read
@@ -1927,7 +1934,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate auth token
-	user, ok := s.isValidToken(req.AuthToken)
+	user, pat, ok := s.authenticateToken(req.AuthToken)
 	if !ok {
 		s.respondRegisterResponse(w, http.StatusUnauthorized, r, RegisterResponse{Status: "error", Error: "unauthorized"})
 		return
@@ -2314,20 +2321,22 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
-		Status:             "success",
-		SessionToken:       sessionToken,
-		SubdomainPrefix:    req.SubdomainPrefix,
-		Remotes:            remotes,
-		Domains:            activeDomains,
-		Warning:            warning,
-		LanguagePreference: langPref,
-		ThemePreference:    themePref,
-		ServerVersion:      config.Version,
-		PolicyConsent:      &consentForResp,
-		MinVersion:         &minVersionForResp,
-		AccessMode:         acMode,
-		WhitelistIPs:       acWhitelist,
-		Passcode:           acPasscode,
+		Status:                 "success",
+		SessionToken:           sessionToken,
+		SubdomainPrefix:        req.SubdomainPrefix,
+		Remotes:                remotes,
+		Domains:                activeDomains,
+		Warning:                warning,
+		LanguagePreference:     langPref,
+		ThemePreference:        themePref,
+		ServerVersion:          config.Version,
+		PolicyConsent:          &consentForResp,
+		MinVersion:             &minVersionForResp,
+		AccessMode:             acMode,
+		WhitelistIPs:           acWhitelist,
+		Passcode:               acPasscode,
+		TokenExpiresAt:         tokenExpiresAt(pat),
+		TokenExpiryWarningDays: s.tokenExpiryWarningDays(),
 	})
 }
 
@@ -2693,6 +2702,9 @@ func (s *Server) Start() error {
 						}
 					})
 					s.checkExpiringReservations()
+					// The same for Personal Access Tokens, which used to expire with no notice
+					// at all (#2344).
+					s.checkExpiringTokens()
 					// Warns users entering the policy-consent warning window, and (only
 					// when configured to) drops the tunnels of those past their deadline
 					// (#1707). On this timer for the same reason as the geo flush above: a
@@ -5461,7 +5473,9 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 	// A permanent extension IS a grant, so a pending request is answered rather than orphaned
 	// in the queue (#2316). Owner's decision; see ResolvePermanenceAfterAdminGrant for what the
 	// alternative cost.
-	s.portalService.ResolvePermanenceAfterAdminGrant(patID, actor, s.clientIP(r))
+	if resolved := s.portalService.ResolvePermanenceAfterAdminGrant(patID, actor, s.clientIP(r)); resolved != nil {
+		s.sendTokenPermanenceDecisionEmail(r, resolved, true)
+	}
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
@@ -6779,6 +6793,12 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		// MinVersion is this client's standing against the version floor, also computed by
 		// the control plane (#1988) and relayed unchanged.
 		MinVersion *MinVersionState `json:"min_version"`
+		// TokenExpiresAt and TokenExpiryWarningDays are the client's token expiry and the
+		// warning window (#2344). An edge has no database, so it can only relay what central
+		// says -- and this struct is where a field central sends is otherwise dropped
+		// silently (#2130). An older control plane omits both, which means "no warning".
+		TokenExpiresAt         string `json:"token_expires_at"`
+		TokenExpiryWarningDays int    `json:"token_expiry_warning_days"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&valResp); err != nil {
 		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "invalid response from control plane"})
@@ -6837,18 +6857,20 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 	}
 
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
-		Status:          "success",
-		SessionToken:    sessionToken,
-		SubdomainPrefix: valResp.SubdomainPrefix,
-		Remotes:         remotes,
-		Domains:         activeDomains,
-		Warning:         warning,
-		ServerVersion:   config.Version,
-		AccessMode:      acMode,
-		WhitelistIPs:    acWhitelist,
-		Passcode:        acPasscode,
-		PolicyConsent:   valResp.PolicyConsent,
-		MinVersion:      valResp.MinVersion,
+		Status:                 "success",
+		SessionToken:           sessionToken,
+		SubdomainPrefix:        valResp.SubdomainPrefix,
+		Remotes:                remotes,
+		Domains:                activeDomains,
+		Warning:                warning,
+		ServerVersion:          config.Version,
+		AccessMode:             acMode,
+		WhitelistIPs:           acWhitelist,
+		Passcode:               acPasscode,
+		PolicyConsent:          valResp.PolicyConsent,
+		MinVersion:             valResp.MinVersion,
+		TokenExpiresAt:         valResp.TokenExpiresAt,
+		TokenExpiryWarningDays: valResp.TokenExpiryWarningDays,
 	})
 }
 
@@ -6878,7 +6900,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := s.isValidToken(edgeReq.AuthToken)
+	user, pat, ok := s.authenticateToken(edgeReq.AuthToken)
 	if !ok {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
@@ -7114,6 +7136,10 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		// which is the only way a client on an edge ever hears about the deadline before it
 		// bites.
 		"min_version": edgeMinVersion,
+		// Relayed by the edge to the client (#2344), for the same reason as the two above: an
+		// edge has no database to read a token's expiry from.
+		"token_expires_at":          tokenExpiresAt(pat),
+		"token_expiry_warning_days": s.tokenExpiryWarningDays(),
 	})
 }
 

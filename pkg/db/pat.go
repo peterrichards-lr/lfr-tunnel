@@ -192,8 +192,12 @@ func (repo *SQLitePATRepo) UpdatePATUsed(patID int64) error {
 }
 
 // UpdatePATExpiry updates the expires_at field of a PAT.
+//
+// It also clears the expiry warning (#2344). The warning was about the OLD date: a token an admin
+// has extended must be warned again before its new one, and one made permanent must not keep a
+// stage that no longer means anything.
 func (repo *SQLitePATRepo) UpdatePATExpiry(patID int64, expiresAt *time.Time) error {
-	query := `UPDATE personal_access_tokens SET expires_at = ? WHERE id = ?`
+	query := `UPDATE personal_access_tokens SET expires_at = ?, expiry_warning_sent = 0 WHERE id = ?`
 	res, err := repo.conn.Exec(query, expiresAt, patID)
 	if err != nil {
 		return err
@@ -308,4 +312,53 @@ func (repo *SQLitePATRepo) PruneExpiredOrRevokedPATs(retentionDays int) error {
 	             OR (expires_at IS NOT NULL AND expires_at < ?)`
 	_, err := repo.conn.Exec(query, cutoff, cutoff)
 	return err
+}
+
+// ListPATsDueExpiryWarning returns live tokens expiring in (now, before] whose holder has not been
+// warned (#2344).
+//
+// Live means not revoked, and not already expired: a token that lapsed before the sweep saw it is
+// past warning -- telling someone their token "is about to expire" after it has would be false,
+// and the client already explains an expired token when it is refused (#2342).
+//
+// The window is applied in Go, not SQL. expires_at is stored as whatever time.Time its writer
+// passed, and not every writer converts to UTC first; SQLite compares DATETIME as text, so a
+// `expires_at <= ?` across two offsets is a string comparison that is wrong by the offset. The
+// candidate set is small -- unwarned live tokens with an expiry -- and validatePAT already makes
+// the same comparison in Go for exactly this reason.
+func (repo *SQLitePATRepo) ListPATsDueExpiryWarning(now, before time.Time) ([]*PersonalAccessToken, error) {
+	rows, err := repo.conn.Query(`SELECT ` + patColumns + ` FROM personal_access_tokens
+		WHERE expires_at IS NOT NULL AND revoked_at IS NULL AND expiry_warning_sent = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var pats []*PersonalAccessToken
+	for rows.Next() {
+		pat, err := scanPAT(rows)
+		if err != nil {
+			return nil, err
+		}
+		if pat.ExpiresAt.After(now) && !pat.ExpiresAt.After(before) {
+			pats = append(pats, pat)
+		}
+	}
+	return pats, rows.Err()
+}
+
+// MarkPATExpiryWarned records that a token's holder has been warned it is about to expire.
+func (repo *SQLitePATRepo) MarkPATExpiryWarned(patID int64) error {
+	res, err := repo.conn.Exec(`UPDATE personal_access_tokens SET expiry_warning_sent = 1 WHERE id = ?`, patID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

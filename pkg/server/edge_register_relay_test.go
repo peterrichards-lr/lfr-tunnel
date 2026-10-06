@@ -34,12 +34,15 @@ func TestTheEdgeProxyRelaysAccessControlToTheClient(t *testing.T) {
 	// The success response the client receives, asserted on the VALUE and not merely on the
 	// field being mentioned. A first version checked for "AccessMode:" alone, which a field
 	// set to "" would satisfy -- it would have passed against a response that relays nothing.
+	//
+	// Whitespace-insensitive: gofmt realigns the whole literal whenever a longer field joins it
+	// (#2344 did), and a check that fails on column alignment reports a defect that is not there.
 	for _, assignment := range []string{
-		"AccessMode:      acMode,",
-		"WhitelistIPs:    acWhitelist,",
-		"Passcode:        acPasscode,",
+		`AccessMode:\s+acMode,`,
+		`WhitelistIPs:\s+acWhitelist,`,
+		`Passcode:\s+acPasscode,`,
 	} {
-		if !strings.Contains(fn, assignment) {
+		if !regexp.MustCompile(assignment).MatchString(fn) {
 			t.Errorf("the edge's registration response does not carry %q -- an edge-served "+
 				"client gets nothing and falls back to its own config file and a hardcoded "+
 				"mode, which is the whole defect #2130 set out to fix", assignment)

@@ -1,0 +1,13 @@
+<p>Hi {{.Name}},</p>
+{{if .Granted}}
+<p>Your request for the access token <strong>{{.TokenName}}</strong> ({{.TokenPrefix}}) never to expire has been approved. It <strong>no longer expires</strong>.</p>
+{{else if .Expired}}
+<p>Your request for the access token <strong>{{.TokenName}}</strong> ({{.TokenPrefix}}) never to expire was not approved, and the token <strong>has already expired</strong>.</p>
+<p>To keep using tunnels, run <code>lfr-tunnel login</code>, or create a new token in the Liferay Tunnel Portal.</p>
+{{else if .ExpiresAt}}
+<p>Your request for the access token <strong>{{.TokenName}}</strong> ({{.TokenPrefix}}) never to expire was not approved. It still expires on <strong>{{.ExpiresAt}}</strong>.</p>
+<p>You will be reminded before it does.</p>
+{{else}}
+<p>Your request for the access token <strong>{{.TokenName}}</strong> ({{.TokenPrefix}}) never to expire was not approved. It keeps its current expiry, shown in the portal.</p>
+{{end}}
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>

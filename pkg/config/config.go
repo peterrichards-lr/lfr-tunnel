@@ -274,8 +274,16 @@ type ServerConfig struct {
 	ClientPlatforms                 map[string]PlatformConfig `yaml:"client_platforms"`
 	VisitorTimeout                  time.Duration             `yaml:"visitor_timeout"`
 	PATRetentionDays                int                       `yaml:"pat_retention_days"`
-	EnableWAF                       bool                      `yaml:"enable_waf"`
-	DisableEmailLogin               bool                      `yaml:"disable_email_login"`
+	// TokenExpiryWarningDays is how long before a Personal Access Token expires its holder is
+	// warned: one email, and a warning from the client on every tunnel started inside the
+	// window (#2344). Configuration rather than a constant because the right lead time depends
+	// on how long a deployment's tokens live and how often its users start a tunnel. Set in the
+	// server config file only, deliberately with no environment override: the config file is
+	// where an operator looks for it. Zero or less reads as the default at use, as
+	// policy_consent_warning_days does -- it is not a way to turn the warning off.
+	TokenExpiryWarningDays int  `yaml:"token_expiry_warning_days"`
+	EnableWAF              bool `yaml:"enable_waf"`
+	DisableEmailLogin      bool `yaml:"disable_email_login"`
 	// DisableNewRegistrations is the umbrella flag gating NEW account creation regardless
 	// of method (email registration or first-time SSO login) -- see issue #910. This is
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
@@ -654,6 +662,13 @@ type ClientConfig struct {
 // literal at each site so the save guard and the loader cannot drift apart silently.
 const TokenSourceConfigFile = "config file"
 
+// DefaultTokenExpiryWarningDays is TokenExpiryWarningDays when unset (#2344). Seven because the
+// shortest lifetime either portal's form offers is 30 days, so a week's notice leaves a working
+// week to replace it. A token created through the API with a shorter life, or any token when the
+// window is set longer than its life, is warned on the first sweep -- correctly, since it does
+// expire inside the window.
+const DefaultTokenExpiryWarningDays = 7
+
 // TokenSourceDefaultFile prefixes the TokenSource of a token read from the implicit
 // ~/.lfr-tunnel/token, the file `lfr-tunnel login` writes. The client's 401 advice keys on it
 // (#2342): login only fixes a rejected token when this is where the token came from, because
@@ -722,6 +737,7 @@ func DefaultServerConfig() *ServerConfig {
 		PruneInterval:               1 * time.Hour,
 		MagicLinkExpiry:             15 * time.Minute,
 		PATRetentionDays:            30,
+		TokenExpiryWarningDays:      DefaultTokenExpiryWarningDays,
 		PolicyConsentGraceDays:      14,
 		PolicyConsentWarningDays:    5,
 		InviteLinkExpiry:            7 * 24 * time.Hour,

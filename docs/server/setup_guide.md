@@ -1926,10 +1926,10 @@ explicit admin action.
 Somebody has to work the queue. A request that nobody looks at is indistinguishable, to the
 person who made it, from one that was refused — so do not set `approval` and walk away.
 
-Reservation extension requests appear in the portal's admin queue in both arms. **Token
-permanence requests currently have an API and no portal UI** (#2280): a user can raise one and
-an admin cannot act on it except through the API directly. Until that lands, prefer `allowed` or
-`disabled` for `tokens`.
+Reservation extension requests and token permanence requests both appear in the portal's admin
+queues, in both arms (#2280). A decision on a token request is emailed to its holder, either way
+(#2344). That matters most for a denial: under `approval`, asking for "never" creates a token that
+expires in 30 days, and a holder who hears nothing has every reason to think it will not.
 
 #### How long a non-permanent reservation lives
 
@@ -1949,6 +1949,38 @@ gateway says so at startup rather than doing it quietly. `null`, or omitting the
 the same as `0`: it means the role says nothing and the resource default applies — 7 days for a
 subdomain, 90 for a custom domain. They differ because a subdomain lives in a shared namespace
 the expiry exists to reclaim and a custom domain does not.
+
+---
+
+### 8.14. Warning Before a Token Expires (`token_expiry_warning_days`)
+
+A Personal Access Token's holder is warned before it stops working, in two ways (#2344):
+
+* **One email**, from the hourly sweep, once the token enters the window. It names the token and
+  its expiry, and says how to replace it. It is transactional: a user who has turned
+  notifications off still gets it, because it is the only notice before their next tunnel is
+  refused.
+* **A client warning** on every tunnel started inside the window, saying when the token expires,
+  where it was read from, and the replacement that will actually take effect: `lfr-tunnel login`
+  for the default token file, otherwise "put a new one where this one came from".
+
+```yaml
+token_expiry_warning_days: 7   # default
+```
+
+One setting drives both, so the email and the client agree. `0` or less reads as the default
+rather than turning the warning off. The shortest lifetime either portal's form offers is 30 days,
+so the default leaves a working week. Raise it if your users go a long time between tunnels. A
+token whose whole life is shorter than the window (possible through the API) is warned on the first
+sweep after it is created.
+
+Only an approved account is warned. A suspended or rejected user's tokens are refused anyway, so
+they are skipped and left unwarned, and a reinstated user is warned as normal.
+
+Each token is emailed once. Changing its expiry, for example by an admin extending it, re-arms
+the warning for the new date. A send that fails is retried by the next sweep instead of being
+recorded as delivered. Nothing here changes what a refused token is told: the gateway still answers
+every token failure with the same `401 unauthorized` (#2342).
 
 ---
 
@@ -2002,4 +2034,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-27* | *Last Reviewed: 2026-09-27*
+*Last Updated: 2026-10-06* | *Last Reviewed: 2026-10-06*

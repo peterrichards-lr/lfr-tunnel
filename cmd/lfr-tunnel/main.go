@@ -1743,7 +1743,91 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 	if regResp.Warning != "" {
 		slog.Info(fmt.Sprintf("\n[WARNING] %s\n\n", regResp.Warning))
 	}
+	warnTokenExpiryOnce(cfg, regResp, time.Now())
 	return regResp, nil
+}
+
+// defaultTokenExpiryWarningDays is the window used when a gateway sends an expiry but no window.
+// It matches the server's own default, config.DefaultTokenExpiryWarningDays.
+const defaultTokenExpiryWarningDays = config.DefaultTokenExpiryWarningDays
+
+// tokenExpiryWarned is the expiry most recently warned about, so a client that fails over or
+// reconnects says it once per expiry date rather than on every registration. A new date -- the
+// token replaced and a different one now expiring -- is warned about afresh.
+var tokenExpiryWarned string
+
+// warnTokenExpiryOnce prints tokenExpiryWarning's lines, once per expiry date per process.
+//
+// On every successful registration, not only at startup: a tunnel that runs for days and only
+// ever reconnects is exactly the one whose token can come to the end of its life mid-session,
+// and a reconnect is the only moment it hears from the gateway (#2344).
+func warnTokenExpiryOnce(cfg *config.ClientConfig, resp *client.RegisterResponse, now time.Time) {
+	lines := tokenExpiryWarning(cfg, resp, now)
+	if len(lines) == 0 || resp.TokenExpiresAt == tokenExpiryWarned {
+		return
+	}
+	tokenExpiryWarned = resp.TokenExpiresAt
+	for _, line := range lines {
+		slog.Info(line)
+	}
+}
+
+// tokenExpiryWarning is what to tell the user when the token they registered with expires inside
+// the gateway's warning window, or nothing. The remedy is chosen exactly as the 401 advice
+// chooses it (#2342): `lfr-tunnel login` only where it actually replaces this token.
+func tokenExpiryWarning(cfg *config.ClientConfig, resp *client.RegisterResponse, now time.Time) []string {
+	if resp == nil || resp.TokenExpiresAt == "" {
+		return nil
+	}
+	expires, err := time.Parse(time.RFC3339, resp.TokenExpiresAt)
+	if err != nil {
+		return nil
+	}
+	window := resp.TokenExpiryWarningDays
+	if window <= 0 {
+		window = defaultTokenExpiryWarningDays
+	}
+	remaining := expires.Sub(now)
+	if remaining <= 0 || remaining > time.Duration(window)*24*time.Hour {
+		return nil
+	}
+
+	lines := []string{
+		fmt.Sprintf("[Warning] Your access token expires %s (%s). Tunnels started with it after that will be refused.",
+			expiresIn(remaining), expires.Local().Format("2006-01-02 15:04 MST")),
+		fmt.Sprintf("[Warning] The token was read from: %s", tokenSourceOrNone(cfg.TokenSource)),
+	}
+	if loginReplacesToken(cfg.TokenSource) {
+		lines = append(lines,
+			"[Warning] Replace it before then:",
+			fmt.Sprintf("         👉 %s", loginCommand),
+		)
+	} else {
+		lines = append(lines,
+			"[Warning] Create a new token in the User Portal and put it there in place of this one:",
+			fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURLForAdvice(cfg, resp.PortalURL)),
+		)
+	}
+	return lines
+}
+
+// expiresIn renders a remaining duration the way a person would say it.
+func expiresIn(d time.Duration) string {
+	switch days := int(d.Hours() / 24); {
+	case days >= 2:
+		return fmt.Sprintf("in %d days", days)
+	case days == 1:
+		return "in 1 day"
+	default:
+		switch hours := int(d.Hours()); {
+		case hours >= 2:
+			return fmt.Sprintf("in %d hours", hours)
+		case hours == 1:
+			return "in 1 hour"
+		default:
+			return "within the hour"
+		}
+	}
 }
 
 // loginCommand is the remedy both token failures point at. It writes ~/.lfr-tunnel/token, and

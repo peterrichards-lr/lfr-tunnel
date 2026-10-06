@@ -68,12 +68,20 @@ func (s *Server) touchPAT(patID int64) {
 // isValidToken checks if a token is valid, checking personal access tokens (PATs)
 // in the database.
 func (s *Server) isValidToken(token string) (*db.User, bool) {
+	user, _, ok := s.authenticateToken(token)
+	return user, ok
+}
+
+// authenticateToken is isValidToken for a caller that also needs the token itself -- the
+// registration handlers, which tell the client when its token expires (#2344). The same check and
+// the same last-used update; only the return differs, so the two cannot drift apart.
+func (s *Server) authenticateToken(token string) (*db.User, *db.PersonalAccessToken, bool) {
 	user, pat, ok := s.validatePAT(token)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	s.touchPAT(pat.ID)
-	return user, true
+	return user, pat, true
 }
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, string, bool) {

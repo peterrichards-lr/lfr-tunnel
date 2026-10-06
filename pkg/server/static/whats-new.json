@@ -3,11 +3,10 @@
     "version": "v1.52.0",
     "release_date": "2026-10-06",
     "features": [
-      "fix(server): refuse control characters and over-long token names (#2348) (#2350)",
-      "fix(server): a failed token lookup at registration is 503, not the final 401 (#2347) (#2349)",
-      "test(e2e): start a real tunnel through the MCP server and prove it is real (#2341) (#2346)",
-      "feat: warn before a Personal Access Token expires, and answer permanence requests (#2344) (#2345)",
-      "fix(client): say what to do about a rejected or missing token, and stop retrying it (#2342) (#2343)"
+      "Clearer token errors: when your access token is rejected or missing, the client now says where the token came from and how to replace it (usually by signing in again with the login command), instead of retrying every region and reporting an outage.",
+      "Token expiry warnings: you now get one email, and a notice each time you start a tunnel, in the days before an access token expires (7 by default). Requests for a token that never expires are answered by email, whether approved or not.",
+      "Fewer dropped tunnels: if the gateway briefly cannot check your token, your tunnel now waits and retries instead of stopping.",
+      "Token names: line breaks and other control characters are no longer accepted, and names are limited to 100 characters. Portal V1 now shows why a token could not be created."
     ]
   },
   {

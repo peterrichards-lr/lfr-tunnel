@@ -16,7 +16,7 @@ require (
 	github.com/jpillora/backoff v1.0.0
 	github.com/jpillora/chisel v1.11.8
 	github.com/mattn/go-isatty v0.0.24
-	github.com/oschwald/maxminddb-golang/v2 v2.6.0
+	github.com/oschwald/maxminddb-golang/v2 v2.7.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sys v0.48.0

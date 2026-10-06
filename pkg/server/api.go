@@ -377,10 +377,12 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, `{"error":"Token name is required"}`, http.StatusBadRequest)
+	name, nameErr := validateTokenName(req.Name)
+	if nameErr != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": nameErr.Error()})
 		return
 	}
+	req.Name = name
 
 	// The operator's policy decides this, not the caller's role (#2264).
 	//

@@ -85,6 +85,9 @@ func TestChiselClientConfigCarriesReconnectPolicy(t *testing.T) {
 	if cfg.KeepAlive != defaultChiselKeepAlive {
 		t.Errorf("KeepAlive = %s, want %s -- unset means chisel never pings and a dead control channel is never noticed (#1946)", cfg.KeepAlive, defaultChiselKeepAlive)
 	}
+	if cfg.MinRetryInterval != chiselBackoffMin {
+		t.Errorf("MinRetryInterval = %s, want %s -- unset, chisel >= 1.12 starts its backoff at 1s and every attempt count derived from %s runs several times too long (#2356)", cfg.MinRetryInterval, chiselBackoffMin, chiselBackoffMin)
+	}
 	if cfg.MaxRetryInterval != chiselMaxRetryInterval {
 		t.Errorf("MaxRetryInterval = %s, want %s", cfg.MaxRetryInterval, chiselMaxRetryInterval)
 	}
@@ -127,17 +130,22 @@ func TestChiselClientConfigHonoursAndClampsTheAdvertisedWindow(t *testing.T) {
 // TestRetryCountForWindowMatchesChiselBackoff checks the derivation against the real backoff
 // library chisel uses, not against a restatement of it.
 //
-// retryCountForWindow has to reproduce chisel's schedule -- `&backoff.Backoff{Max:
-// MaxRetryInterval}` with Min and Factor left at the library defaults
-// (chisel/client/client_connect.go:22) -- and the whole defect in #1946 was believing a
-// schedule without checking it. So the expected total is summed from the library itself: a
-// dependency bump that changes those defaults turns this red instead of silently shortening
-// every client's reconnect window.
+// retryCountForWindow has to reproduce chisel's schedule -- `&backoff.Backoff{Min:
+// MinRetryInterval, Max: MaxRetryInterval}` with Factor left at the library default
+// (chisel/client/client_connect.go) -- and the whole defect in #1946 was believing a schedule
+// without checking it. So the expected total is summed from the library itself: a backoff bump
+// that changes its defaults turns this red instead of silently changing every client's
+// reconnect window.
+//
+// What this does NOT cover is chisel changing how it builds the Backoff. Up to 1.11 it omitted
+// Min, and this test mirrored that, so chisel 1.12 defaulting Min to 1s passed here and was
+// caught only by the RunClient reconnect tests (#2356). TestChiselClientConfigCarriesReconnectPolicy
+// now pins MinRetryInterval, which is the half of that this package controls.
 func TestRetryCountForWindowMatchesChiselBackoff(t *testing.T) {
 	for _, window := range []time.Duration{failoverHandbackWindow, minReconnectWindow, defaultReconnectWindow, maxReconnectWindow} {
 		count := retryCountForWindow(window)
 
-		b := &backoff.Backoff{Max: chiselMaxRetryInterval}
+		b := &backoff.Backoff{Min: chiselBackoffMin, Max: chiselMaxRetryInterval}
 		var total time.Duration
 		for i := 0; i < count; i++ {
 			total += b.Duration()
@@ -146,7 +154,7 @@ func TestRetryCountForWindowMatchesChiselBackoff(t *testing.T) {
 			t.Errorf("%d attempts cover only %s of chisel's real backoff, short of the %s window", count, total, window)
 		}
 
-		b2 := &backoff.Backoff{Max: chiselMaxRetryInterval}
+		b2 := &backoff.Backoff{Min: chiselBackoffMin, Max: chiselMaxRetryInterval}
 		var oneLess time.Duration
 		for i := 0; i < count-1; i++ {
 			oneLess += b2.Duration()

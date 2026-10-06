@@ -721,9 +721,9 @@ const defaultHeartbeatInterval = 5 * time.Second
 // certain, rather than on what the failure looks like, which it cannot tell apart.
 //
 // What was here before was `MaxRetryInterval: 3s, MaxRetryCount: 3`, which is not "three
-// seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel
-// builds `&backoff.Backoff{Max: MaxRetryInterval}` and leaves Min and Factor at the library
-// defaults of 100ms and 2, then tests the attempt count before sleeping
+// seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel 1.11
+// built `&backoff.Backoff{Max: MaxRetryInterval}` and left Min and Factor at the library
+// defaults of 100ms and 2, then tested the attempt count before sleeping
 // (chisel/client/client_connect.go:22,48). The real budget was four connection attempts and
 // 700ms of backoff -- the 3s cap was never reached -- so every gateway deploy ended every
 // tunnel attached to it. Measured in production: two deploys, the same user's client absent
@@ -779,11 +779,16 @@ const failoverHandbackWindow = 10 * time.Second
 // larger.
 const chiselMaxRetryInterval = 10 * time.Second
 
-// chiselBackoffMin is the first backoff step, i.e. github.com/jpillora/backoff's default Min,
-// which chisel relies on by leaving the field zero. Restated here because deriving an attempt
-// count from a duration means reproducing chisel's backoff schedule, and that schedule is only
-// correct if this matches. TestReconnectWindowMatchesChiselBackoff cross-checks it against the
-// real library rather than against this comment.
+// chiselBackoffMin is the first backoff step, passed to chisel as MinRetryInterval.
+//
+// It is set explicitly because chisel's own default moved under us: up to 1.11 chisel left the
+// backoff's Min at zero, so the library default of 100ms applied, and 1.12 added
+// MinRetryInterval and defaults it to 1s (#2356). Every attempt count below was derived from a
+// 100ms first step, so under the new default the same count stretched failoverHandbackWindow
+// from 10s to ~46s -- the bump compiled cleanly and only the reconnect tests noticed. Deriving an
+// attempt count from a duration means reproducing chisel's backoff schedule, so we own the first
+// step instead of inheriting it. TestRetryCountForWindowMatchesChiselBackoff cross-checks it
+// against the real library rather than against this comment.
 const chiselBackoffMin = 100 * time.Millisecond
 
 // clampReconnectWindow returns the window the client will actually honour for an advertised
@@ -845,6 +850,7 @@ func newChiselClientConfig(serverURL, token string, remotes []string, advertised
 		Auth:             fmt.Sprintf("%s:%s", token, token),
 		Remotes:          remotes,
 		KeepAlive:        defaultChiselKeepAlive,
+		MinRetryInterval: chiselBackoffMin,
 		MaxRetryInterval: chiselMaxRetryInterval,
 		MaxRetryCount:    retryCountForWindow(window),
 	}

@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.52.0",
+    "release_date": "2026-10-06",
+    "features": [
+      "fix(server): refuse control characters and over-long token names (#2348) (#2350)",
+      "fix(server): a failed token lookup at registration is 503, not the final 401 (#2347) (#2349)",
+      "test(e2e): start a real tunnel through the MCP server and prove it is real (#2341) (#2346)",
+      "feat: warn before a Personal Access Token expires, and answer permanence requests (#2344) (#2345)",
+      "fix(client): say what to do about a rejected or missing token, and stop retrying it (#2342) (#2343)"
+    ]
+  },
+  {
     "version": "v1.51.2",
     "release_date": "2026-10-02",
     "features": [
@@ -61,18 +72,6 @@
       "feat(server): never_expires is three operator policies the server enforces (#2265) (#2274)",
       "fix(portal): 70 new keys, ten locales, and the mechanism a title= needs (#2248) (#2260)",
       "fix(portal-v1): split the emphasis out of two properties values (#2252) (#2255)"
-    ]
-  },
-  {
-    "version": "v1.49.1",
-    "release_date": "2026-09-25",
-    "features": [
-      "fix(portal): 139 elements resolve prose through the key it already has (#2247) (#2253)",
-      "fix(ci): the path filter covers both portal arms, and stops on checker scripts (#2250) (#2251)",
-      "fix(portal-v1): five empty-state rows resolve through t() (#2244) (#2246)",
-      "fix(tests): the handshake precondition is established, not raced (#2234) (#2245)",
-      "fix(portal-v1): a user can see their own custom domain provisioning (#2233) (#2243)",
-      "fix(portal-v2): the custom-domain control is disabled at the quota, not removed (#2241) (#2242)"
     ]
   }
 ]

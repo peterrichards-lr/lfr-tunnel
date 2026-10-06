@@ -344,22 +344,38 @@ echo "✅ Registration, approval and tunnel routing work."
 # `-background` intermediate with the PID the tunnel's grandchild wrote to its state file, and the
 # two never match. #2339 fixed it with unit tests, but nothing ran the client, so nothing could
 # show the tool works -- the same hole the original bug lived in. This runs the real binary inside
-# the client container (never on the host: .agents/skills/edr-constraints) and checks four things,
-# in this order on purpose:
+# the client container (never on the host: .agents/skills/edr-constraints) and checks, in this
+# order on purpose:
 #
 #   1. the MCP server says `success` and returns public URLs and a PID   (what it REPORTED)
-#   2. that PID is a live process in the container                        (the PID is not stale)
+#   2. the URL names the subdomain asked for, and that PID is a live
+#      process running with the arguments the call passed              (it is OUR tunnel)
 #   3. the public URL it returned serves the mock target through nginx   (what it reported is TRUE)
-#   4. stop_tunnel stops it                                               (cleanup, and that tool)
+#   4. stop_tunnel stops THAT process                                    (cleanup, and that tool)
 #
 # Step 3 is the one that earns the test. A server that reported a plausible URL for a tunnel that
 # never came up would pass 1 and 2.
 echo "=== Starting a tunnel through the MCP server ==="
 MCP_SUBDOMAIN="mcp-dev"
 
+# Every failure in this step dumps what is needed to diagnose it from a CI log alone.
+mcp_fail() {
+    echo "❌ $1"
+    echo "=== MCP tunnel client log ==="
+    docker-compose exec -T lfr-tunnel sh -c 'tail -60 ~/.lfr-tunnel/logs/*.log 2>/dev/null' || true
+    echo "=== lfr-tunneld logs (tail) ==="
+    docker-compose logs --tail=60 lfr-tunneld || true
+    exit 1
+}
+
 # One JSON-RPC exchange with `lfr-tunnel mcp` in the long-running client container. The server
 # reads newline-delimited requests from stdin and exits at EOF, after answering; the tunnel it
 # starts is a detached background process and outlives it.
+#
+# Bounded, because nothing else is: the server blocks on the `-background` intermediate, and the
+# e2e job sets no timeout-minutes, so a regression that leaked the pipe to the tunnel would hang
+# the job for GitHub's six-hour default instead of failing it. `timeout` is busybox's, inside the
+# container, so it behaves the same on a macOS host.
 mcp_call() {
     printf '%s\n' \
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
@@ -367,7 +383,7 @@ mcp_call() {
         docker-compose exec -T \
             -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
             -e LFT_CLIENT_SERVER=http://tunnel.lfr-demo.local \
-            lfr-tunnel ./lfr-tunnel mcp
+            lfr-tunnel timeout 60 ./lfr-tunnel mcp
 }
 
 # A process's state letter from /proc inside the client container, or "gone".
@@ -377,15 +393,26 @@ mcp_call() {
 # intermediate exits, so once it stops it stays a zombie for the life of the container. On a real
 # host init/launchd reaps it. Measured on the first run of this test: `kill -0` reported the
 # stopped tunnel as still running -- and would equally have reported a tunnel that died on start
-# as alive.
+# as alive. The state is read after the LAST ')' so a command name containing spaces cannot shift
+# the field.
 mcp_pid_state() {
     docker-compose exec -T lfr-tunnel sh -c \
-        '[ -r "/proc/$1/stat" ] && awk "{print \$3}" "/proc/$1/stat" || echo gone' _ "$1" | tr -d '\r'
+        '[ -r "/proc/$1/stat" ] && sed "s/.*) //" "/proc/$1/stat" | cut -d" " -f1 || echo gone' _ "$1" | tr -d '\r'
+}
+
+# Live means running, sleeping or in uninterruptible wait. Asserted as membership rather than as
+# "not gone and not a zombie", so an empty answer -- the exec itself failing -- is not read as
+# alive (e2e-testing §3).
+mcp_pid_live() {
+    case "$1" in
+        R | S | D) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # Pulls one field out of the tool result for the request with id 2. The tool's payload is JSON
-# inside result.content[0].text; a tool error is reported as isError with "ERROR: ..." text, and
-# is turned into a failure here rather than read as an empty field.
+# inside result.content[0].text. A tool error (isError), a JSON-RPC error, or no answer at all is
+# printed on STDOUT and exits non-zero, so the caller's failure message carries it.
 mcp_field() {
     python3 -c '
 import json, sys
@@ -397,50 +424,69 @@ for line in sys.stdin:
     msg = json.loads(line)
     if msg.get("id") != 2:
         continue
+    if "error" in msg:
+        print("JSON-RPC error: " + json.dumps(msg["error"]))
+        sys.exit(1)
     result = msg.get("result") or {}
     text = result["content"][0]["text"]
     if result.get("isError"):
-        sys.exit("tool error: " + text)
+        print("tool error: " + text)
+        sys.exit(1)
     value = json.loads(text).get(field)
     print(json.dumps(value) if isinstance(value, (list, dict)) else ("" if value is None else value))
     sys.exit(0)
-sys.exit("no response to request 2")
+print("no response to request 2")
+sys.exit(1)
 ' "$1"
 }
 
-START_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'","ports":"80","target_host":"mock-target"}}}')
-echo "MCP start_tunnel response: $START_OUT"
+MCP_T0=$(python3 -c 'import time; print(time.time())')
+START_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'","ports":"80","target_host":"mock-target"}}}') ||
+    mcp_fail "the MCP server did not answer start_tunnel within 60s, or exited non-zero."
+MCP_ELAPSED=$(python3 -c "import time; print(f'{time.time() - $MCP_T0:.2f}')")
+echo "MCP start_tunnel response (${MCP_ELAPSED}s, against start_tunnel's 2s registration window): $START_OUT"
 
-MCP_STATUS=$(echo "$START_OUT" | mcp_field status) || { echo "❌ start_tunnel failed: $MCP_STATUS"; exit 1; }
-MCP_PID=$(echo "$START_OUT" | mcp_field pid)
-MCP_URLS=$(echo "$START_OUT" | mcp_field public_urls)
+MCP_STATUS=$(echo "$START_OUT" | mcp_field status) || mcp_fail "start_tunnel failed: $MCP_STATUS"
+MCP_PID=$(echo "$START_OUT" | mcp_field pid) || mcp_fail "start_tunnel gave no pid: $MCP_PID"
+MCP_URLS=$(echo "$START_OUT" | mcp_field public_urls) || mcp_fail "start_tunnel gave no public_urls: $MCP_URLS"
 
 # Positive assertions first (e2e-testing §3): "no error" is satisfied by a server that never
 # started anything.
 if [ "$MCP_STATUS" != "success" ]; then
-    echo "❌ start_tunnel reported status '$MCP_STATUS', not 'success' -- the #2336 failure mode."
-    docker-compose exec -T lfr-tunnel sh -c 'cat ~/.lfr-tunnel/logs/*.log 2>/dev/null | tail -40' || true
-    exit 1
+    mcp_fail "start_tunnel reported status '$MCP_STATUS', not 'success' -- the #2336 failure mode."
 fi
 MCP_HOST=$(echo "$MCP_URLS" | python3 -c '
 import json, sys
 from urllib.parse import urlparse
-urls = json.load(sys.stdin) or []
+raw = sys.stdin.read().strip()
+urls = json.loads(raw) if raw else []
 print(urlparse(urls[0]).hostname if urls else "")
 ')
 if [ -z "$MCP_HOST" ]; then
-    echo "❌ start_tunnel reported success with no public URL: $MCP_URLS"
-    exit 1
+    mcp_fail "start_tunnel reported success with no public URL: '$MCP_URLS'"
+fi
+# The tunnel must be the one asked for. Without -subdomain the client falls back to the container
+# hostname and would still register and route, so step 3 alone would not notice it being dropped.
+if [ "${MCP_HOST%%.*}" != "$MCP_SUBDOMAIN" ]; then
+    mcp_fail "start_tunnel reported $MCP_HOST, not a host for the requested subdomain '$MCP_SUBDOMAIN'."
 fi
 case "$MCP_PID" in
-    ''|*[!0-9]*) echo "❌ start_tunnel reported a PID that is not a number: '$MCP_PID'"; exit 1 ;;
+    '' | *[!0-9]*) mcp_fail "start_tunnel reported a PID that is not a number: '$MCP_PID'" ;;
 esac
 MCP_PID_STATE=$(mcp_pid_state "$MCP_PID")
-if [ "$MCP_PID_STATE" = "gone" ] || [ "$MCP_PID_STATE" = "Z" ]; then
-    echo "❌ start_tunnel reported PID $MCP_PID, which is not a live process in the client container (state $MCP_PID_STATE)."
-    exit 1
+if ! mcp_pid_live "$MCP_PID_STATE"; then
+    mcp_fail "start_tunnel reported PID $MCP_PID, which is not a live process in the client container (state '$MCP_PID_STATE')."
 fi
-echo "MCP reported success: PID $MCP_PID, public host $MCP_HOST"
+# And it was started with what the call passed. target_host in particular is invisible otherwise:
+# this container already sets LFT_TARGET_HOST=mock-target, so routing would work without it.
+MCP_CMDLINE=$(docker-compose exec -T lfr-tunnel sh -c 'tr "\0" " " < "/proc/$1/cmdline"' _ "$MCP_PID" | tr -d '\r')
+for want in "-subdomain $MCP_SUBDOMAIN" "-ports 80" "-target-host mock-target"; do
+    case "$MCP_CMDLINE" in
+        *"$want"*) ;;
+        *) mcp_fail "PID $MCP_PID was not started with '$want': $MCP_CMDLINE" ;;
+    esac
+done
+echo "MCP reported success: PID $MCP_PID ($MCP_PID_STATE), public host $MCP_HOST"
 
 # The reported URL must actually serve the target. Its HOST is used, not a hardcoded
 # "$MCP_SUBDOMAIN.lfr-demo.local", so this checks what the tool said rather than what the test
@@ -455,21 +501,30 @@ for _ in {1..20}; do
     sleep 1
 done
 if [ "$MCP_ROUTED" = false ]; then
-    echo "❌ The URL start_tunnel reported ($MCP_HOST) does not serve the mock target."
-    echo "Last response: $MCP_BODY"
-    exit 1
+    mcp_fail "The URL start_tunnel reported ($MCP_HOST) does not serve the mock target. Last response: $MCP_BODY"
 fi
 echo "✅ The tunnel start_tunnel reported is real: $MCP_HOST serves the mock target."
 
-# Cleanup, and the other tool this exercises: stop_tunnel must report success AND the process
-# must actually be gone.
-STOP_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"stop_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'"}}}')
-echo "MCP stop_tunnel response: $STOP_OUT"
-STOP_STATUS=$(echo "$STOP_OUT" | mcp_field status) || { echo "❌ stop_tunnel failed: $STOP_STATUS"; exit 1; }
-if [ "$STOP_STATUS" != "success" ]; then
-    echo "❌ stop_tunnel reported status '$STOP_STATUS'."
-    exit 1
+# Cleanup, and the other tool this exercises. stop_tunnel reports success whenever the client's
+# -stop exits 0 -- which it also does when it finds nothing to stop -- so success alone proves
+# nothing. The tunnel must still be live going in, the stop must name THIS PID, and the process
+# must be gone (or a zombie, see mcp_pid_state) afterwards.
+MCP_PID_STATE=$(mcp_pid_state "$MCP_PID")
+if ! mcp_pid_live "$MCP_PID_STATE"; then
+    mcp_fail "PID $MCP_PID was no longer live before stop_tunnel was called (state '$MCP_PID_STATE')."
 fi
+STOP_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"stop_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'"}}}') ||
+    mcp_fail "the MCP server did not answer stop_tunnel within 60s, or exited non-zero."
+echo "MCP stop_tunnel response: $STOP_OUT"
+STOP_STATUS=$(echo "$STOP_OUT" | mcp_field status) || mcp_fail "stop_tunnel failed: $STOP_STATUS"
+STOP_MESSAGE=$(echo "$STOP_OUT" | mcp_field message) || mcp_fail "stop_tunnel gave no message: $STOP_MESSAGE"
+if [ "$STOP_STATUS" != "success" ]; then
+    mcp_fail "stop_tunnel reported status '$STOP_STATUS'."
+fi
+case "$STOP_MESSAGE" in
+    *"Stopping background tunnel for subdomain '$MCP_SUBDOMAIN' (PID: $MCP_PID)"*) ;;
+    *) mcp_fail "stop_tunnel did not stop PID $MCP_PID: $STOP_MESSAGE" ;;
+esac
 MCP_STOPPED=false
 for _ in {1..10}; do
     MCP_PID_STATE=$(mcp_pid_state "$MCP_PID")
@@ -480,8 +535,7 @@ for _ in {1..10}; do
     sleep 1
 done
 if [ "$MCP_STOPPED" = false ]; then
-    echo "❌ stop_tunnel reported success but PID $MCP_PID is still running (state $MCP_PID_STATE)."
-    exit 1
+    mcp_fail "stop_tunnel reported success but PID $MCP_PID is still running (state '$MCP_PID_STATE')."
 fi
 echo "PID $MCP_PID after stop_tunnel: $MCP_PID_STATE"
 echo "✅ stop_tunnel stopped it."

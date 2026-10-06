@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -1002,9 +1003,9 @@ func main() {
 						failoverCause = err.Error()
 					}
 					engine.LogEvent("warn", "failover_started", map[string]any{
-						"failed_region": failedRegion,
-						"failed_url":    cfg.ServerURL,
-						"cause":         failoverCause,
+						logFieldFailedRegion: failedRegion,
+						"failed_url":         cfg.ServerURL,
+						"cause":              failoverCause,
 					})
 					_ = client.ClearRegionCacheFile() //nolint:errcheck
 				}
@@ -1013,7 +1014,8 @@ func main() {
 				// alias (issue #1166).
 				excludeFailedRegion(cfg, primaryRegionsMap, failedURL, keepRegion, plannedMove)
 
-				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
+				newResp, ok, refused := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders)
+				if ok {
 					applySession(newResp, "failover")
 					if keepRegion {
 						slog.Info(fmt.Sprintf("[Client] Session re-established on region '%s' (%s)", cfg.Region, cfg.ServerURL))
@@ -1030,10 +1032,21 @@ func main() {
 					continue
 				}
 
+				if refused {
+					// Not an outage, so not reported as one: the advice printed with the refusal
+					// is the whole story, and "exhausted every region" would send the user
+					// looking at the status page for a problem only they can fix (#2342).
+					slog.Info("[Error] The tunnel has stopped: the gateway refused it for a reason no other region can fix (see above).")
+					engine.LogEvent("error", "failover_refused", map[string]any{
+						logFieldFailedRegion: failedRegion,
+					})
+					break
+				}
+
 				slog.Info("[Error] Failover exhausted every candidate region without a successful registration.")
 				engine.LogEvent("error", "failover_exhausted", map[string]any{
-					"failed_region": failedRegion,
-					"attempts":      maxFailoverAttempts,
+					logFieldFailedRegion: failedRegion,
+					"attempts":           maxFailoverAttempts,
 				})
 				break
 			}
@@ -1459,6 +1472,9 @@ const logFieldRegion = "region"
 // logFieldURL is the same for the gateway URL.
 const logFieldURL = "url"
 
+// logFieldFailedRegion is the same for the region a failover is leaving.
+const logFieldFailedRegion = "failed_region"
+
 // logFieldFrom is the same for the region a move started from. Three events record one now --
 // failback, failover and the node-set move (#1937) -- and a typo in any of them writes an event
 // under a key nothing queries.
@@ -1506,14 +1522,15 @@ func regionDiscoveryURL(cfg *config.ClientConfig, primaryRegions map[string]stri
 // reregisterAcrossRegions re-elects a region and registers on it, moving on to the
 // next-best region when a registration fails for a reason another region could
 // satisfy. Returns false only when every candidate has been tried, or when the failure
-// is one no region can fix.
-func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) (*client.RegisterResponse, bool) {
+// is one no region can fix -- and refused tells those two apart, because they are reported
+// differently: one is an outage, the other is the user's to resolve (#2342).
+func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) (resp *client.RegisterResponse, ok bool, refused bool) {
 	backoff := failoverRetryBackoff
 	for attempt := 1; attempt <= maxFailoverAttempts; attempt++ {
 		cfg.Region = ""
 		resolveServerURL(cfg, false)
 		if cfg.ServerURL == "" {
-			return nil, false
+			return nil, false, false
 		}
 
 		// AFTER resolveServerURL, which records probe/cache for the election it just ran, and
@@ -1524,7 +1541,7 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 
 		regResp, failure := attemptRegistration(cfg, portMappings, sub, addedHeaders)
 		if failure == nil {
-			return regResp, true
+			return regResp, true, false
 		}
 
 		slog.Info(fmt.Sprintf("[Warning] Registration on region '%s' failed (attempt %d/%d): %v",
@@ -1535,7 +1552,7 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 
 		if failure.terminal {
 			// Another region would reject this identically.
-			return nil, false
+			return nil, false, true
 		}
 
 		// Take this region out of the running and let the next pass elect a different
@@ -1548,7 +1565,7 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 			backoff *= 2
 		}
 	}
-	return nil, false
+	return nil, false, false
 }
 
 // sameGatewayRetryBackoff is the first pause between same-gateway re-registration attempts,
@@ -1592,7 +1609,7 @@ func reregisterSameGateway(ctx context.Context, cfg *config.ClientConfig, portMa
 		}
 
 		if failure.terminal {
-			// A reservation, quota or consent problem. Retrying reproduces it forever, and
+			// A reservation, quota, consent or token problem. Retrying reproduces it forever, and
 			// this client has nowhere else to take it.
 			return nil, false
 		}
@@ -1617,8 +1634,8 @@ func reregisterSameGateway(ctx context.Context, cfg *config.ClientConfig, portMa
 type registrationFailure struct {
 	err error
 	// terminal marks a failure no region can satisfy -- a reservation or account-limit
-	// problem the user has to resolve in the portal. Retrying elsewhere just produces
-	// the same rejection from a different host.
+	// problem the user has to resolve in the portal, or a token the gateway will not accept
+	// (#2342). Retrying elsewhere just produces the same rejection from a different host.
 	terminal bool
 	// advice is the operator-facing guidance to print, if any.
 	advice []string
@@ -1636,8 +1653,18 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 	if client.IsDocker() {
 		clientOS += " (Docker)"
 	}
+	// No token can never register: the gateway answers an empty one with the same bare 401 as a
+	// bad one, so asking only spends a round trip to learn what is already known here (#2342).
+	if cfg.AuthToken == "" {
+		return nil, missingTokenFailure(cfg)
+	}
+
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
+		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == http.StatusUnauthorized {
+			return nil, unauthorizedFailure(cfg, err, portalURLForAdvice(cfg, regErr.PortalURL))
+		}
+
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
 			// A consent refusal is also a 403, but it is not a reservation or quota problem
 			// and must not be reported as one -- the advice below would send the user
@@ -1681,13 +1708,7 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 				}
 			}
 
-			portalURL := regErr.PortalURL
-			if portalURL == "" {
-				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
-				if !strings.Contains(portalURL, "portal.") {
-					portalURL = cfg.ServerURL + "/portal"
-				}
-			}
+			portalURL := portalURLForAdvice(cfg, regErr.PortalURL)
 			return nil, &registrationFailure{
 				err:      err,
 				terminal: true,
@@ -1718,6 +1739,82 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 		slog.Info(fmt.Sprintf("\n[WARNING] %s\n\n", regResp.Warning))
 	}
 	return regResp, nil
+}
+
+// loginCommand is the remedy both token failures point at. It writes ~/.lfr-tunnel/token, and
+// nowhere else -- see TokenSourceDefaultFile for why that limits when it can be advised.
+const loginCommand = "lfr-tunnel login"
+
+// unauthorizedFailure describes a 401 from registration (#2342).
+//
+// Terminal: tokens are checked on central, and an edge relays central's answer unchanged
+// (handleEdgeRegisterProxy), so no region can accept a token another refused. Before this a 401
+// was retried against every region and ended "Failover exhausted every candidate region" -- a
+// credential problem reported as an outage -- and a pinned client retried it forever.
+//
+// The advice is deliberately the same whatever the cause. The gateway folds a missing,
+// unknown, revoked or expired token and an unapproved account into one 401 (validatePAT), so
+// that nobody can use the answer to learn whether a token exists. Saying "expired" here would
+// be a guess, and a guess that is sometimes right is no better than one that discloses. It
+// names every cause instead, and adds only what this machine already knows: where the token
+// came from, which decides what will actually replace it.
+func unauthorizedFailure(cfg *config.ClientConfig, err error, portalURL string) *registrationFailure {
+	advice := []string{
+		"[Client] The gateway did not accept this access token. It may have expired or been revoked, or the account may not be active.",
+		fmt.Sprintf("[Client] The token was read from: %s", tokenSourceOrNone(cfg.TokenSource)),
+	}
+	if strings.HasPrefix(cfg.TokenSource, config.TokenSourceDefaultFile+" (") {
+		advice = append(advice,
+			"[Client] Sign in again to replace it:",
+			fmt.Sprintf("         👉 %s", loginCommand),
+			fmt.Sprintf("[Client] Or create a new token in the User Portal: %s\n", portalURL),
+		)
+	} else {
+		// Any other source outranks the file login writes, so login would save a new token
+		// and this one would go on being used.
+		advice = append(advice,
+			"[Client] Create a new token in the User Portal and put it there in place of this one:",
+			fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL),
+		)
+	}
+	return &registrationFailure{err: err, terminal: true, advice: advice}
+}
+
+// missingTokenFailure is the refusal for a client with no token at all, decided without
+// contacting the gateway (#2342). Terminal for the same reason a 401 is.
+func missingTokenFailure(cfg *config.ClientConfig) *registrationFailure {
+	advice := []string{"[Client] No access token was found, so the gateway was not contacted."}
+	if path := strings.TrimSpace(os.Getenv("LFT_TOKEN_FILE")); path != "" {
+		// LFT_TOKEN_FILE replaces the default path, so the file login writes is never read.
+		advice = append(advice,
+			fmt.Sprintf("[Client] LFT_TOKEN_FILE points at %s, which holds no token. Put one there, or unset LFT_TOKEN_FILE and run:", path),
+			fmt.Sprintf("         👉 %s", loginCommand),
+		)
+	} else {
+		advice = append(advice,
+			"[Client] Sign in to get one:",
+			fmt.Sprintf("         👉 %s", loginCommand),
+		)
+	}
+	advice = append(advice, fmt.Sprintf("[Client] Or create a token in the User Portal and pass it with -token: %s\n", portalURLForAdvice(cfg, "")))
+	return &registrationFailure{
+		err:      errors.New("no access token configured"),
+		terminal: true,
+		advice:   advice,
+	}
+}
+
+// portalURLForAdvice is the portal link to print: the one the gateway reported, or a guess
+// from the gateway URL when there was no response to report one.
+func portalURLForAdvice(cfg *config.ClientConfig, reported string) string {
+	if reported != "" {
+		return reported
+	}
+	portalURL := strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
+	if !strings.Contains(portalURL, "portal.") {
+		portalURL = cfg.ServerURL + "/portal"
+	}
+	return portalURL
 }
 
 // performRegistrationHandshake registers and exits the process on any failure. Only

@@ -458,7 +458,7 @@ func TestReregisterAcrossRegionsMovesOn(t *testing.T) {
 	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: badSrv.URL, AuthToken: "t"}
-	resp, ok := reregisterAcrossRegions(cfg, nil, "sub", nil)
+	resp, ok, _ := reregisterAcrossRegions(cfg, nil, "sub", nil)
 	if !ok {
 		t.Fatalf("expected registration to succeed on the healthy region")
 	}
@@ -492,8 +492,12 @@ func TestReregisterAcrossRegionsStopsOnTerminal(t *testing.T) {
 	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
-	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {
+	_, ok, refused := reregisterAcrossRegions(cfg, nil, "sub", nil)
+	if ok {
 		t.Fatalf("expected a terminal 403 to abort the failover")
+	}
+	if !refused {
+		t.Error("a terminal stop must be reported as refused, not as every region exhausted")
 	}
 	if got := atomic.LoadInt32(&hits); got != 1 {
 		t.Errorf("expected a terminal failure to stop after one attempt, got %d", got)
@@ -517,8 +521,12 @@ func TestReregisterAcrossRegionsGivesUpCleanly(t *testing.T) {
 	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
-	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {
+	_, ok, refused := reregisterAcrossRegions(cfg, nil, "sub", nil)
+	if ok {
 		t.Fatalf("expected failure when every region is unhealthy")
+	}
+	if refused {
+		t.Error("an outage is not a refusal: every region failing must not be reported as refused")
 	}
 	if got := atomic.LoadInt32(&hits); got != maxFailoverAttempts {
 		t.Errorf("expected exactly %d attempts before giving up, got %d", maxFailoverAttempts, got)

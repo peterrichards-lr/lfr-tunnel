@@ -331,12 +331,161 @@ echo "=== Response received ==="
 echo "$RESPONSE"
 
 # Verify content
-if echo "$RESPONSE" | grep -q "Mock Liferay Instance"; then
-    echo "✅ E2E Integration Test PASSED! Registration, Approval, and Tunnel routing work flawlessly!"
-    docker-compose down -v
-    exit 0
-else
+if ! echo "$RESPONSE" | grep -q "Mock Liferay Instance"; then
     echo "❌ E2E Integration Test FAILED! Staged response did not match expected output."
     docker-compose down -v
     exit 1
 fi
+echo "✅ Registration, approval and tunnel routing work."
+
+# 8. Start a real tunnel through the MCP server (#2341).
+#
+# start_tunnel could never report success for ~36 releases (#2336): it compared the PID of the
+# `-background` intermediate with the PID the tunnel's grandchild wrote to its state file, and the
+# two never match. #2339 fixed it with unit tests, but nothing ran the client, so nothing could
+# show the tool works -- the same hole the original bug lived in. This runs the real binary inside
+# the client container (never on the host: .agents/skills/edr-constraints) and checks four things,
+# in this order on purpose:
+#
+#   1. the MCP server says `success` and returns public URLs and a PID   (what it REPORTED)
+#   2. that PID is a live process in the container                        (the PID is not stale)
+#   3. the public URL it returned serves the mock target through nginx   (what it reported is TRUE)
+#   4. stop_tunnel stops it                                               (cleanup, and that tool)
+#
+# Step 3 is the one that earns the test. A server that reported a plausible URL for a tunnel that
+# never came up would pass 1 and 2.
+echo "=== Starting a tunnel through the MCP server ==="
+MCP_SUBDOMAIN="mcp-dev"
+
+# One JSON-RPC exchange with `lfr-tunnel mcp` in the long-running client container. The server
+# reads newline-delimited requests from stdin and exits at EOF, after answering; the tunnel it
+# starts is a detached background process and outlives it.
+mcp_call() {
+    printf '%s\n' \
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+        "$1" |
+        docker-compose exec -T \
+            -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
+            -e LFT_CLIENT_SERVER=http://tunnel.lfr-demo.local \
+            lfr-tunnel ./lfr-tunnel mcp
+}
+
+# A process's state letter from /proc inside the client container, or "gone".
+#
+# Not `kill -0`, which cannot tell a live process from a zombie. The client container's PID 1 is
+# `sleep infinity`, which never reaps: the tunnel is reparented to it when `-background`'s
+# intermediate exits, so once it stops it stays a zombie for the life of the container. On a real
+# host init/launchd reaps it. Measured on the first run of this test: `kill -0` reported the
+# stopped tunnel as still running -- and would equally have reported a tunnel that died on start
+# as alive.
+mcp_pid_state() {
+    docker-compose exec -T lfr-tunnel sh -c \
+        '[ -r "/proc/$1/stat" ] && awk "{print \$3}" "/proc/$1/stat" || echo gone' _ "$1" | tr -d '\r'
+}
+
+# Pulls one field out of the tool result for the request with id 2. The tool's payload is JSON
+# inside result.content[0].text; a tool error is reported as isError with "ERROR: ..." text, and
+# is turned into a failure here rather than read as an empty field.
+mcp_field() {
+    python3 -c '
+import json, sys
+field = sys.argv[1]
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    msg = json.loads(line)
+    if msg.get("id") != 2:
+        continue
+    result = msg.get("result") or {}
+    text = result["content"][0]["text"]
+    if result.get("isError"):
+        sys.exit("tool error: " + text)
+    value = json.loads(text).get(field)
+    print(json.dumps(value) if isinstance(value, (list, dict)) else ("" if value is None else value))
+    sys.exit(0)
+sys.exit("no response to request 2")
+' "$1"
+}
+
+START_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'","ports":"80","target_host":"mock-target"}}}')
+echo "MCP start_tunnel response: $START_OUT"
+
+MCP_STATUS=$(echo "$START_OUT" | mcp_field status) || { echo "❌ start_tunnel failed: $MCP_STATUS"; exit 1; }
+MCP_PID=$(echo "$START_OUT" | mcp_field pid)
+MCP_URLS=$(echo "$START_OUT" | mcp_field public_urls)
+
+# Positive assertions first (e2e-testing §3): "no error" is satisfied by a server that never
+# started anything.
+if [ "$MCP_STATUS" != "success" ]; then
+    echo "❌ start_tunnel reported status '$MCP_STATUS', not 'success' -- the #2336 failure mode."
+    docker-compose exec -T lfr-tunnel sh -c 'cat ~/.lfr-tunnel/logs/*.log 2>/dev/null | tail -40' || true
+    exit 1
+fi
+MCP_HOST=$(echo "$MCP_URLS" | python3 -c '
+import json, sys
+from urllib.parse import urlparse
+urls = json.load(sys.stdin) or []
+print(urlparse(urls[0]).hostname if urls else "")
+')
+if [ -z "$MCP_HOST" ]; then
+    echo "❌ start_tunnel reported success with no public URL: $MCP_URLS"
+    exit 1
+fi
+case "$MCP_PID" in
+    ''|*[!0-9]*) echo "❌ start_tunnel reported a PID that is not a number: '$MCP_PID'"; exit 1 ;;
+esac
+MCP_PID_STATE=$(mcp_pid_state "$MCP_PID")
+if [ "$MCP_PID_STATE" = "gone" ] || [ "$MCP_PID_STATE" = "Z" ]; then
+    echo "❌ start_tunnel reported PID $MCP_PID, which is not a live process in the client container (state $MCP_PID_STATE)."
+    exit 1
+fi
+echo "MCP reported success: PID $MCP_PID, public host $MCP_HOST"
+
+# The reported URL must actually serve the target. Its HOST is used, not a hardcoded
+# "$MCP_SUBDOMAIN.lfr-demo.local", so this checks what the tool said rather than what the test
+# expected it to say.
+MCP_ROUTED=false
+for _ in {1..20}; do
+    MCP_BODY=$(curl -s -H "Host: $MCP_HOST" "http://localhost:$E2E_PROXY_PORT/" || true)
+    if echo "$MCP_BODY" | grep -q "Mock Liferay Instance"; then
+        MCP_ROUTED=true
+        break
+    fi
+    sleep 1
+done
+if [ "$MCP_ROUTED" = false ]; then
+    echo "❌ The URL start_tunnel reported ($MCP_HOST) does not serve the mock target."
+    echo "Last response: $MCP_BODY"
+    exit 1
+fi
+echo "✅ The tunnel start_tunnel reported is real: $MCP_HOST serves the mock target."
+
+# Cleanup, and the other tool this exercises: stop_tunnel must report success AND the process
+# must actually be gone.
+STOP_OUT=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"stop_tunnel","arguments":{"subdomain":"'"$MCP_SUBDOMAIN"'"}}}')
+echo "MCP stop_tunnel response: $STOP_OUT"
+STOP_STATUS=$(echo "$STOP_OUT" | mcp_field status) || { echo "❌ stop_tunnel failed: $STOP_STATUS"; exit 1; }
+if [ "$STOP_STATUS" != "success" ]; then
+    echo "❌ stop_tunnel reported status '$STOP_STATUS'."
+    exit 1
+fi
+MCP_STOPPED=false
+for _ in {1..10}; do
+    MCP_PID_STATE=$(mcp_pid_state "$MCP_PID")
+    if [ "$MCP_PID_STATE" = "gone" ] || [ "$MCP_PID_STATE" = "Z" ]; then
+        MCP_STOPPED=true
+        break
+    fi
+    sleep 1
+done
+if [ "$MCP_STOPPED" = false ]; then
+    echo "❌ stop_tunnel reported success but PID $MCP_PID is still running (state $MCP_PID_STATE)."
+    exit 1
+fi
+echo "PID $MCP_PID after stop_tunnel: $MCP_PID_STATE"
+echo "✅ stop_tunnel stopped it."
+
+echo "✅ E2E Integration Test PASSED! Registration, approval, tunnel routing and the MCP server's start_tunnel work."
+docker-compose down -v
+exit 0

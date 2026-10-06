@@ -11,6 +11,10 @@ var (
 	// no longer in the state the caller believed it was (#2267). Distinct from ErrNotFound
 	// because the caller usually wants to re-read and say which it was.
 	ErrStateChanged = errors.New("record is not in the expected state")
+	// ErrRowUnreadable means a row was FOUND but could not be scanned (#2347). Distinct from a
+	// failed lookup, because the server answers those differently and must not answer one way
+	// only for a record that exists.
+	ErrRowUnreadable = errors.New("record exists but could not be read")
 )
 
 type AuditEntry struct {

@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -107,14 +108,28 @@ func (repo *SQLitePATRepo) CreatePAT(pat *PersonalAccessToken) error {
 }
 
 // GetPATByHash looks up a PAT by its SHA-256 hash.
+//
+// Three failures, kept apart because the server answers them differently (#2347): ErrNotFound for
+// no such token; ErrRowUnreadable (wrapping the scan error) for a row that exists but cannot be
+// read; and the driver's own error for a lookup that failed before anything was known. QueryRow
+// conflates the last two -- its Scan reports a query failure and a bad column the same way -- so
+// this uses Query and scans the row itself.
 func (repo *SQLitePATRepo) GetPATByHash(hash string) (*PersonalAccessToken, error) {
-	row := repo.conn.QueryRow(`SELECT `+patColumns+` FROM personal_access_tokens WHERE token_hash = ?`, hash)
-	pat, err := scanPAT(row)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
+	rows, err := repo.conn.Query(`SELECT `+patColumns+` FROM personal_access_tokens WHERE token_hash = ?`, hash)
 	if err != nil {
 		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, ErrNotFound
+	}
+	pat, err := scanPAT(rows)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRowUnreadable, err)
 	}
 	return pat, nil
 }

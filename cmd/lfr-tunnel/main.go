@@ -1725,6 +1725,19 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 			}
 		}
 
+		// The gateway could not CHECK the token -- its token store failed -- which is neither a
+		// refusal nor an outage (#2347). Retryable like any 5xx, but the generic 5xx advice below
+		// ("offline or undergoing maintenance") would be wrong: the gateway answered.
+		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == http.StatusServiceUnavailable && regErr.Message == gatewayTokenStoreUnavailable {
+			return nil, &registrationFailure{
+				err: err,
+				advice: []string{
+					"[Client] The gateway could not check your access token just now. Your token was not rejected and nothing needs changing;",
+					"[Client] it will work again once the gateway recovers, usually within moments.",
+				},
+			}
+		}
+
 		errStr := err.Error()
 		if strings.Contains(errStr, "registration request failed") ||
 			strings.Contains(errStr, "gateway error (5") ||
@@ -1838,6 +1851,11 @@ const loginCommand = "lfr-tunnel login"
 // missing, unknown, revoked or expired token and an unapproved account (validatePAT, and the
 // isValidToken checks in handleRegister and handleEdgeRegister).
 const gatewayTokenRefusal = "unauthorized"
+
+// gatewayTokenStoreUnavailable is the message of the gateway's 503 when it could not look a token up
+// at all (#2347). Held in step with the server's tokenStoreUnavailableMessage by
+// TestGatewayTokenStoreMessageMatchesTheServer.
+const gatewayTokenStoreUnavailable = "the gateway could not check your token just now; retry in a moment"
 
 // unauthorizedFailure describes the gateway refusing the user's token (#2342).
 //

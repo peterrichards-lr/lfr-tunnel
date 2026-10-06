@@ -1933,10 +1933,16 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate auth token
-	user, pat, ok := s.authenticateToken(req.AuthToken)
-	if !ok {
+	// Validate auth token. The refusal is FINAL for the client (#2342); an unavailable token
+	// store is not a refusal, and is answered 503 so the client retries instead (#2347).
+	user, pat, verdict := s.authenticateToken(req.AuthToken)
+	switch verdict {
+	case tokenRefused:
 		s.respondRegisterResponse(w, http.StatusUnauthorized, r, RegisterResponse{Status: "error", Error: "unauthorized"})
+		return
+	case tokenStoreUnavailable:
+		w.Header().Set("Retry-After", strconv.Itoa(tokenStoreUnavailableRetrySeconds))
+		s.respondRegisterResponse(w, http.StatusServiceUnavailable, r, RegisterResponse{Status: "error", Error: tokenStoreUnavailableMessage})
 		return
 	}
 
@@ -6900,9 +6906,16 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, pat, ok := s.authenticateToken(edgeReq.AuthToken)
-	if !ok {
+	// The same verdicts as handleRegister. The edge relays the status and message unchanged -- not
+	// the Retry-After header, which it does not copy.
+	user, pat, verdict := s.authenticateToken(edgeReq.AuthToken)
+	switch verdict {
+	case tokenRefused:
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	case tokenStoreUnavailable:
+		w.Header().Set("Retry-After", strconv.Itoa(tokenStoreUnavailableRetrySeconds))
+		respondJSON(w, http.StatusServiceUnavailable, map[string]string{"error": tokenStoreUnavailableMessage})
 		return
 	}
 

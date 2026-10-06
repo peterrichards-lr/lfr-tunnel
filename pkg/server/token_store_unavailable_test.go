@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -17,15 +18,23 @@ import (
 )
 
 // #2347: since #2342 the client treats a registration 401 as final, so a token lookup that FAILED
-// -- SQLITE_BUSY, an I/O error -- must not be answered as one. Every FIRING case here goes red
-// against the code before it, which answered all of these 401.
+// -- an I/O error, SQLITE_BUSY from another process, a closed database -- must not be answered as
+// one. Cases are labelled: FIRING ones go red against the code before #2347, which answered all of
+// these 401; BOUNDING ones passed before too, and pin the disclosure line.
 
-// failingPATLookup is the real token repository with its hash lookup failing the way a busy or
-// broken database does: with an error that is not ErrNotFound.
+// failingPATLookup is the real token repository with its hash lookup failing the way a broken
+// database does: with an error that is neither ErrNotFound nor ErrRowUnreadable.
 type failingPATLookup struct{ db.PATRepository }
 
 func (failingPATLookup) GetPATByHash(string) (*db.PersonalAccessToken, error) {
-	return nil, errors.New("database is locked (5) (SQLITE_BUSY)")
+	return nil, errors.New("disk I/O error")
+}
+
+// unreadablePATRow reports the token row as found but undecodable -- out-of-band damage.
+type unreadablePATRow struct{ db.PATRepository }
+
+func (unreadablePATRow) GetPATByHash(string) (*db.PersonalAccessToken, error) {
+	return nil, fmt.Errorf("%w: sql: Scan error on column index 8", db.ErrRowUnreadable)
 }
 
 // failingUserLookup fails only the SECOND read, after the token row has been found.
@@ -46,6 +55,7 @@ func seedApprovedTokenHolder(t *testing.T, srv *Server, raw string) {
 	}
 }
 
+// FIRING.
 func TestAnUnavailableTokenStoreIsNotARefusal(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
@@ -86,8 +96,9 @@ func TestAnUnavailableTokenStoreAnswersTheSameForAnyToken(t *testing.T) {
 	}
 }
 
-// Only the FIRST lookup may be reported as unavailable. Once the token row is found, a failure is
-// a refusal -- answering it differently would be an answer only ever given for a real token.
+// BOUNDING. Only the lookup query may be reported as unavailable. Once the token row is found, a
+// failure is a refusal -- answering it differently would be an answer only ever given for a real
+// token. Passes before #2347 too (everything was 401); it pins the line the fix must not cross.
 func TestAFailureAfterTheTokenIsFoundIsStillARefusal(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
@@ -100,11 +111,30 @@ func TestAFailureAfterTheTokenIsFoundIsStillARefusal(t *testing.T) {
 	}
 }
 
-// The control: a healthy store still refuses a bad token with the uniform 401, and an empty token
-// is refused before the store is consulted at all.
+// FIRING against the first version of this fix, which answered 503 for any non-ErrNotFound lookup
+// error -- including a row that exists but cannot be read, which only a real token can produce.
+func TestAnUnreadableTokenRowIsARefusal(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+	srv.db.PATRepository = unreadablePATRow{srv.db.PATRepository}
+
+	rec, resp := registerTunnelAsVersion(t, srv, "lft_pat_real_token", "sub-u", "v9.9.9")
+	if rec.Code != http.StatusUnauthorized || resp.Error != gatewayTokenRefusalForTest {
+		t.Errorf("a found-but-unreadable token row must be the uniform 401, not an existence oracle; got %d %q", rec.Code, resp.Error)
+	}
+}
+
+// The control: a healthy store registers a good token, still refuses a bad one with the uniform
+// 401, and refuses an empty token before the store is consulted at all.
 func TestARefusedTokenIsStillA401(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
+	srv.cfg.AllowClientAutoReservation = true
+	seedApprovedTokenHolder(t, srv, "lft_pat_real_token")
+
+	if rec, resp := registerTunnelAsVersion(t, srv, "lft_pat_real_token", "sub-ok", "v9.9.9"); rec.Code != http.StatusOK {
+		t.Fatalf("a good token on a healthy store must register; got %d %q", rec.Code, resp.Error)
+	}
 
 	if rec, resp := registerTunnelAsVersion(t, srv, "lft_pat_never_issued", "sub-d", "v9.9.9"); rec.Code != http.StatusUnauthorized || resp.Error != gatewayTokenRefusalForTest {
 		t.Errorf("an unknown token on a healthy store: got %d %q, want 401 %q", rec.Code, resp.Error, gatewayTokenRefusalForTest)
@@ -116,7 +146,7 @@ func TestARefusedTokenIsStillA401(t *testing.T) {
 	}
 }
 
-// Most clients register through an edge, which relays central's answer. Central failing its token
+// FIRING. Most clients register through an edge, which relays central's answer. Central failing its token
 // lookup must reach the client as 503 through a real edge, not only on the direct path.
 func TestAnUnavailableTokenStoreReachesAnEdgeClientAs503(t *testing.T) {
 	tmp := t.TempDir()
@@ -163,7 +193,13 @@ func TestAnUnavailableTokenStoreReachesAnEdgeClientAs503(t *testing.T) {
 	rec := httptest.NewRecorder()
 	edge.handleRegister(rec, req)
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("central's failed token lookup reached the edge client as %d, not 503: %s", rec.Code, rec.Body.String())
+	var resp RegisterResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding the edge response: %v", err)
+	}
+	// The message as well as the status: a 503 for some other reason -- a drain, maintenance --
+	// would satisfy the status alone, and the client recognises this one by its message.
+	if rec.Code != http.StatusServiceUnavailable || resp.Error != tokenStoreUnavailableMessage {
+		t.Errorf("central's failed token lookup reached the edge client as %d %q, want 503 %q", rec.Code, resp.Error, tokenStoreUnavailableMessage)
 	}
 }

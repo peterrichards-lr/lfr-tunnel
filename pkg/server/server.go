@@ -6906,7 +6906,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The same verdicts as handleRegister, relayed by the edge with their status unchanged.
+	// The same verdicts as handleRegister. The edge relays the status and message unchanged -- not
+	// the Retry-After header, which it does not copy.
 	user, pat, verdict := s.authenticateToken(edgeReq.AuthToken)
 	switch verdict {
 	case tokenRefused:

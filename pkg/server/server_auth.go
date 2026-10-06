@@ -45,11 +45,12 @@ const (
 // the lookup is not enough: the token must also be unrevoked, unexpired, and belong to an approved
 // user.
 //
-// Only a failure of the FIRST lookup is reported as tokenStoreUnavailable. At that point nothing
-// is known about the token, so saying "the store is unavailable" says nothing about it -- the same
-// answer would come back for a token that does not exist. A failure AFTER the token row was found
-// (reading its user) is reported as tokenRefused, because answering it differently would be an
-// answer only ever given for a token that exists.
+// Only a failure of the lookup QUERY is reported as tokenStoreUnavailable. At that point nothing is
+// known about the token, so saying "the store is unavailable" says nothing about it -- the same
+// answer would come back for a token that does not exist. Anything that happens only because the
+// row was found -- the row itself unreadable, or reading its user failing -- is reported as
+// tokenRefused, because answering it differently would be an answer only ever given for a token
+// that exists.
 func (s *Server) checkPAT(token string) (*db.User, *db.PersonalAccessToken, tokenVerdict) {
 	if token == "" || s.db == nil {
 		return nil, nil, tokenRefused
@@ -60,6 +61,12 @@ func (s *Server) checkPAT(token string) (*db.User, *db.PersonalAccessToken, toke
 
 	pat, err := s.db.GetPATByHash(tokenHash)
 	if errors.Is(err, db.ErrNotFound) {
+		return nil, nil, tokenRefused
+	}
+	if errors.Is(err, db.ErrRowUnreadable) {
+		// FOUND, but damaged. A refusal, not "unavailable": answering this 503 would happen only
+		// for a token that exists. Logged without the token, so the damage is visible.
+		slog.Error(fmt.Sprintf("[Server] A token row exists but could not be read; refusing it: %v", err))
 		return nil, nil, tokenRefused
 	}
 	if err != nil {
@@ -121,8 +128,12 @@ func (s *Server) authenticateToken(token string) (*db.User, *db.PersonalAccessTo
 }
 
 // tokenStoreUnavailableRetrySeconds is the Retry-After on a 503 for an unavailable token store.
-// Short, because the realistic cause is SQLite's busy timeout during a backup or a burst of
-// writes, which clears in seconds.
+//
+// Set because it is correct HTTP for a 503, not because anything acts on it today: an edge rebuilds
+// the response without copying headers, and the client does not read it. What a lookup can
+// realistically fail with is an I/O error, corruption, SQLITE_BUSY from another process holding the
+// file, or "database is closed" for a request that outlives shutdown -- not in-process contention,
+// which SetMaxOpenConns(1) turns into a wait rather than an error.
 const tokenStoreUnavailableRetrySeconds = 5
 
 // tokenStoreUnavailableMessage names no token state, on purpose: the same answer comes back

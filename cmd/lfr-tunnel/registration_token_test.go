@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -385,5 +386,47 @@ func TestFailoverMovesPastAnEdgeAuthRefusal(t *testing.T) {
 	}
 	if resp.SessionToken != "tok" {
 		t.Errorf("expected the healthy region's session, got %+v", resp)
+	}
+}
+
+// #2347: a 503 for a token store the gateway could not read is retryable, and must not be reported
+// as either a rejected token or an offline gateway.
+func TestATokenStoreFailureIsRetryableAndSaysSo(t *testing.T) {
+	srv := registrationServer(t, http.StatusServiceUnavailable, `{"status":"error","error":"`+gatewayTokenStoreUnavailable+`"}`, nil)
+
+	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t", TokenSource: "token file (/x)"}
+	_, failure := attemptRegistration(cfg, nil, "sub", nil)
+	if failure == nil {
+		t.Fatal("expected a failure for the 503")
+	}
+	if failure.terminal {
+		t.Error("a token store the gateway could not read must be retried, not treated as final")
+	}
+	text := adviceText(failure)
+	if !strings.Contains(text, "not rejected") {
+		t.Errorf("the advice must say the token was not rejected:\n%s", text)
+	}
+	if strings.Contains(text, "offline") || strings.Contains(text, loginCommand) {
+		t.Errorf("the advice blamed an outage or the token, and it was neither:\n%s", text)
+	}
+
+	// The control: any other 503 keeps the generic outage advice.
+	other := registrationServer(t, http.StatusServiceUnavailable, `{"status":"error","error":"this gateway is restarting shortly"}`, nil)
+	_, otherFailure := attemptRegistration(&config.ClientConfig{ServerURL: other.URL, AuthToken: "t"}, nil, "sub", nil)
+	if otherFailure == nil || !strings.Contains(adviceText(otherFailure), "offline") {
+		t.Errorf("an ordinary 503 lost its outage advice: %+v", otherFailure)
+	}
+}
+
+// The client recognises this 503 by its message, so it must match the server's, read from source.
+func TestGatewayTokenStoreMessageMatchesTheServer(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "pkg", "server", "server_auth.go"))
+	if err != nil {
+		t.Fatalf("reading the server source: %v", err)
+	}
+	// %q spells the value as the Go literal the server's source contains.
+	want := fmt.Sprintf("const tokenStoreUnavailableMessage = %q", gatewayTokenStoreUnavailable)
+	if !strings.Contains(string(raw), want) {
+		t.Errorf("pkg/server/server_auth.go does not declare %s -- the client would stop recognising the 503 and fall back to the generic outage advice", want)
 	}
 }

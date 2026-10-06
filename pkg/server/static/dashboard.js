@@ -5205,7 +5205,9 @@ function closeModal() {
 }
 
 async function generateToken() {
-  const name = document.getElementById('token-name').value;
+  // Trimmed as V2 does and as the server does (#2348), so a name of only spaces is caught here
+  // rather than sent and refused.
+  const name = document.getElementById('token-name').value.trim();
   const expiry = parseInt(document.getElementById('token-expiry').value);
 
   if (!name) return showToast('Please enter a name');
@@ -5246,7 +5248,16 @@ async function generateToken() {
       alertBox.className = 'alert alert-warning';
     }
   } else {
-    showToast('Failed to create token.');
+    // The server says why -- a name it refused (#2348), or never-expires not allowed here -- and
+    // V2 has always shown that reason. A generic toast here left V1 users guessing what to change.
+    let reason = 'Failed to create token.';
+    try {
+      const body = await res.json();
+      if (body && body.error) reason = body.error;
+    } catch (e) {
+      // Not JSON -- keep the generic message.
+    }
+    showToast(reason);
   }
 }
 

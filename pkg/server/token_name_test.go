@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -38,6 +39,15 @@ func TestValidateTokenName(t *testing.T) {
 		{"DEL", "a\x7fb", "", errTokenNameControl},
 		{"C1 next-line", "a\u0085b", "", errTokenNameControl},
 		{"header injection shape", "name\r\nBcc: someone@example.com", "", errTokenNameControl},
+		{"line separator, which IsControl misses", "a\u2028b", "", errTokenNameControl},
+		{"paragraph separator", "a\u2029b", "", errTokenNameControl},
+		{"right-to-left override", "invoice\u202Etxt.exe", "", errTokenNameControl},
+		{"right-to-left isolate", "a\u2067b", "", errTokenNameControl},
+		{"left-to-right mark", "a\u200Eb", "", errTokenNameControl},
+		{"Arabic letter mark", "a\u061Cb", "", errTokenNameControl},
+		{"ZWJ emoji sequence is a real name", "laptop 👩\u200D💻", "laptop 👩\u200D💻", nil},
+		{"ZWNJ is ordinary in Persian", "می\u200Cخواهم", "می\u200Cخواهم", nil},
+		{"a trailing newline from a paste is trimmed, not refused", "Work Laptop\n", "Work Laptop", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := validateTokenName(tc.in)
@@ -96,8 +106,8 @@ func TestThePortalServiceCreatePathRefusesABadNameToo(t *testing.T) {
 	// A real expiry on both calls, so the name is the only difference between them. "" means
 	// "never", which this policy refuses -- a refusal for the wrong reason.
 	expires := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
-	if _, _, err := srv.portalService.CreateToken(dev, "a\nb", expires, "127.0.0.1"); err == nil {
-		t.Error("portalService.CreateToken accepted a name with a line break")
+	if _, _, err := srv.portalService.CreateToken(dev, "a\nb", expires, "127.0.0.1"); !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("portalService.CreateToken must refuse a name with a line break as an invalid request; got %v", err)
 	}
 	if _, _, err := srv.portalService.CreateToken(dev, "Work Laptop", expires, "127.0.0.1"); err != nil {
 		t.Errorf("portalService.CreateToken refused an ordinary name: %v", err)

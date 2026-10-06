@@ -65,3 +65,21 @@ func TestAPIVersionAdvertisesClientReconnectWindow(t *testing.T) {
 		t.Errorf("client_reconnect_seconds = %d, want 75 -- without it the only way to correct a client's reconnect window is a client release (#1946)", resp.ClientReconnectSeconds)
 	}
 }
+
+// TestChiselServerDoesNotLogSessionTokens holds #2356: the chisel username is the session
+// token, and chisel 1.12 logs it at INFO on every session open and close. The check is made on
+// a FORKED logger, because that is what chisel's session handler logs through
+// (server_handler.go: s.Fork("session#%d", id)) -- asserting the parent alone would pass a fix
+// that silenced startup lines and left every "Open (user=<token>)" in the journal.
+func TestChiselServerDoesNotLogSessionTokens(t *testing.T) {
+	srv, err := newChiselServer(&config.ServerConfig{})
+	if err != nil {
+		t.Fatalf("newChiselServer: %v", err)
+	}
+	if srv.IsInfo() {
+		t.Error("the chisel server logs at INFO; chisel >= 1.12 writes the session token (its username) into every Open/Close line")
+	}
+	if srv.Fork("session#%d", 1).IsInfo() {
+		t.Error("a chisel session logger still logs at INFO, so every tunnel open and close writes its session token to the journal")
+	}
+}

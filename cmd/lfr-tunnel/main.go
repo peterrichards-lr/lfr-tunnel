@@ -1055,9 +1055,9 @@ func main() {
 		// A non-nil error here is a local fault -- the chisel client could not be built, or
 		// the log redirection failed -- not a connection that dropped, and re-registering
 		// fixes none of them. Those still end the loop and are reported below. A gateway that
-		// goes away returns nil instead: chisel's connectionLoop returns nil when it gives up
-		// (chisel/client/client_connect.go:50-62), which is exactly why the give-up was so
-		// invisible (#1946).
+		// goes away returns nil instead. chisel 1.11 returned nil when it gave up, which is
+		// exactly why the give-up was so invisible (#1946); 1.12 returns an error, and
+		// RunClient maps it back to nil (chiselWaitResult) so this branch still holds (#2356).
 		if err != nil {
 			break
 		}

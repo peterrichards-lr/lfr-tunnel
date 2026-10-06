@@ -741,7 +741,7 @@ const defaultHeartbeatInterval = 5 * time.Second
 // hand control back so region failover can run, and this window is the upper bound on how
 // long that takes for a loss nothing signalled. Every signalled reason to move -- lease
 // eviction, a drain/shutdown warning, a failback -- cancels the session context, which
-// chisel's retry loop selects on (client_connect.go:56-59), so those paths preempt this
+// chisel's retry loop selects on (chisel 1.12.1 client_connect.go:66-72), so those paths preempt this
 // window immediately and are not delayed by it at all.
 //
 // minReconnectWindow and maxReconnectWindow bound what a gateway is allowed to talk this
@@ -958,7 +958,26 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}()
 
 	// 5. Block until context done or wait error
-	return c.Wait()
+	return chiselWaitResult(c.Wait())
+}
+
+// chiselGaveUp is the error chisel >= 1.12 returns once MaxRetryCount is spent. Unexported
+// upstream, so matched by text; TestRunClientHandsBackPromptlyWhenFailoverIsAvailable fails if
+// chisel rewords it.
+const chiselGaveUp = "connection attempts exhausted"
+
+// chiselWaitResult maps chisel giving up on the gateway back to nil.
+//
+// Up to 1.11 chisel's connectionLoop returned nil when it gave up, and the session loop in
+// cmd/lfr-tunnel depends on that: nil means "the connection is gone, re-register or fail
+// over", while an error means a local fault that ends the process. chisel 1.12 returns an
+// error instead, which turned every unsignalled gateway loss into a fatal exit for a client
+// with no failover path -- the #1946 outage again, one reconnect window later (#2356).
+func chiselWaitResult(err error) error {
+	if err != nil && err.Error() == chiselGaveUp {
+		return nil
+	}
+	return err
 }
 
 // connectAnnounceTimeout bounds how long the "fully online" announcement waits for the

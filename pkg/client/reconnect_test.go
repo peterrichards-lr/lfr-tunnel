@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -222,11 +223,33 @@ func TestRunClientHandsBackPromptlyWhenFailoverIsAvailable(t *testing.T) {
 	// 12.7s of backoff plus the dial attempts themselves; 30s is generous headroom for a busy
 	// CI box without being so loose that a regression to the 60s window would still pass.
 	select {
-	case <-done:
+	case err := <-done:
+		// nil is the contract the session loop in cmd/lfr-tunnel branches on: an error there
+		// is a fatal local fault, so a give-up reported as one exits the process instead of
+		// re-registering (#2356). chisel 1.12 started returning one.
+		if err != nil {
+			t.Errorf("RunClient returned %q when chisel gave up on the gateway; the session loop treats any error as fatal, so a client with no failover path would exit instead of re-registering", err)
+		}
 	case <-time.After(30 * time.Second):
 		t.Fatalf("RunClient was still retrying after 30s with failover available; region failover is starved (%d attempts)", atomic.LoadInt32(&attempts))
 	}
 	if elapsed := time.Since(start); elapsed < 5*time.Second {
 		t.Errorf("handed back after only %s -- that is a blip away from an unnecessary region move, which is what the window exists to absorb", elapsed.Round(time.Millisecond))
+	}
+}
+
+// TestChiselWaitResultOnlyForgivesTheGiveUp pins the other half of chiselWaitResult: only
+// chisel's give-up becomes nil. Any other error is a local fault the session loop must still
+// see, and swallowing it would loop forever on something re-registering cannot fix.
+func TestChiselWaitResultOnlyForgivesTheGiveUp(t *testing.T) {
+	if err := chiselWaitResult(errors.New(chiselGaveUp)); err != nil {
+		t.Errorf("chisel's give-up should map to nil, got %v", err)
+	}
+	if err := chiselWaitResult(nil); err != nil {
+		t.Errorf("nil should stay nil, got %v", err)
+	}
+	other := errors.New("listen tcp 127.0.0.1:60000: bind: address already in use")
+	if err := chiselWaitResult(other); err != other {
+		t.Errorf("a local fault must pass through unchanged, got %v", err)
 	}
 }

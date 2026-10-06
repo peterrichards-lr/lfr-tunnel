@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.52.0",
+    "release_date": "2026-10-06",
+    "features": [
+      "Clearer token errors: when your access token is rejected or missing, the client now says where the token came from and how to replace it (usually by signing in again with the login command), instead of retrying every region and reporting an outage.",
+      "Token expiry warnings: you now get one email, and a notice each time you start a tunnel, in the days before an access token expires (7 by default). Requests for a token that never expires are answered by email, whether approved or not.",
+      "Fewer dropped tunnels: if the gateway briefly cannot check your token, your tunnel now waits and retries instead of stopping.",
+      "Token names: line breaks and other control characters are no longer accepted, and names are limited to 100 characters. Portal V1 now shows why a token could not be created."
+    ]
+  },
+  {
     "version": "v1.51.2",
     "release_date": "2026-10-02",
     "features": [
@@ -61,18 +71,6 @@
       "feat(server): never_expires is three operator policies the server enforces (#2265) (#2274)",
       "fix(portal): 70 new keys, ten locales, and the mechanism a title= needs (#2248) (#2260)",
       "fix(portal-v1): split the emphasis out of two properties values (#2252) (#2255)"
-    ]
-  },
-  {
-    "version": "v1.49.1",
-    "release_date": "2026-09-25",
-    "features": [
-      "fix(portal): 139 elements resolve prose through the key it already has (#2247) (#2253)",
-      "fix(ci): the path filter covers both portal arms, and stops on checker scripts (#2250) (#2251)",
-      "fix(portal-v1): five empty-state rows resolve through t() (#2244) (#2246)",
-      "fix(tests): the handshake precondition is established, not raced (#2234) (#2245)",
-      "fix(portal-v1): a user can see their own custom domain provisioning (#2233) (#2243)",
-      "fix(portal-v2): the custom-domain control is disabled at the quota, not removed (#2241) (#2242)"
     ]
   }
 ]

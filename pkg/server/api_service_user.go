@@ -66,8 +66,8 @@ func (s *portalService) ListTokens(user *db.User) ([]*db.PersonalAccessToken, er
 
 // CreateToken handles token limitation, validation, generation, hashing and persistence.
 func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt string, ipAddress string) (string, *db.PersonalAccessToken, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+	name, err := validateTokenName(name)
+	if err != nil {
 		return "", nil, ErrInvalidRequest
 	}
 

@@ -761,6 +761,7 @@ export default function Dashboard() {
                   type="text"
                   className="input-field"
                   required
+                  maxLength={100}
                   placeholder={t('token_name_placeholder', 'e.g. Work Laptop')}
                   value={newTokenName}
                   onChange={(e) => setNewTokenName(e.target.value)}

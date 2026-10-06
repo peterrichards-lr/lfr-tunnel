@@ -1,11 +1,15 @@
 package mail
 
 import (
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
+	"mime"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"strings"
 	"time"
 )
 
@@ -96,40 +100,87 @@ func (s *SMTPClient) Send(to string, subject string, body string, plainBody stri
 	}
 	defer w.Close() //nolint:errcheck
 
-	headers := make(map[string]string)
-	headers["From"] = s.cfg.SMTPFromAddress
-	headers["To"] = to
-	headers["Subject"] = subject
-	headers["MIME-Version"] = "1.0"
-	headers["Content-Type"] = `multipart/alternative; boundary="lfr-tunnel-boundary-12345"`
-
-	var msg string
-	for k, v := range headers {
-		msg += fmt.Sprintf("%s: %s\r\n", k, v)
+	msg, err := buildMessage(s.cfg.SMTPFromAddress, to, subject, body, plainBody)
+	if err != nil {
+		return err
 	}
-
-	msg += "\r\n"
-
-	// Plain text part
-	if plainBody != "" {
-		msg += "--lfr-tunnel-boundary-12345\r\n"
-		msg += "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
-		msg += plainBody + "\r\n\r\n"
-	}
-
-	// HTML part
-	if body != "" {
-		msg += "--lfr-tunnel-boundary-12345\r\n"
-		msg += "Content-Type: text/html; charset=UTF-8\r\n\r\n"
-		msg += body + "\r\n\r\n"
-	}
-
-	msg += "--lfr-tunnel-boundary-12345--\r\n"
-
 	_, err = w.Write([]byte(msg))
 	if err != nil {
 		return fmt.Errorf("failed to write message body: %v", err)
 	}
 
 	return nil
+}
+
+// buildMessage assembles the RFC 5322 message, separately from the SMTP conversation so its
+// safety properties can be tested without a server.
+//
+// Two of its inputs can carry text a user typed -- a token name reaches the subject and the plain
+// body (#2344) -- so it must not let content become structure:
+//
+//   - Header values have CR and LF removed, and the subject is RFC 2047 encoded. A raw
+//     "name\r\nBcc: x" in a subject was a second header; a raw non-ASCII subject was invalid 8-bit.
+//   - The multipart boundary is random per message, and regenerated if either body happens to
+//     contain it. It used to be a fixed string, so a body containing that string followed by a
+//     Content-Type line could close the plain-text part and open an HTML part of its own.
+func buildMessage(from, to, subject, htmlBody, plainBody string) (string, error) {
+	boundary, err := newBoundary(htmlBody, plainBody)
+	if err != nil {
+		return "", err
+	}
+
+	// Ordered, so the message is deterministic apart from the boundary.
+	headers := [][2]string{
+		{"From", headerValue(from)},
+		{"To", headerValue(to)},
+		{"Subject", mime.QEncoding.Encode("UTF-8", headerValue(subject))},
+		{"MIME-Version", "1.0"},
+		{"Content-Type", `multipart/alternative; boundary="` + boundary + `"`},
+	}
+
+	var msg strings.Builder
+	for _, h := range headers {
+		msg.WriteString(h[0] + ": " + h[1] + "\r\n")
+	}
+	msg.WriteString("\r\n")
+
+	if plainBody != "" {
+		msg.WriteString("--" + boundary + "\r\n")
+		msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
+		msg.WriteString(plainBody + "\r\n\r\n")
+	}
+	if htmlBody != "" {
+		msg.WriteString("--" + boundary + "\r\n")
+		msg.WriteString("Content-Type: text/html; charset=UTF-8\r\n\r\n")
+		msg.WriteString(htmlBody + "\r\n\r\n")
+	}
+	msg.WriteString("--" + boundary + "--\r\n")
+	return msg.String(), nil
+}
+
+// headerValue removes the characters that would end a header line. Nothing a header legitimately
+// carries here needs them, and folding is not used.
+func headerValue(v string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+}
+
+// newBoundary returns a random multipart boundary that appears in neither body.
+func newBoundary(bodies ...string) (string, error) {
+	for {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err != nil {
+			return "", fmt.Errorf("failed to generate a MIME boundary: %v", err)
+		}
+		boundary := "lfr-" + hex.EncodeToString(b)
+		clash := false
+		for _, body := range bodies {
+			if strings.Contains(body, boundary) {
+				clash = true
+				break
+			}
+		}
+		if !clash {
+			return boundary, nil
+		}
+	}
 }

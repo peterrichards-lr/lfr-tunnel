@@ -663,8 +663,10 @@ type ClientConfig struct {
 const TokenSourceConfigFile = "config file"
 
 // DefaultTokenExpiryWarningDays is TokenExpiryWarningDays when unset (#2344). Seven because the
-// shortest lifetime either portal offers is 30 days, so a week's notice fits every token a user
-// can create and leaves a working week to replace it.
+// shortest lifetime either portal's form offers is 30 days, so a week's notice leaves a working
+// week to replace it. A token created through the API with a shorter life, or any token when the
+// window is set longer than its life, is warned on the first sweep -- correctly, since it does
+// expire inside the window.
 const DefaultTokenExpiryWarningDays = 7
 
 // TokenSourceDefaultFile prefixes the TokenSource of a token read from the implicit

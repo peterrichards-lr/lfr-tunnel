@@ -310,3 +310,101 @@ func TestPermanenceDecisionIsEmailedForBothOutcomes(t *testing.T) {
 		})
 	}
 }
+
+// A suspended user's tokens are refused by validatePAT anyway, so "replace it before it expires"
+// would be advice about a credential that does not work. Skipped -- and left unwarned, so the
+// warning still reaches them if they are reinstated (#2344 review).
+func TestTokenExpirySweepSkipsUnusableAccountsUntilReinstated(t *testing.T) {
+	srv, mail, cleanup := setupTestServer(t)
+	defer cleanup()
+	dev := expiryUser(t, srv, "dev@example.com")
+	tokenFor(t, srv, dev, "tok", daysFromNow(3))
+
+	dev.Status = db.UserStatusRevoked
+	if err := srv.db.UpdateUser(dev); err != nil {
+		t.Fatal(err)
+	}
+	srv.checkExpiringTokens()
+	if sent := emailsTo(mail, dev.Email); len(sent) != 0 {
+		t.Fatalf("a suspended user was told to replace a token that is already refused: %+v", sent)
+	}
+
+	dev.Status = db.UserStatusApproved
+	if err := srv.db.UpdateUser(dev); err != nil {
+		t.Fatal(err)
+	}
+	srv.checkExpiringTokens()
+	if sent := emailsTo(mail, dev.Email); len(sent) != 1 {
+		t.Errorf("a reinstated user must still be warned; got %d emails", len(sent))
+	}
+}
+
+// A DENY is allowed on a token that lapsed in the queue (#2280). Promising a reminder for a date
+// already past would be false.
+func TestDenyingALapsedRequestSaysTheTokenHasExpired(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	mail := &mockMailSender{}
+	srv.notifications = NewNotificationService(mail, srv.db, srv.cfg)
+	dev := expiryUser(t, srv, "dev@example.com")
+	pat := tokenFor(t, srv, dev, "lapsed", daysFromNow(-2))
+	if err := srv.db.SetPATPermanenceState(pat.ID, db.PATPermanencePending); err != nil {
+		t.Fatal(err)
+	}
+
+	decideOverHTTP(t, srv, pat.ID, false)
+
+	sent := waitForEmail(t, mail, dev.Email)
+	if len(sent) != 1 {
+		t.Fatalf("expected one decision email, got %d", len(sent))
+	}
+	if !strings.Contains(sent[0].TextBody, "has already expired") || strings.Contains(sent[0].TextBody, "reminded") {
+		t.Errorf("a denial on a lapsed token must say it has expired, not promise a reminder:\n%s", sent[0].TextBody)
+	}
+}
+
+// "Extend Permanent" answers a pending request as GRANTED (#2316). That is a decision too, and
+// the holder is told through whichever admin door it came.
+func TestExtendPermanentTellsTheHolderTheirRequestWasGranted(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	mail := &mockMailSender{}
+	srv.notifications = NewNotificationService(mail, srv.db, srv.cfg)
+	dev := expiryUser(t, srv, "dev@example.com")
+	pat := tokenFor(t, srv, dev, "asked", in30Days())
+	if err := srv.db.SetPATPermanenceState(pat.ID, db.PATPermanencePending); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/admin/tokens/%d/extend", pat.ID), strings.NewReader(`{"days": 0}`))
+	rec := httptest.NewRecorder()
+	srv.handleAdminExtendToken(rec, req, "admin@example.com")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("extend permanent: %d %s", rec.Code, rec.Body.String())
+	}
+
+	sent := waitForEmail(t, mail, dev.Email)
+	if len(sent) != 1 || !strings.Contains(sent[0].TextBody, "no longer expires") {
+		t.Errorf("the holder was not told their request was granted via Extend Permanent: %+v", sent)
+	}
+}
+
+// A decision that did not happen must not be announced. A second decision on an already-decided
+// request is refused with 409; the holder hears about the first only.
+func TestARefusedDecisionSendsNoEmail(t *testing.T) {
+	srv := serverWithPolicy(t, config.NeverExpiresApproval, config.NeverExpiresDisabled, config.NeverExpiresDisabled)
+	mail := &mockMailSender{}
+	srv.notifications = NewNotificationService(mail, srv.db, srv.cfg)
+	dev := expiryUser(t, srv, "dev@example.com")
+	pat := tokenFor(t, srv, dev, "never-asked", in30Days())
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/admin/tokens/%d/permanence", pat.ID), strings.NewReader(`{"grant": true}`))
+	rec := httptest.NewRecorder()
+	srv.handleAdminDecideTokenPermanence(rec, req, "admin@example.com")
+	if rec.Code == http.StatusOK {
+		t.Fatalf("deciding a request nobody made should be refused, got 200")
+	}
+
+	time.Sleep(200 * time.Millisecond) // the send is asynchronous; give a wrong one time to land
+	if sent := emailsTo(mail, dev.Email); len(sent) != 0 {
+		t.Errorf("a refused decision was emailed to the holder: %+v", sent)
+	}
+}

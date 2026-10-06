@@ -5473,7 +5473,9 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 	// A permanent extension IS a grant, so a pending request is answered rather than orphaned
 	// in the queue (#2316). Owner's decision; see ResolvePermanenceAfterAdminGrant for what the
 	// alternative cost.
-	s.portalService.ResolvePermanenceAfterAdminGrant(patID, actor, s.clientIP(r))
+	if resolved := s.portalService.ResolvePermanenceAfterAdminGrant(patID, actor, s.clientIP(r)); resolved != nil {
+		s.sendTokenPermanenceDecisionEmail(r, resolved, true)
+	}
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck

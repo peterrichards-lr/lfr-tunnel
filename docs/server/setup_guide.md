@@ -1969,8 +1969,13 @@ token_expiry_warning_days: 7   # default
 ```
 
 One setting drives both, so the email and the client agree. `0` or less reads as the default
-rather than turning the warning off. The shortest lifetime either portal offers is 30 days, so the
-default leaves a working week. Raise it if your users go a long time between tunnels.
+rather than turning the warning off. The shortest lifetime either portal's form offers is 30 days,
+so the default leaves a working week. Raise it if your users go a long time between tunnels. A
+token whose whole life is shorter than the window (possible through the API) is warned on the first
+sweep after it is created.
+
+Only an approved account is warned. A suspended or rejected user's tokens are refused anyway, so
+they are skipped and left unwarned, and a reinstated user is warned as normal.
 
 Each token is emailed once. Changing its expiry, for example by an admin extending it, re-arms
 the warning for the new date. A send that fails is retried by the next sweep instead of being

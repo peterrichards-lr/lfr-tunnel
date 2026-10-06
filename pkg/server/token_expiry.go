@@ -5,6 +5,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"lfr-tunnel/pkg/config"
@@ -33,7 +34,8 @@ const (
 )
 
 // expiryEmailTimeFormat is how an expiry date is written in an email, matching the reservation
-// emails so the two read alike.
+// emails so the two read alike. Always rendered in UTC: expires_at keeps whatever offset its writer
+// passed, and two tokens should not read "+0530" and "UTC" in the same inbox.
 const expiryEmailTimeFormat = "2006-01-02 15:04:05 MST"
 
 // tokenExpiryWarningDays is token_expiry_warning_days, or the default when unset or not positive.
@@ -67,6 +69,12 @@ func (s *Server) checkExpiringTokens() {
 			slog.Info(fmt.Sprintf("[Server] Failed to retrieve user %s for expiring token %d: %v", pat.UserID, pat.ID, err))
 			continue
 		}
+		// Only a usable account. validatePAT already refuses every token of a suspended or
+		// rejected user, so "replace it before it expires" would be advice about a credential
+		// that does not work anyway. Left unmarked, so a reinstated user is still warned.
+		if user.Status != db.UserStatusApproved {
+			continue
+		}
 		// Transactional: this is the only notice before a credential stops working. Muting it
 		// does not spare the holder noise, it costs them a tunnel at the moment they need it.
 		if !shouldSendTo(user, emailTransactional) {
@@ -74,6 +82,12 @@ func (s *Server) checkExpiringTokens() {
 		}
 
 		if err := s.sendTokenExpiringEmail(user, pat); err != nil {
+			continue
+		}
+		// Re-read before marking: a send can take seconds, and an admin who extended the token
+		// meanwhile has re-armed the warning for a NEW date. Marking it now would record that
+		// date as warned when the email named the old one.
+		if current, err := s.db.GetPATByID(pat.ID); err != nil || current.ExpiresAt == nil || !current.ExpiresAt.Equal(*pat.ExpiresAt) {
 			continue
 		}
 		if err := s.db.MarkPATExpiryWarned(pat.ID); err != nil {
@@ -86,7 +100,7 @@ func (s *Server) checkExpiringTokens() {
 // error so the sweep can decline to advance the stage on it.
 func (s *Server) sendTokenExpiringEmail(user *db.User, pat *db.PersonalAccessToken) error {
 	portalLink := s.getPortalBaseURL(nil) + "/portal"
-	expiresStr := pat.ExpiresAt.Format(expiryEmailTimeFormat)
+	expiresStr := pat.ExpiresAt.UTC().Format(expiryEmailTimeFormat)
 
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "token_expiring.html", map[string]interface{}{
 		tmplName:       user.FirstName,
@@ -135,8 +149,13 @@ func (s *Server) sendTokenPermanenceDecisionEmail(r *http.Request, pat *db.Perso
 
 	portalLink := s.getPortalBaseURL(r) + "/portal"
 	expiresStr := ""
+	// A denial may land on a token that lapsed while it sat in the queue -- the decision path
+	// allows a DENY there so an admin can clear the row (#2280). "It still expires on <a past
+	// date>, you will be reminded" would be false, so a lapsed token is told it has expired.
+	expired := false
 	if pat.ExpiresAt != nil {
-		expiresStr = pat.ExpiresAt.Format(expiryEmailTimeFormat)
+		expiresStr = pat.ExpiresAt.UTC().Format(expiryEmailTimeFormat)
+		expired = !pat.ExpiresAt.After(time.Now())
 	}
 
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "token_permanence_decided.html", map[string]interface{}{
@@ -144,23 +163,35 @@ func (s *Server) sendTokenPermanenceDecisionEmail(r *http.Request, pat *db.Perso
 		"TokenName":    pat.Name,
 		"TokenPrefix":  pat.TokenPrefix,
 		"Granted":      granted,
+		"Expired":      expired,
 		tmplExpiresAt:  expiresStr,
 		tmplPortalLink: portalLink,
 	})
-	if err != nil {
-		slog.Info(fmt.Sprintf("[Server] Failed to render token_permanence_decided email: %v", err))
-		return
-	}
 
 	var subject, plain string
-	if granted {
+	switch {
+	case granted:
 		subject = fmt.Sprintf("Access Token Will Not Expire: %s", pat.Name)
 		plain = fmt.Sprintf("Hi %s,\n\nYour request for the access token %s (%s) never to expire has been approved. It no longer expires.\n\nPortal: %s",
 			user.FirstName, pat.Name, pat.TokenPrefix, portalLink)
-	} else {
+	case expired:
+		subject = fmt.Sprintf("Access Token Request Declined: %s", pat.Name)
+		plain = fmt.Sprintf("Hi %s,\n\nYour request for the access token %s (%s) never to expire was not approved, and the token has already expired. To keep using tunnels, run:\n  %s\n\nor create a new token in the portal:\n%s",
+			user.FirstName, pat.Name, pat.TokenPrefix, loginCommand, portalLink)
+	case expiresStr == "":
+		subject = fmt.Sprintf("Access Token Request Declined: %s", pat.Name)
+		plain = fmt.Sprintf("Hi %s,\n\nYour request for the access token %s (%s) never to expire was not approved. It keeps its current expiry, shown in the portal:\n%s",
+			user.FirstName, pat.Name, pat.TokenPrefix, portalLink)
+	default:
 		subject = fmt.Sprintf("Access Token Will Still Expire: %s", pat.Name)
 		plain = fmt.Sprintf("Hi %s,\n\nYour request for the access token %s (%s) never to expire was not approved. It still expires on %s.\n\nYou will be reminded before it does. Portal: %s",
 			user.FirstName, pat.Name, pat.TokenPrefix, expiresStr, portalLink)
+	}
+	if err != nil {
+		// The same fallback the expiry email has, so a broken template override drops
+		// formatting rather than the decision itself.
+		slog.Info(fmt.Sprintf("[Server] Failed to render token_permanence_decided email: %v", err))
+		body = "<p>" + strings.ReplaceAll(html.EscapeString(plain), "\n", "<br>") + "</p>"
 	}
 
 	s.sendNotificationAsync(notifyTokenPermanenceDecided, user.Email, subject, body, plain)

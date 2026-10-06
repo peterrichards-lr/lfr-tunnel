@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"lfr-tunnel/pkg/db"
 	"log/slog"
@@ -24,33 +25,67 @@ import (
 // and "may this user do admin things?" are different questions, and folding the second in here
 // would mean every caller had to opt out of it.
 
-// validatePAT resolves a personal access token to its user, or reports that it is not currently
-// usable. A nil error from the lookup is not enough: the token must also be unrevoked, unexpired,
-// and belong to an approved user.
-func (s *Server) validatePAT(token string) (*db.User, *db.PersonalAccessToken, bool) {
+// tokenVerdict is what checking a personal access token concluded (#2347).
+type tokenVerdict int
+
+const (
+	// tokenValid: the token resolves to an approved user and may be used.
+	tokenValid tokenVerdict = iota
+	// tokenRefused: the token is missing, unknown, revoked or expired, or its user is not
+	// approved. Deliberately one verdict for all of them -- the gateway's 401 must not say which
+	// (#2342).
+	tokenRefused
+	// tokenStoreUnavailable: the lookup itself failed, so nothing is known about the token. Kept
+	// apart from tokenRefused because the registration handlers answer the two differently, and
+	// the client treats a refusal as final.
+	tokenStoreUnavailable
+)
+
+// checkPAT resolves a personal access token to its user, or says why it cannot. A nil error from
+// the lookup is not enough: the token must also be unrevoked, unexpired, and belong to an approved
+// user.
+//
+// Only a failure of the FIRST lookup is reported as tokenStoreUnavailable. At that point nothing
+// is known about the token, so saying "the store is unavailable" says nothing about it -- the same
+// answer would come back for a token that does not exist. A failure AFTER the token row was found
+// (reading its user) is reported as tokenRefused, because answering it differently would be an
+// answer only ever given for a token that exists.
+func (s *Server) checkPAT(token string) (*db.User, *db.PersonalAccessToken, tokenVerdict) {
 	if token == "" || s.db == nil {
-		return nil, nil, false
+		return nil, nil, tokenRefused
 	}
 
 	hashBytes := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hashBytes[:])
 
 	pat, err := s.db.GetPATByHash(tokenHash)
+	if errors.Is(err, db.ErrNotFound) {
+		return nil, nil, tokenRefused
+	}
 	if err != nil {
-		return nil, nil, false
+		slog.Error(fmt.Sprintf("[Server] Token lookup failed, so the token could not be checked: %v", err))
+		return nil, nil, tokenStoreUnavailable
 	}
 	if pat.RevokedAt != nil {
-		return nil, nil, false
+		return nil, nil, tokenRefused
 	}
 	if pat.ExpiresAt != nil && !pat.ExpiresAt.After(time.Now().UTC()) {
-		return nil, nil, false
+		return nil, nil, tokenRefused
 	}
 
 	user, err := s.db.GetUser(pat.UserID)
 	if err != nil || user == nil || user.Status != db.UserStatusApproved {
-		return nil, nil, false
+		return nil, nil, tokenRefused
 	}
-	return user, pat, true
+	return user, pat, tokenValid
+}
+
+// validatePAT is checkPAT for callers that only need "usable or not". Every caller of this treats
+// an unavailable store as a refusal, which is what they all did before #2347 -- only the
+// registration handlers, where a refusal is final, needed the difference.
+func (s *Server) validatePAT(token string) (*db.User, *db.PersonalAccessToken, bool) {
+	user, pat, verdict := s.checkPAT(token)
+	return user, pat, verdict == tokenValid
 }
 
 // touchPAT records the token as used, without making the caller wait for a write it does not
@@ -68,21 +103,31 @@ func (s *Server) touchPAT(patID int64) {
 // isValidToken checks if a token is valid, checking personal access tokens (PATs)
 // in the database.
 func (s *Server) isValidToken(token string) (*db.User, bool) {
-	user, _, ok := s.authenticateToken(token)
-	return user, ok
+	user, _, verdict := s.authenticateToken(token)
+	return user, verdict == tokenValid
 }
 
-// authenticateToken is isValidToken for a caller that also needs the token itself -- the
-// registration handlers, which tell the client when its token expires (#2344). The same check and
-// the same last-used update; only the return differs, so the two cannot drift apart.
-func (s *Server) authenticateToken(token string) (*db.User, *db.PersonalAccessToken, bool) {
-	user, pat, ok := s.validatePAT(token)
-	if !ok {
-		return nil, nil, false
+// authenticateToken is isValidToken for the registration handlers, which need the token itself --
+// to tell the client when it expires (#2344) -- and the verdict, to answer an unavailable token
+// store with 503 rather than the final 401 (#2347). The same check and the same last-used update;
+// only the return differs, so the two cannot drift apart.
+func (s *Server) authenticateToken(token string) (*db.User, *db.PersonalAccessToken, tokenVerdict) {
+	user, pat, verdict := s.checkPAT(token)
+	if verdict != tokenValid {
+		return nil, nil, verdict
 	}
 	s.touchPAT(pat.ID)
-	return user, pat, true
+	return user, pat, tokenValid
 }
+
+// tokenStoreUnavailableRetrySeconds is the Retry-After on a 503 for an unavailable token store.
+// Short, because the realistic cause is SQLite's busy timeout during a backup or a burst of
+// writes, which clears in seconds.
+const tokenStoreUnavailableRetrySeconds = 5
+
+// tokenStoreUnavailableMessage names no token state, on purpose: the same answer comes back
+// whatever token was sent.
+const tokenStoreUnavailableMessage = "the gateway could not check your token just now; retry in a moment"
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	var actorEmail string

@@ -315,6 +315,63 @@ EXTRA
     fi
 fi
 
+# 6. A workflow backing a required context must not combine a `concurrency:` group with
+#    pull_request triggers that fire without a new commit (#2358).
+#
+#    Such triggers -- edited, labeled, unlabeled and the like -- put several runs on ONE SHA,
+#    and a concurrency group cancels a PENDING run whenever a newer one joins it, regardless of
+#    cancel-in-progress. A run cancelled before its job starts creates a check suite with no
+#    check run, so the required context shows "Expected -- Waiting for status to be reported"
+#    and the PR is blocked with every check green. That is what held #2354 for 16 hours, and it
+#    is invisible to `gh pr checks` and to statusCheckRollup alike.
+#
+#    The commit-changing defaults (opened, synchronize, reopened) are allowed, which is what
+#    ci.yml and e2e-sso.yml use: there each run supersedes the last on a NEW SHA, and cancelling
+#    the old one is the point. The blind spot that leaves, stated rather than hidden: `reopened`
+#    does not change the SHA either, so reopening a PR while its run is still queued could do
+#    the same thing to those workflows. It is rare enough, and the commit-changing groups useful
+#    enough, that this check does not forbid it.
+while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    [ -f "$file" ] || continue
+    grep -qE '^[[:space:]]*concurrency:' "$file" || continue
+
+    # The pull_request `types:` list, inline ([a, b]) or block (- a) form. No `types:` means
+    # GitHub's defaults, which are all commit-changing.
+    pr_types=$(awk '
+        /^on:/          { in_on = 1; next }
+        in_on && /^[a-zA-Z]/ { exit }
+        in_on && /^  pull_request:/ { in_pr = 1; next }
+        in_on && /^  [a-zA-Z_-]+:/  { in_pr = 0; in_types = 0 }
+        in_pr && /^    types:/ {
+            line = $0; sub(/^    types:[[:space:]]*/, "", line)
+            if (line ~ /^\[/) { gsub(/[][,]/, " ", line); n = split(line, t, " "); for (i = 1; i <= n; i++) print t[i] }
+            else { in_types = 1 }
+            next
+        }
+        in_types && /^      - / { v = $0; sub(/^      - /, "", v); print v; next }
+        in_types && /^    [a-zA-Z]/ { in_types = 0 }
+    ' "$file")
+
+    same_sha=""
+    for t in $pr_types; do
+        case "$t" in
+            opened|synchronize|reopened) ;;
+            *) same_sha="$same_sha $t" ;;
+        esac
+    done
+    [ -n "$same_sha" ] || continue
+
+    echo "ERROR: $file declares a concurrency group and backs a required context, but its" >&2
+    echo "       pull_request trigger includes events that do not change the commit:$same_sha." >&2
+    echo "       Those put several runs on one SHA; the group cancels a pending one before its" >&2
+    echo "       job starts, no check run is created, and the required context waits forever" >&2
+    echo "       (#2358). Drop the concurrency group, or drop those trigger types." >&2
+    fail=1
+done <<FILES
+$REQUIRED_FILES
+FILES
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi

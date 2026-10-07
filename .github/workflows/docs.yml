@@ -12,8 +12,9 @@ on:
 
 # Only one Pages deployment should ever be in flight at a time -- unlike most of this
 # repo's other workflows, don't cancel an in-progress deployment (a half-applied deploy
-# would leave the live site broken). Same reasoning as the issue-link-check concurrency
-# group (#1033).
+# would leave the live site broken). This group is safe where issue-link-check's was not
+# (#2358): GitHub still cancels a PENDING run when a newer one queues, and for a deploy only
+# the newest one matters -- nothing here is a required status check waiting on every run.
 concurrency:
   group: "pages"
   cancel-in-progress: false

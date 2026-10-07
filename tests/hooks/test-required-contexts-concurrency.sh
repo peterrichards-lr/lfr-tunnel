@@ -166,6 +166,68 @@ on:
     types: [opened, edited, labeled]'
 run_case "same-SHA types without a group are allowed" allowed
 
+# pull_request_target is how label-driven workflows are usually written; same trigger shape.
+write_issue_link 'name: Issue Link Check
+
+on:
+  pull_request_target:
+    types: [opened, labeled]
+
+concurrency:
+  group: x'
+run_case "pull_request_target types are read too" refused "labeled"
+
+# A trigger that never carries a new commit is same-SHA by nature, whatever its types.
+write_issue_link 'name: Issue Link Check
+
+on:
+  pull_request:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: x'
+run_case "a PR-attached trigger with no commit of its own is refused" refused "trigger:pull_request_review"
+
+# Fail-closed false positives the first parser had: each of these is a SAFE list.
+write_issue_link 'name: Issue Link Check
+
+on:
+  pull_request:
+    types: ["opened", '"'"'synchronize'"'"']  # quoted, with a trailing comment
+
+concurrency:
+  group: x'
+run_case "quoted safe types and a trailing comment are allowed" allowed
+
+# to_crlf — rewrite the fixture with CRLF line endings, as a Windows checkout would.
+to_crlf() {
+    sed 's/$/\r/' "$TREE/.github/workflows/issue-link-check.yml" > "$WORK/crlf" \
+        && mv "$WORK/crlf" "$TREE/.github/workflows/issue-link-check.yml"
+}
+
+write_issue_link 'name: Issue Link Check
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: x'
+to_crlf
+run_case "a safe list with CRLF line endings is allowed" allowed
+
+write_issue_link 'name: Issue Link Check
+
+on:
+  pull_request:
+    types: [opened, labeled]
+
+concurrency:
+  group: x'
+to_crlf
+run_case "a dangerous list with CRLF line endings is still refused" refused "labeled"
+
 echo ""
 echo "  passed: $PASS  failed: $FAIL"
 [ "$FAIL" -eq 0 ]

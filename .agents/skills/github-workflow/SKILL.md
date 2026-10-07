@@ -612,9 +612,12 @@ Two related rules the same script enforces, both learned from permanent merge bl
 
   Such a run creates a check suite but no check run, so `gh pr checks`, the check-runs API and
   `statusCheckRollup` all show one green run and nothing wrong. `gh run rerun <id>` clears it.
-  The cause was a `concurrency:` group on a workflow triggered by `labeled`/`edited`: GitHub
-  cancels a **pending** run when a newer one joins the group, `cancel-in-progress: false`
-  notwithstanding. Check 6 of `scripts/check-required-contexts.sh` now refuses that combination.
+  The cause was a `concurrency:` group on a workflow triggered by `labeled`/`edited`: under the
+  default `queue: single`, GitHub cancels a **pending** run when a newer one joins the group,
+  `cancel-in-progress: false` notwithstanding -- it takes a run already holding the group plus
+  two arriving together, which a Dependabot rebase produces. Check 6 of
+  `scripts/check-required-contexts.sh` now refuses a group on any required-context workflow with
+  triggers that do not change the commit.
   It held #2354 for 16 hours, and the ruleset's unattributed-changes approval was blamed first by
   elimination — wrongly, because elimination over the visible checks cannot find a check that
   was never created. Compare against a sibling PR that *is* CLEAN before concluding anything.

@@ -568,6 +568,27 @@ func newChiselServerConfig(cfg *config.ServerConfig) *chserver.Config {
 	}
 }
 
+// newChiselServer builds the embedded chisel server with its INFO logging switched off.
+//
+// The chisel username is the session token itself (Registry.AddUser in auth.go), and that
+// token is a credential: /api/deregister accepts it on its own. chisel 1.12 began logging the
+// username at INFO -- "Open (user=...)" and "Close (user=...)" for every tunnel session, and
+// "Login failed for user ..." which 1.11 kept at Debug -- so leaving INFO on would write live
+// tokens to journald on every gateway (#2356). Nothing reads chisel's own INFO lines; what it
+// loses is startup chatter ("Listening on", "Fingerprint") that this server logs better itself.
+//
+// Switching it off on the server's logger is what silences the session lines too: chisel
+// builds each session's logger with Fork, which shares the parent's Info flag by pointer but
+// NOT its output, so redirecting the output through a redacting writer would have missed them.
+func newChiselServer(cfg *config.ServerConfig) (*chserver.Server, error) {
+	chiselSrv, err := chserver.NewServer(newChiselServerConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	chiselSrv.Info = false
+	return chiselSrv, nil
+}
+
 // NewServer initializes and returns a new Server instance.
 func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	validateTunnelDomains(cfg)
@@ -581,8 +602,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	// Initialize Chisel server config
-	chiselCfg := newChiselServerConfig(cfg)
-	chiselSrv, err := chserver.NewServer(chiselCfg)
+	chiselSrv, err := newChiselServer(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize chisel server: %v", err)
 	}

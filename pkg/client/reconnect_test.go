@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -85,6 +86,9 @@ func TestChiselClientConfigCarriesReconnectPolicy(t *testing.T) {
 	if cfg.KeepAlive != defaultChiselKeepAlive {
 		t.Errorf("KeepAlive = %s, want %s -- unset means chisel never pings and a dead control channel is never noticed (#1946)", cfg.KeepAlive, defaultChiselKeepAlive)
 	}
+	if cfg.MinRetryInterval != chiselBackoffMin {
+		t.Errorf("MinRetryInterval = %s, want %s -- unset, chisel >= 1.12 starts its backoff at 1s and every attempt count derived from %s runs several times too long (#2356)", cfg.MinRetryInterval, chiselBackoffMin, chiselBackoffMin)
+	}
 	if cfg.MaxRetryInterval != chiselMaxRetryInterval {
 		t.Errorf("MaxRetryInterval = %s, want %s", cfg.MaxRetryInterval, chiselMaxRetryInterval)
 	}
@@ -127,17 +131,22 @@ func TestChiselClientConfigHonoursAndClampsTheAdvertisedWindow(t *testing.T) {
 // TestRetryCountForWindowMatchesChiselBackoff checks the derivation against the real backoff
 // library chisel uses, not against a restatement of it.
 //
-// retryCountForWindow has to reproduce chisel's schedule -- `&backoff.Backoff{Max:
-// MaxRetryInterval}` with Min and Factor left at the library defaults
-// (chisel/client/client_connect.go:22) -- and the whole defect in #1946 was believing a
-// schedule without checking it. So the expected total is summed from the library itself: a
-// dependency bump that changes those defaults turns this red instead of silently shortening
-// every client's reconnect window.
+// retryCountForWindow has to reproduce chisel's schedule -- `&backoff.Backoff{Min:
+// MinRetryInterval, Max: MaxRetryInterval}` with Factor left at the library default
+// (chisel/client/client_connect.go) -- and the whole defect in #1946 was believing a schedule
+// without checking it. So the expected total is summed from the library itself: a backoff bump
+// that changes its defaults turns this red instead of silently changing every client's
+// reconnect window.
+//
+// What this does NOT cover is chisel changing how it builds the Backoff. Up to 1.11 it omitted
+// Min, and this test mirrored that, so chisel 1.12 defaulting Min to 1s passed here and was
+// caught only by the RunClient reconnect tests (#2356). TestChiselClientConfigCarriesReconnectPolicy
+// now pins MinRetryInterval, which is the half of that this package controls.
 func TestRetryCountForWindowMatchesChiselBackoff(t *testing.T) {
 	for _, window := range []time.Duration{failoverHandbackWindow, minReconnectWindow, defaultReconnectWindow, maxReconnectWindow} {
 		count := retryCountForWindow(window)
 
-		b := &backoff.Backoff{Max: chiselMaxRetryInterval}
+		b := &backoff.Backoff{Min: chiselBackoffMin, Max: chiselMaxRetryInterval}
 		var total time.Duration
 		for i := 0; i < count; i++ {
 			total += b.Duration()
@@ -146,7 +155,7 @@ func TestRetryCountForWindowMatchesChiselBackoff(t *testing.T) {
 			t.Errorf("%d attempts cover only %s of chisel's real backoff, short of the %s window", count, total, window)
 		}
 
-		b2 := &backoff.Backoff{Max: chiselMaxRetryInterval}
+		b2 := &backoff.Backoff{Min: chiselBackoffMin, Max: chiselMaxRetryInterval}
 		var oneLess time.Duration
 		for i := 0; i < count-1; i++ {
 			oneLess += b2.Duration()
@@ -214,11 +223,33 @@ func TestRunClientHandsBackPromptlyWhenFailoverIsAvailable(t *testing.T) {
 	// 12.7s of backoff plus the dial attempts themselves; 30s is generous headroom for a busy
 	// CI box without being so loose that a regression to the 60s window would still pass.
 	select {
-	case <-done:
+	case err := <-done:
+		// nil is the contract the session loop in cmd/lfr-tunnel branches on: an error there
+		// is a fatal local fault, so a give-up reported as one exits the process instead of
+		// re-registering (#2356). chisel 1.12 started returning one.
+		if err != nil {
+			t.Errorf("RunClient returned %q when chisel gave up on the gateway; the session loop treats any error as fatal, so a client with no failover path would exit instead of re-registering", err)
+		}
 	case <-time.After(30 * time.Second):
 		t.Fatalf("RunClient was still retrying after 30s with failover available; region failover is starved (%d attempts)", atomic.LoadInt32(&attempts))
 	}
 	if elapsed := time.Since(start); elapsed < 5*time.Second {
 		t.Errorf("handed back after only %s -- that is a blip away from an unnecessary region move, which is what the window exists to absorb", elapsed.Round(time.Millisecond))
+	}
+}
+
+// TestChiselWaitResultOnlyForgivesTheGiveUp pins the other half of chiselWaitResult: only
+// chisel's give-up becomes nil. Any other error is a local fault the session loop must still
+// see, and swallowing it would loop forever on something re-registering cannot fix.
+func TestChiselWaitResultOnlyForgivesTheGiveUp(t *testing.T) {
+	if err := chiselWaitResult(errors.New(chiselGaveUp)); err != nil {
+		t.Errorf("chisel's give-up should map to nil, got %v", err)
+	}
+	if err := chiselWaitResult(nil); err != nil {
+		t.Errorf("nil should stay nil, got %v", err)
+	}
+	other := errors.New("listen tcp 127.0.0.1:60000: bind: address already in use")
+	if err := chiselWaitResult(other); err != other {
+		t.Errorf("a local fault must pass through unchanged, got %v", err)
 	}
 }

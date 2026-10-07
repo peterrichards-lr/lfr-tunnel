@@ -721,9 +721,9 @@ const defaultHeartbeatInterval = 5 * time.Second
 // certain, rather than on what the failure looks like, which it cannot tell apart.
 //
 // What was here before was `MaxRetryInterval: 3s, MaxRetryCount: 3`, which is not "three
-// seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel
-// builds `&backoff.Backoff{Max: MaxRetryInterval}` and leaves Min and Factor at the library
-// defaults of 100ms and 2, then tests the attempt count before sleeping
+// seconds times three tries". MaxRetryInterval is only the CAP on chisel's backoff: chisel 1.11
+// built `&backoff.Backoff{Max: MaxRetryInterval}` and left Min and Factor at the library
+// defaults of 100ms and 2, then tested the attempt count before sleeping
 // (chisel/client/client_connect.go:22,48). The real budget was four connection attempts and
 // 700ms of backoff -- the 3s cap was never reached -- so every gateway deploy ended every
 // tunnel attached to it. Measured in production: two deploys, the same user's client absent
@@ -741,7 +741,7 @@ const defaultHeartbeatInterval = 5 * time.Second
 // hand control back so region failover can run, and this window is the upper bound on how
 // long that takes for a loss nothing signalled. Every signalled reason to move -- lease
 // eviction, a drain/shutdown warning, a failback -- cancels the session context, which
-// chisel's retry loop selects on (client_connect.go:56-59), so those paths preempt this
+// chisel's retry loop selects on (chisel 1.12.1 client_connect.go:66-72), so those paths preempt this
 // window immediately and are not delayed by it at all.
 //
 // minReconnectWindow and maxReconnectWindow bound what a gateway is allowed to talk this
@@ -779,11 +779,16 @@ const failoverHandbackWindow = 10 * time.Second
 // larger.
 const chiselMaxRetryInterval = 10 * time.Second
 
-// chiselBackoffMin is the first backoff step, i.e. github.com/jpillora/backoff's default Min,
-// which chisel relies on by leaving the field zero. Restated here because deriving an attempt
-// count from a duration means reproducing chisel's backoff schedule, and that schedule is only
-// correct if this matches. TestReconnectWindowMatchesChiselBackoff cross-checks it against the
-// real library rather than against this comment.
+// chiselBackoffMin is the first backoff step, passed to chisel as MinRetryInterval.
+//
+// It is set explicitly because chisel's own default moved under us: up to 1.11 chisel left the
+// backoff's Min at zero, so the library default of 100ms applied, and 1.12 added
+// MinRetryInterval and defaults it to 1s (#2356). Every attempt count below was derived from a
+// 100ms first step, so under the new default the same count stretched failoverHandbackWindow
+// from 10s to ~46s -- the bump compiled cleanly and only the reconnect tests noticed. Deriving an
+// attempt count from a duration means reproducing chisel's backoff schedule, so we own the first
+// step instead of inheriting it. TestRetryCountForWindowMatchesChiselBackoff cross-checks it
+// against the real library rather than against this comment.
 const chiselBackoffMin = 100 * time.Millisecond
 
 // clampReconnectWindow returns the window the client will actually honour for an advertised
@@ -845,6 +850,7 @@ func newChiselClientConfig(serverURL, token string, remotes []string, advertised
 		Auth:             fmt.Sprintf("%s:%s", token, token),
 		Remotes:          remotes,
 		KeepAlive:        defaultChiselKeepAlive,
+		MinRetryInterval: chiselBackoffMin,
 		MaxRetryInterval: chiselMaxRetryInterval,
 		MaxRetryCount:    retryCountForWindow(window),
 	}
@@ -952,7 +958,26 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}()
 
 	// 5. Block until context done or wait error
-	return c.Wait()
+	return chiselWaitResult(c.Wait())
+}
+
+// chiselGaveUp is the error chisel >= 1.12 returns once MaxRetryCount is spent. Unexported
+// upstream, so matched by text; TestRunClientHandsBackPromptlyWhenFailoverIsAvailable fails if
+// chisel rewords it.
+const chiselGaveUp = "connection attempts exhausted"
+
+// chiselWaitResult maps chisel giving up on the gateway back to nil.
+//
+// Up to 1.11 chisel's connectionLoop returned nil when it gave up, and the session loop in
+// cmd/lfr-tunnel depends on that: nil means "the connection is gone, re-register or fail
+// over", while an error means a local fault that ends the process. chisel 1.12 returns an
+// error instead, which turned every unsignalled gateway loss into a fatal exit for a client
+// with no failover path -- the #1946 outage again, one reconnect window later (#2356).
+func chiselWaitResult(err error) error {
+	if err != nil && err.Error() == chiselGaveUp {
+		return nil
+	}
+	return err
 }
 
 // connectAnnounceTimeout bounds how long the "fully online" announcement waits for the

@@ -601,6 +601,27 @@ Two related rules the same script enforces, both learned from permanent merge bl
   a context that was never created does not appear there at all while still blocking the merge,
   so a green-looking rollup is not proof a PR can merge.
 
+- **A cancelled run with no jobs blocks just as silently (#2358).** If the merge box shows a
+  required context as *"Expected — Waiting for status to be reported"* while that same check is
+  green, look for a workflow run on the head SHA that was cancelled before its job started:
+
+  ```bash
+  gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>" \
+    --jq '.workflow_runs[] | "\(.id) \(.name) \(.conclusion)"'
+  ```
+
+  Such a run creates a check suite but no check run, so `gh pr checks`, the check-runs API and
+  `statusCheckRollup` all show one green run and nothing wrong. `gh run rerun <id>` clears it.
+  The cause was a `concurrency:` group on a workflow triggered by `labeled`/`edited`: under the
+  default `queue: single`, GitHub cancels a **pending** run when a newer one joins the group,
+  `cancel-in-progress: false` notwithstanding -- it takes a run already holding the group plus
+  two arriving together, which a Dependabot rebase produces. Check 6 of
+  `scripts/check-required-contexts.sh` now refuses a group on any required-context workflow with
+  triggers that do not change the commit.
+  It held #2354 for 16 hours, and the ruleset's unattributed-changes approval was blamed first by
+  elimination — wrongly, because elimination over the visible checks cannot find a check that
+  was never created. Compare against a sibling PR that *is* CLEAN before concluding anything.
+
 A job-level `if:` on a normal, non-matrix job **is** fine: GitHub accepts a `skipped`
 conclusion for a required status check. Verified — PR #1379 merged while two required
 contexts were skipped. Don't remove existing path filters believing otherwise; that would
@@ -652,4 +673,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-29* | *Last Reviewed: 2026-09-29*
+*Last Updated: 2026-10-07* | *Last Reviewed: 2026-10-07*

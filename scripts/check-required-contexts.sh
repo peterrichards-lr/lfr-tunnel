@@ -315,6 +315,69 @@ EXTRA
     fi
 fi
 
+# 6. A workflow backing a required context must not combine a `concurrency:` group with
+#    triggers that fire without a new commit (#2358).
+#
+#    Such triggers -- edited, labeled, unlabeled, a review, a comment -- put several runs on ONE
+#    SHA. Under a group's default `queue: single`, GitHub cancels a PENDING run whenever a newer
+#    one joins, whatever cancel-in-progress says. It takes three runs in the group: one running,
+#    and two arriving together, one of which is cancelled. A run cancelled before its job starts
+#    creates a check suite with no check run, and if it is the newest suite on the head SHA the
+#    required context shows "Expected -- Waiting for status to be reported" and the PR is
+#    blocked with every check green. That held #2354 for 16 hours, invisible to `gh pr checks`
+#    and to statusCheckRollup alike. A `queue: max` group would not cancel, but it is refused
+#    here too: this repo has been wrong about queue semantics once already (#1033).
+#
+#    Read: `pull_request` and `pull_request_target` `types:` (inline or block, quotes and
+#    trailing comments tolerated), and the PR-attached triggers that never carry a new commit.
+#    The commit-changing defaults (opened, synchronize, reopened) are allowed, which is what
+#    ci.yml and e2e-sso.yml use: each run supersedes the last on a NEW SHA, and cancelling the
+#    old one is the point. Blind spots, stated rather than hidden:
+#      - `reopened` does not change the SHA either, so reopening a PR while its run is queued
+#        or running could do the same to those workflows. Rare, and the groups are worth it.
+#      - The parser reads this repo's YAML style -- 2-space indentation, block `on:` -- not
+#        every form YAML allows (flow-mapping `on: {…}`, quoted keys, multi-line flow lists),
+#        nor a group declared inside a called reusable workflow.
+while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    [ -f "$file" ] || continue
+    grep -qE '^[[:space:]]*concurrency:' "$file" || continue
+
+    same_sha=$(awk '
+        { sub(/\r$/, ""); sub(/[[:space:]]+#.*$/, ""); gsub(/["\047]/, "") }
+        /^on:/          { in_on = 1; next }
+        in_on && /^[a-zA-Z]/ { exit }
+        in_on && /^  (pull_request|pull_request_target):/ { in_pr = 1; in_types = 0; next }
+        in_on && /^  (pull_request_review|pull_request_review_comment|issue_comment|check_run|check_suite|status):/ {
+            k = $0; sub(/^  /, "", k); sub(/:.*/, "", k); print "trigger:" k
+            in_pr = 0; in_types = 0; next
+        }
+        in_on && /^  [a-zA-Z_-]+:/  { in_pr = 0; in_types = 0; next }
+        in_pr && /^    types:/ {
+            line = $0; sub(/^    types:[[:space:]]*/, "", line)
+            if (line ~ /^\[/) { gsub(/[][,]/, " ", line); n = split(line, t, " "); for (i = 1; i <= n; i++) emit(t[i]) }
+            else { in_types = 1 }
+            next
+        }
+        in_types && /^      - / { v = $0; sub(/^      - /, "", v); emit(v); next }
+        in_types && /^    [a-zA-Z]/ { in_types = 0 }
+        function emit(v) {
+            gsub(/[[:space:]]/, "", v)
+            if (v != "" && v != "opened" && v != "synchronize" && v != "reopened") print v
+        }
+    ' "$file" | tr '\n' ' ')
+    [ -n "$same_sha" ] || continue
+
+    echo "ERROR: $file declares a concurrency group and backs a required context, but it" >&2
+    echo "       is triggered by events that do not change the commit: $same_sha" >&2
+    echo "       Those put several runs on one SHA; by default the group cancels a pending one" >&2
+    echo "       before its job starts, no check run is created, and the required context can" >&2
+    echo "       wait forever (#2358). Drop the concurrency group, or drop those triggers." >&2
+    fail=1
+done <<FILES
+$REQUIRED_FILES
+FILES
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi

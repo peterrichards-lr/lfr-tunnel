@@ -6,17 +6,33 @@ on:
     branches:
       - master
 
-# cancel-in-progress deliberately false (#1033): this check runs on both `opened` and
-# `labeled` (e.g. adding `no-issue-needed` right after opening a PR that didn't reference
-# an issue), and cancelling the in-flight `opened` run left a `cancelled` check-run
-# alongside the `labeled` run's `success` for the same required context -- branch
-# protection latched onto the cancelled one and blocked merge even though the latest run
-# for this context had actually succeeded. Runs still queue sequentially within the same
-# PR (never in parallel) via the shared concurrency group; they just complete naturally
-# instead of being cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+# Deliberately NO `concurrency:` group (#2358). This workflow fires on events that do not
+# change the commit -- edited, labeled, unlabeled -- so several runs on one SHA are normal (a
+# Dependabot PR is opened and labelled within a second), and a required context cannot sit
+# behind a group that cancels any of them.
+#
+# The group used to be here with `cancel-in-progress: false`, on the reasoning (#1033) that
+# runs would "complete naturally instead of being cancelled". That holds only for a run already
+# IN PROGRESS. Under the default `queue: single`, a group holds one running and one pending run,
+# and GitHub cancels the pending one whenever a newer run joins, whatever cancel-in-progress
+# says. On #2354 a Dependabot rebase did exactly that: the previous SHA's run still held the
+# group when two runs for the new SHA arrived together, and one was cancelled two seconds after
+# creation, before any job started. Its check suite had no "Verify PR references an issue" run,
+# the required context showed "Expected -- Waiting for status to be reported", and the PR sat
+# BLOCKED for 16 hours with every check green. Nothing but `actions/runs?head_sha=` showed it,
+# because a job-less run creates no check run. (The same cancellation happens on most Dependabot
+# PRs; it only blocks when the job-less run is the newest on the head SHA.)
+#
+# Without a group, runs overlap. The job is read-only and reads the PR's labels, title and body
+# live, and nothing cancels, so #1033's failure -- a cancelled check run beside a successful one
+# -- cannot recur. What overlap does allow is two runs finishing out of order, in either
+# direction: one that read the PR just before a label landed can fail after a newer one passed
+# (a red check a re-run clears), or one that read it just before a label was removed can pass
+# after a newer one failed (the policy reads green for a PR that no longer complies). Both need
+# events seconds apart, and both are visible on the PR -- unlike the silent, indefinite block
+# they replace. `queue: max` would keep the runs in order without cancelling, and was passed
+# over on purpose: it puts this required context back on GitHub's queue semantics, which is
+# what #1033 got wrong. scripts/check-required-contexts.sh (check 6) fails if a group returns.
 
 permissions:
   contents: read

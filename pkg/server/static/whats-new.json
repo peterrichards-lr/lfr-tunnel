@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.52.1",
+    "release_date": "2026-10-07",
+    "features": [
+      "Maintenance release: the tunnel transport is updated to chisel 1.12.1, which brings its upstream security fixes. Reconnection after a gateway restart and region failover behave exactly as before."
+    ]
+  },
+  {
     "version": "v1.52.0",
     "release_date": "2026-10-06",
     "features": [
@@ -49,28 +56,6 @@
       "feat(edr): a PreToolUse guard that refuses execution, not mention (#2289) (#2301)",
       "fix(api): stop publishing the owner's email address to anonymous callers (#2300)",
       "docs(agents): name who publishes a draft, and a third test-coverage shape (#2292, #2293) (#2299)"
-    ]
-  },
-  {
-    "version": "v1.50.0",
-    "release_date": "2026-09-29",
-    "features": [
-      "docs(architecture): supported_domains, and why served is not issuable (#2295) (#2296)",
-      "feat(gates): a ceiling on pipefail + `grep -q`, which can report the opposite of the truth (#2290) (#2291)",
-      "feat(agents): a decisions directory, delegation rules, and a preflight table (#2287) (#2288)",
-      "fix(edr): the deny list covers the daemon, and a derived gate keeps it covering it (#2283) (#2284)",
-      "chore: remove the agent session transcript committed to the repo root (#2285) (#2286)",
-      "docs(server): what may never expire, and what `approval` costs an operator (#2268) (#2282)",
-      "fix(portal): the release confirmation names what is actually being released (#2273) (#2281)",
-      "feat(portal): both arms render the never-expires option from the policy, not the role (#2266) (#2279)",
-      "fix(client): the health check dials the target's port, and the gateway stops paging on a timer (#2270) (#2278)",
-      "feat(config): custom_domain_expiry_days, and one resolver for both resources (#2276) (#2277)",
-      "feat(server): a token permanence request can be raised, granted and denied (#2267) (#2275)",
-      "a11y(portal): both arms declare <html lang>, and the iron warning keeps its SSH sentence (#2262) (#2269)",
-      "test(e2e): point the expensive job at the data plane and a non-admin journey (#2249) (#2272)",
-      "feat(server): never_expires is three operator policies the server enforces (#2265) (#2274)",
-      "fix(portal): 70 new keys, ten locales, and the mechanism a title= needs (#2248) (#2260)",
-      "fix(portal-v1): split the emphasis out of two properties values (#2252) (#2255)"
     ]
   }
 ]

@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.336.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.1
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.1
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.25.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1

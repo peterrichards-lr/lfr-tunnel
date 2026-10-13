@@ -3,20 +3,38 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v1.2.0` (origin/main @ `83b1cf2`, 2026-08-01)
-**Last checked**: 2026-08-05
+**Reference version at last check**: `v2.1.0` (main @ `f304c4a`, 2026-09-22)
+**Last checked**: 2026-10-13
 
 ## Known drift as of this check
 
-- [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) — pre-release version-bump PRs merge directly to `master` at high volume (10 in ~6 hours on one day); release branch naming disagrees between the script and `CONTRIBUTING.md`.
-- [#932](https://github.com/peterrichards-lr/lfr-tunnel/issues/932) — an EDR/SentinelOne test-safety rule is stated with different strictness across 3 files; the file designated as the single source of truth is stale relative to the real incident that hardened the rule elsewhere. `AGENTS.md` itself states "single source of truth per topic... if you see the same rule stated differently in two places, that's a bug" — this repo is currently in violation of its own stated principle.
-- [#933](https://github.com/peterrichards-lr/lfr-tunnel/issues/933) — the doc-review timestamp system is unreliable (an 18-day undetected drift was found) and duplicated across two near-identical checker scripts. `ai-agent-template` fixed the underlying cause of this class of bug in its PR #16 (append-only timestamp injection instead of rewrite-on-touch).
+None open. The three items recorded at the 2026-08-05 check are all closed:
+[#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
+naming), [#932](https://github.com/peterrichards-lr/lfr-tunnel/issues/932) (the EDR rule stated
+three ways) and [#933](https://github.com/peterrichards-lr/lfr-tunnel/issues/933) (the doc-review
+timestamp system).
+
+## 2026-10-13: the REA lessons
+
+The template's review of `morluto/rea` produced six lessons, each assessed here against what this
+repo actually has. They were assessed from that review's written brief: the
+`feature/rea-lessons` branch it describes was not on GitHub at this check, so none of it was
+compared as merged template code.
+
+| Lesson | Here |
+| --- | --- |
+| 1. Generate the skill index and check it | **Adopted as a check, not a generator** ([#2363](https://github.com/peterrichards-lr/lfr-tunnel/issues/2363)): `scripts/check-skill-routing.py`. AGENTS.md routes by what an agent is *about to do*, with reasoning, which frontmatter cannot produce. |
+| 2. Turn bug classes into blocking guards | **Already the practice**: ~35 bespoke `scripts/check-*` gates and ratchets, each citing its incident and most tested with a control in `tests/hooks`. A shared `.guards.json` would refactor working code and lose the incident-specific messages. |
+| 3. Engineering principles, not just etiquette | **Two of five adopted** ([#2361](https://github.com/peterrichards-lr/lfr-tunnel/issues/2361)): "a passing check is evidence only if it could have failed" and "unknown is not absent", in AGENTS.md. The other three add little to its Pragmatism section. |
+| 4. A fast inner loop separate from the full gate | **Already met**: commit-time hooks are fast, push runs the full suite, and `make test PKG=… TEST_FLAGS=…` scopes a run. |
+| 5. Reversible setup | **Not applicable**: no bootstrap. The one destructive helper, `make prune-branches`, already writes a recovery manifest and refuses `master` and `checksums`. |
+| 6. Measure whether instructions help (skill evals) | **Not adopted yet**: the brief records its harness as never run against a real model, and here it would mean running agents in throwaway worktrees on an EDR-watched machine. Revisit once the template has results. |
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 
-`coding-standards`, `documentation`, `github-workflow`, `human-in-the-loop`, `multi-agent-orchestration`, `reflection-and-planning`, `release-management`, `rule-adherence`, `tool-use-react`, `unit-testing`
-
-`ai-agent-template`'s `release-management` and `rule-adherence` skills are directly relevant to the drift found above and are worth reading before fixing these issues locally.
+`coding-standards`, `documentation`, `documentation-review`, `e2e-verification`, `github-workflow`,
+`human-in-the-loop`, `multi-agent-orchestration`, `no-assumptions`, `reflection-and-planning`,
+`release-management`, `rule-adherence`, `template-sync`, `tool-use-react`, `unit-testing`
 
 ## How to use this file
 
@@ -24,5 +42,6 @@ Before writing a new agent rule here, check whether `ai-agent-template` already 
 
 Update the "Last checked" date and the drift list above whenever this comparison is repeated.
 
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*

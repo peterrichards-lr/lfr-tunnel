@@ -116,6 +116,42 @@ could not confirm this in the codebase — treating it as unverified") rather th
 presenting a guess as fact. A wrong grounded-sounding answer is worse than an
 honest "I don't know."
 
+## Engineering principles
+
+Groundedness is about claims concerning the code. These two are about claims concerning
+**results** — a test, a gate, a log search, a production check — which is where this repo has
+actually been misled (#2361).
+
+- **A passing check is evidence only if it could have failed.** Before reporting green, show the
+  same check going red on input that is known to be bad — the *control* — or say the result is
+  unverified. A check that cannot fail looks exactly like one that passed:
+  - #1919 shipped with its test green, because the fixture described a region name no client ever
+    writes;
+  - the warm-up test written for #1947 passed against the unfixed code, because it closed a
+    response body unread and so never pooled a connection;
+  - verifying v1.52.1's token-logging fix, "0 token-bearing lines" was reported twice from
+    gateways where no tunnel session existed to log one — the live lease count was the signal
+    that could tell the two apart.
+
+  The skills hold the domain forms of this rule, and are the place to add new ones:
+  [`e2e-testing`](.agents/skills/e2e-testing/SKILL.md) (mutation tests and markers that occur
+  anyway), [`github-workflow`](.agents/skills/github-workflow/SKILL.md) §5b–§5c (gates),
+  [`edr-constraints`](.agents/skills/edr-constraints/SKILL.md) (the go-guard CONTROL), and
+  [`lfr-tunnel-ops`](.agents/skills/lfr-tunnel-ops/SKILL.md) §8 (what proves a failover).
+
+- **Unknown is not absent.** When a value could not be determined, keep it unknown and say so.
+  Never let it collapse into "none", "false", "zero", "empty" or "denied", because every one of
+  those is a claim:
+  - #2347: a database fault during the token check was answered 401, which told the client its
+    token was bad — and the client correctly treated that as final;
+  - #1779: `scripts/check-required-contexts.sh` treats empty live branch-protection lists as
+    *unread*, reporting `NOT VERIFIED` rather than agreement;
+  - the v1.52.1 journal checks above, where "no session to inspect" was reported as "no tokens
+    logged".
+
+  The corollary for reporting: name what was not verified, including anything checked only
+  against a stub or a mock.
+
 ## Pragmatism & Velocity Principles
 
 To maintain high developer velocity while preserving software quality:
@@ -260,4 +296,4 @@ in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*
+*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*

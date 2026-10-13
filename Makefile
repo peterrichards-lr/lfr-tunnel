@@ -1,4 +1,4 @@
-.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-skill-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -96,6 +96,7 @@ help:
 	@echo "  make check-docs-fences - No markdown code fence is left open"
 	@echo "  make check-doc-links   - Every docs link in source resolves to a real file/heading"
 	@echo "  make check-docs-routing - Every docs page is reachable from a landing page"
+	@echo "  make check-skill-routing - Every skill is routed from AGENTS.md and every link to one resolves"
 	@echo "  make check-deprecated-flags - No user-visible string names a deprecated flag"
 	@echo "  make check-inspector   - Inspector page functions behave (executed, not grepped)"
 	@echo "  make check-portal-parity - No capability exists in only one portal arm"
@@ -357,6 +358,7 @@ test-hooks:
 	@./tests/hooks/test-required-contexts-mirror.sh
 	@./tests/hooks/test-required-contexts-concurrency.sh
 	@./tests/hooks/test-setup-go-check-latest.sh
+	@./tests/hooks/test-skill-routing.sh
 	@./tests/hooks/test-workflow-failure-alert.sh
 	@./tests/hooks/test-css-modifiers.sh
 	@./tests/hooks/test-theme-tokens.sh
@@ -517,6 +519,11 @@ check-doc-links:
 # A page no landing page names is reachable only by site search (#2081).
 check-docs-routing:
 	@python3 scripts/check-docs-routing.py
+
+# A skill AGENTS.md does not route is invisible to every agent that does not read
+# .claude/skills, and a link to a renamed skill resolves to nothing (#2363).
+check-skill-routing:
+	@python3 scripts/check-skill-routing.py
 
 # A deprecated flag still works, so a string naming one breaks nothing and tells nobody (#2090).
 check-deprecated-flags:

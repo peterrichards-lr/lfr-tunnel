@@ -184,8 +184,9 @@ done
 #                          not exist -- the portal served one as a live href
 #   check-docs-routing.py  a page on the site that no landing page names, reachable only by
 #                          search or by knowing the URL
+#   check-skill-routing.py a skill AGENTS.md does not route, or a link to one that is gone (#2363)
 if command -v python3 >/dev/null 2>&1; then
-    for gate in check-docs-fences.py check-doc-links.py check-docs-routing.py check-deprecated-flag-strings.py; do
+    for gate in check-docs-fences.py check-doc-links.py check-docs-routing.py check-skill-routing.py check-deprecated-flag-strings.py; do
         # Presence-guarded, exactly like the shell gates above. These inspect the whole
         # repository, so running them somewhere that has no scripts/ or no docs/ -- a hook test
         # fixture, a partial checkout -- asks them about a repository that is not there. One of

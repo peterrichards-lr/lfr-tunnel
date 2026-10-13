@@ -73,16 +73,54 @@ func TestReconnectingDoesNotInflateTheCount(t *testing.T) {
 	}
 }
 
-func TestTheLatestChoiceOfTheDayWins(t *testing.T) {
+// TestEveryRouteOfTheDayIsKept is the control for #2372, and replaces
+// TestTheLatestChoiceOfTheDayWins, which pinned the behaviour #2372 removed.
+//
+// The production shape, exactly: a planned drain moves a user to another gateway (failover), and
+// an hour later the client moves back (failback). Keyed on (user, day) the failback overwrote the
+// failover, so the report could show one route or the other for that user that day, never both --
+// and since a transient route is nearly always followed by another registration, it was usually
+// the transient one that vanished. One failback survived against the audit log's 43.
+func TestEveryRouteOfTheDayIsKept(t *testing.T) {
 	d := setupTestDB(t)
 	repo := NewSQLiteRegionProbeRepo(d.conn)
 	now := time.Now()
 
-	// Someone who removes -server and reconnects must stop being reported as pinned.
+	for i, src := range []string{regionvocab.SourceProbe, regionvocab.SourceFailover, regionvocab.SourceFailback} {
+		if err := repo.RecordRegionSource("wes", src, now.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatalf("record %s: %v", src, err)
+		}
+	}
+
+	got, err := repo.GetRegionSources(30)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	for _, c := range got {
+		switch c.Source {
+		case regionvocab.SourceProbe, regionvocab.SourceFailover, regionvocab.SourceFailback:
+			if c.Users != 1 {
+				t.Errorf("%s: want 1 user -- every route a user took today must be kept, got %d (#2372)", c.Source, c.Users)
+			}
+		}
+	}
+}
+
+// TestAUserPinnedEarlierTodayStillCountsAsPinned states the one consequence #2372 accepted.
+//
+// The old upsert let someone who removed -server and reconnected stop counting as pinned the same
+// day. Keeping every route means they count as pinned for any window that includes the day they
+// were pinned -- which a multi-day window already did across days. So "pinned" now reads, within
+// the day as well as across days: pinned at some point in the window.
+func TestAUserPinnedEarlierTodayStillCountsAsPinned(t *testing.T) {
+	d := setupTestDB(t)
+	repo := NewSQLiteRegionProbeRepo(d.conn)
+	now := time.Now()
+
 	if err := repo.RecordRegionSource("u", regionvocab.SourceExplicitServer, now); err != nil {
 		t.Fatalf("record: %v", err)
 	}
-	if err := repo.RecordRegionSource("u", regionvocab.SourceProbe, now.Add(time.Minute)); err != nil {
+	if err := repo.RecordRegionSource("u", regionvocab.SourceProbe, now.Add(time.Second)); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 
@@ -91,11 +129,11 @@ func TestTheLatestChoiceOfTheDayWins(t *testing.T) {
 		t.Fatalf("report: %v", err)
 	}
 	for _, c := range got {
-		if c.Source == regionvocab.SourceExplicitServer && c.Users != 0 {
-			t.Errorf("after un-pinning, the user must no longer count as pinned (got %d)", c.Users)
+		if c.Source == regionvocab.SourceExplicitServer && c.Users != 1 {
+			t.Errorf("a user pinned earlier today must still count as pinned in today's window, got %d", c.Users)
 		}
 		if c.Source == regionvocab.SourceProbe && c.Users != 1 {
-			t.Errorf("the later choice must win, got %d probing users", c.Users)
+			t.Errorf("the later probe must be counted too, got %d", c.Users)
 		}
 	}
 }

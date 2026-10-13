@@ -116,6 +116,47 @@ could not confirm this in the codebase — treating it as unverified") rather th
 presenting a guess as fact. A wrong grounded-sounding answer is worse than an
 honest "I don't know."
 
+## Engineering principles
+
+Groundedness is about claims concerning the code. These two are about claims concerning
+**results** — a test, a gate, a log search, a production check — which is where this repo has
+actually been misled.
+
+- **A passing check is evidence only if it could have failed.** For a check you wrote or changed
+  in the task, and for any ad-hoc check (a log grep, a production probe, a scan), show it going
+  red on known-bad input — the *control* — or show that the condition it would detect was
+  present. Otherwise report the result as unverified. Existing gates that carry their own
+  anti-vacuity tests can be trusted as they stand. A check that cannot fail looks exactly like
+  one that passed:
+  - the placement report shipped (#1891) with `TestControlMapsToCentral` green, because its
+    fixture used a region name no client ever writes — found in #1919;
+  - the warm-up test written for #1947 passed against the unfixed code, because it closed a
+    response body unread and so never pooled a connection — caught by its control before merge;
+  - verifying #2356's token-logging fix in v1.52.1, "0 token-bearing lines" was reported twice
+    from gateways where no tunnel session existed to log one; the live lease count was what could
+    tell the two apart (recorded in #2361).
+
+  The skills hold the domain forms of this rule, and are the place to add new ones:
+  [`e2e-testing`](.agents/skills/e2e-testing/SKILL.md) (mutation tests, and markers that occur
+  anyway), [`github-workflow`](.agents/skills/github-workflow/SKILL.md) §5b–§5d (gates and
+  assertions), [`edr-constraints`](.agents/skills/edr-constraints/SKILL.md) (the go-guard
+  CONTROL), and [`lfr-tunnel-ops`](.agents/skills/lfr-tunnel-ops/SKILL.md) §8 (what proves a
+  failover).
+
+- **Unknown is not absent.** When a value could not be determined, keep it unknown and say so.
+  Never let it collapse into "none", "false", "zero", "empty" or "denied", because every one of
+  those is a claim:
+  - #2347: a database fault during the token check was answered 401, which told the client its
+    token was bad — and the client correctly treated that as final;
+  - #1729: `scripts/check-required-contexts.sh` treats an empty union of the live
+    branch-protection and ruleset lists as *unread*, reporting `NOT VERIFIED` rather than
+    agreement;
+  - the v1.52.1 journal checks above, where "no session to inspect" was reported as "no tokens
+    logged".
+
+  The corollary for reporting: name what was not verified, including anything checked only
+  against a stub or a mock.
+
 ## Pragmatism & Velocity Principles
 
 To maintain high developer velocity while preserving software quality:
@@ -260,4 +301,4 @@ in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*
+*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*

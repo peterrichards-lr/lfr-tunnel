@@ -166,11 +166,15 @@ func (db *DB) initSchema() error {
 		node_id TEXT DEFAULT 'control'
 	);
 
-	-- How each user's client chose its gateway, one row per user per day (#1922).
+	-- How each user's client chose its gateway: one row per user per day per SOURCE (#1922,
+	-- #2372).
 	--
-	-- Per DAY, not per session, for the same reason region_probes is: this answers "who is
-	-- pinned", a question about people, and a user who reconnects fifty times must not
-	-- outweigh one who connects once.
+	-- Per DAY, not per session, for the same reason region_probes is: this answers questions
+	-- about people, and a user who reconnects fifty times must not outweigh one who connects
+	-- once. Per SOURCE as well since #2372: keyed on (user, day) alone, the last registration of
+	-- the day overwrote the others, so a failover or failback -- transient by nature, and nearly
+	-- always followed by another registration -- was erased by the very reconnect that ended it.
+	-- In production, of the two failbacks registered directly on central, one was overwritten.
 	--
 	-- A pinned client runs no latency probe, so it already sends an empty probe set --
 	-- indistinguishable from a client with reporting off or one too old to send any. This
@@ -180,7 +184,7 @@ func (db *DB) initSchema() error {
 		day TEXT NOT NULL,
 		source TEXT NOT NULL,
 		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (user_id, day)
+		PRIMARY KEY (user_id, day, source)
 	);
 
 	-- One row per user per region per day (#1151). The day is part of the key on purpose: a
@@ -509,4 +513,37 @@ var migrations = []migration{
 	// the sweep only ever selects tokens inside the warning window, so this does not send
 	// anything to a token with weeks left.
 	{37, "ALTER TABLE personal_access_tokens ADD COLUMN expiry_warning_sent INTEGER NOT NULL DEFAULT 0"},
+	// Re-key client_region_source from (user_id, day) to (user_id, day, source) (#2372). SQLite
+	// cannot alter a primary key, so the table is rebuilt: clear any stale copy, copy the rows out,
+	// drop, recreate with the new key, copy back, drop the copy.
+	//
+	// Shaped by two constraints. Single-statement entries, because nothing else here relies on
+	// the driver executing several statements in one Exec, and this is not the change to find
+	// out on. And the LATEST entry must be safe to re-run: TestSchemaMigrationVersioning deletes
+	// the newest schema_version row and re-runs initSchema, and a draft that ended on
+	// `ALTER TABLE ... RENAME` failed there with "no such table" -- which in production is a
+	// gateway that will not start. Ending on DROP TABLE IF EXISTS, with the copy-back as INSERT
+	// OR IGNORE, makes a re-run harmless. All migrations run in one transaction, so a failure
+	// part-way rolls the whole rebuild back rather than leaving the rows in the copy.
+	//
+	// Safe on both histories: on an existing database every row comes back (the old key is a
+	// subset of the new one, so none can collide); on a fresh one the base schema already
+	// created the new shape and the rebuild moves nothing.
+	// A stale copy left by some earlier hand-run would make 39's CREATE ... IF NOT EXISTS a no-op,
+	// so the live rows would never be copied out and 40 would drop them (#2374 review, reproduced
+	// by hand). The live table is the truth; clear any leftover first.
+	{38, "DROP TABLE IF EXISTS client_region_source_pre2372"},
+	{39, `CREATE TABLE IF NOT EXISTS client_region_source_pre2372 AS
+		SELECT user_id, day, source, recorded_at FROM client_region_source`},
+	{40, "DROP TABLE IF EXISTS client_region_source"},
+	{41, `CREATE TABLE IF NOT EXISTS client_region_source (
+		user_id TEXT NOT NULL,
+		day TEXT NOT NULL,
+		source TEXT NOT NULL,
+		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, day, source)
+	)`},
+	{42, `INSERT OR IGNORE INTO client_region_source (user_id, day, source, recorded_at)
+		SELECT user_id, day, source, recorded_at FROM client_region_source_pre2372`},
+	{43, "DROP TABLE IF EXISTS client_region_source_pre2372"},
 }

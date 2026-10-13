@@ -859,9 +859,12 @@ ssh -i ~/.ssh/lfr-tunnel-central-eu-west-1.pem ubuntu@tunnel.lfr-demo.se \
   "sudo sqlite3 -readonly /etc/lfr-tunneld/lfr-tunnel.db \"SELECT COUNT(*), MIN(created_at), MAX(created_at) FROM admin_audit_log WHERE action='tunnel.start' AND details LIKE '%region source failback]%'\""
 ```
 
-Use the audit log, **not** `client_region_source`: that table misses every registration relayed
-through an edge and keeps only the last source per user per day, so it held one failback against
-the audit log's 43 (#2368).
+Use the audit log, **not** `client_region_source`, for anything before 2026-10-13. Until v1.52.3
+that table missed every registration relayed through an edge (#2368, fixed by #2371), and until
+#2372 it kept only the last source per user per day -- so it held one failback against the audit
+log's 43, and those historical rows stay lossy. From the release carrying #2372 it records every
+route per user per day on both paths, but it still counts people per day rather than events, so
+the audit log remains the place to count cycles.
 
 So the deliberate run below is for watching one cycle closely -- the timers, the events, the tray --
 not for proving failback works at all. This is how to drive it.

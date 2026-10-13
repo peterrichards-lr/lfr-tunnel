@@ -30,9 +30,15 @@ type RegionSourceCount struct {
 
 // RecordRegionSource stores how one user's client chose its gateway today.
 //
-// Upsert on (user_id, day): a reconnect replaces the row rather than adding one, so the counts
-// stay per-person. The latest choice of the day wins, which is the useful one -- a user who
-// removes -server and reconnects should stop being reported as pinned.
+// Upsert on (user_id, day, source): a reconnect by the same route refreshes its row rather than
+// adding one, so the counts stay per-person, and every route a user took that day is kept.
+//
+// It used to upsert on (user_id, day), so the latest registration of the day replaced the rest
+// (#2372). That was meant to let a user who removes -server stop counting as pinned that day,
+// but it also erased failovers and failbacks, which are almost always followed by another
+// registration -- of the two failbacks registered directly on central, one was overwritten. Keeping every route means a
+// user pinned at any point in the window counts as pinned in it, which is already what a
+// multi-day window did across days; it now holds within the day as well.
 func (repo *SQLiteRegionProbeRepo) RecordRegionSource(userID, source string, at time.Time) error {
 	if userID == "" || source == "" {
 		return nil
@@ -44,7 +50,7 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionSource(userID, source string, at 
 	_, err := repo.conn.Exec(`
 		INSERT INTO client_region_source (user_id, day, source, recorded_at)
 		VALUES (?, ?, ?, ?)
-		ON CONFLICT(user_id, day) DO UPDATE SET source = excluded.source, recorded_at = excluded.recorded_at`,
+		ON CONFLICT(user_id, day, source) DO UPDATE SET recorded_at = excluded.recorded_at`,
 		userID, at.UTC().Format("2006-01-02"), source, sqliteTime(at))
 	if err != nil {
 		return fmt.Errorf("record region source: %w", err)

@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.52.3",
+    "release_date": "2026-10-13",
+    "features": [
+      "Better gateway reports: when your tunnel connects through a regional gateway, the service now records which region you chose and how quickly each one responded, as it already did for direct connections. This feeds the reports used to decide where gateways should run. Nothing changes in how you use the tunnel."
+    ]
+  },
+  {
     "version": "v1.52.2",
     "release_date": "2026-10-13",
     "features": [
@@ -30,15 +37,6 @@
       "fix(mcp): start_tunnel reports the tunnel it started, not a PID that never matches (#2339)",
       "feat(gates): a capability nobody has tested cannot be announced quietly (#2338)",
       "docs(mcp): describe the server that shipped, not the one proposed (#2335)"
-    ]
-  },
-  {
-    "version": "v1.51.1",
-    "release_date": "2026-10-01",
-    "features": [
-      "fix(portal): one rule for heading icons, a status that survives a language switch (#2331) (#2332)",
-      "fix(i18n): a translated value carries words, not decoration (#2327) (#2328)",
-      "fix(ci): assert the install path, not its spelling, and stop filtering the hook suite (#2329) (#2330)"
     ]
   }
 ]

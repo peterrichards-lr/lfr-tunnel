@@ -838,6 +838,20 @@ between 2026-09-20 and 2026-10-12: from the night v1.48.40 shipped the `failback
 `control` (2). A cross-region cycle had already completed on 2026-09-21, but its v1.48.38 client
 predated the vocabulary and reported `region source probe`, which is how the claim survived.
 
+**Read 43 as an upper bound, not a count of cycles.** The tag is set by two paths, and it is
+sticky:
+
+- the failback prober (`cmd/lfr-tunnel/main.go:865`) logs the client event `failback`; the
+  node-set watcher returning a `-prefer-region` client to its region (`main.go:920`) tags the
+  registration `failback` too but logs `node_set_move` -- so the audit token is broader than the
+  `failback` event in the table below;
+- the source is a package global sent on every registration (`pkg/client/client.go:614`) and
+  never cleared, so a later watcher move to some *other* region repeats `failback`.
+
+A repeat can only follow a `failback` with no other source in between. Keyed by user and
+subdomain, 41 of the 43 followed a different source -- fresh failbacks, from 5 users -- and 2 could
+be repeats; 3 were launched with `-prefer-region` and may be the `node_set_move` path.
+
 To answer the question rather than trust this paragraph, ask central -- read-only:
 
 ```bash
@@ -894,7 +908,7 @@ not documented as user configuration -- do not put them in a config file or sugg
 | `LFT_REELECTION_MIN_INTERVAL` | **10 min** | floor between topology-driven moves |
 | `LFT_PLANNED_SHUTDOWN_COOLDOWN` | **1 hour** | failback after a *planned* move |
 
-The last one is not theoretical: the production capture above declined failback at `03:55:35` and
+The last one is not theoretical: the 2026-09-19 production capture declined failback at `03:55:35` and
 did not retry until `04:55:25` -- an hour to the second.
 
 ### The run
@@ -915,7 +929,7 @@ failback look broken.** How you stop the node decides which cooldown applies:
 | the instance is killed, or the network drops | the client notices the gateway is gone -- an **unplanned** failover | `LFT_REGION_FAILOVER_COOLDOWN`, 90s by default |
 
 Stopping a node politely is the natural thing to do, so the hour is the case you will hit
-first. The production capture in this section is exactly that: failback declined at `03:55:35`
+first. The 2026-09-19 production capture is exactly that: failback declined at `03:55:35`
 and was not retried until `04:55:25` -- an hour to the second, with nothing wrong.
 
 Watch two things at once. The console shows the human story; the session log is the evidence:
@@ -946,7 +960,8 @@ Polling the public URL proves nothing -- an edge cross-proxies to the lease hold
 | `failover` with `from`/`to` and `lease_lost: False` | an orderly move, not a recovery from a dropped lease |
 | `failback_declined` `reason: cooldown` | the timer, working -- not a failure |
 | `failback_declined` `reason: unreachable` | the node is genuinely still down |
-| `failback` | the move back completed -- routine in production since v1.48.40 (see the query above) |
+| `failback` | the prober moved the client back -- seen in production since v1.48.40 (see the query above) |
+| `node_set_move` | the roster changed and the client moved; with `-prefer-region`, this is how a return to the requested region can show up instead of `failback` |
 | `node_set_changed` | the roster fingerprint moved (#1937) |
 
 ### Testing the tray in the same run

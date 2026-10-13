@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.52.4",
+    "release_date": "2026-10-13",
+    "features": [
+      "More complete gateway reports: when your client moves between gateways during the day, for example while one is restarted and when it moves back, each route is now recorded rather than only the last one. Nothing changes in how you use the tunnel."
+    ]
+  },
+  {
     "version": "v1.52.3",
     "release_date": "2026-10-13",
     "features": [
@@ -28,15 +35,6 @@
       "Token expiry warnings: you now get one email, and a notice each time you start a tunnel, in the days before an access token expires (7 by default). Requests for a token that never expires are answered by email, whether approved or not.",
       "Fewer dropped tunnels: if the gateway briefly cannot check your token, your tunnel now waits and retries instead of stopping.",
       "Token names: line breaks and other control characters are no longer accepted, and names are limited to 100 characters. Portal V1 now shows why a token could not be created."
-    ]
-  },
-  {
-    "version": "v1.51.2",
-    "release_date": "2026-10-02",
-    "features": [
-      "fix(mcp): start_tunnel reports the tunnel it started, not a PID that never matches (#2339)",
-      "feat(gates): a capability nobody has tested cannot be announced quietly (#2338)",
-      "docs(mcp): describe the server that shipped, not the one proposed (#2335)"
     ]
   }
 ]

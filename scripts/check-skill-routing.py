@@ -10,8 +10,9 @@ this asserts what AGENTS.md's rules-integrity section only states:
   2. its frontmatter `name` matches the directory and its `description` is non-empty -- the
      description is what Claude Code reads, through the .claude/skills symlink, to decide
      whether to load the skill at all;
-  3. every skill is linked from BOTH the Preflight section and the Rules, by topic section;
-  4. every .agents/skills/<x>/SKILL.md link in AGENTS.md and CLAUDE.md resolves;
+  3. every skill is the TARGET of a live link -- not inside an HTML comment or a code fence --
+     in BOTH the Preflight section and the Rules, by topic section;
+  4. every relative link in AGENTS.md and CLAUDE.md resolves (skill links included);
   5. .claude/skills is a symlink resolving to .agents/skills (#1433) -- without it no skill
      appears in Claude Code's skill list and AGENTS.md is the only route to any of them;
   6. at least LFT_SKILLS_MIN skills were found, so a broken glob cannot pass over nothing.
@@ -26,8 +27,36 @@ import re
 import sys
 
 SKILLS_DIR = os.path.join(".agents", "skills")
-LINK = re.compile(r"\.agents/skills/([A-Za-z0-9_.-]+)/SKILL\.md")
-MIN_SKILLS = int(os.environ.get("LFT_SKILLS_MIN", "6"))
+# A skill link TARGET, exactly: .agents/skills/<name>/SKILL.md, optionally ./-prefixed or with an
+# #anchor. Matched against link targets only, never against raw text -- the Rules section's link
+# text IS the skill path, so matching text would let a broken href pass as routed (#2363 review).
+TARGET = re.compile(r"^(?:\./)?\.agents/skills/([A-Za-z0-9_.-]+)/SKILL\.md(?:#[^\s]*)?$")
+INLINE = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+REFDEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s.*)?$", re.M)
+
+
+def live(text):
+    """Markdown with HTML comments and fenced code blocks removed: what a reader sees as links.
+
+    A commented-out Preflight row, or a path quoted in a fence, is not routing anything.
+    """
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    return re.sub(r"(?ms)^ {0,3}(```|~~~).*?^ {0,3}\1[^\n]*$", "", text)
+
+
+def link_targets(text):
+    """(target, line number) for every inline and reference-definition link in live markdown."""
+    text = live(text)
+    found = []
+    for rx in (INLINE, REFDEF):
+        for m in rx.finditer(text):
+            found.append((m.group(1), text.count("\n", 0, m.start()) + 1))
+    return found
+
+
+def skill_targets(text):
+    """Skill names whose SKILL.md is the target of a live link in `text`."""
+    return {m.group(1) for m in (TARGET.match(t) for t, _ in link_targets(text)) if m}
 
 
 def section(text, heading):
@@ -49,7 +78,7 @@ def frontmatter(path):
     the block every line must be a key, an indented continuation, a comment or blank; the first
     line that is none of those -- prose -- shows the block was never closed where it ends.
     """
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:  # -sig: a leading BOM is not a missing block
         lines = f.read().splitlines()
     if not lines or lines[0].strip() != "---":
         return None
@@ -60,8 +89,14 @@ def frontmatter(path):
         m = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$", line)
         if m:
             key, val = m.group(1), m.group(2).strip()
-            out[key] = "" if val in (">", "|", ">-", "|-") else val.strip("\"'")
-        elif key and line.startswith((" ", "\t")):
+            if not val.startswith(("\"", "'")):
+                val = re.sub(r"\s+#.*$", "", val)  # an inline YAML comment is not part of a value
+            if val in (">", "|", ">-", "|-", "~", "null", "Null", "NULL"):
+                val = ""
+            out[key] = val.strip("\"'").strip()
+        elif key and (line.startswith((" ", "\t")) or line.startswith("- ")):
+            # Indented continuation, or an unindented block-sequence item (`- Read`), which is
+            # valid YAML for list fields such as allowed-tools.
             out[key] = (out[key] + " " + line.strip()).strip()
         elif line.strip() == "" or line.lstrip().startswith("#"):
             continue
@@ -84,8 +119,13 @@ def main(argv):
         print(f"ERROR: {SKILLS_DIR}/ does not exist under {root}", file=sys.stderr)
         return 1
 
-    skills = sorted(d for d in os.listdir(skills_path)
-                    if os.path.isdir(os.path.join(skills_path, d)) and not d.startswith("."))
+    entries = [d for d in os.listdir(skills_path) if not d.startswith(".")]
+    skills = sorted(d for d in entries if os.path.isdir(os.path.join(skills_path, d)))
+    for d in sorted(entries):
+        p = os.path.join(skills_path, d)
+        if os.path.islink(p) and not os.path.exists(p):
+            errors.append(f"{SKILLS_DIR}/{d} is a symlink to nothing -- a skill that was moved or "
+                          "deleted without removing its link")
 
     # 1-2. Each skill directory, and its frontmatter.
     for name in skills:
@@ -117,23 +157,27 @@ def main(argv):
         if body is None:
             errors.append(f"AGENTS.md has no '## {heading}' section to route skills from")
             continue
-        routed = set(LINK.findall(body))
+        routed = skill_targets(body)
         for name in skills:
             if name not in routed:
                 errors.append(f"skill '{name}' is not linked from AGENTS.md '## {heading}' -- "
                               f"add .agents/skills/{name}/SKILL.md there")
 
-    # 4. Every skill link in the entry-point files resolves.
+    # 4. Every relative link in the entry-point files resolves -- not only well-formed skill
+    #    paths: a typo'd href (`.agents/skill/x/SKILL.md`, `.../SKIL.md`) is exactly the link
+    #    that no longer looks like a skill link, and it routes an agent to nothing.
     for doc in ("AGENTS.md", "CLAUDE.md"):
         p = os.path.join(root, doc)
         if not os.path.isfile(p):
             continue
         with open(p, encoding="utf-8") as f:
-            for lineno, line in enumerate(f, 1):
-                for target in LINK.findall(line):
-                    if not os.path.isfile(os.path.join(skills_path, target, "SKILL.md")):
-                        errors.append(f"{doc}:{lineno} links .agents/skills/{target}/SKILL.md, "
-                                      "which does not exist")
+            text = f.read()
+        for target, lineno in link_targets(text):
+            if re.match(r"^([a-z][a-z0-9+.-]*:|#|/)", target, re.I):
+                continue  # a URL, an in-page anchor, or site-absolute: not a repository path
+            path = target.split("#", 1)[0]
+            if path and not os.path.exists(os.path.join(root, path)):
+                errors.append(f"{doc}:{lineno} links {target}, which does not exist")
 
     # 5. The discovery symlink.
     link = os.path.join(root, ".claude", "skills")
@@ -150,9 +194,14 @@ def main(argv):
         return 1
 
     # 6. Anti-vacuity, last so it never pre-empts a specific finding (the #1779 ordering).
-    if len(skills) < MIN_SKILLS:
+    try:
+        min_skills = int(os.environ.get("LFT_SKILLS_MIN", "6"))
+    except ValueError:
+        print("ERROR: LFT_SKILLS_MIN must be an integer", file=sys.stderr)
+        return 2
+    if len(skills) < min_skills:
         print(f"ERROR: found {len(skills)} skill(s) under {SKILLS_DIR}/, below the floor of "
-              f"{MIN_SKILLS}. If one was removed deliberately, lower LFT_SKILLS_MIN in the same "
+              f"{min_skills}. If one was removed deliberately, lower LFT_SKILLS_MIN in the same "
               "change.", file=sys.stderr)
         return 1
 

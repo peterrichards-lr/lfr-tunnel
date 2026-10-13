@@ -24,7 +24,7 @@ compared as merged template code.
 | Lesson | Here |
 | --- | --- |
 | 1. Generate the skill index and check it | **Adopted as a check, not a generator** ([#2363](https://github.com/peterrichards-lr/lfr-tunnel/issues/2363)): `scripts/check-skill-routing.py`. AGENTS.md routes by what an agent is *about to do*, with reasoning, which frontmatter cannot produce. |
-| 2. Turn bug classes into blocking guards | **Already the practice**: ~35 bespoke `scripts/check-*` gates and ratchets, each citing its incident and tested with a control. A shared `.guards.json` would refactor working code and lose the incident-specific messages. |
+| 2. Turn bug classes into blocking guards | **Already the practice**: ~35 bespoke `scripts/check-*` gates and ratchets, each citing its incident and most tested with a control in `tests/hooks`. A shared `.guards.json` would refactor working code and lose the incident-specific messages. |
 | 3. Engineering principles, not just etiquette | **Two of five adopted** ([#2361](https://github.com/peterrichards-lr/lfr-tunnel/issues/2361)): "a passing check is evidence only if it could have failed" and "unknown is not absent", in AGENTS.md. The other three add little to its Pragmatism section. |
 | 4. A fast inner loop separate from the full gate | **Already met**: commit-time hooks are fast, push runs the full suite, and `make test PKG=… TEST_FLAGS=…` scopes a run. |
 | 5. Reversible setup | **Not applicable**: no bootstrap. The one destructive helper, `make prune-branches`, already writes a recovery manifest and refuses `master` and `checksums`. |

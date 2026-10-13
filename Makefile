@@ -356,6 +356,7 @@ test-hooks:
 	@./tests/hooks/test-install-script.sh
 	@./tests/hooks/test-required-contexts-mirror.sh
 	@./tests/hooks/test-required-contexts-concurrency.sh
+	@./tests/hooks/test-setup-go-check-latest.sh
 	@./tests/hooks/test-workflow-failure-alert.sh
 	@./tests/hooks/test-css-modifiers.sh
 	@./tests/hooks/test-theme-tokens.sh

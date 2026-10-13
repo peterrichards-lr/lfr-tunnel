@@ -440,6 +440,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Check Formatting (gofmt)
@@ -642,6 +643,11 @@ jobs:
       - name: The served /privacy page must cover every PRIVACY.md category
         run: node scripts/check-privacy-disclosures.cjs
 
+  # check-latest on every setup-go step (#2365): without it, go-version '1.26' resolves to
+  # whichever 1.26.x the runner image has cached, not the newest release. On 2026-10-13 that
+  # was 1.26.8 while 1.26.9 carried twelve stdlib security fixes, so this scan failed on every
+  # PR -- and, worse, the GitHub release build would have shipped the unpatched stdlib.
+  # tests/hooks/test-setup-go-check-latest.sh fails if a setup-go step omits it.
   govulncheck:
     name: Vulnerability Scan
     needs: changes
@@ -655,6 +661,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -791,6 +798,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -837,6 +845,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -862,6 +871,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Run E2E Integration Test
@@ -884,6 +894,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Run Multi-Region Edge E2E Test
@@ -902,6 +913,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26'
+          check-latest: true
           cache: true
 
       - name: Set up Node.js

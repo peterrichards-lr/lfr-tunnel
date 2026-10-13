@@ -7013,6 +7013,14 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	// Shared with handleRegister (#2020): the same five lines lived in both handlers.
 	s.recordClientVersionAndOS(userRec, edgeReq.ClientVersion, edgeReq.ClientOS)
 
+	// How the client chose its gateway, and the probes it took to choose (#2368). #2020 brought
+	// the version across and left these behind, so for every client registering through an edge
+	// -- most of the fleet -- the node-placement report's region sources and latency figures
+	// were never written. TestBothRegistrationPathsRecordTheSameBookkeeping now fails if any
+	// s.record* call in handleRegister is missing here.
+	s.recordRegionProbes(userRec, edgeReq.RegionProbes)
+	s.recordRegionSource(userRec, edgeReq.RegionSource)
+
 	// The hard stage of the bandwidth quota, decided here because central is the counting
 	// authority and the edge has no database to decide from (#1959). The edge relays this
 	// error to the client verbatim.

@@ -80,7 +80,9 @@ func TestReconnectingDoesNotInflateTheCount(t *testing.T) {
 // an hour later the client moves back (failback). Keyed on (user, day) the failback overwrote the
 // failover, so the report could show one route or the other for that user that day, never both --
 // and since a transient route is nearly always followed by another registration, it was usually
-// the transient one that vanished. One failback survived against the audit log's 43.
+// the transient one that vanished: of the two failbacks registered directly on central, one was
+// overwritten. (The other 41 of the audit log's 43 were lost to the edge path never recording
+// at all -- #2368, fixed separately.)
 func TestEveryRouteOfTheDayIsKept(t *testing.T) {
 	d := setupTestDB(t)
 	repo := NewSQLiteRegionProbeRepo(d.conn)
@@ -115,7 +117,11 @@ func TestEveryRouteOfTheDayIsKept(t *testing.T) {
 func TestAUserPinnedEarlierTodayStillCountsAsPinned(t *testing.T) {
 	d := setupTestDB(t)
 	repo := NewSQLiteRegionProbeRepo(d.conn)
-	now := time.Now()
+	// Noon UTC today, not time.Now(): run at 23:59:59 the two records could land on different
+	// days, and then the OLD (user, day) key would also count them as pinned -- a control that
+	// passes for the wrong reason (#2374 review).
+	y, m, dd := time.Now().UTC().Date()
+	now := time.Date(y, m, dd, 12, 0, 0, 0, time.UTC)
 
 	if err := repo.RecordRegionSource("u", regionvocab.SourceExplicitServer, now); err != nil {
 		t.Fatalf("record: %v", err)

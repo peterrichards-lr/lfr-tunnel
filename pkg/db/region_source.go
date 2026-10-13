@@ -36,7 +36,7 @@ type RegionSourceCount struct {
 // It used to upsert on (user_id, day), so the latest registration of the day replaced the rest
 // (#2372). That was meant to let a user who removes -server stop counting as pinned that day,
 // but it also erased failovers and failbacks, which are almost always followed by another
-// registration -- one failback survived against the audit log's 43. Keeping every route means a
+// registration -- of the two failbacks registered directly on central, one was overwritten. Keeping every route means a
 // user pinned at any point in the window counts as pinned in it, which is already what a
 // multi-day window did across days; it now holds within the day as well.
 func (repo *SQLiteRegionProbeRepo) RecordRegionSource(userID, source string, at time.Time) error {

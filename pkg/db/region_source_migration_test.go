@@ -120,3 +120,63 @@ func TestMigrationsRekeyAnExistingRegionSourceTable(t *testing.T) {
 		t.Errorf("user a has %d route(s) on 2026-10-01 after recording a second, want 2 -- the old key is still in force", routes)
 	}
 }
+
+// TestARebuildIgnoresAStaleCopyTable covers the one state the #2374 review showed could lose
+// live rows: a client_region_source_pre2372 left over from some earlier hand-run. Without the
+// leading DROP (migration 38), the copy-out's CREATE ... IF NOT EXISTS is a no-op, the live
+// table is dropped, and only the stale rows come back -- reproduced by hand during review.
+func TestARebuildIgnoresAStaleCopyTable(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "schema37-leftover.db")
+
+	old, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatalf("opening: %v", err)
+	}
+	if _, err := old.Exec(`
+		CREATE TABLE client_region_source (
+			user_id TEXT NOT NULL,
+			day TEXT NOT NULL,
+			source TEXT NOT NULL,
+			recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, day)
+		);
+		CREATE TABLE client_region_source_pre2372 (user_id TEXT, day TEXT, source TEXT, recorded_at NUM);
+		INSERT INTO client_region_source_pre2372 VALUES ('stale', '2026-01-01', 'probe', '2026-01-01 00:00:00');
+		CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+		INSERT INTO schema_version (version) VALUES (37);
+		INSERT INTO client_region_source (user_id, day, source, recorded_at) VALUES
+			('live-1', '2026-10-01', 'failback', '2026-10-01 10:00:00'),
+			('live-2', '2026-10-01', 'explicit_server', '2026-10-01 11:00:00');
+	`); err != nil {
+		t.Fatalf("building a version-37 database with a stale copy: %v", err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatalf("closing: %v", err)
+	}
+
+	database, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("migrating: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("closing the migrated database: %v", err)
+		}
+	})
+
+	var live, stale int
+	if err := database.conn.QueryRow(
+		`SELECT COUNT(*) FROM client_region_source WHERE user_id LIKE 'live-%'`).Scan(&live); err != nil {
+		t.Fatalf("count live: %v", err)
+	}
+	if err := database.conn.QueryRow(
+		`SELECT COUNT(*) FROM client_region_source WHERE user_id = 'stale'`).Scan(&stale); err != nil {
+		t.Fatalf("count stale: %v", err)
+	}
+	if live != 2 {
+		t.Errorf("%d of 2 live rows survived the rebuild -- a stale copy table displaced them", live)
+	}
+	if stale != 0 {
+		t.Errorf("the stale copy's row was restored into the live table")
+	}
+}

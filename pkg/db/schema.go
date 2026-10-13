@@ -174,7 +174,7 @@ func (db *DB) initSchema() error {
 	-- once. Per SOURCE as well since #2372: keyed on (user, day) alone, the last registration of
 	-- the day overwrote the others, so a failover or failback -- transient by nature, and nearly
 	-- always followed by another registration -- was erased by the very reconnect that ended it.
-	-- In production that kept one failback row against the audit log's 43.
+	-- In production, of the two failbacks registered directly on central, one was overwritten.
 	--
 	-- A pinned client runs no latency probe, so it already sends an empty probe set --
 	-- indistinguishable from a client with reporting off or one too old to send any. This
@@ -514,8 +514,8 @@ var migrations = []migration{
 	// anything to a token with weeks left.
 	{37, "ALTER TABLE personal_access_tokens ADD COLUMN expiry_warning_sent INTEGER NOT NULL DEFAULT 0"},
 	// Re-key client_region_source from (user_id, day) to (user_id, day, source) (#2372). SQLite
-	// cannot alter a primary key, so the table is rebuilt: copy the rows out, drop, recreate with
-	// the new key, copy back, drop the copy.
+	// cannot alter a primary key, so the table is rebuilt: clear any stale copy, copy the rows out,
+	// drop, recreate with the new key, copy back, drop the copy.
 	//
 	// Shaped by two constraints. Single-statement entries, because nothing else here relies on
 	// the driver executing several statements in one Exec, and this is not the change to find
@@ -529,17 +529,21 @@ var migrations = []migration{
 	// Safe on both histories: on an existing database every row comes back (the old key is a
 	// subset of the new one, so none can collide); on a fresh one the base schema already
 	// created the new shape and the rebuild moves nothing.
-	{38, `CREATE TABLE IF NOT EXISTS client_region_source_pre2372 AS
+	// A stale copy left by some earlier hand-run would make 39's CREATE ... IF NOT EXISTS a no-op,
+	// so the live rows would never be copied out and 40 would drop them (#2374 review, reproduced
+	// by hand). The live table is the truth; clear any leftover first.
+	{38, "DROP TABLE IF EXISTS client_region_source_pre2372"},
+	{39, `CREATE TABLE IF NOT EXISTS client_region_source_pre2372 AS
 		SELECT user_id, day, source, recorded_at FROM client_region_source`},
-	{39, "DROP TABLE IF EXISTS client_region_source"},
-	{40, `CREATE TABLE IF NOT EXISTS client_region_source (
+	{40, "DROP TABLE IF EXISTS client_region_source"},
+	{41, `CREATE TABLE IF NOT EXISTS client_region_source (
 		user_id TEXT NOT NULL,
 		day TEXT NOT NULL,
 		source TEXT NOT NULL,
 		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (user_id, day, source)
 	)`},
-	{41, `INSERT OR IGNORE INTO client_region_source (user_id, day, source, recorded_at)
+	{42, `INSERT OR IGNORE INTO client_region_source (user_id, day, source, recorded_at)
 		SELECT user_id, day, source, recorded_at FROM client_region_source_pre2372`},
-	{42, "DROP TABLE IF EXISTS client_region_source_pre2372"},
+	{43, "DROP TABLE IF EXISTS client_region_source_pre2372"},
 }

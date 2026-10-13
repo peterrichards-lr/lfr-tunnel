@@ -828,11 +828,29 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 Failover and failback are proven by the edge E2E on every PR, and a **planned** move was captured
 from production for the first time on 2026-09-19 (a client log showing `gateway_shutdown_warning`
--> `planned_move_started` -> `failover`, `lease_lost: False`). What has never been observed end to
-end is a **completed failback**: production only ever produces declines, because a scheduled edge
-comes back at 08:00 local long after anyone is watching.
+-> `planned_move_started` -> `failover`, `lease_lost: False`).
 
-This is how to drive the whole cycle deliberately.
+**Completed failbacks happen in production routinely.** This section used to say the opposite --
+"production only ever produces declines" -- and it was out of date by the time anyone checked
+(#2369). Central's audit log held 43 `tunnel.start` registrations with region source `failback`
+between 2026-09-20 and 2026-10-12: from the night v1.48.40 shipped the `failback` vocabulary
+(#2087), across clients v1.48.40-v1.48.51, landing on `edge-us` (34), `edge-apac` (7) and
+`control` (2). A cross-region cycle had already completed on 2026-09-21, but its v1.48.38 client
+predated the vocabulary and reported `region source probe`, which is how the claim survived.
+
+To answer the question rather than trust this paragraph, ask central -- read-only:
+
+```bash
+ssh -i ~/.ssh/lfr-tunnel-central-eu-west-1.pem ubuntu@tunnel.lfr-demo.se \
+  "sudo sqlite3 -readonly /etc/lfr-tunneld/lfr-tunnel.db \"SELECT COUNT(*), MIN(created_at), MAX(created_at) FROM admin_audit_log WHERE action='tunnel.start' AND details LIKE '%region source failback]%'\""
+```
+
+Use the audit log, **not** `client_region_source`: that table misses every registration relayed
+through an edge and keeps only the last source per user per day, so it held one failback against
+the audit log's 43 (#2368).
+
+So the deliberate run below is for watching one cycle closely -- the timers, the events, the tray --
+not for proving failback works at all. This is how to drive it.
 
 ### The flag that makes it possible: `-prefer-region`, not `-pin`
 
@@ -928,7 +946,7 @@ Polling the public URL proves nothing -- an edge cross-proxies to the lease hold
 | `failover` with `from`/`to` and `lease_lost: False` | an orderly move, not a recovery from a dropped lease |
 | `failback_declined` `reason: cooldown` | the timer, working -- not a failure |
 | `failback_declined` `reason: unreachable` | the node is genuinely still down |
-| `failback` | **the thing that has never been seen in production** |
+| `failback` | the move back completed -- routine in production since v1.48.40 (see the query above) |
 | `node_set_changed` | the roster fingerprint moved (#1937) |
 
 ### Testing the tray in the same run
@@ -943,4 +961,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-01* | *Last Reviewed: 2026-10-01*
+*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*

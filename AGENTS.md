@@ -20,8 +20,12 @@ agent's skill list and the only route to them is this file — which makes one m
 everything they contain (#1433).
 
 Keep the files themselves in `.agents/`, which is tool-neutral. Add a new skill as
-`.agents/skills/<name>/SKILL.md` with `name` and `description` frontmatter; the symlink picks it
-up with no further wiring. `/reload-skills` re-scans without restarting a session.
+`.agents/skills/<name>/SKILL.md` with `name` (matching the directory) and `description`
+frontmatter, then route it from **both** the Preflight table and "Rules, by topic" below. The
+symlink makes it discoverable to Claude Code, but an agent that reads only this file would never
+learn it exists. `make check-skill-routing` (also run by `make test-hooks`) refuses a skill that
+is not routed, frontmatter that does not match, a dangling link in this file or `CLAUDE.md`,
+and a missing symlink (#2363). `/reload-skills` re-scans without restarting a session.
 
 ## Preflight — what to load before you author
 

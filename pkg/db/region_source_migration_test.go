@@ -107,7 +107,10 @@ func TestMigrationsRekeyAnExistingRegionSourceTable(t *testing.T) {
 
 	// And it now behaves: a second route for user a on 2026-10-01 is added, not overwritten.
 	repo := NewSQLiteRegionProbeRepo(database.conn)
-	at, _ := time.Parse("2006-01-02 15:04:05", "2026-10-01 12:00:00")
+	at, err := time.Parse("2006-01-02 15:04:05", "2026-10-01 12:00:00")
+	if err != nil {
+		t.Fatalf("parse fixture time: %v", err)
+	}
 	if err := repo.RecordRegionSource("a", regionvocab.SourceFailover, at); err != nil {
 		t.Fatalf("record after migration: %v", err)
 	}

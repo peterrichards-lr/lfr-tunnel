@@ -42,7 +42,7 @@ cases = [
     ("[!TIP] keeps GitHub's label \"Tip\" in a tip box",
      "> [!TIP]\n> Body.\n",
      '!!! tip "Tip"', "Body."),
-    ("[!IMPORTANT] keeps GitHub's label \"Important\" in a info box",
+    ("[!IMPORTANT] keeps GitHub's label \"Important\" in an info box",
      "> [!IMPORTANT]\n> Body.\n",
      '!!! info "Important"', "Body."),
     ("[!WARNING] keeps GitHub's label \"Warning\" in a warning box",

@@ -135,6 +135,9 @@ fi
 # is an alert that lost the word its author chose: an IMPORTANT read "Info", a CAUTION "Danger".
 # The hook emits the label explicitly; this holds the published pages to it. Nothing in docs/
 # writes `!!! info` or `!!! danger` by hand, so any such pair here came from the hook.
+# Deliberately narrow: it matches the exact markup the hook produces (one class, a plain-text
+# title), which is the regression it exists for. It would also refuse a lifted title that is
+# literally "Info" (`> ℹ️ **Info** — …`); pick another word for such a title.
 # Matched on the flattened page, since the two tags sit on separate lines.
 styled=""
 while IFS= read -r -d '' f; do

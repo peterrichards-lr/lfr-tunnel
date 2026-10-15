@@ -44,8 +44,10 @@ _TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
 
 # The lead's emoji can also pick the callout's type. The community-project notice is written as
 # `[!NOTE]` on all three Liferay tools sites, but renders as Material's `info` callout -- the
-# family's agreed rendered shape (#2393). ℹ️ says "information", so it maps to `info` whatever
-# the alert type; every other emoji keeps the alert's own mapping.
+# family's agreed rendered shape (#2393). ℹ️ says "information", so it lifts a NOTE to `info`.
+# Only a NOTE: a WARNING or CAUTION that happens to open with ℹ️ keeps its weight rather than
+# being quietly downgraded -- this hook is the reference the other two sites copy. Every other
+# emoji keeps the alert's own mapping.
 _EMOJI_KIND = {"\u2139": "info"}
 
 
@@ -122,7 +124,7 @@ def _convert(markdown: str) -> str:
                 rest = rest[:1].upper() + rest[1:]
             body[0] = rest
             for ch, emoji_kind in _EMOJI_KIND.items():
-                if ch in title.group(1):
+                if ch in title.group(1) and kind == "note":
                     kind = emoji_kind
             out.append(f'!!! {kind} "{title.group(2).strip()}"')
         else:

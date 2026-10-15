@@ -101,9 +101,10 @@ fi
 # notice satisfied two separate greps. Take the text from the first admonition to its first
 # </div> -- the converted alert is a single div holding a title and a paragraph -- and look there.
 #
-# Both halves are required: the callout's title is "Community project" (the alerts hook lifts the
-# source's emoji + bold lead into it, #2391), and its body carries the disclaimer itself. A
-# callout with the disclaimer but titled "Info", or titled correctly with the text gone, fails.
+# All three parts are required. The callout's title is "Community project" (the alerts hook lifts
+# the source's emoji + bold lead into it, #2391); its body carries the disclaimer itself; and it
+# links to the About page, which the shared shape includes (#2393). A callout titled "Info", one
+# titled correctly with the text gone, or one that lost its link, fails.
 notice_ok=0
 case "$page" in *"<h2"*) ;; *) above="" ;; esac   # no section heading: nothing is "above" one
 case "$above" in
@@ -116,7 +117,8 @@ case "$above" in
     # is invisible) and fold line breaks, so a source that wraps the sentence still matches.
     callout=$(printf '%s' "$callout" | tr '\n\t' '  ' | sed -E 's/<!--([^-]|-[^-])*-->//g' | tr -s ' ')
     if grep -q '<p class="admonition-title">Community project</p>' <<<"$callout" \
-      && grep -q 'Not an official Liferay product and not covered by Liferay Support' <<<"$callout"; then
+      && grep -q 'Not an official Liferay product and not covered by Liferay Support' <<<"$callout" \
+      && grep -q '<a href="about/">About this project</a>' <<<"$callout"; then
       notice_ok=1
     fi
     ;;

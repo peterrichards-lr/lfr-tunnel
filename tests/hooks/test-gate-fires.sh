@@ -493,6 +493,10 @@ make_site "$SANDBOX/site-noteclass"
 printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition note"><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-noteclass/index.html"
 run_rendered "a Community project callout of class note, not info" "$SANDBOX/site-noteclass" 'NO-NOTICE'
+make_site "$SANDBOX/site-nolink"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-nolink/index.html"
+run_rendered "a notice callout without its About link" "$SANDBOX/site-nolink" 'NO-NOTICE'
 make_site "$SANDBOX/site-commented"
 printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><!-- Not an official Liferay product and not covered by Liferay Support. --><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-commented/index.html"
@@ -501,7 +505,7 @@ run_rendered "a disclaimer present only inside an HTML comment" "$SANDBOX/site-c
 # Narrowness control: a source that wraps the disclaimer across lines renders a line break inside
 # the phrase, and must still pass.
 make_site "$SANDBOX/site-wrapped"
-printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and\nnot covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and\nnot covered by Liferay Support. <a href="about/">About this project</a></p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-wrapped/index.html"
 if bash "$RENDERED" "$SANDBOX/site-wrapped" >/dev/null 2>&1; then
     pass "check-docs-rendered.sh accepts a disclaimer wrapped across lines (narrowness control)"

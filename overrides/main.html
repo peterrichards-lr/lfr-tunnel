@@ -1,13 +1,42 @@
 {% extends "base.html" %}
 
 {#-
-  Shared across the Liferay tools docs sites. Overrides ONE block and calls
-  super() first, so a Material upgrade that changes base.html still reaches us.
+  SHARED FILE. The canonical copy is overrides/main.html on the master branch
+  of peterrichards-lr/lfr-tunnel. The Liferay tools docs sites (lfr-tunnel,
+  liferay-docker-manager, liferay-ai-commerce-accelerator) each carry a copy
+  with the same content. Never edit a copy: change the canonical file in
+  lfr-tunnel, then copy it to the others unchanged. The rule is in lfr-tunnel's
+  CONTRIBUTING.md, "Shared docs files"; the sync plan, including the CI checks
+  that compare the copies, is peterrichards-lr/liferay-ai-commerce-accelerator#1329.
 
-  1. Search-engine ownership tokens (emitted only when the key is set).
-  2. Open Graph / Twitter card tags so links shared in Slack, Teams, LinkedIn
-     etc. unfurl with the project's social preview instead of a bare URL.
-     extra.social_image is a path relative to docs/ (e.g. assets/social-preview.png).
+  The values are per-site and come from each site's mkdocs.yml (verification
+  tokens, social image, site name and description, SVG favicon). Two things are
+  fixed here, so every site must match them: the social image is 1280x640, and
+  the touch icon lives at docs/assets/apple-touch-icon.png.
+
+  Material has no config key for any of this, so the tags are injected through
+  the theme's `extrahead` block. The template overrides ONE block, and
+  `{{ super() }}` comes first: the block is empty in Material 9.7.7's
+  base.html, but calling super() keeps whatever a future release puts there.
+
+  `custom_dir` costs an upgrade hazard worth recording: this file overrides the
+  theme's `main.html`, so a future Material release that changes that template
+  will not reach these sites until this file is reconciled. Keeping the override
+  to one block, and calling `super()`, is what keeps that cost small.
+
+  1. Search-engine ownership tokens. Each is guarded by `if`, so an unset key
+     emits nothing rather than an empty `content=""`, which some crawlers treat
+     as a failed claim rather than an absent one.
+  2. Open Graph / Twitter card tags, so a link shared in Slack, Teams or
+     LinkedIn unfurls as the project rather than a bare URL. The home page uses
+     the site name alone; every other page is prefixed with its own title.
+     `og:image` is absolute by construction: it is resolved by the SCRAPER, not
+     the browser, so a relative path has no page to resolve against and the
+     card renders blank. `site_url` carries a trailing slash and
+     `extra.social_image` (a path relative to docs/, e.g.
+     assets/social-preview.png) does not lead with one.
+  3. An SVG favicon for browsers that take one, with theme.favicon (PNG) as the
+     fallback, and the apple-touch-icon.
 -#}
 {% block extrahead %}
   {{ super() }}

@@ -35,8 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history for git-revision-date-localized (#2391): a shallow clone dates every
-          # page to the deploy. CI's Documentation Build fetches the same, so the two builds match.
+          # Full history for git-revision-date-localized (#2391). Required: on a shallow clone the
+          # plugin warns under GitHub Actions and --strict fails the deploy. CI's Documentation
+          # Build fetches the same, so the two builds match.
           fetch-depth: 0
 
       - name: Set up Python

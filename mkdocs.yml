@@ -108,8 +108,8 @@ markdown_extensions:
 hooks:
   - scripts/mkdocs_github_alerts.py
 
-# The navigation below is hand-maintained -- `plugins:` is only `search`, so nothing derives it
-# from the docs/ tree. A page added under docs/ and left out of nav: still builds and deploys; it
+# The navigation below is hand-maintained -- no plugin in `plugins:` derives it from the docs/ tree
+# (search and git-revision-date-localized only; no awesome-pages or literate-nav). A page added under docs/ and left out of nav: still builds and deploys; it
 # is simply unreachable except by direct URL or site search, and `mkdocs --strict` reports that as
 # INFO rather than a warning, so the build stays green either way (#1918).
 #

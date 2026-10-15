@@ -4,7 +4,7 @@
  *
  * Publishing is automatic and navigation is not. `.github/workflows/docs.yml` runs
  * `mkdocs build --strict` and deploys to Pages on every push to master, but `mkdocs.yml` carries a
- * hand-written `nav:` block and its `plugins:` list is only `search` -- no awesome-pages, no
+ * hand-written `nav:` block and none of its `plugins:` derives navigation -- no awesome-pages, no
  * literate-nav, no gen-files. So a new page anywhere under docs/ is built, deployed, and reachable
  * by direct URL or site search alone. Nothing fails, which is what makes it easy to miss -- and it
  * had already happened: `docker_hub_readme.md` has been on disk and absent from `nav:` since #94.

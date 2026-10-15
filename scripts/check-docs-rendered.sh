@@ -110,6 +110,9 @@ case "$above" in
   *'class="admonition'*)
     callout=${above#*class=\"admonition}
     callout=${callout%%</div>*}
+    # What a reader sees, not what the markup holds: drop HTML comments (a disclaimer inside one
+    # is invisible) and fold line breaks, so a source that wraps the sentence still matches.
+    callout=$(printf '%s' "$callout" | tr '\n\t' '  ' | sed -E 's/<!--([^-]|-[^-])*-->//g' | tr -s ' ')
     if grep -q '<p class="admonition-title">Community project</p>' <<<"$callout" \
       && grep -q 'Not an official Liferay product and not covered by Liferay Support' <<<"$callout"; then
       notice_ok=1

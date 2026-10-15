@@ -481,13 +481,28 @@ run_rendered "a notice beside an unrelated callout rather than in one" "$SANDBOX
 # The two halves of the titled callout (#2391): the pre-#2391 untitled shape -- the disclaimer
 # inside a callout headed "Info" -- and the right title over a body that lost the disclaimer.
 make_site "$SANDBOX/site-untitled"
-printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Info</p><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Info</p><p>Not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-untitled/index.html"
 run_rendered "a notice callout not titled Community project" "$SANDBOX/site-untitled" 'NO-NOTICE'
 make_site "$SANDBOX/site-emptybody"
 printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-emptybody/index.html"
 run_rendered "a Community project callout without the disclaimer" "$SANDBOX/site-emptybody" 'NO-NOTICE'
+make_site "$SANDBOX/site-commented"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><!-- Not an official Liferay product and not covered by Liferay Support. --><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-commented/index.html"
+run_rendered "a disclaimer present only inside an HTML comment" "$SANDBOX/site-commented" 'NO-NOTICE'
+
+# Narrowness control: a source that wraps the disclaimer across lines renders a line break inside
+# the phrase, and must still pass.
+make_site "$SANDBOX/site-wrapped"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and\nnot covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-wrapped/index.html"
+if bash "$RENDERED" "$SANDBOX/site-wrapped" >/dev/null 2>&1; then
+    pass "check-docs-rendered.sh accepts a disclaimer wrapped across lines (narrowness control)"
+else
+    fail "check-docs-rendered.sh refused a disclaimer wrapped across lines"
+fi
 
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.

@@ -1,18 +1,23 @@
 {% extends "base.html" %}
 
 {#-
-  CANONICAL COPY. Shared by the three Liferay tools docs sites (lfr-tunnel,
-  liferay-docker-manager, liferay-ai-commerce-accelerator); this repository's
-  master holds the canonical copy. Do not edit it downstream: change it here,
-  then open a sync PR in LDM and AICA, whose docs CI checks that their copy has
-  the same content. Nothing in it is per-site -- the tokens, image and names all
-  come from each site's mkdocs.yml. See CONTRIBUTING.md, "Shared docs files".
+  SHARED FILE. The canonical copy is overrides/main.html on the master branch
+  of peterrichards-lr/lfr-tunnel. The Liferay tools docs sites (lfr-tunnel,
+  liferay-docker-manager, liferay-ai-commerce-accelerator) each carry a copy
+  with the same content. Never edit a copy: change the canonical file in
+  lfr-tunnel, then copy it to the others unchanged. The rule is in lfr-tunnel's
+  CONTRIBUTING.md, "Shared docs files"; the sync plan, including the CI checks
+  that compare the copies, is peterrichards-lr/liferay-ai-commerce-accelerator#1329.
+
+  The values are per-site and come from each site's mkdocs.yml (verification
+  tokens, social image, site name and description, SVG favicon). Two things are
+  fixed here, so every site must match them: the social image is 1280x640, and
+  the touch icon lives at docs/assets/apple-touch-icon.png.
 
   Material has no config key for any of this, so the tags are injected through
   the theme's `extrahead` block. The template overrides ONE block, and
-  `{{ super() }}` comes first and is load-bearing: the block is not empty in the
-  base template, and dropping it would discard whatever Material puts there --
-  today and after any theme upgrade.
+  `{{ super() }}` comes first: the block is empty in Material 9.7.7's
+  base.html, but calling super() keeps whatever a future release puts there.
 
   `custom_dir` costs an upgrade hazard worth recording: this file overrides the
   theme's `main.html`, so a future Material release that changes that template

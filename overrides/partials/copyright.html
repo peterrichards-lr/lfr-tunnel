@@ -1,10 +1,16 @@
 {#-
-  CANONICAL COPY. Shared by the three Liferay tools docs sites (lfr-tunnel,
-  liferay-docker-manager, liferay-ai-commerce-accelerator); this repository's
-  master holds the canonical copy. Do not edit it downstream: change it here,
-  then open a sync PR in LDM and AICA, whose docs CI checks that their copy has
-  the same content. The footer text itself is per-site: it comes from each
-  site's `copyright:` in mkdocs.yml. See CONTRIBUTING.md, "Shared docs files".
+  SHARED FILE. The canonical copy is overrides/partials/copyright.html on the
+  master branch of peterrichards-lr/lfr-tunnel. The Liferay tools docs sites
+  (lfr-tunnel, liferay-docker-manager, liferay-ai-commerce-accelerator) each
+  carry a copy with the same content. Never edit a copy: change the canonical
+  file in lfr-tunnel, then copy it to the others unchanged. The rule is in
+  lfr-tunnel's CONTRIBUTING.md, "Shared docs files"; the sync plan, including
+  the CI checks that compare the copies, is
+  peterrichards-lr/liferay-ai-commerce-accelerator#1329.
+
+  The footer text is per-site: it comes from each site's `copyright:` in
+  mkdocs.yml. The link target is fixed, so every site must have an About page
+  at docs/about.md.
 
   Material's partials/copyright.html (mkdocs-material 9.7.7), plus a link to the
   About page in every page's footer (lfr-tunnel #2383).
@@ -13,9 +19,9 @@
   is NOT Jinja-processed, so it cannot interpolate `site_url`. A relative
   "about/" there 404s on every nested page, and a root-relative "/about/"
   resolves to github.io/about/ on a project site. The `url` filter resolves
-  against the CURRENT page, so the link is correct on nested pages and under
-  `mkdocs serve` alike, and cannot drift from `site_url` because it is derived
-  from it.
+  against the CURRENT page (`../../about/` on a page two levels down), so the
+  link is correct on nested pages and under `mkdocs serve` alike, and cannot
+  drift from `site_url` because it never reads it.
 -#}
 <div class="md-copyright">
   <div class="md-copyright__highlight">

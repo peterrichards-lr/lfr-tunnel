@@ -76,9 +76,9 @@ Four files of the docs site are shared with the two sibling Liferay tools sites,
 | `overrides/main.html` | Search-console, Open Graph/Twitter and favicon tags |
 | `overrides/partials/copyright.html` | The footer's "About these docs" link |
 
-- **Change them only here.** A change to any of the four needs a follow-up sync PR in LDM and AICA, copying the file across unchanged. Their docs CI checks that their copy has the same content as this repository's `master` (the sync plan is on [AICA #1329](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator/issues/1329)).
-- **A site-specific need goes in a separate file** — for example an extra stylesheet listed after `liferay-blue.css` in `extra_css` — never in a shared file. Everything per-site, such as the verification token, the social image, the footer text and the site name, already comes from each site's `mkdocs.yml`.
-- **Keep them out of formatters.** All four are listed by name in `.prettierignore`: a formatter rewriting one here would make every downstream check fail at once. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["ℹ"]` for ruff) — the character is the hook's opt-in token, and rewording it breaks the downstream check.
+- **Change them only here.** A change to any of the four needs a follow-up sync PR in LDM and AICA, copying the file across unchanged. Their docs CI is to check that their copy has the same content as this repository's `master`; those checks are planned, not yet live (the sync plan is on [AICA #1329](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator/issues/1329)).
+- **A site-specific need goes in a separate file** — for example an extra stylesheet listed after `liferay-blue.css` in `extra_css` — never in a shared file. The per-site values — verification tokens, the social image, the footer text and the site name — come from each site's `mkdocs.yml`. A few things are fixed in the shared files, so every site must match them: a 1280×640 social image, `docs/assets/apple-touch-icon.png`, and an About page at `docs/about.md`.
+- **Keep them out of formatters.** All four are listed by name in `.prettierignore`: a formatter rewriting one here would make every downstream check fail at once. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["\u2139"]` for ruff): the copies must stay byte-identical, so rewording a comment to silence the linter breaks the downstream check.
 
 ## 🤖 AI-Assisted Contributions
 

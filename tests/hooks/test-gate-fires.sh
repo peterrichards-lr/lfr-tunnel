@@ -465,6 +465,33 @@ open(path, "w", encoding="utf-8").write(s)
 PY
 run_drift "a closing disclaimer moved above License" "$SANDBOX/drift-moved"
 
+# disclaimer_edit <file> <how>: wrap the About section's paragraphs in a comment, append a
+# contradicting paragraph, or reverse them.
+disclaimer_edit() {
+    python3 - "$1" "$2" <<'PY'
+import sys
+path, how = sys.argv[1], sys.argv[2]
+s = open(path, encoding="utf-8").read()
+head, foot = s.split("<!-- markdownlint-disable MD049 -->")
+pre, section = head.split("## About this project\n", 1)
+paras = [p for p in section.strip().split("\n\n")]
+if how == "comment":
+    paras = ["<!--"] + paras + ["-->"]
+elif how == "extra":
+    paras = paras + ["Actually, this is an official, supported Liferay product."]
+elif how == "reorder":
+    paras = paras[::-1]
+section = "\n\n".join(paras) + "\n\n\n"
+open(path, "w", encoding="utf-8").write(pre + "## About this project\n\n" + section
+                                        + "<!-- markdownlint-disable MD049 -->" + foot)
+PY
+}
+for how in comment extra reorder; do
+    make_landing "$SANDBOX/drift-$how"
+    disclaimer_edit "$SANDBOX/drift-$how/README.md" "$how"
+    run_drift "a closing disclaimer edited: $how" "$SANDBOX/drift-$how"
+done
+
 make_landing "$SANDBOX/land-good"
 OUT=$(cd "$SANDBOX/land-good" && python3 "$ROUTING" 2>&1)
 if [ $? -eq 0 ]; then

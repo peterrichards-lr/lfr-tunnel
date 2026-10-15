@@ -116,11 +116,20 @@ def notice_problem(path, expected):
 
 # The full disclaimer (#2387). The README closes with the About page's text -- who maintains the
 # project, that it is not an official or supported Liferay product, and how the docs are written
-# and reviewed. docs/about.md is the one source: the README's last `##` section must hold each of
-# its body paragraphs verbatim, so a change to one that is not made to the other fails here
-# instead of leaving two disclaimers that disagree.
+# and reviewed. docs/about.md is the one source, and the README must END with exactly
+# `## About this project` followed by its body blocks, in order, with nothing after them.
+#
+# Exactly, not "each paragraph appears somewhere in the last section": that version passed an
+# added paragraph contradicting the About text, the paragraphs reordered, the whole text inside
+# an HTML comment, a fence or <details>, and other content following it (a setext heading, an
+# H3) -- the same "is it somewhere in region X?" shape [NO-NOTICE] above already had to abandon.
+# A wrapping `-->`, fence or `</details>` becomes the last block, so this rejects those too.
+#
+# Comparison is per line: each paragraph is one line in both files. Re-wrapping one over several
+# lines, even without changing a word, fails -- keep them one line each.
 ABOUT = os.path.join("docs", "about.md")
 FOOTER_MARK = "<!-- markdownlint-disable MD049 -->"
+DISCLAIMER_HEADING = "## About this project"
 
 
 def about_paragraphs():
@@ -131,23 +140,32 @@ def about_paragraphs():
 
 
 def disclaimer_problem():
-    """None if the README's last `##` section holds every About paragraph, else what is wrong."""
+    """None if the README ends with the heading and every About block in order, else what is wrong."""
     wanted = about_paragraphs()
     if len(wanted) < 2:
         return f"cannot be checked: {ABOUT} yielded {len(wanted)} paragraph(s), too few to be the page"
+    if any(b[0].startswith("#") for b in wanted):
+        return (f"cannot be checked: {ABOUT}'s body contains a heading ('{wanted[0][0][:40]}'), "
+                f"which would start a new README section. Keep the About page to paragraphs")
 
     with open(ROOT_README, encoding="utf-8") as handle:
-        lines = handle.read().split(FOOTER_MARK)[0].splitlines()
-    starts = [n for n, line in enumerate(lines) if line.startswith("## ")]
-    if not starts:
-        return "has no `##` section at all"
-    last = blocks(lines[starts[-1]:])
-    missing = [b for b in wanted if b not in last]
-    if missing:
-        return (f"does not end with {ABOUT}'s text: its last section ('{lines[starts[-1]][3:]}') "
-                f"lacks {len(missing)} of {len(wanted)} paragraph(s), starting "
-                f"'{missing[0][0][:70]}…'")
-    return None
+        body = blocks(handle.read().split(FOOTER_MARK)[0].splitlines())
+    expected = [[DISCLAIMER_HEADING]] + wanted
+    tail = body[-len(expected):]
+    if tail == expected:
+        return None
+
+    if [DISCLAIMER_HEADING] not in body:
+        return f"has no '{DISCLAIMER_HEADING}' section"
+    after = body[body.index([DISCLAIMER_HEADING]) + 1:]
+    for n, block in enumerate(wanted):
+        if n >= len(after):
+            return f"stops after {n} of the {len(wanted)} About paragraph(s)"
+        if after[n] != block:
+            return (f"differs from {ABOUT} at block {n + 1} of its closing section: has "
+                    f"'{after[n][0][:60]}…', expected '{block[0][:60]}…'")
+    return (f"has {len(after) - len(wanted)} block(s) after the About text, starting "
+            f"'{after[len(wanted)][0][:60]}…' -- it must be the last thing before the footer")
 
 
 def main():

@@ -26,7 +26,7 @@ To prevent information overload, our documentation is divided into dedicated, to
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
 *   **[Exposing Any Local HTTP Service](docs/exposing-any-http-service.md)** — The tunnel does not inspect what is listening on the port it publishes, so a Node service, a client extension in dev mode or any other local HTTP server works with `-ports`.
 *   **[Using Your Own Domain](docs/custom_domains.md)** — Serve a tunnel at a domain you own. Point it at the gateway with a `CNAME` and register it in the portal; the gateway obtains and renews the certificate for you.
-*   **[About These Docs](docs/about.md)** — Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
+*   **[About these docs](docs/about.md)** — Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
 
 ### 🛠️ Server Administration
 *   **[Server Gateway Setup Guide](docs/server/setup_guide.md)** — Comprehensive setup guide to host your own gateway server (`lfr-tunneld`), configure wildcard DNS, Caddy/Nginx reverse proxies, Postfix secure TLS SMTP relays, and scheduled backups.

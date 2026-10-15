@@ -50,7 +50,7 @@ All operator deployment and configuration resources are organized under the `doc
 
 - **[Contributing Guide](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md)**: General contribution rules, git branching conventions, code style checks, and release checklists.
 - **[Testing Protocol](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md#-testing--verification-protocol)**: Detailed instructions for running automated unit/E2E tests locally and manual exploratory test scenarios.
-- **[About These Docs](about.md)**: Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
+- **[About these docs](about.md)**: Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
 
 ## Related Liferay tools
 

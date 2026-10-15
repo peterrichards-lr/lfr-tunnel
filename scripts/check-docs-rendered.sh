@@ -176,6 +176,20 @@ layout=$(python3 "$(dirname "$0")/check-docs-home-layout.py" "$home" "$HOME_H1" 
   fail=1
 }
 
+# The shared top-level navigation (#2405): the labels an ordered subset of the family's standard
+# list, sentence case, "About these docs" last. check-docs-nav-order.py reads the built home page's
+# primary navigation with an HTML parser.
+nav=$(python3 "$(dirname "$0")/check-docs-nav-order.py" "$home" 2>&1) || {
+  echo "[NAV] the top-level navigation does not follow the shared order (#2405):"
+  # A line STARTING with FAIL is an assertion; anything else means the script itself broke.
+  if grep -q '^FAIL' <<<"$nav"; then
+    printf '%s\n' "$nav" | sed -n 's/^FAIL /  /p'
+  else
+    printf '%s\n' "$nav" | sed 's/^/  /'
+  fi
+  fail=1
+}
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "❌ The published output does not match what the source asks for."
@@ -183,4 +197,5 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 printf '%s\n' "$layout" | sed 's/^ok   /  ✓ home: /'
-echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page, alerts titled with their GitHub label, home page on the shared layout."
+printf '%s\n' "$nav" | sed -n 's/^ok   nav: /  ✓ nav: /p'
+echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page, alerts titled with their GitHub label, home page on the shared layout, top-level nav in the shared order."

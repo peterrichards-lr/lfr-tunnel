@@ -124,24 +124,31 @@ hooks:
 # nav-exclude: docker_hub_readme.md -- the Docker Hub repository description, pasted by hand into hub.docker.com. It is written for that listing (Docker Hub pull badge, absolute raw.githubusercontent.com image URLs) and restates the Home page, so publishing it here too would put a second, drifting front page on the site.
 nav:
   - Home: README.md
-  - Client Guides:
-    - Getting Started: getting_started.md
-    - Client Configuration File: client_configuration.md
-    - Liferay SE Guide: liferay-se-guide.md
-    - MCP Guide: mcp.md
-    - Exposing Any Local HTTP Service: exposing-any-http-service.md
-    - Using Your Own Domain: custom_domains.md
-  - Server & Operator Guides:
-    - Control Plane Setup: server/setup_guide.md
-    - Edge Node Scaling: server/edge_setup_guide.md
-    - AWS Provisioning: server/aws_setup_guide.md
-    - SSO / OIDC Cloud Guide: server/sso_cloud_guide.md
-  - Architecture & Security:
-    - System Architecture: architecture.md
-    - InfoSec & Trust Guide: infosec.md
-  - Project Info:
+  # The shared top-level order (ai-agent-template#135, docs-site-standard; #2405): Home, Tutorials,
+  # How-to guides, Reference, Explanation, Troubleshooting, Showcase, Project and contributing,
+  # About these docs -- in that order, in sentence case, a section with no pages omitted, never
+  # renamed or reordered. check-docs-rendered.sh holds the built site to it. Moving a page between
+  # sections is a nav edit only: the file stays put, so its published URL does not change.
+  - Tutorials:
+    - Getting started: getting_started.md
+  - How-to guides:
+    - Client:
+      - Liferay SE guide: liferay-se-guide.md
+      - MCP guide: mcp.md
+      - Exposing any local HTTP service: exposing-any-http-service.md
+      - Using your own domain: custom_domains.md
+    - Server and operator:
+      - Control plane setup: server/setup_guide.md
+      - Edge node scaling: server/edge_setup_guide.md
+      - AWS provisioning: server/aws_setup_guide.md
+      - SSO / OIDC cloud guide: server/sso_cloud_guide.md
+  - Reference:
+    - Client configuration file: client_configuration.md
+  - Explanation:
+    - System architecture: architecture.md
+    - InfoSec and trust guide: infosec.md
+  - Project and contributing:
     - Contributing: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md
-    - Security Policy: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/SECURITY.md
-    - Code of Conduct: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CODE_OF_CONDUCT.md
-  # Last on every site in the family (STANDARD.md §6.3).
-  - About These Docs: about.md
+    - Security policy: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/SECURITY.md
+    - Code of conduct: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CODE_OF_CONDUCT.md
+  - About these docs: about.md

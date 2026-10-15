@@ -42,13 +42,14 @@ _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
 _TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
 
 
-# The lead's emoji can also pick the callout's type. The community-project notice is written as
-# `[!NOTE]` on all three Liferay tools sites, but renders as Material's `info` callout -- the
-# family's agreed rendered shape (#2393). ℹ️ says "information", so it lifts a NOTE to `info`.
-# Only a NOTE: a WARNING or CAUTION that happens to open with ℹ️ keeps its weight rather than
-# being quietly downgraded -- this hook is the reference the other two sites copy. Every other
-# emoji keeps the alert's own mapping.
-_EMOJI_KIND = {"\u2139": "info"}
+# A lifted title renders as `info`, whatever the alert's type ("option B", the family decision on
+# #2391). The community-project notice is written as `[!NOTE]` on all three Liferay tools sites and
+# must render as the shared `info` callout titled "Community project"; the strict opt-in above is
+# what keeps this from reaching any other alert. Untitled alerts keep _TYPES unchanged.
+#
+# This file is meant to be identical in all three repos (LDM may keep it at a different path), like
+# liferay-blue.css -- change it here and copy it to the others.
+_TITLED_KIND = "info"
 
 
 def _is_emoji(token: str) -> bool:
@@ -123,9 +124,7 @@ def _convert(markdown: str) -> str:
             if re.fullmatch(r"[a-z]+[.,;:]?", first):
                 rest = rest[:1].upper() + rest[1:]
             body[0] = rest
-            for ch, emoji_kind in _EMOJI_KIND.items():
-                if ch in title.group(1) and kind == "note":
-                    kind = emoji_kind
+            kind = _TITLED_KIND
             out.append(f'!!! {kind} "{title.group(2).strip()}"')
         else:
             out.append(f"!!! {kind}")

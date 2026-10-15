@@ -71,13 +71,14 @@ def linked_from(path, prefix):
 # parser that CommonMark can outflank (setext headings, info-string fences).
 #
 # The README's link is absolute because it is read on github.com and in search results; the hub's
-# is relative because mkdocs resolves it. The hub carries it as a GitHub alert so that it is a
-# callout on both github.com and the site (the alerts hook converts it).
+# is relative because mkdocs resolves it. Both carry it as a `[!NOTE]` alert -- the family standard
+# for the three Liferay tools sites (#2393) -- so it is a callout on github.com, and on the site the
+# alerts hook renders it as the shared `info` callout titled "Community project".
 NOTICE = ("ℹ️ **Community project** — not an official Liferay product and not covered by "
           "Liferay Support. [About this project]({})")
 NOTICE_BLOCKS = {
-    ROOT_README: ["> " + NOTICE.format("https://peterrichards-lr.github.io/lfr-tunnel/about/")],
-    HUB: ["> [!IMPORTANT]", "> " + NOTICE.format("about.md")],
+    ROOT_README: ["> [!NOTE]", "> " + NOTICE.format("https://peterrichards-lr.github.io/lfr-tunnel/about/")],
+    HUB: ["> [!NOTE]", "> " + NOTICE.format("about.md")],
 }
 
 

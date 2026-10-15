@@ -488,6 +488,11 @@ make_site "$SANDBOX/site-emptybody"
 printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-emptybody/index.html"
 run_rendered "a Community project callout without the disclaimer" "$SANDBOX/site-emptybody" 'NO-NOTICE'
+# The class is part of the shared shape (#2393): a "note" callout means the sites have drifted.
+make_site "$SANDBOX/site-noteclass"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition note"><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-noteclass/index.html"
+run_rendered "a Community project callout of class note, not info" "$SANDBOX/site-noteclass" 'NO-NOTICE'
 make_site "$SANDBOX/site-commented"
 printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><!-- Not an official Liferay product and not covered by Liferay Support. --><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-commented/index.html"
@@ -537,7 +542,14 @@ run_routing() { # run_routing <label> <dir>
 }
 
 make_landing "$SANDBOX/land-missing"
-grep -v 'Community project' "$REPO_ROOT/README.md" >"$SANDBOX/land-missing/README.md"
+python3 - "$REPO_ROOT/README.md" "$SANDBOX/land-missing/README.md" <<'PY'
+import sys
+src, dst = sys.argv[1:]
+lines = open(src, encoding="utf-8").read().split("\n")
+i = next(n for n, l in enumerate(lines) if "**Community project**" in l)
+del lines[i - 1:i + 1]                         # the alert marker and its notice line
+open(dst, "w", encoding="utf-8").write("\n".join(lines))
+PY
 run_routing "a README without the notice" "$SANDBOX/land-missing"
 
 make_landing "$SANDBOX/land-below"
@@ -545,43 +557,52 @@ python3 - "$SANDBOX/land-below/docs/README.md" <<'PY'
 import sys
 path = sys.argv[1]
 lines = open(path, encoding="utf-8").read().split("\n")
-notice = [l for l in lines if "Community project" in l]
-rest = [l for l in lines if "Community project" not in l]
+i = next(n for n, l in enumerate(lines) if "Community project" in l)
+notice = lines[i - 1:i + 1]                   # the [!NOTE] marker and its notice line
+rest = lines[:i - 1] + lines[i + 1:]
 first = next(i for i, l in enumerate(rest) if l.startswith("## "))
 rest[first + 1:first + 1] = [""] + notice
 open(path, "w", encoding="utf-8").write("\n".join(rest))
 PY
 run_routing "a docs home whose notice is below its first heading" "$SANDBOX/land-below"
 
-# move_notice <file> <where>: before-h1 | before-description | below-rule | plain
+# move_notice <file> <where>: before-h1 | before-description | below-rule | plain | unalerted | important
 move_notice() {
     python3 - "$1" "$2" <<'PY'
 import sys
 path, where = sys.argv[1], sys.argv[2]
 lines = open(path, encoding="utf-8").read().split("\n")
 i = next(n for n, l in enumerate(lines) if "**Community project**" in l)
-notice = lines[i]
+notice = lines[i - 1:i + 1]                    # the [!NOTE] marker and its notice line
+assert notice[0] == "> [!NOTE]", notice
 if where == "plain":
-    lines[i] = notice[2:]                      # drop the "> ": a paragraph, not a callout
+    lines[i - 1:i + 1] = [notice[1][2:]]       # no marker, no "> ": a paragraph, not a callout
+elif where == "unalerted":
+    del lines[i - 1]                           # the pre-#2393 plain quote: no [!NOTE] marker
+elif where == "important":
+    lines[i - 1] = "> [!IMPORTANT]"            # the pre-#2393 hub alert type
 else:
-    del lines[i]
-    if lines[i - 1] == "":
-        del lines[i - 1]
+    del lines[i - 1:i + 1]
+    if lines[i - 2] == "":
+        del lines[i - 2]
     if where == "before-h1":
-        lines[0:0] = [notice, ""]
+        lines[0:0] = notice + [""]
     elif where == "before-description":
-        lines[1:1] = ["", notice]
+        lines[1:1] = [""] + notice
     elif where == "below-rule":
         r = next(n for n, l in enumerate(lines) if l == "---")
-        lines[r + 1:r + 1] = ["", notice]
+        lines[r + 1:r + 1] = [""] + notice
 open(path, "w", encoding="utf-8").write("\n".join(lines))
 PY
 }
-for where in before-h1 before-description below-rule plain; do
+for where in before-h1 before-description below-rule plain unalerted; do
     make_landing "$SANDBOX/land-$where"
     move_notice "$SANDBOX/land-$where/README.md" "$where"
     run_routing "a README notice moved $where" "$SANDBOX/land-$where"
 done
+make_landing "$SANDBOX/land-important"
+move_notice "$SANDBOX/land-important/docs/README.md" important
+run_routing "a docs home notice still written as [!IMPORTANT]" "$SANDBOX/land-important"
 
 # The README's closing section must hold docs/about.md's body verbatim (#2387).
 run_drift() { # run_drift <label> <dir>

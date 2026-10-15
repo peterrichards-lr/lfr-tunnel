@@ -28,8 +28,11 @@ def first_admonition(src):
 cases = [
     # (label, source, expected header, expected first body line)
     ("emoji + bold lead + em dash is titled",
-     "> [!IMPORTANT]\n> ℹ️ **Community project** — not an official product. [About](about.md)\n",
+     "> [!NOTE]\n> ℹ️ **Community project** — not an official product. [About](about.md)\n",
      '!!! info "Community project"', "Not an official product. [About](about.md)"),
+    ("another emoji keeps the alert's own type (#2393: only ℹ️ picks info)",
+     "> [!NOTE]\n> ⚠️ **Heads up** — check first.\n",
+     '!!! note "Heads up"', "Check first."),
     ("a bold lead without the emoji is left alone",
      "> [!NOTE]\n> **Cost Explorer must be enabled** — a one-time toggle\n> — before any of the above will work.\n",
      "!!! note", "**Cost Explorer must be enabled** — a one-time toggle"),

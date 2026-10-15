@@ -87,7 +87,7 @@ fi
 # Community-project notice on the site's home page (#2385). check-docs-routing.py holds the
 # markdown; this holds what readers get: a callout, above the first section heading. The source
 # writes it as a GitHub alert, so a broken alerts hook would print it as a plain blockquote with
-# a literal "[!IMPORTANT]" -- which the leaked-marker check above would also report.
+# a literal "[!NOTE]" -- which the leaked-marker check above would also report.
 home="$SITE/index.html"
 above=""
 page=""
@@ -107,8 +107,10 @@ fi
 notice_ok=0
 case "$page" in *"<h2"*) ;; *) above="" ;; esac   # no section heading: nothing is "above" one
 case "$above" in
-  *'class="admonition'*)
-    callout=${above#*class=\"admonition}
+  *'class="admonition info"'*)
+    # Exactly `info` (#2393): the shared rendered shape on all three Liferay tools sites, whatever
+    # alert type the source uses. A `note` callout here means the sites have drifted apart.
+    callout=${above#*class=\"admonition info\"}
     callout=${callout%%</div>*}
     # What a reader sees, not what the markup holds: drop HTML comments (a disclaimer inside one
     # is invisible) and fold line breaks, so a source that wraps the sentence still matches.
@@ -120,9 +122,9 @@ case "$above" in
     ;;
 esac
 if [ "$notice_ok" -ne 1 ]; then
-  echo "[NO-NOTICE] the home page does not show the community-project notice as a callout titled \"Community project\" above its first section."
+  echo "[NO-NOTICE] the home page does not show the community-project notice as a callout of class info titled \"Community project\" above its first section."
   echo "  Readers must see that this is not an official Liferay product before they decide to adopt it."
-  echo "  Source: the [!IMPORTANT] alert straight after the opening paragraph of docs/README.md."
+  echo "  Source: the [!NOTE] alert straight after the opening paragraph of docs/README.md."
   fail=1
 fi
 

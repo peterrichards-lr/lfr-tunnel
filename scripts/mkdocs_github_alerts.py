@@ -42,6 +42,13 @@ _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
 _TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
 
 
+# The lead's emoji can also pick the callout's type. The community-project notice is written as
+# `[!NOTE]` on all three Liferay tools sites, but renders as Material's `info` callout -- the
+# family's agreed rendered shape (#2393). ℹ️ says "information", so it maps to `info` whatever
+# the alert type; every other emoji keeps the alert's own mapping.
+_EMOJI_KIND = {"\u2139": "info"}
+
+
 def _is_emoji(token: str) -> bool:
     """True when every character is a symbol, or one of the joiners and variation selectors an
     emoji is built from. Not "non-ASCII": that let `→`'s neighbours in, and a word such as
@@ -114,6 +121,9 @@ def _convert(markdown: str) -> str:
             if re.fullmatch(r"[a-z]+[.,;:]?", first):
                 rest = rest[:1].upper() + rest[1:]
             body[0] = rest
+            for ch, emoji_kind in _EMOJI_KIND.items():
+                if ch in title.group(1):
+                    kind = emoji_kind
             out.append(f'!!! {kind} "{title.group(2).strip()}"')
         else:
             out.append(f"!!! {kind}")

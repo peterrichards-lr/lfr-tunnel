@@ -13,6 +13,9 @@
 #   check-commit-attribution.sh  the guard against a permanently unmergeable PR (#1384)
 #   check_docs_review.py         only ever exercised incidentally, by test-nested-worktree-scope.sh
 #
+# check-docs-rendered.sh joined later (#2383), for the two assertions the published site's
+# claims rest on.
+#
 # check-required-contexts.sh had one (test-required-contexts-mirror.sh) covering check 5 only,
 # so checks 1-4 -- including the one that catches a required context nobody emits -- were
 # unproven.
@@ -281,6 +284,60 @@ if [ $? -eq 0 ]; then
     pass "check-required-contexts.sh passes against the real workflows (narrowness control)"
 else
     fail "check-required-contexts.sh fails on a clean checkout: $(echo "$OUT" | head -3 | tr '\n' ' ')"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. check-docs-rendered.sh — a built page that does not visibly show its review dates, or
+#    lacks the Search Console tag (#2381, #2383). The About page promises readers the dates.
+#
+# The script only greps, so a directory of hand-written pages reaches every branch without
+# mkdocs. The undated variants are the two shapes the first version of the check accepted: a
+# footer inside an HTML comment, and an example footer in a code block.
+# ---------------------------------------------------------------------------
+RENDERED="$REPO_ROOT/scripts/check-docs-rendered.sh"
+TAG='<meta name="google-site-verification" content="x">'
+FOOT='<p><em>Last Updated: 2026-01-01</em> | <em>Last Reviewed: 2026-01-01</em></p>'
+make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
+    mkdir -p "$1/nested"
+    for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
+    printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/nested/index.html"
+    printf '<html><head>%s</head><body>not found</body></html>\n' "$TAG" >"$1/404.html"
+}
+
+run_rendered() { # run_rendered <label> <dir> <expected marker>
+    OUT=$(bash "$RENDERED" "$2" 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "check-docs-rendered.sh PASSED $1"
+    elif grep -q "$3" <<<"$OUT"; then
+        pass "check-docs-rendered.sh fires on $1"
+    else
+        fail "check-docs-rendered.sh exited $RC on $1 without reporting $3: $(echo "$OUT" | head -2 | tr '\n' ' ')"
+    fi
+}
+
+make_site "$SANDBOX/site-comment"
+printf '<html><head>%s</head><body><!-- *Last Updated: 2026-01-01* | *Last Reviewed: 2026-01-01* --></body></html>\n' \
+    "$TAG" >"$SANDBOX/site-comment/nested/index.html"
+run_rendered "dates only inside an HTML comment" "$SANDBOX/site-comment" 'UNDATED-PAGE'
+
+make_site "$SANDBOX/site-code"
+printf '<html><head>%s</head><body><pre><code><span class="ge">*Last Updated: 2026-01-01*</span> | <span class="ge">*Last Reviewed: 2026-01-01*</span></code></pre></body></html>\n' \
+    "$TAG" >"$SANDBOX/site-code/nested/index.html"
+run_rendered "dates only in a code-block example" "$SANDBOX/site-code" 'UNDATED-PAGE'
+
+make_site "$SANDBOX/site-notag"
+printf '<html><head></head><body>%s</body></html>\n' "$FOOT" >"$SANDBOX/site-notag/a.html"
+run_rendered "a page without the verification tag" "$SANDBOX/site-notag" 'MISSING-VERIFICATION'
+
+# Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
+# however the directory is spelled.
+make_site "$SANDBOX/site-good"
+OUT=$(bash "$RENDERED" "$SANDBOX/site-good/" 2>&1)
+if [ $? -eq 0 ]; then
+    pass "check-docs-rendered.sh accepts a dated, tagged site given as 'dir/' (narrowness control)"
+else
+    fail "check-docs-rendered.sh refused a correct site: $(echo "$OUT" | head -3 | tr '\n' ' ')"
 fi
 
 echo

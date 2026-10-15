@@ -326,6 +326,9 @@ jobs:
         run: python3 scripts/check_docs_review.py --dir docs --review-only --max-review-days 180
 
       - name: Check changed markdown files' review footers
+        # Runs even when the review-age step above fails, so a PR sees both kinds of finding at
+        # once rather than one per push.
+        if: success() || failure()
         run: |
           set -euo pipefail
           case "${{ github.event_name }}" in

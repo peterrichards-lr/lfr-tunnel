@@ -182,8 +182,10 @@ jobs:
           # rename there breaks the build with no docs/ change at all, and
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
           # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
-          # docs/ change at all (#2381).
-          if echo "$CHANGED" | grep -qE '^docs/|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^\.github/workflows/'; then
+          # docs/ change at all (#2381). The alerts hook is code mkdocs runs on every page, and
+          # check-docs-rendered.sh is the job's own assertion -- edited alone, neither would
+          # otherwise ever run before reaching master (#2383).
+          if echo "$CHANGED" | grep -qE '^docs/|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check-docs-rendered\.sh$|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false

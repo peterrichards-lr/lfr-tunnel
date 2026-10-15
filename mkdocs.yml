@@ -77,6 +77,7 @@ nav:
     - System Architecture: architecture.md
     - InfoSec & Trust Guide: infosec.md
   - Project Info:
+    - About These Docs: about.md
     - Contributing: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md
     - Security Policy: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/SECURITY.md
     - Code of Conduct: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CODE_OF_CONDUCT.md

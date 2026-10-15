@@ -16,6 +16,8 @@ description: Global requirements for Markdown documentation timestamps and revie
 3. You must also establish a `scripts/check_docs_review.py` script that parses this footer using the regex `r"\*Last Updated: ([\d\-]+)\* \| \*Last Reviewed: ([\d\-]+)\*"` and accepts arguments for `--max-review-days` and `--max-update-days`. This is the single canonical checker for this topic -- do not create a second near-duplicate script; if you find one, consolidate it into this one instead (see issue #933, which is exactly that mistake happening once already).
 4. In full-repo mode the script alerts via `sys.exit(1)` if any documents have exceeded these self-reported-age thresholds. It also has a **changed-files mode** (`--changed-files <paths...>`) that instead cross-checks each given file's footer against `git log`'s real last-modified date for that file, flagging drift beyond `--max-git-drift-days`. This is the check that actually catches someone editing a file's content without bumping its own footer -- a self-reported-only check can never catch that, since the footer can simply be wrong and nothing before checked it against anything external. CI runs this mode automatically against every PR's changed `.md` files ("Documentation Review Check" in `.github/workflows/ci.yml`), so this is no longer purely an on-demand, agent-invoked check for files a PR actually touches -- though the full-repo audit mode is still agent-invoked only, by design, since it would otherwise gate every PR on the whole repo's pre-existing staleness backlog rather than just what that PR changed.
 
+**Public commitment.** The site's [About page](../../../docs/about.md) tells readers that every page shows when it was last updated and last reviewed. Changing or bypassing this rule requires updating the About page in the same PR. On the site side it is held by `scripts/check-docs-rendered.sh` (`[UNDATED-PAGE]`), which fails any built page that does not render the footer.
+
 ## Documentation Review Requirements (Active Rule)
 5. **Post-Implementation Review**: After implementing any code or feature change, you MUST review the project documentation to see if updates are needed. Note that a single code change may require updates to multiple documents (e.g., `README.md`, `architecture.md`, `spec.md`).
 6. **Timestamp Updates**:
@@ -27,4 +29,4 @@ If you ever ask the AI to "review the project documentation for outdated files",
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*

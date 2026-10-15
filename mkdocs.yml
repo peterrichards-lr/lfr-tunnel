@@ -17,7 +17,7 @@ theme:
   name: material
   custom_dir: overrides            # main.html + partials/copyright.html
   language: en
-  logo: assets/logo.svg            # light variant (white hex): sits on the navy header
+  logo: assets/logo.svg            # light variant (white hex): sits on the header -- blue in light mode, navy in dark
   favicon: assets/favicon.png      # 64px PNG of the blue variant; favicon.svg via extra below
   icon:
     repo: fontawesome/brands/github

@@ -7,8 +7,9 @@
  * docs/assets/stylesheets/liferay-blue.css (LDM-#1822), which in turn ports
  * lfr-tunnel's portal palette (pkg/server/static/themes/liferay.css).
  *
- *   Primary: #0B5FFF -- Liferay standard blue (accent, light-scheme header)
- *   Shell:   #1a1f35 -- deep navy (footer, dark-scheme header and background)
+ *   Primary: #0B5FFF -- Liferay standard blue (links, light-scheme header)
+ *   Navy:    #12162a deep (dark-scheme header, dark footer) and #1a1f35
+ *            (light footer, dark page background)
  *
  * Blue and navy never touch: --lfr-blue sits on white (links, icons) or under
  * white text (the light-scheme header), and the navy carries the dark scheme,

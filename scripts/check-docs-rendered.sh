@@ -90,17 +90,27 @@ fi
 # a literal "[!IMPORTANT]" -- which the leaked-marker check above would also report.
 home="$SITE/index.html"
 above=""
+page=""
 if [ -f "$home" ]; then
   # Cut at the first "<h2" itself, not at the line holding it: HTML need not break lines, and a
   # minified page would otherwise leave nothing above the heading -- or, cut by line, everything.
   page=$(cat "$home")
   above=${page%%<h2*}
 fi
+# Inside the callout, not merely beside one: an unrelated admonition above a plain-paragraph
+# notice satisfied two separate greps. Take the text from the first admonition to its first
+# </div> -- the converted alert is a single div holding two paragraphs -- and look there.
 notice_ok=0
-if grep -q 'class="admonition' <<<"$above" \
-  && grep -q '<strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support' <<<"$above"; then
-  notice_ok=1
-fi
+case "$page" in *"<h2"*) ;; *) above="" ;; esac   # no section heading: nothing is "above" one
+case "$above" in
+  *'class="admonition'*)
+    callout=${above#*class=\"admonition}
+    callout=${callout%%</div>*}
+    if grep -q '<strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support' <<<"$callout"; then
+      notice_ok=1
+    fi
+    ;;
+esac
 if [ "$notice_ok" -ne 1 ]; then
   echo "[NO-NOTICE] the home page does not show the community-project notice as a callout above its first section."
   echo "  Readers must see that this is not an official Liferay product before they decide to adopt it."

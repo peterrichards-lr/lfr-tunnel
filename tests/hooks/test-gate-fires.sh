@@ -437,9 +437,9 @@ NOTICE_HTML='<div class="admonition info"><p class="admonition-title">Community 
 # check-docs-home-layout.py reads the <article>, so the fixtures wrap the page in one.
 HOME_H1='<h1 id="liferay-tunnel-documentation">Liferay Tunnel documentation</h1>'
 HOME_BODY='<h2 id="i-want-to">I want to…</h2><table><thead><tr><th>I want to…</th><th>Go to</th></tr></thead><tbody><tr><td>Share my local Liferay</td><td><a href="a/">A</a></td></tr><tr><td>Run my own gateway</td><td><a href="b/">B</a></td></tr></tbody></table><h2 id="by-subject">By subject</h2><h3 id="client-guides">Client guides</h3><ul><li><a href="a/">A</a></li></ul><h2 id="related-liferay-tools">Related Liferay tools</h2><p>Three community tools from the same maintainer. None is an official Liferay product or covered by Liferay Support.</p><table><thead><tr><th>Tool</th><th>What it does</th></tr></thead><tbody><tr><td><a href="https://peterrichards-lr.github.io/liferay-docker-manager/">Liferay Docker Manager</a></td><td>Run, manage and develop Liferay DXP and Portal environments in Docker.</td></tr><tr><td><a href="https://peterrichards-lr.github.io/liferay-ai-commerce-accelerator/">Liferay AI Commerce Accelerator</a></td><td>Generate and manage AI-driven commerce data in Liferay DXP.</td></tr><tr><td>Liferay Tunnel</td><td>You are here. Securely expose a local Liferay environment on a public HTTPS subdomain.</td></tr></tbody></table>'
-# Material's primary navigation, as the built home page carries it (#2405). A nested page with a
-# title-case label proves only the top level is held to sentence case.
-HOME_NAV='<nav class="md-nav md-nav--primary" data-md-level="0"><ul class="md-nav__list"><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Home</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Tutorials</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">How-to guides</span></a><nav class="md-nav"><ul class="md-nav__list"><li class="md-nav__item"><a class="md-nav__link"><span class="md-ellipsis">Nested Title Case Page</span></a></li></ul></nav></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Reference</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Explanation</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Project and contributing</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">About these docs</span></a></li></ul></nav>'
+# Material's primary navigation, as the built home page carries it (#2405): a nested page, and
+# the page's own table of contents (nav.md-nav--secondary), whose headings are not nav labels.
+HOME_NAV='<nav class="md-nav md-nav--primary" data-md-level="0"><ul class="md-nav__list"><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Home</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Tutorials</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">How-to guides</span></a><nav class="md-nav"><ul class="md-nav__list"><li class="md-nav__item"><a class="md-nav__link"><span class="md-ellipsis">Nested page</span></a><nav class="md-nav md-nav--secondary"><ul class="md-nav__list"><li class="md-nav__item"><a class="md-nav__link"><span class="md-ellipsis">Related Liferay Tools</span></a></li></ul></nav></li></ul></nav></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Reference</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Explanation</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Project and contributing</span></a></li><li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">About these docs</span></a></li></ul></nav>'
 make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
     mkdir -p "$1/nested"
     for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
@@ -618,16 +618,19 @@ run_nav() { # run_nav <label> <sed expression applied to index.html> <expected m
         fail "check-docs-rendered.sh exited $RC on $1 without reporting '$3': $(head -4 <<<"$OUT" | tr '\n' ' ')"
     fi
 }
-run_nav "a title-case section label" 's/>How-to guides</>How-To Guides</' 'labels not in the standard list'
+run_nav "a top-level label outside the standard (How-To Guides)" 's/>How-to guides</>How-To Guides</' 'labels not in the standard list'
+run_nav "a title-case page label below the top level" 's/>Nested page</>Getting Started With Tunnels</' 'title case'
 run_nav "the old About These Docs label" 's/>About these docs</>About These Docs</' 'title case'
 run_nav "a section label outside the standard" 's/>Reference</>Client guides</' 'labels not in the standard list'
 run_nav "two sections out of order" 's/>Tutorials</>TMP</; s/>Reference</>Tutorials</; s/>TMP</>Reference</' 'out of the standard order'
 run_nav "About these docs not last" 's/>About these docs</>Showcase</; s/>Home</>About these docs</' 'present and last'
 run_nav "no About these docs at all" 's/>About these docs</>Troubleshooting</' 'present and last'
 run_nav "no primary navigation" 's/md-nav--primary/md-nav--secondary/' 'no top-level navigation'
-# Narrowness controls: an omitted optional section, and a title-case page BELOW the top level.
+# Narrowness controls: an omitted optional section; a nested label with a proper noun, an acronym
+# and an inner-capital name; and a title-case heading in the page's table of contents.
 for expr in 's/<li class="md-nav__item"><a href="#" class="md-nav__link"><span class="md-ellipsis">Explanation<\/span><\/a><\/li>//' \
-            's/>Nested Title Case Page</>Another Title Case Page</'; do
+            's/>Nested page</>Expose Liferay SE demos to InfoSec reviewers</' \
+            's/>Related Liferay Tools</>Another Title Case Heading</'; do
     make_site "$SANDBOX/site-nav-ok"
     sed -i.bak -e "$expr" "$SANDBOX/site-nav-ok/index.html" && rm -f "$SANDBOX/site-nav-ok/index.html.bak"
     if cmp -s "$SANDBOX/site-nav-ok/index.html" "$SANDBOX/site-good-layout/index.html"; then

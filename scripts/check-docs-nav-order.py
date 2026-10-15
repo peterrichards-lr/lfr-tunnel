@@ -7,7 +7,8 @@ Called by check-docs-rendered.sh. The three Liferay tools sites share one top-le
 so a reader moving between them finds the same sections in the same order. The rule is the
 template's (peterrichards-lr/ai-agent-template#135, docs-site-standard): the labels are an
 ORDERED SUBSET of STANDARD_NAV -- a section with no pages is omitted, never renamed or reordered
--- in sentence case, with "About these docs" present and last.
+-- with "About these docs" present and last, and every label in the nav, top level and below,
+in sentence case.
 
 It reads Material's primary navigation in the built page, not mkdocs.yml: the labels a reader
 sees are the output, and a theme feature (tabs, section indexes) can change what reaches it.
@@ -31,29 +32,42 @@ STANDARD_NAV = (
 )
 ABOUT = "About these docs"
 _WORD = re.compile(r"[A-Za-z][A-Za-z'’]*")
+# Proper nouns a sentence-case label may still capitalise mid-label. Acronyms (SSO, MCP) and
+# names with an inner capital (InfoSec, macOS) are recognised by their shape and need no entry.
+NAMES = {"Liferay"}
 
 
 class PrimaryNav(HTMLParser):
-    """The top-level labels of Material's primary navigation, in order."""
+    """Material's primary navigation: the top-level labels in order, and every label in it.
+
+    The page's own table of contents is embedded in the primary nav (nav.md-nav--secondary) and
+    is skipped: those are the page's headings, not navigation labels.
+    """
 
     def __init__(self):
         super().__init__()
-        self.labels, self.nav_depth, self.ul_depth = [], 0, 0
-        self.in_item, self.in_label, self.buffer = False, False, ""
+        self.labels, self.all_labels = [], []
+        self.nav_depth, self.ul_depth, self.toc_depth = 0, 0, 0
+        self.in_item, self.in_label, self.top, self.buffer = False, False, False, ""
 
     def handle_starttag(self, tag, attrs):
         cls = (dict(attrs).get("class") or "").split()
         if tag == "nav":
             if self.nav_depth or "md-nav--primary" in cls:
                 self.nav_depth += 1
+                if self.toc_depth or "md-nav--secondary" in cls:
+                    self.toc_depth += 1
             return
-        if not self.nav_depth:
+        if not self.nav_depth or self.toc_depth:
             return
         if tag == "ul":
             self.ul_depth += 1
         elif tag == "li" and self.ul_depth == 1:
             self.in_item, self.buffer = True, None
-        elif tag == "span" and "md-ellipsis" in cls and self.in_item and self.buffer is None:
+        elif tag == "span" and "md-ellipsis" in cls and not self.in_label:
+            # The first label inside a top-level item is that item's own; any later one is a
+            # page or group below it.
+            self.top = self.in_item and self.ul_depth == 1 and self.buffer is None
             self.in_label, self.buffer = True, ""
 
     def handle_endtag(self, tag):
@@ -61,11 +75,18 @@ class PrimaryNav(HTMLParser):
             return
         if tag == "nav":
             self.nav_depth -= 1
-        elif tag == "ul":
+            self.toc_depth = max(0, self.toc_depth - 1)
+            return
+        if self.toc_depth:
+            return
+        if tag == "ul":
             self.ul_depth -= 1
         elif tag == "span" and self.in_label:
             self.in_label = False
-            self.labels.append(" ".join(self.buffer.split()))
+            label = " ".join(self.buffer.split())
+            self.all_labels.append(label)
+            if self.top:
+                self.labels.append(label)
         elif tag == "li" and self.ul_depth == 1:
             self.in_item = False
 
@@ -75,8 +96,10 @@ class PrimaryNav(HTMLParser):
 
 
 def is_title_case(label):
-    """A word after the first starts with a capital and is not an acronym."""
-    return any(w[0].isupper() and not w.isupper() for w in _WORD.findall(label)[1:])
+    """A word after the first is capitalised like an ordinary word (a capital, then lower case)
+    and is not a known proper noun. Acronyms and inner-capital names do not count."""
+    return any(w[0].isupper() and w[1:].islower() and w not in NAMES
+               for w in _WORD.findall(label)[1:])
 
 
 parser = PrimaryNav()
@@ -98,8 +121,9 @@ check(known == sorted(known, key=STANDARD_NAV.index), "in the standard order",
       f"out of the standard order: {known!r}")
 check(labels[-1:] == [ABOUT], f'"{ABOUT}" present and last',
       f'"{ABOUT}" must be present and last; the labels end {labels[-1:]!r}')
-titled = [lab for lab in labels if is_title_case(lab)]
-check(not titled, "sentence case", f"title case (use sentence case): {titled!r}")
+titled = [lab for lab in dict.fromkeys(parser.all_labels) if is_title_case(lab)]
+check(not titled, f"all {len(set(parser.all_labels))} nav labels in sentence case",
+      f"title case (use sentence case): {titled!r}")
 
 for line in bad:
     print("FAIL " + line)

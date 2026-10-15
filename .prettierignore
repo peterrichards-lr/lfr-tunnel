@@ -27,7 +27,16 @@ package-lock.json
 *.yml
 *.yaml
 
-# --- Shared docs palette ------------------------------------------------------------
-# Kept byte-identical across the three Liferay tools sites (LDM, AICA, lfr-tunnel; #2391);
-# it is changed in one repo and copied to the others. Reformatting it here would fork it.
+# --- Canonical shared docs files ----------------------------------------------------
+# This repo holds the CANONICAL copy of four files shared by the three Liferay tools docs sites
+# (LDM, AICA, lfr-tunnel; #2391, #2397). LDM and AICA copy them verbatim, and their docs CI
+# fails unless their copy is byte-identical to this repo's master (AICA #1329). Prettier
+# rewriting any of them here would make every downstream sync check fail at once -- a
+# formatting change that reads as upstream drift. Keep all four listed, by name: the two
+# templates are also matched by *.html above, but that glob exists for unrelated reasons and
+# must not be what protects them. The .py hook is outside Prettier's scope today; it is listed so
+# this block stays the complete set.
 docs/assets/stylesheets/liferay-blue.css
+scripts/mkdocs_github_alerts.py
+overrides/main.html
+overrides/partials/copyright.html

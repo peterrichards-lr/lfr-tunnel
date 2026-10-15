@@ -18,6 +18,12 @@ Two independent modes:
    showed the file was really last modified 2026-07-28 -- self-reported-only
    checks can never catch that; only a cross-check against real git history
    can.
+
+3. Review-age mode (--review-only, with --dir): the full-repo walk, judged on
+   "Last Reviewed" alone, with no file allowed to sit outside it. CI runs this
+   against docs/ on every PR (#2389), because the About page tells readers the
+   pages are reviewed to keep them current -- and a date that is shown but
+   never refreshed keeps every other check green.
 """
 
 import os
@@ -169,17 +175,39 @@ def check_changed_files(files, max_git_drift_days):
     return issues_found
 
 
-def check_full_repo(root_dir, max_review_days, max_update_days):
+def check_full_repo(root_dir, max_review_days, max_update_days, review_only=False):
     files = find_md_files(root_dir)
     now = datetime.now()
     issues_found = False
 
     print(f"Scanning {len(files)} markdown files...")
-    print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
+    if review_only:
+        print(f"Rules: Max Review Days = {max_review_days} (review age only)\n")
+    else:
+        print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
 
     for f in files:
         updated, reviewed = parse_timestamps(f)
         if updated is None or reviewed is None:
+            # The audit skips these; the gate cannot. A page with no footer, or with a date that
+            # does not parse (2026-13-01), has no review age at all -- skipping it is how a page
+            # would leave the check for good (#2389).
+            if review_only:
+                print(f"[MISSING-FOOTER] {f}: no parseable 'Last Updated / Last Reviewed' footer, "
+                      f"so its review age cannot be checked.")
+                issues_found = True
+            continue
+
+        if review_only:
+            # A future date never ages into the limit, so it would exempt the page indefinitely.
+            # One day of slack: the footer is written in the author's local date, CI runs in UTC.
+            if (reviewed - now).days >= 1:
+                print(f"[FUTURE-REVIEW] {f}: Last Reviewed {reviewed.date()} is in the future.")
+                issues_found = True
+            elif (now - reviewed).days > max_review_days:
+                print(f"[STALE] {f}: Last reviewed {(now - reviewed).days} days ago "
+                      f"(limit {max_review_days}). Review the page and bump its Last Reviewed date.")
+                issues_found = True
             continue
 
         review_age_days = (now - reviewed).days
@@ -230,8 +258,16 @@ def main():
                          help="Max days the footer's Last Updated date may lag behind git's real last-modified "
                               "date for that file before warning")
     parser.add_argument('--dir', type=str, default=".", help="Directory to scan in full-repo mode")
+    parser.add_argument('--review-only', action='store_true',
+                         help="Full-repo mode judged on Last Reviewed alone; a missing, unparseable or "
+                              "future-dated footer fails instead of being skipped (the CI gate, #2389)")
 
     args = parser.parse_args()
+
+    if args.review_only and (args.files or args.changed_files):
+        # Named files select changed-files mode, which would drop --review-only without a word and
+        # run a different check entirely -- a CI step reading green for the wrong reason.
+        parser.error("--review-only walks --dir; it cannot be combined with FILES or --changed-files")
 
     if args.files or args.changed_files:
         if not args.files:
@@ -239,7 +275,8 @@ def main():
             sys.exit(0)
         issues_found = check_changed_files(args.files, args.max_git_drift_days)
     else:
-        issues_found = check_full_repo(args.dir, args.max_review_days, args.max_update_days)
+        issues_found = check_full_repo(args.dir, args.max_review_days, args.max_update_days,
+                                       review_only=args.review_only)
 
     if not issues_found:
         print("✅ All documentation files are up to date and well-reviewed.")

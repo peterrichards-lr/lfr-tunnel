@@ -253,6 +253,76 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 4b. check_docs_review.py --review-only — the CI gate on published pages' review age (#2389).
+#
+# Run exactly as CI runs it: the command is read back out of ci.yml, so a test of one set of
+# flags cannot pass while the workflow runs another. The fixture is a copy of the real docs/,
+# with one page's footer edited.
+# ---------------------------------------------------------------------------
+AGE_CMD="python3 scripts/check_docs_review.py --dir docs --review-only --max-review-days 180"
+if ! grep -qF "run: $AGE_CMD" .github/workflows/ci.yml; then
+    fail "ci.yml no longer runs '$AGE_CMD' -- the cases below would test a command CI does not run"
+fi
+make_docs() { # make_docs <dir>: a sandbox repo root holding a copy of the real docs/ and the checker
+    mkdir -p "$1/scripts"
+    cp -R "$REPO_ROOT/docs" "$1/docs"
+    cp "$DOCS" "$1/scripts/"
+}
+days_ago() { python3 -c "import datetime,sys; print(datetime.date.today() - datetime.timedelta(days=int(sys.argv[1])))" "$1"; }
+set_reviewed() { # set_reviewed <file> <replacement for the whole footer line, or "" to delete it>
+    python3 - "$1" "$2" <<'PY'
+import re, sys
+path, line = sys.argv[1], sys.argv[2]
+s = open(path, encoding="utf-8").read()
+s, n = re.subn(r"^\*Last Updated:.*$\n?", line + "\n" if line else "", s, flags=re.M)
+assert n == 1, f"{path}: expected one footer line, found {n}"
+open(path, "w", encoding="utf-8").write(s)
+PY
+}
+run_age() { # run_age <label> <dir> <expected tag>
+    OUT=$(cd "$2" && $AGE_CMD 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "review-age gate PASSED $1"
+    elif grep -q "\[$3\] docs/mcp.md" <<<"$OUT"; then
+        pass "review-age gate fires on $1"
+    else
+        fail "review-age gate exited $RC on $1 but did not report $3 for docs/mcp.md:
+        $(head -4 <<<"$OUT" | tr '\n' ' ')"
+    fi
+}
+TODAY=$(days_ago 0)
+
+make_docs "$SANDBOX/age-stale"
+set_reviewed "$SANDBOX/age-stale/docs/mcp.md" "*Last Updated: $(days_ago 400)* | *Last Reviewed: $(days_ago 181)*"
+run_age "a page last reviewed 181 days ago" "$SANDBOX/age-stale" STALE
+
+make_docs "$SANDBOX/age-nofooter"
+set_reviewed "$SANDBOX/age-nofooter/docs/mcp.md" ""
+run_age "a page with its footer removed" "$SANDBOX/age-nofooter" MISSING-FOOTER
+
+make_docs "$SANDBOX/age-baddate"
+set_reviewed "$SANDBOX/age-baddate/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: 2026-13-01*"
+run_age "a page whose review date does not parse" "$SANDBOX/age-baddate" MISSING-FOOTER
+
+make_docs "$SANDBOX/age-future"
+set_reviewed "$SANDBOX/age-future/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: $(days_ago -30)*"
+run_age "a page reviewed in the future" "$SANDBOX/age-future" FUTURE-REVIEW
+
+# Narrowness controls: the real pages, a page on the limit itself, and an old Last Updated --
+# only the review date is judged, and a page can be right and unchanged for years.
+make_docs "$SANDBOX/age-edge"
+set_reviewed "$SANDBOX/age-edge/docs/mcp.md" "*Last Updated: $(days_ago 900)* | *Last Reviewed: $(days_ago 180)*"
+for d in "$REPO_ROOT" "$SANDBOX/age-edge"; do
+    OUT=$(cd "$d" && $AGE_CMD 2>&1)
+    if [ $? -eq 0 ]; then
+        pass "review-age gate accepts $([ "$d" = "$REPO_ROOT" ] && echo "the real docs/" || echo "a page reviewed exactly 180 days ago, updated 900") (narrowness control)"
+    else
+        fail "review-age gate refused $d: $(head -4 <<<"$OUT" | tr '\n' ' ')"
+    fi
+done
+
+# ---------------------------------------------------------------------------
 # 5. check-required-contexts.sh, check 1 — a required context no job emits.
 #
 # The failure mode is silent and permanent: the context never gets a check run, so it stays

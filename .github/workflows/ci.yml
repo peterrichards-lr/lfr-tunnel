@@ -317,6 +317,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The About page (docs/about.md) tells readers the pages are reviewed to keep them current
+      # (#2389). The step below only reads files a PR touches, so a page nobody edits would never
+      # be looked at again. This one reads every page under docs/ on every run, whatever changed --
+      # so the day a page passes 180 days, the next PR fails until someone reviews it. Scoped to
+      # docs/, the published site: the promise is made about those pages, not every .md here.
+      - name: Check every published page's review age
+        run: python3 scripts/check_docs_review.py --dir docs --review-only --max-review-days 180
+
       - name: Check changed markdown files' review footers
         run: |
           set -euo pipefail

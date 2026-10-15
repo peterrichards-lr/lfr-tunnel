@@ -18,6 +18,12 @@ Two independent modes:
    showed the file was really last modified 2026-07-28 -- self-reported-only
    checks can never catch that; only a cross-check against real git history
    can.
+
+3. Review-age mode (--review-only, with --dir): the full-repo walk, judged on
+   "Last Reviewed" alone, with no file allowed to sit outside it. CI runs this
+   against docs/ on every PR (#2389), because the About page tells readers the
+   pages are reviewed to keep them current -- and a date that is shown but
+   never refreshed keeps every other check green.
 """
 
 import os
@@ -46,6 +52,12 @@ def is_nested_worktree_root(path):
     return os.path.isfile(os.path.join(path, '.git'))
 
 
+# Every extension MkDocs builds as a page (mkdocs.utils.markdown_extensions), matched without
+# regard to case. Used by --review-only, which must see every page the site publishes: a stale
+# page saved as .markdown, or as .MD, would otherwise be published unchecked (#2389).
+MKDOCS_PAGE_EXTENSIONS = ('.md', '.markdown', '.mdown', '.mkdn', '.mkd')
+
+
 def find_md_files(root_dir):
     md_files = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -58,6 +70,41 @@ def find_md_files(root_dir):
             if f.endswith('.md'):
                 md_files.append(os.path.join(dirpath, f))
     return md_files
+
+
+def find_site_pages(docs_dir):
+    """Every file MkDocs would publish as a page under docs_dir, walked as MkDocs walks it:
+    following symlinks, and with none of find_md_files' skips -- MkDocs builds a page under a
+    node_modules/ or a nested checkout just the same, so the gate must read it too."""
+    pages = []
+    for dirpath, dirnames, filenames in os.walk(docs_dir, followlinks=True):
+        dirnames[:] = [d for d in dirnames if d != '.git']
+        for f in filenames:
+            if f.lower().endswith(MKDOCS_PAGE_EXTENSIONS):
+                pages.append(os.path.join(dirpath, f))
+    return pages
+
+
+def parse_final_footer(filepath):
+    """The footer as the gate reads it: the file's last non-blank line, and nothing else.
+
+    parse_timestamps takes the FIRST footer-shaped string anywhere, so a fresh example in a code
+    block or an HTML comment above a stale real footer passed the gate (#2389 review). The real
+    footer is the one at the bottom of the page; requiring it there leaves an example nowhere
+    to stand in for it.
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f.read().splitlines() if line.strip()]
+    if not lines:
+        return None, None
+    match = FOOTER_PATTERN.fullmatch(lines[-1])
+    if not match:
+        return None, None
+    try:
+        return (datetime.strptime(match.group(1), "%Y-%m-%d"),
+                datetime.strptime(match.group(2), "%Y-%m-%d"))
+    except ValueError:
+        return None, None
 
 
 def parse_timestamps(filepath):
@@ -169,17 +216,40 @@ def check_changed_files(files, max_git_drift_days):
     return issues_found
 
 
-def check_full_repo(root_dir, max_review_days, max_update_days):
-    files = find_md_files(root_dir)
+def check_full_repo(root_dir, max_review_days, max_update_days, review_only=False):
+    files = find_site_pages(root_dir) if review_only else find_md_files(root_dir)
     now = datetime.now()
     issues_found = False
 
     print(f"Scanning {len(files)} markdown files...")
-    print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
+    if review_only:
+        print(f"Rules: Max Review Days = {max_review_days} (review age only)\n")
+    else:
+        print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
 
     for f in files:
-        updated, reviewed = parse_timestamps(f)
+        updated, reviewed = parse_final_footer(f) if review_only else parse_timestamps(f)
         if updated is None or reviewed is None:
+            # The audit skips these; the gate cannot. A page with no footer, or with a date that
+            # does not parse (2026-13-01), has no review age at all -- skipping it is how a page
+            # would leave the check for good (#2389).
+            if review_only:
+                print(f"[MISSING-FOOTER] {f}: its last line is not a parseable "
+                      f"'*Last Updated: YYYY-MM-DD* | *Last Reviewed: YYYY-MM-DD*' footer, "
+                      f"so its review age cannot be checked.")
+                issues_found = True
+            continue
+
+        if review_only:
+            # A future date never ages into the limit, so it would exempt the page indefinitely.
+            # One day of slack: the footer is written in the author's local date, CI runs in UTC.
+            if (reviewed - now).days >= 1:
+                print(f"[FUTURE-REVIEW] {f}: Last Reviewed {reviewed.date()} is in the future.")
+                issues_found = True
+            elif (now - reviewed).days > max_review_days:
+                print(f"[STALE] {f}: Last reviewed {(now - reviewed).days} days ago "
+                      f"(limit {max_review_days}). Review the page and bump its Last Reviewed date.")
+                issues_found = True
             continue
 
         review_age_days = (now - reviewed).days
@@ -230,8 +300,16 @@ def main():
                          help="Max days the footer's Last Updated date may lag behind git's real last-modified "
                               "date for that file before warning")
     parser.add_argument('--dir', type=str, default=".", help="Directory to scan in full-repo mode")
+    parser.add_argument('--review-only', action='store_true',
+                         help="Full-repo mode judged on Last Reviewed alone; a missing, unparseable or "
+                              "future-dated footer fails instead of being skipped (the CI gate, #2389)")
 
     args = parser.parse_args()
+
+    if args.review_only and (args.files or args.changed_files):
+        # Named files select changed-files mode, which would drop --review-only without a word and
+        # run a different check entirely -- a CI step reading green for the wrong reason.
+        parser.error("--review-only walks --dir; it cannot be combined with FILES or --changed-files")
 
     if args.files or args.changed_files:
         if not args.files:
@@ -239,7 +317,8 @@ def main():
             sys.exit(0)
         issues_found = check_changed_files(args.files, args.max_git_drift_days)
     else:
-        issues_found = check_full_repo(args.dir, args.max_review_days, args.max_update_days)
+        issues_found = check_full_repo(args.dir, args.max_review_days, args.max_update_days,
+                                       review_only=args.review_only)
 
     if not issues_found:
         print("✅ All documentation files are up to date and well-reviewed.")

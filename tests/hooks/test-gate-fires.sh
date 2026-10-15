@@ -253,6 +253,141 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 4b. check_docs_review.py --review-only — the CI gate on published pages' review age (#2389).
+#
+# AGE_CMD is the command the cases run, and the check below holds ci.yml to it: the step must
+# run exactly this, inside the required docs-review-check job, with nothing that lets it be
+# skipped or ignored. A grep for the string alone stayed green under `continue-on-error: true`.
+# The fixture is a copy of the real docs/, with one page edited.
+# ---------------------------------------------------------------------------
+AGE_CMD="python3 scripts/check_docs_review.py --dir docs --review-only --max-review-days 180"
+STEP_OK=$(python3 - "$AGE_CMD" 2>&1 <<'PY'
+import re, sys
+cmd, lines = sys.argv[1], open(".github/workflows/ci.yml", encoding="utf-8").read().splitlines()
+at = [i for i, l in enumerate(lines) if l.strip() == "run: " + cmd]
+if len(at) != 1:
+    sys.exit(f"{len(at)} step(s) run it, expected 1")
+job = next(l for l in reversed(lines[:at[0]]) if re.match(r"^  [\w-]+:\s*$", l)).strip()
+if job != "docs-review-check:":
+    sys.exit(f"it runs in job {job}, not docs-review-check")
+start = next(i for i in range(at[0], -1, -1) if lines[i].lstrip().startswith("- "))
+end = next((i for i in range(at[0] + 1, len(lines)) if lines[i].lstrip().startswith("- ")
+            or re.match(r"^  \S", lines[i])), len(lines))
+for l in lines[start:end]:
+    if re.match(r"^\s*-?\s*(if|continue-on-error):", l):
+        sys.exit(f"the step can be skipped or ignored: {l.strip()}")
+print("ok")
+PY
+)
+if [ "$STEP_OK" = "ok" ]; then
+    pass "ci.yml runs the review-age command, unconditionally, in docs-review-check"
+else
+    fail "ci.yml's review-age step is not what the cases below test: $STEP_OK"
+fi
+# The gate reads docs/ because MkDocs does. If mkdocs.yml ever moves docs_dir, the gate would
+# keep reading a folder the site no longer publishes.
+if grep -qE '^docs_dir:' mkdocs.yml; then
+    fail "mkdocs.yml sets docs_dir; the review-age step still reads --dir docs"
+fi
+make_docs() { # make_docs <dir>: a sandbox repo root holding a copy of the real docs/ and the checker
+    mkdir -p "$1/scripts"
+    cp -R "$REPO_ROOT/docs" "$1/docs"
+    cp "$DOCS" "$1/scripts/"
+}
+days_ago() { python3 -c "import datetime,sys; print(datetime.date.today() - datetime.timedelta(days=int(sys.argv[1])))" "$1"; }
+set_reviewed() { # set_reviewed <file> <replacement for the whole footer line, or "" to delete it>
+    python3 - "$1" "$2" <<'PY'
+import re, sys
+path, line = sys.argv[1], sys.argv[2]
+s = open(path, encoding="utf-8").read()
+s, n = re.subn(r"^\*Last Updated:.*$\n?", line + "\n" if line else "", s, flags=re.M)
+assert n == 1, f"{path}: expected one footer line, found {n}"
+open(path, "w", encoding="utf-8").write(s)
+PY
+}
+run_age() { # run_age <label> <dir> <expected tag> [page, default docs/mcp.md]
+    local page="${4:-docs/mcp.md}"
+    OUT=$(cd "$2" && $AGE_CMD 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "review-age gate PASSED $1"
+    elif grep -qF "[$3] $page" <<<"$OUT"; then
+        pass "review-age gate fires on $1"
+    else
+        fail "review-age gate exited $RC on $1 but did not report $3 for $page:
+        $(head -4 <<<"$OUT" | tr '\n' ' ')"
+    fi
+}
+TODAY=$(days_ago 0)
+
+make_docs "$SANDBOX/age-stale"
+set_reviewed "$SANDBOX/age-stale/docs/mcp.md" "*Last Updated: $(days_ago 400)* | *Last Reviewed: $(days_ago 181)*"
+run_age "a page last reviewed 181 days ago" "$SANDBOX/age-stale" STALE
+
+make_docs "$SANDBOX/age-nofooter"
+set_reviewed "$SANDBOX/age-nofooter/docs/mcp.md" ""
+run_age "a page with its footer removed" "$SANDBOX/age-nofooter" MISSING-FOOTER
+
+make_docs "$SANDBOX/age-baddate"
+set_reviewed "$SANDBOX/age-baddate/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: 2026-13-01*"
+run_age "a page whose review date does not parse" "$SANDBOX/age-baddate" MISSING-FOOTER
+
+make_docs "$SANDBOX/age-future"
+set_reviewed "$SANDBOX/age-future/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: $(days_ago -30)*"
+run_age "a page reviewed 30 days in the future" "$SANDBOX/age-future" FUTURE-REVIEW
+
+make_docs "$SANDBOX/age-future2"
+set_reviewed "$SANDBOX/age-future2/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: $(days_ago -2)*"
+run_age "a page reviewed 2 days in the future" "$SANDBOX/age-future2" FUTURE-REVIEW
+
+# A fresh footer-shaped example above a stale real footer: the example must not stand in for it.
+for wrap in fence comment; do
+    make_docs "$SANDBOX/age-$wrap"
+    set_reviewed "$SANDBOX/age-$wrap/docs/mcp.md" "*Last Updated: $(days_ago 400)* | *Last Reviewed: $(days_ago 300)*"
+    python3 - "$SANDBOX/age-$wrap/docs/mcp.md" "$wrap" "$TODAY" <<'PY'
+import sys
+path, wrap, today = sys.argv[1:]
+ex = f"*Last Updated: {today}* | *Last Reviewed: {today}*"
+ex = f"```\n{ex}\n```" if wrap == "fence" else f"<!-- {ex} -->"
+s = open(path, encoding="utf-8").read().split("\n", 1)
+open(path, "w", encoding="utf-8").write(s[0] + "\n\n" + ex + "\n" + s[1])
+PY
+    run_age "a stale footer under a fresh example in a $wrap" "$SANDBOX/age-$wrap" STALE
+done
+
+# Pages MkDocs publishes that a walk for lower-case .md alone would miss.
+STALE_PAGE="# Old\n\n*Last Updated: $(days_ago 400)* | *Last Reviewed: $(days_ago 300)*\n"
+make_docs "$SANDBOX/age-ext"
+printf "$STALE_PAGE" >"$SANDBOX/age-ext/docs/old.markdown"
+run_age "a stale page saved as .markdown" "$SANDBOX/age-ext" STALE docs/old.markdown
+make_docs "$SANDBOX/age-upper"
+printf "$STALE_PAGE" >"$SANDBOX/age-upper/docs/OLD.MD"
+run_age "a stale page saved as .MD" "$SANDBOX/age-upper" STALE docs/OLD.MD
+make_docs "$SANDBOX/age-link"
+mkdir -p "$SANDBOX/linked" && printf "$STALE_PAGE" >"$SANDBOX/linked/old.md"
+ln -s "$SANDBOX/linked" "$SANDBOX/age-link/docs/linked"
+run_age "a stale page in a symlinked directory" "$SANDBOX/age-link" STALE docs/linked/old.md
+make_docs "$SANDBOX/age-nm"
+mkdir -p "$SANDBOX/age-nm/docs/node_modules" && printf "$STALE_PAGE" >"$SANDBOX/age-nm/docs/node_modules/old.md"
+run_age "a stale page under node_modules/" "$SANDBOX/age-nm" STALE docs/node_modules/old.md
+
+# Narrowness controls: the real pages; a page on the limit itself with an old Last Updated --
+# only the review date is judged, and a page can be right and unchanged for years; and a page
+# dated tomorrow, which is the one day of slack for a local-date footer checked in UTC.
+make_docs "$SANDBOX/age-edge"
+set_reviewed "$SANDBOX/age-edge/docs/mcp.md" "*Last Updated: $(days_ago 900)* | *Last Reviewed: $(days_ago 180)*"
+make_docs "$SANDBOX/age-tomorrow"
+set_reviewed "$SANDBOX/age-tomorrow/docs/mcp.md" "*Last Updated: $TODAY* | *Last Reviewed: $(days_ago -1)*"
+for d in "$REPO_ROOT" "$SANDBOX/age-edge" "$SANDBOX/age-tomorrow"; do
+    OUT=$(cd "$d" && $AGE_CMD 2>&1)
+    if [ $? -eq 0 ]; then
+        pass "review-age gate accepts ${d##*/} (narrowness control)"
+    else
+        fail "review-age gate refused ${d##*/}: $(head -4 <<<"$OUT" | tr '\n' ' ')"
+    fi
+done
+
+# ---------------------------------------------------------------------------
 # 5. check-required-contexts.sh, check 1 — a required context no job emits.
 #
 # The failure mode is silent and permanent: the context never gets a check run, so it stays

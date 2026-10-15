@@ -6,6 +6,7 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "overrides/**"
       - "requirements-dev.txt"
       - ".github/workflows/docs.yml"
   workflow_dispatch: # Allow manual trigger

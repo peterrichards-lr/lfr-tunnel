@@ -2,6 +2,8 @@
 
 `lfr-tunnel` is an open-source, MIT-licensed tunneling utility tailored for Liferay Development and Sales Engineering (SE) teams. It allows local Liferay runtime environments (including LDM workspaces, standalone Liferay Tomcat bundles, and Liferay Docker containers) to be securely exposed through dynamic wildcard subdomains on public domain endpoints.
 
+📖 Full documentation: <https://peterrichards-lr.github.io/lfr-tunnel/>
+
 Unlike generic tunneling tools, `lfr-tunnel` is built specifically for Liferay:
 - **Zero-Config Port Matching**: Scans Liferay Workspace directories to extract and map client extension development ports automatically.
 - **Multi-Port Tunneling**: Maps the main Liferay portal instance (port `8080`) and all client extensions under a single subdomain prefix (e.g. `alpha-se.yourdomain.com` and `alpha-se-my-extension.yourdomain.com`).
@@ -56,4 +58,4 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*
+*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*

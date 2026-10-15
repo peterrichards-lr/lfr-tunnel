@@ -7,11 +7,12 @@
  * docs/assets/stylesheets/liferay-blue.css (LDM-#1822), which in turn ports
  * lfr-tunnel's portal palette (pkg/server/static/themes/liferay.css).
  *
- *   Primary: #0B5FFF -- Liferay standard blue (foreground / accent)
- *   Shell:   #1a1f35 -- deep navy (header, footer, dark background)
+ *   Primary: #0B5FFF -- Liferay standard blue (accent, light-scheme header)
+ *   Shell:   #1a1f35 -- deep navy (footer, dark-scheme header and background)
  *
- * Two roles, kept separate: --lfr-blue is a FOREGROUND (links, icons);
- * the navy is the brand chrome. Collapsing them makes one of them fail contrast.
+ * Blue and navy never touch: --lfr-blue sits on white (links, icons) or under
+ * white text (the light-scheme header), and the navy carries the dark scheme,
+ * whose links use --lfr-blue-light. #0B5FFF on navy is 3.17:1 and fails AA.
  *
  * Requires in mkdocs.yml:  theme.palette[*].primary: custom / accent: custom
  */
@@ -31,13 +32,13 @@
   --lfr-danger: #ff4d6a;
 }
 
-/* ---- Light scheme: white page, navy chrome, blue accent ------------------ */
+/* ---- Light scheme: white page, Liferay blue header, navy footer --------- */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color: var(--lfr-navy-deep);
-  --md-primary-fg-color--light: var(--lfr-navy-raised);
-  --md-primary-fg-color--dark: #0d1020;
-  --md-primary-bg-color: var(--lfr-text-main);
-  --md-primary-bg-color--light: var(--lfr-text-secondary);
+  --md-primary-fg-color: var(--lfr-blue);
+  --md-primary-fg-color--light: #4a86ff;
+  --md-primary-fg-color--dark: var(--lfr-blue-hover);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
 
   --md-accent-fg-color: var(--lfr-blue-hover);
   --md-accent-fg-color--transparent: rgba(11, 95, 255, 0.1);
@@ -91,10 +92,11 @@
   --md-typeset-del-color: var(--lfr-danger);
 }
 
-/* Header and tabs stay navy in both schemes: the one element that reads as
-   brand chrome. Header logo = the *-logo-light.svg variant. */
-.md-header { background-color: var(--lfr-navy-deep); color: var(--lfr-text-main); }
-.md-tabs   { background-color: var(--lfr-navy);      color: var(--lfr-text-main); }
+/* Header and tabs: Liferay blue in the light scheme (from --md-primary-* above,
+   white text at 5.13:1), navy in the dark one -- a bright blue bar is harsh on
+   a dark page. Header logo = the *-logo-light.svg variant, white on either. */
+[data-md-color-scheme="slate"] .md-header { background-color: var(--lfr-navy-deep); color: var(--lfr-text-main); }
+[data-md-color-scheme="slate"] .md-tabs   { background-color: var(--lfr-navy);      color: var(--lfr-text-main); }
 
 ::selection { background-color: rgba(11, 95, 255, 0.3); }
 

@@ -59,6 +59,52 @@ def linked_from(path, prefix):
     return out
 
 
+# The community-project notice (#2385). A reader decides whether to adopt the tool on the first
+# screen, and the Liferay name and logo can read as an official, supported product -- so the
+# disclaimer has to come before that decision, not on the About page they may never open. Both
+# landing pages must carry it verbatim, linking the About page, above their first `##` heading.
+# The README's link is absolute because it is read on github.com and in search results; the
+# hub's is relative because mkdocs resolves it.
+NOTICE = ("ℹ️ **Community project** — not an official Liferay product and not covered by "
+          "Liferay Support. [About this project]({})")
+NOTICE_TARGETS = {
+    ROOT_README: "https://peterrichards-lr.github.io/lfr-tunnel/about/",
+    HUB: "about.md",
+}
+
+
+def notice_problem(path, target):
+    """None if `path` carries the notice above its first `##` heading, else what is wrong."""
+    with open(path, encoding="utf-8") as handle:
+        lines = handle.read().splitlines()
+
+    wanted = NOTICE.format(target)
+    notice_at = heading_at = None
+    fence = None
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        marker = re.match(r"^(`{3,}|~{3,})", stripped)
+        if marker:  # a fenced block can hold either string as an example, which must not count
+            if fence is None:
+                fence = marker.group(1)
+            elif stripped.startswith(fence):
+                fence = None
+            continue
+        if fence:
+            continue
+        if notice_at is None and re.sub(r"^>\s*", "", stripped) == wanted:
+            notice_at = number
+        if heading_at is None and line.startswith("## "):
+            heading_at = number
+
+    if notice_at is None:
+        return f"does not carry the notice, linking {target}, as a line of its own"
+    if heading_at is not None and notice_at > heading_at:
+        return (f"carries the notice on line {notice_at + 1}, below its first `##` heading on "
+                f"line {heading_at + 1} -- off the first screen")
+    return None
+
+
 def main():
     skip = excluded_pages()
     expected = pages_on_disk() - skip
@@ -78,12 +124,21 @@ def main():
                   f"knowing its URL.")
             print(f"    Add it, or record it in mkdocs.yml as `# nav-exclude: <path> -- <why>`.")
 
+    for landing, target in NOTICE_TARGETS.items():
+        problem = notice_problem(landing, target)
+        if problem:
+            issues += 1
+            print(f"[NO-NOTICE] {landing} {problem}.")
+            print(f"    Readers must see that this is not an official Liferay product before they "
+                  f"decide to adopt it. Expected, straight after the opening paragraph:")
+            print(f"    > {NOTICE.format(target)}")
+
     if issues:
-        print(f"\n❌ {issues} page(s) missing from a landing page.")
+        print(f"\n❌ {issues} landing-page problem(s).")
         return 1
 
     print(f"✅ {len(expected)} page(s): every one is reachable from both landing pages "
-          f"({len(skip)} deliberately excluded).")
+          f"({len(skip)} deliberately excluded), and both carry the community-project notice.")
     return 0
 
 

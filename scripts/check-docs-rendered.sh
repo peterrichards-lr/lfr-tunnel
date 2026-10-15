@@ -84,10 +84,34 @@ if [ -n "$undated" ]; then
   fail=1
 fi
 
+# Community-project notice on the site's home page (#2385). check-docs-routing.py holds the
+# markdown; this holds what readers get: a callout, above the first section heading. The source
+# writes it as a GitHub alert, so a broken alerts hook would print it as a plain blockquote with
+# a literal "[!IMPORTANT]" -- which the leaked-marker check above would also report.
+home="$SITE/index.html"
+above=""
+if [ -f "$home" ]; then
+  # Cut at the first "<h2" itself, not at the line holding it: HTML need not break lines, and a
+  # minified page would otherwise leave nothing above the heading -- or, cut by line, everything.
+  page=$(cat "$home")
+  above=${page%%<h2*}
+fi
+notice_ok=0
+if grep -q 'class="admonition' <<<"$above" \
+  && grep -q '<strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support' <<<"$above"; then
+  notice_ok=1
+fi
+if [ "$notice_ok" -ne 1 ]; then
+  echo "[NO-NOTICE] the home page does not show the community-project notice as a callout above its first section."
+  echo "  Readers must see that this is not an official Liferay product before they decide to adopt it."
+  echo "  Source: the [!IMPORTANT] alert straight after the opening paragraph of docs/README.md."
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "❌ The published output does not match what the source asks for."
   exit 1
 fi
 
-echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page."
+echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page."

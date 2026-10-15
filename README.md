@@ -2,7 +2,9 @@
 
 `lfr-tunnel` is an open-source, MIT-licensed tunneling utility tailored for Liferay Development and Sales Engineering (SE) teams. It allows local Liferay runtime environments (including LDM workspaces, standalone Liferay Tomcat bundles, and Liferay Docker containers) to be securely exposed through dynamic wildcard subdomains on public domain endpoints.
 
-📖 Full documentation: <https://peterrichards-lr.github.io/lfr-tunnel/> · [About these docs](docs/about.md) — a community project, not an official Liferay product.
+> ℹ️ **Community project** — not an official Liferay product and not covered by Liferay Support. [About this project](https://peterrichards-lr.github.io/lfr-tunnel/about/)
+
+📖 Full documentation: <https://peterrichards-lr.github.io/lfr-tunnel/>
 
 Unlike generic tunneling tools, `lfr-tunnel` is built specifically for Liferay:
 - **Zero-Config Port Matching**: Scans Liferay Workspace directories to extract and map client extension development ports automatically.
@@ -23,6 +25,7 @@ To prevent information overload, our documentation is divided into dedicated, to
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
 *   **[Exposing Any Local HTTP Service](docs/exposing-any-http-service.md)** — The tunnel does not inspect what is listening on the port it publishes, so a Node service, a client extension in dev mode or any other local HTTP server works with `-ports`.
 *   **[Using Your Own Domain](docs/custom_domains.md)** — Serve a tunnel at a domain you own. Point it at the gateway with a `CNAME` and register it in the portal; the gateway obtains and renews the certificate for you.
+*   **[About These Docs](docs/about.md)** — Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
 
 ### 🛠️ Server Administration
 *   **[Server Gateway Setup Guide](docs/server/setup_guide.md)** — Comprehensive setup guide to host your own gateway server (`lfr-tunneld`), configure wildcard DNS, Caddy/Nginx reverse proxies, Postfix secure TLS SMTP relays, and scheduled backups.

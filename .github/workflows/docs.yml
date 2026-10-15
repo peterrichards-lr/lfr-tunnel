@@ -1,5 +1,8 @@
 name: Deploy Documentation
 
+# PR builds and the rendered-output checks live in ci.yml's Documentation Build, which runs on
+# every PR behind the docs paths filter and is required through CI Gate. This workflow only
+# deploys; it does not repeat that build on PRs (#2391).
 on:
   push:
     branches: ["master"]
@@ -30,7 +33,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          # Full history for git-revision-date-localized (#2391). Required: on a shallow clone the
+          # plugin warns under GitHub Actions and --strict fails the deploy. CI's Documentation
+          # Build fetches the same, so the two builds match.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7

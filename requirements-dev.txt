@@ -1,1 +1,5 @@
+# Docs toolchain (#2391). mkdocs pinned explicitly so it stays below 2.0: Material 9.7.7 warns
+# about MkDocs 2.0 compatibility, and an unpinned mkdocs would follow it there.
+mkdocs==1.6.1
 mkdocs-material==9.7.7
+mkdocs-git-revision-date-localized-plugin==1.6.0

@@ -16,6 +16,7 @@ the build, not picking a side.
 """
 
 import re
+import unicodedata
 
 # GitHub's five types, mapped to the Material admonition that carries the same weight.
 # IMPORTANT has no exact Material twin; `info` is the closest in both colour and intent.
@@ -28,6 +29,26 @@ _TYPES = {
 }
 
 _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
+
+# GitHub alerts cannot carry a title, so a source that wants one writes it as the first line's
+# lead: an emoji, a bold phrase, an em dash -- `> ℹ️ **Community project** — not an official…`.
+# On github.com that reads as a title; here it becomes one (#2391), and the emoji is dropped
+# because the admonition draws its own icon.
+#
+# The emoji is the opt-in, not decoration. A bold lead alone is not enough: aws_setup_guide.md
+# opens a NOTE with `**Cost Explorer must already be enabled for the account** — a one-time
+# toggle … — before any of the above will work`, a sentence that runs on past the dash.
+# Lifting that lead into a title would cut it in half.
+_TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
+
+
+def _is_emoji(token: str) -> bool:
+    """True when every character is a symbol, or one of the joiners and variation selectors an
+    emoji is built from. Not "non-ASCII": that let `→`'s neighbours in, and a word such as
+    `Важно` would have been dropped from the text. Not "not a word character" either: Python
+    counts ℹ (U+2139) as a letter, so the category is checked for it explicitly."""
+    return all(unicodedata.category(ch) in ("So", "Sk", "Mn", "Cf") or ch == "\u2139"
+               for ch in token)
 
 # CommonMark fences, and the rule that matters here: a fence is CLOSED only by a line of the
 # same character, at least as long, carrying no info string. `` ```bash `` therefore cannot
@@ -81,7 +102,21 @@ def _convert(markdown: str) -> str:
             body.append(re.sub(r"^>\s?", "", lines[i]))
             i += 1
 
-        out.append(f"!!! {kind}")
+        title = _TITLE_LEAD.match(body[0]) if body else None
+        if title is not None and not _is_emoji(title.group(1)):
+            title = None
+        if title is not None:
+            # The remainder now opens a paragraph under its own heading, so it takes a capital --
+            # but only an ordinary lower-case word. `lfr-tunnel`, `macOS` and `-ports` are names
+            # whose case is the point, and are left exactly as written.
+            rest = title.group(3)
+            first = rest.split(" ", 1)[0]
+            if re.fullmatch(r"[a-z]+[.,;:]?", first):
+                rest = rest[:1].upper() + rest[1:]
+            body[0] = rest
+            out.append(f'!!! {kind} "{title.group(2).strip()}"')
+        else:
+            out.append(f"!!! {kind}")
         out.append("")
         # Blank lines stay blank: indenting them would end the admonition early on some
         # Python-Markdown versions and is invisible either way.

@@ -5,6 +5,20 @@ Welcome to the Liferay Tunnel documentation! This is the central hub for learnin
 > [!IMPORTANT]
 > ℹ️ **Community project** — not an official Liferay product and not covered by Liferay Support. [About this project](about.md)
 
+| I want to… | Go to |
+|---|---|
+| Share my local Liferay with someone, for the first time | [Getting Started](getting_started.md) |
+| Set my client up once and stop passing flags | [Client Configuration File](client_configuration.md) |
+| Get set up as a Liferay Sales Engineer | [Liferay SE Guide](liferay-se-guide.md) |
+| Drive the tunnel from an AI assistant | [MCP Guide](mcp.md) |
+| Expose something other than Liferay | [Exposing Any Local HTTP Service](exposing-any-http-service.md) |
+| Use my own domain instead of a gateway subdomain | [Using Your Own Domain](custom_domains.md) |
+| Run my own gateway | [Control Plane Setup](server/setup_guide.md) |
+| Add a regional edge node | [Edge Node Scaling](server/edge_setup_guide.md) |
+| Put sign-in behind my identity provider | [SSO/OIDC Cloud Guide](server/sso_cloud_guide.md) |
+| Check it's safe to run on a corporate machine | [InfoSec & Trust Guide](infosec.md) |
+| Understand how it works | [System Architecture Guide](architecture.md) |
+
 ## 📖 Developer & Client Guides
 
 - **[Getting Started Guide](getting_started.md)**: Learn the basic concepts, registration flow, and how to start your first tunnel.
@@ -32,6 +46,13 @@ All operator deployment and configuration resources are organized under the `doc
 - **[Contributing Guide](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md)**: General contribution rules, git branching conventions, code style checks, and release checklists.
 - **[Testing Protocol](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md#-testing--verification-protocol)**: Detailed instructions for running automated unit/E2E tests locally and manual exploratory test scenarios.
 - **[About These Docs](about.md)**: Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
+
+## 🧰 Related Liferay tools
+
+Community projects from the same maintainer, also unofficial and unsupported:
+
+- **[Liferay Docker Manager](https://peterrichards-lr.github.io/liferay-docker-manager/)**: A command-line orchestrator for standing up Liferay Portal and DXP environments with Docker Compose.
+- **[Liferay AI Commerce Accelerator](https://peterrichards-lr.github.io/liferay-ai-commerce-accelerator/)**: Generates and manages AI-driven commerce data in Liferay DXP.
 
 
 <!-- markdownlint-disable MD049 -->

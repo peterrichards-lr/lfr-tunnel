@@ -130,10 +130,34 @@ if [ "$notice_ok" -ne 1 ]; then
   fail=1
 fi
 
+# Alert titles keep GitHub's label; only the style is borrowed from Material (the family decision
+# on #2391). A box titled with the STYLE name -- `info` titled "Info", `danger` titled "Danger" --
+# is an alert that lost the word its author chose: an IMPORTANT read "Info", a CAUTION "Danger".
+# The hook emits the label explicitly; this holds the published pages to it. Nothing in docs/
+# writes `!!! info` or `!!! danger` by hand, so any such pair here came from the hook.
+# Matched on the flattened page, since the two tags sit on separate lines.
+styled=""
+while IFS= read -r -d '' f; do
+  flat=$(tr '\n\t' '  ' <"$f" | sed -E 's/> +</></g')
+  case "$flat" in
+    *'<div class="admonition info"><p class="admonition-title">Info</p>'* | \
+    *'<div class="admonition danger"><p class="admonition-title">Danger</p>'*)
+      styled="$styled${f#"$SITE"/}
+"
+      ;;
+  esac
+done < <(find "$SITE" -name '*.html' -print0)
+if [ -n "$styled" ]; then
+  echo "[STYLE-TITLE] $(printf '%s' "$styled" | grep -c .) page(s) title an alert with Material's style name (\"Info\" or \"Danger\") instead of GitHub's label."
+  echo "  IMPORTANT must read \"Important\" and CAUTION \"Caution\" (scripts/mkdocs_github_alerts.py, _LABELS). Pages affected:"
+  printf '%s' "$styled" | sed 's|^|    |'
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "❌ The published output does not match what the source asks for."
   exit 1
 fi
 
-echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page."
+echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page, alerts titled with their GitHub label."

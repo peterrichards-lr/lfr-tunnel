@@ -52,6 +52,19 @@ _TYPES = {
     "CAUTION": "danger",
 }
 
+# The title is GitHub's own label; only the style is borrowed from Material (the family
+# decision on lfr-tunnel #2391). A bare `!!! info` is titled by Material with the STYLE name,
+# so an IMPORTANT box read "Info" and a CAUTION box "Danger" -- the reader lost the word the
+# author chose. Emitting the label explicitly keeps it. No custom `important` style either:
+# the label matters more than the colour, and fewer shared rules means less to keep in sync.
+_LABELS = {
+    "NOTE": "Note",
+    "TIP": "Tip",
+    "IMPORTANT": "Important",
+    "WARNING": "Warning",
+    "CAUTION": "Caution",
+}
+
 _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
 
 # A GitHub alert cannot carry a title -- the marker must sit alone on its line or github.com
@@ -74,7 +87,8 @@ _TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
 # to render as the `info` callout cannot say so in GitHub-native source. The community-project
 # notice is written as `[!NOTE]` on all three sites and renders as the shared `info` callout
 # titled "Community project". It is the lift that decides, not the emoji; the strict opt-in
-# above is what keeps this from reaching any other alert. Untitled alerts keep _TYPES.
+# above is what keeps this from reaching any other alert. Every other alert keeps its _TYPES
+# style and its _LABELS title.
 _LIFTED_TITLE_TYPE = "info"
 
 
@@ -131,6 +145,7 @@ def _convert(markdown: str) -> str:
             continue
 
         kind = _TYPES[match.group(1)]
+        label = _LABELS[match.group(1)]
         trailing = match.group(2).strip()
 
         # The body is collected BEFORE the admonition header is emitted, because a lifted title
@@ -156,7 +171,7 @@ def _convert(markdown: str) -> str:
             kind = _LIFTED_TITLE_TYPE
             out.append(f'!!! {kind} "{title.group(2).strip()}"')
         else:
-            out.append(f"!!! {kind}")
+            out.append(f'!!! {kind} "{label}"')
         out.append("")
         # Blank lines stay blank: indenting them would end the admonition early on some
         # Python-Markdown versions and is invisible either way.

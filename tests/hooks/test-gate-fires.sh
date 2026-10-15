@@ -513,6 +513,25 @@ else
     fail "check-docs-rendered.sh refused a disclaimer wrapped across lines"
 fi
 
+# Alert titles keep GitHub's label (#2391): a box titled with Material's style name fails, on any
+# page, with the two tags on separate lines as the real build writes them.
+for pair in "info:Info" "danger:Danger"; do
+    cls=${pair%%:*}; ttl=${pair#*:}
+    make_site "$SANDBOX/site-style-$cls"
+    printf '<html><head>%s</head><body><div class="admonition %s">\n<p class="admonition-title">%s</p>\n<p>Body.</p>\n</div>%s</body></html>\n' \
+        "$TAG" "$cls" "$ttl" "$FOOT" >"$SANDBOX/site-style-$cls/nested/index.html"
+    run_rendered "an alert titled with the style name \"$ttl\"" "$SANDBOX/site-style-$cls" 'STYLE-TITLE'
+done
+# Narrowness control: the same boxes titled with GitHub's labels pass.
+make_site "$SANDBOX/site-labels"
+printf '<html><head>%s</head><body><div class="admonition info">\n<p class="admonition-title">Important</p>\n</div><div class="admonition danger">\n<p class="admonition-title">Caution</p>\n</div>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-labels/nested/index.html"
+if bash "$RENDERED" "$SANDBOX/site-labels" >/dev/null 2>&1; then
+    pass "check-docs-rendered.sh accepts info \"Important\" and danger \"Caution\" (narrowness control)"
+else
+    fail "check-docs-rendered.sh refused alerts titled with GitHub's labels"
+fi
+
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.
 make_site "$SANDBOX/site-good"

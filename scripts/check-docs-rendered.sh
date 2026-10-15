@@ -157,10 +157,28 @@ if [ -n "$styled" ]; then
   fail=1
 fi
 
+# The shared home-page layout (#2401): H1, the #i-want-to / #by-subject / #related-liferay-tools
+# H2s in order, both table formats, the related-tools rows, and no emoji in headings. The
+# assertions live in check-docs-home-layout.py, which reads the built page's article with an HTML
+# parser; this script supplies the page and this site's values.
+HOME_H1="Liferay Tunnel documentation"
+HOME_SELF="Liferay Tunnel"
+layout=$(python3 "$(dirname "$0")/check-docs-home-layout.py" "$home" "$HOME_H1" "$HOME_SELF" 2>&1) || {
+  echo "[HOME-LAYOUT] the home page does not follow the shared home-page layout (#2401):"
+  case "$layout" in
+    *FAIL*) printf '%s\n' "$layout" | grep '^FAIL' | sed 's/^FAIL /  /' ;;
+    # No assertion line at all: the script itself broke (no home page, a parse error). Show it
+    # rather than a header with nothing under it.
+    *) printf '%s\n' "$layout" | sed 's/^/  /' ;;
+  esac
+  fail=1
+}
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "❌ The published output does not match what the source asks for."
   exit 1
 fi
 
-echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page, alerts titled with their GitHub label."
+printf '%s\n' "$layout" | sed 's/^ok   /  ✓ home: /'
+echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag and review dates on every page, community notice on the home page, alerts titled with their GitHub label, home page on the shared layout."

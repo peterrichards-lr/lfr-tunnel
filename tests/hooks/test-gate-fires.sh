@@ -433,13 +433,17 @@ RENDERED="$REPO_ROOT/scripts/check-docs-rendered.sh"
 TAG='<meta name="google-site-verification" content="x">'
 FOOT='<p><em>Last Updated: 2026-01-01</em> | <em>Last Reviewed: 2026-01-01</em></p>'
 NOTICE_HTML='<div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support. <a href="about/">About this project</a></p></div>'
+# The shared home-page layout (#2401), as the real build renders it: everything after the notice.
+# check-docs-home-layout.py reads the <article>, so the fixtures wrap the page in one.
+HOME_H1='<h1 id="liferay-tunnel-documentation">Liferay Tunnel documentation</h1>'
+HOME_BODY='<h2 id="i-want-to">I want to…</h2><table><thead><tr><th>I want to…</th><th>Go to</th></tr></thead><tbody><tr><td>Share my local Liferay</td><td><a href="a/">A</a></td></tr><tr><td>Run my own gateway</td><td><a href="b/">B</a></td></tr></tbody></table><h2 id="by-subject">By subject</h2><h3 id="client-guides">Client guides</h3><ul><li><a href="a/">A</a></li></ul><h2 id="related-liferay-tools">Related Liferay tools</h2><p>Three community tools from the same maintainer. None is an official Liferay product or covered by Liferay Support.</p><table><thead><tr><th>Tool</th><th>What it does</th></tr></thead><tbody><tr><td><a href="https://x/ldm/">Liferay Docker Manager</a></td><td>Run LDM.</td></tr><tr><td><a href="https://x/aica/">Liferay AI Commerce Accelerator</a></td><td>Generate data.</td></tr><tr><td>Liferay Tunnel</td><td>You are here. Securely expose.</td></tr></tbody></table>'
 make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
     mkdir -p "$1/nested"
     for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
     printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/nested/index.html"
     printf '<html><head>%s</head><body>not found</body></html>\n' "$TAG" >"$1/404.html"
-    printf '<html><head>%s</head><body><h1>Home</h1>%s<h2>Guides</h2>%s</body></html>\n' \
-        "$TAG" "$NOTICE_HTML" "$FOOT" >"$1/index.html"
+    printf '<html><head>%s</head><body><article>%s%s%s%s</article></body></html>\n' \
+        "$TAG" "$HOME_H1" "$NOTICE_HTML" "$HOME_BODY" "$FOOT" >"$1/index.html"
 }
 
 run_rendered() { # run_rendered <label> <dir> <expected marker>
@@ -505,8 +509,8 @@ run_rendered "a disclaimer present only inside an HTML comment" "$SANDBOX/site-c
 # Narrowness control: a source that wraps the disclaimer across lines renders a line break inside
 # the phrase, and must still pass.
 make_site "$SANDBOX/site-wrapped"
-printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and\nnot covered by Liferay Support. <a href="about/">About this project</a></p></div><h2>Guides</h2>%s</body></html>\n' \
-    "$TAG" "$FOOT" >"$SANDBOX/site-wrapped/index.html"
+printf '<html><head>%s</head><body><article>%s<div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and\nnot covered by Liferay Support. <a href="about/">About this project</a></p></div>%s%s</article></body></html>\n' \
+    "$TAG" "$HOME_H1" "$HOME_BODY" "$FOOT" >"$SANDBOX/site-wrapped/index.html"
 if bash "$RENDERED" "$SANDBOX/site-wrapped" >/dev/null 2>&1; then
     pass "check-docs-rendered.sh accepts a disclaimer wrapped across lines (narrowness control)"
 else
@@ -531,6 +535,44 @@ if bash "$RENDERED" "$SANDBOX/site-labels" >/dev/null 2>&1; then
 else
     fail "check-docs-rendered.sh refused alerts titled with GitHub's labels"
 fi
+
+# The shared home-page layout (#2401): one break per assertion, each on an otherwise good site.
+# The message is the assertion: each case greps for the line only its own break produces.
+run_layout() { # run_layout <label> <sed expression applied to index.html> <expected message>
+    local d="$SANDBOX/site-layout-$((++LAYOUT_N))"
+    make_site "$d"
+    sed -i.bak -e "$2" "$d/index.html" && rm -f "$d/index.html.bak"
+    if cmp -s "$d/index.html" "$SANDBOX/site-good-layout/index.html"; then
+        harness "layout fixture '$1': the sed expression changed nothing, so it tests nothing"
+        return
+    fi
+    OUT=$(bash "$RENDERED" "$d" 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "check-docs-rendered.sh PASSED $1"
+    elif grep -q 'HOME-LAYOUT' <<<"$OUT" && grep -qF "$3" <<<"$OUT"; then
+        pass "check-docs-rendered.sh fires on $1"
+    else
+        fail "check-docs-rendered.sh exited $RC on $1 without reporting '$3': $(head -4 <<<"$OUT" | tr '\n' ' ')"
+    fi
+}
+LAYOUT_N=0
+make_site "$SANDBOX/site-good-layout"
+run_layout "an H1 in title case" 's/>Liferay Tunnel documentation</>Liferay Tunnel Documentation</' 'H1 is'
+run_layout "a missing #by-subject heading" 's/<h2 id="by-subject">By subject<\/h2>//' 'need #i-want-to, then #by-subject'
+run_layout "related tools above By subject" 's/<h2 id="by-subject">/<h2 id="related-liferay-tools">X<\/h2><h2 id="by-subject">/' 'need #i-want-to, then #by-subject'
+run_layout 'a second "Related" heading' 's/<h3 id="client-guides">/<h3 id="related-reading">Related reading<\/h3><h3 id="client-guides">/' 'headings mentioning "Related"'
+run_layout "a section after Related Liferay tools" 's/<\/tbody><\/table><p><em>/<\/tbody><\/table><h2 id="showcase">Showcase<\/h2><p><em>/' 'the last H2 is'
+run_layout 'an I-want-to column headed "Read"' 's/<th>Go to<\/th>/<th>Read<\/th>/' 'the #i-want-to table headers'
+run_layout 'a task row with a leading "…"' 's/<td>Share my local Liferay/<td>…share my local Liferay/' 'task rows not in sentence case'
+run_layout "a task row ending in a full stop" 's/<td>Run my own gateway</<td>Run my own gateway.</' 'task rows not in sentence case'
+run_layout "a numbered By-subject subsection" 's/>Client guides</>1. Client guides</' 'subsections'
+run_layout "a reworded related-tools intro" 's/None is an official/Neither is an official/' 'related-tools intro'
+run_layout 'a related-tools table headed "Description"' 's/<th>What it does<\/th>/<th>Description<\/th>/' 'related-liferay-tools table headers'
+run_layout "related tools in another order" 's/Liferay Docker Manager<\/a>/Liferay Docker Manager-X<\/a>/' 'related-tools rows are'
+run_layout 'a second "You are here." row' 's/<td>Run LDM.<\/td>/<td>You are here. Run LDM.<\/td>/' 'You are here.'
+run_layout "this site's own row linked" 's/<td>Liferay Tunnel<\/td>/<td><a href="x\/">Liferay Tunnel<\/a><\/td>/' 'only this site'
+run_layout "an emoji in a heading" 's/>Client guides</>📖 Client guides</' 'headings with emoji'
 
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.

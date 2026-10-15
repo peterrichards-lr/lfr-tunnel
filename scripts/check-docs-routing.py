@@ -114,6 +114,42 @@ def notice_problem(path, expected):
     return None
 
 
+# The full disclaimer (#2387). The README closes with the About page's text -- who maintains the
+# project, that it is not an official or supported Liferay product, and how the docs are written
+# and reviewed. docs/about.md is the one source: the README's last `##` section must hold each of
+# its body paragraphs verbatim, so a change to one that is not made to the other fails here
+# instead of leaving two disclaimers that disagree.
+ABOUT = os.path.join("docs", "about.md")
+FOOTER_MARK = "<!-- markdownlint-disable MD049 -->"
+
+
+def about_paragraphs():
+    """docs/about.md's body: the blocks between its H1 and its review footer."""
+    with open(ABOUT, encoding="utf-8") as handle:
+        text = handle.read().split(FOOTER_MARK)[0]
+    return [b for b in blocks(text.splitlines()) if not b[0].startswith("# ")]
+
+
+def disclaimer_problem():
+    """None if the README's last `##` section holds every About paragraph, else what is wrong."""
+    wanted = about_paragraphs()
+    if len(wanted) < 2:
+        return f"cannot be checked: {ABOUT} yielded {len(wanted)} paragraph(s), too few to be the page"
+
+    with open(ROOT_README, encoding="utf-8") as handle:
+        lines = handle.read().split(FOOTER_MARK)[0].splitlines()
+    starts = [n for n, line in enumerate(lines) if line.startswith("## ")]
+    if not starts:
+        return "has no `##` section at all"
+    last = blocks(lines[starts[-1]:])
+    missing = [b for b in wanted if b not in last]
+    if missing:
+        return (f"does not end with {ABOUT}'s text: its last section ('{lines[starts[-1]][3:]}') "
+                f"lacks {len(missing)} of {len(wanted)} paragraph(s), starting "
+                f"'{missing[0][0][:70]}…'")
+    return None
+
+
 def main():
     skip = excluded_pages()
     expected = pages_on_disk() - skip
@@ -143,12 +179,19 @@ def main():
             for line in block:
                 print(f"    {line}")
 
+    problem = disclaimer_problem()
+    if problem:
+        issues += 1
+        print(f"[DISCLAIMER-DRIFT] {ROOT_README} {problem}.")
+        print(f"    The README's closing section must hold {ABOUT}'s body verbatim. Change both, "
+              f"or neither.")
+
     if issues:
         print(f"\n❌ {issues} landing-page problem(s).")
         return 1
 
     print(f"✅ {len(expected)} page(s): every one is reachable from both landing pages "
-          f"({len(skip)} deliberately excluded), and both carry the community-project notice.")
+          f"({len(skip)} deliberately excluded), both carry the community-project notice, and the README ends with the About text.")
     return 0
 
 

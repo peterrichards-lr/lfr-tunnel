@@ -422,6 +422,76 @@ for where in before-h1 before-description below-rule plain; do
     run_routing "a README notice moved $where" "$SANDBOX/land-$where"
 done
 
+# The README's closing section must hold docs/about.md's body verbatim (#2387).
+run_drift() { # run_drift <label> <dir>
+    OUT=$(cd "$2" && python3 "$ROUTING" 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "check-docs-routing.py PASSED $1"
+    elif grep -q 'DISCLAIMER-DRIFT' <<<"$OUT"; then
+        pass "check-docs-routing.py fires on $1"
+    else
+        fail "check-docs-routing.py exited $RC on $1 without reporting DISCLAIMER-DRIFT: $(echo "$OUT" | head -2 | tr '\n' ' ')"
+    fi
+}
+
+make_landing "$SANDBOX/drift-missing"
+python3 - "$SANDBOX/drift-missing/README.md" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path, encoding="utf-8").read()
+head, foot = s.split("<!-- markdownlint-disable MD049 -->")
+head = head[:head.index("\n---\n\n## About this project")] + "\n\n"
+open(path, "w", encoding="utf-8").write(head + "<!-- markdownlint-disable MD049 -->" + foot)
+PY
+run_drift "a README without the closing disclaimer" "$SANDBOX/drift-missing"
+
+make_landing "$SANDBOX/drift-about"
+sed 's/with the maintainer accountable for what ships/and reviewed by the maintainer/' \
+    "$REPO_ROOT/docs/about.md" >"$SANDBOX/drift-about/docs/about.md"
+run_drift "an About page reworded without the README" "$SANDBOX/drift-about"
+
+make_landing "$SANDBOX/drift-moved"
+python3 - "$SANDBOX/drift-moved/README.md" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path, encoding="utf-8").read()
+start = s.index("\n---\n\n## About this project")
+end = s.index("<!-- markdownlint-disable MD049 -->")
+section = s[start:end].rstrip() + "\n"
+s = s[:start] + "\n\n" + s[end:]
+s = s.replace("\n---\n\n## License", section + "\n---\n\n## License", 1)
+open(path, "w", encoding="utf-8").write(s)
+PY
+run_drift "a closing disclaimer moved above License" "$SANDBOX/drift-moved"
+
+# disclaimer_edit <file> <how>: wrap the About section's paragraphs in a comment, append a
+# contradicting paragraph, or reverse them.
+disclaimer_edit() {
+    python3 - "$1" "$2" <<'PY'
+import sys
+path, how = sys.argv[1], sys.argv[2]
+s = open(path, encoding="utf-8").read()
+head, foot = s.split("<!-- markdownlint-disable MD049 -->")
+pre, section = head.split("## About this project\n", 1)
+paras = [p for p in section.strip().split("\n\n")]
+if how == "comment":
+    paras = ["<!--"] + paras + ["-->"]
+elif how == "extra":
+    paras = paras + ["Actually, this is an official, supported Liferay product."]
+elif how == "reorder":
+    paras = paras[::-1]
+section = "\n\n".join(paras) + "\n\n\n"
+open(path, "w", encoding="utf-8").write(pre + "## About this project\n\n" + section
+                                        + "<!-- markdownlint-disable MD049 -->" + foot)
+PY
+}
+for how in comment extra reorder; do
+    make_landing "$SANDBOX/drift-$how"
+    disclaimer_edit "$SANDBOX/drift-$how/README.md" "$how"
+    run_drift "a closing disclaimer edited: $how" "$SANDBOX/drift-$how"
+done
+
 make_landing "$SANDBOX/land-good"
 OUT=$(cd "$SANDBOX/land-good" && python3 "$ROUTING" 2>&1)
 if [ $? -eq 0 ]; then

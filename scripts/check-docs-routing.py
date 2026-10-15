@@ -114,6 +114,60 @@ def notice_problem(path, expected):
     return None
 
 
+# The full disclaimer (#2387). The README closes with the About page's text -- who maintains the
+# project, that it is not an official or supported Liferay product, and how the docs are written
+# and reviewed. docs/about.md is the one source, and the README must END with exactly
+# `## About this project` followed by its body blocks, in order, with nothing after them.
+#
+# Exactly, not "each paragraph appears somewhere in the last section": that version passed an
+# added paragraph contradicting the About text, the paragraphs reordered, the whole text inside
+# an HTML comment, a fence or <details>, and other content following it (a setext heading, an
+# H3) -- the same "is it somewhere in region X?" shape [NO-NOTICE] above already had to abandon.
+# A wrapping `-->`, fence or `</details>` becomes the last block, so this rejects those too.
+#
+# Comparison is per line: each paragraph is one line in both files. Re-wrapping one over several
+# lines, even without changing a word, fails -- keep them one line each.
+ABOUT = os.path.join("docs", "about.md")
+FOOTER_MARK = "<!-- markdownlint-disable MD049 -->"
+DISCLAIMER_HEADING = "## About this project"
+
+
+def about_paragraphs():
+    """docs/about.md's body: the blocks between its H1 and its review footer."""
+    with open(ABOUT, encoding="utf-8") as handle:
+        text = handle.read().split(FOOTER_MARK)[0]
+    return [b for b in blocks(text.splitlines()) if not b[0].startswith("# ")]
+
+
+def disclaimer_problem():
+    """None if the README ends with the heading and every About block in order, else what is wrong."""
+    wanted = about_paragraphs()
+    if len(wanted) < 2:
+        return f"cannot be checked: {ABOUT} yielded {len(wanted)} paragraph(s), too few to be the page"
+    if any(b[0].startswith("#") for b in wanted):
+        return (f"cannot be checked: {ABOUT}'s body contains a heading ('{wanted[0][0][:40]}'), "
+                f"which would start a new README section. Keep the About page to paragraphs")
+
+    with open(ROOT_README, encoding="utf-8") as handle:
+        body = blocks(handle.read().split(FOOTER_MARK)[0].splitlines())
+    expected = [[DISCLAIMER_HEADING]] + wanted
+    tail = body[-len(expected):]
+    if tail == expected:
+        return None
+
+    if [DISCLAIMER_HEADING] not in body:
+        return f"has no '{DISCLAIMER_HEADING}' section"
+    after = body[body.index([DISCLAIMER_HEADING]) + 1:]
+    for n, block in enumerate(wanted):
+        if n >= len(after):
+            return f"stops after {n} of the {len(wanted)} About paragraph(s)"
+        if after[n] != block:
+            return (f"differs from {ABOUT} at block {n + 1} of its closing section: has "
+                    f"'{after[n][0][:60]}…', expected '{block[0][:60]}…'")
+    return (f"has {len(after) - len(wanted)} block(s) after the About text, starting "
+            f"'{after[len(wanted)][0][:60]}…' -- it must be the last thing before the footer")
+
+
 def main():
     skip = excluded_pages()
     expected = pages_on_disk() - skip
@@ -143,12 +197,19 @@ def main():
             for line in block:
                 print(f"    {line}")
 
+    problem = disclaimer_problem()
+    if problem:
+        issues += 1
+        print(f"[DISCLAIMER-DRIFT] {ROOT_README} {problem}.")
+        print(f"    The README's closing section must hold {ABOUT}'s body verbatim. Change both, "
+              f"or neither.")
+
     if issues:
         print(f"\n❌ {issues} landing-page problem(s).")
         return 1
 
     print(f"✅ {len(expected)} page(s): every one is reachable from both landing pages "
-          f"({len(skip)} deliberately excluded), and both carry the community-project notice.")
+          f"({len(skip)} deliberately excluded), both carry the community-project notice, and the README ends with the About text.")
     return 0
 
 

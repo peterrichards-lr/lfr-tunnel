@@ -7,11 +7,17 @@ repo_name: peterrichards-lr/lfr-tunnel
 
 theme:
   name: material
+  custom_dir: overrides
   favicon: assets/favicon.png
   logo: assets/logo.svg
 
 plugins:
   - search
+
+# Search-engine ownership tokens, rendered into every page's <head> by overrides/main.html.
+# Add Bing's as `bing_site_verification:` (emitted as msvalidate.01) the same way.
+extra:
+  google_site_verification: r7MfW8Y9zUhxsygop-Ubkr6dt7i9rUmddL4pEI26Ngk
 
 # Without these, the published site silently loses two things the source clearly intends.
 # Measured on the built output before they were added: 33 GitHub alert markers printed to the
@@ -71,6 +77,7 @@ nav:
     - System Architecture: architecture.md
     - InfoSec & Trust Guide: infosec.md
   - Project Info:
+    - About These Docs: about.md
     - Contributing: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md
     - Security Policy: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/SECURITY.md
     - Code of Conduct: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CODE_OF_CONDUCT.md

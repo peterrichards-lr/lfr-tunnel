@@ -65,6 +65,8 @@ wrong failure. The prose bullets below carry each rule's reasoning; this table i
   absence-only assertion passes on a blank page.
 - **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
   Read before creating or editing any `.md` file.
+  The [About page](docs/about.md) publicly commits to this rule. Changing or bypassing it requires
+  updating the About page in the same PR.
 - **Edge node state synchronization** — [`.agents/skills/edge-sync/SKILL.md`](.agents/skills/edge-sync/SKILL.md)
   Read before modifying any in-memory tunnel/lease state on the control plane.
 - **Operations, deployment, builds, signing** — [`.agents/skills/lfr-tunnel-ops/SKILL.md`](.agents/skills/lfr-tunnel-ops/SKILL.md)
@@ -305,4 +307,4 @@ in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*
+*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*

@@ -2,6 +2,9 @@
 
 Welcome to the Liferay Tunnel documentation! This is the central hub for learning how to use, deploy, and contribute to `lfr-tunnel`.
 
+> [!IMPORTANT]
+> ℹ️ **Community project** — not an official Liferay product and not covered by Liferay Support. [About this project](about.md)
+
 ## 📖 Developer & Client Guides
 
 - **[Getting Started Guide](getting_started.md)**: Learn the basic concepts, registration flow, and how to start your first tunnel.
@@ -28,8 +31,9 @@ All operator deployment and configuration resources are organized under the `doc
 
 - **[Contributing Guide](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md)**: General contribution rules, git branching conventions, code style checks, and release checklists.
 - **[Testing Protocol](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md#-testing--verification-protocol)**: Detailed instructions for running automated unit/E2E tests locally and manual exploratory test scenarios.
+- **[About These Docs](about.md)**: Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*
+*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*

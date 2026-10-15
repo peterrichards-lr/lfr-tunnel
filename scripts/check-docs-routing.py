@@ -59,6 +59,61 @@ def linked_from(path, prefix):
     return out
 
 
+# The community-project notice (#2385). A reader decides whether to adopt the tool on the first
+# screen, and the Liferay name and logo can read as an official, supported product -- so the
+# disclaimer has to come before that decision, not on the About page they may never open.
+#
+# Each landing page must open with exactly: its H1, its description paragraph (unchanged -- it is
+# the search-result snippet), then the notice block below. Checked by walking the top of the file
+# rather than by asking "is it somewhere above the first `##`?": that question was satisfied by a
+# notice above the H1, between the H1 and the description, below a `---` rule, inside an HTML
+# comment or <details>, or as a plain paragraph -- and answering it needed a heading and fence
+# parser that CommonMark can outflank (setext headings, info-string fences).
+#
+# The README's link is absolute because it is read on github.com and in search results; the hub's
+# is relative because mkdocs resolves it. The hub carries it as a GitHub alert so that it is a
+# callout on both github.com and the site (the alerts hook converts it).
+NOTICE = ("ℹ️ **Community project** — not an official Liferay product and not covered by "
+          "Liferay Support. [About this project]({})")
+NOTICE_BLOCKS = {
+    ROOT_README: ["> " + NOTICE.format("https://peterrichards-lr.github.io/lfr-tunnel/about/")],
+    HUB: ["> [!IMPORTANT]", "> " + NOTICE.format("about.md")],
+}
+
+
+def blocks(lines):
+    """Consecutive non-blank lines, grouped; blank lines separate blocks."""
+    out, current = [], []
+    for line in lines:
+        if line.strip():
+            current.append(line.rstrip())
+        elif current:
+            out.append(current)
+            current = []
+    if current:
+        out.append(current)
+    return out
+
+
+def notice_problem(path, expected):
+    """None if `path` opens H1, description paragraph, notice block; else what is wrong."""
+    with open(path, encoding="utf-8") as handle:
+        top = blocks(handle.read().splitlines())
+
+    if not top or len(top[0]) != 1 or not top[0][0].startswith("# "):
+        return "does not open with its H1 on a line of its own"
+    # Anything that is not prose -- a quote, heading, rule or list, HTML, a fence, a table. A
+    # single backtick is allowed: the README's description opens with inline code.
+    if len(top) < 2 or top[1][0].startswith((">", "#", "-", "*", "<", "```", "~~~", "|")):
+        return "has no description paragraph straight after its H1"
+    if len(top) < 3 or top[2] != expected:
+        found = "elsewhere in the file" if any("**Community project**" in l for b in top for l in b) \
+            else "nowhere"
+        return (f"does not carry the notice block straight after its description paragraph "
+                f"(the notice text appears {found})")
+    return None
+
+
 def main():
     skip = excluded_pages()
     expected = pages_on_disk() - skip
@@ -78,12 +133,22 @@ def main():
                   f"knowing its URL.")
             print(f"    Add it, or record it in mkdocs.yml as `# nav-exclude: <path> -- <why>`.")
 
+    for landing, block in NOTICE_BLOCKS.items():
+        problem = notice_problem(landing, block)
+        if problem:
+            issues += 1
+            print(f"[NO-NOTICE] {landing} {problem}.")
+            print(f"    Readers must see that this is not an official Liferay product before they "
+                  f"decide to adopt it. Expected, straight after the opening paragraph:")
+            for line in block:
+                print(f"    {line}")
+
     if issues:
-        print(f"\n❌ {issues} page(s) missing from a landing page.")
+        print(f"\n❌ {issues} landing-page problem(s).")
         return 1
 
     print(f"✅ {len(expected)} page(s): every one is reachable from both landing pages "
-          f"({len(skip)} deliberately excluded).")
+          f"({len(skip)} deliberately excluded), and both carry the community-project notice.")
     return 0
 
 

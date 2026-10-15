@@ -53,10 +53,21 @@ if [ "$diagrams" -ne 0 ]; then
   fail=1
 fi
 
+# Search Console ownership token (overrides/main.html, extra.google_site_verification). The
+# template renders it only when set, so deleting the key keeps the build green -- and Google,
+# which re-checks periodically, would quietly unverify the property (#2381).
+unverified=$(grep -rL 'name="google-site-verification"' "$SITE" --include='*.html' || true)
+if [ -n "$unverified" ]; then
+  echo "[MISSING-VERIFICATION] $(echo "$unverified" | wc -l | tr -d ' ') page(s) lack the google-site-verification meta tag."
+  echo "  Check extra.google_site_verification in mkdocs.yml and overrides/main.html. Pages affected:"
+  echo "$unverified" | sed "s|^$SITE/|    |"
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "❌ The published output does not match what the source asks for."
   exit 1
 fi
 
-echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code."
+echo "✅ $pages page(s): no alert markers leaked, no mermaid rendered as code, verification tag on every page."

@@ -181,7 +181,9 @@ jobs:
           # unresolvable to mkdocs. mkdocs.yml is included because `nav:` names files, so a
           # rename there breaks the build with no docs/ change at all, and
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
-          if echo "$CHANGED" | grep -qE '^docs/|^mkdocs\.yml$|^requirements-dev\.txt$|^\.github/workflows/'; then
+          # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
+          # docs/ change at all (#2381).
+          if echo "$CHANGED" | grep -qE '^docs/|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false

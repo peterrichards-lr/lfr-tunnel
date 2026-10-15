@@ -1,7 +1,21 @@
 {#-
-  Material's partials/copyright.html (mkdocs-material 9.7.7), plus a link to the About page on
-  every page's footer (#2383). `url` resolves it relative to the current page, so it works on
-  nested pages and under `mkdocs serve` alike.
+  CANONICAL COPY. Shared by the three Liferay tools docs sites (lfr-tunnel,
+  liferay-docker-manager, liferay-ai-commerce-accelerator); this repository's
+  master holds the canonical copy. Do not edit it downstream: change it here,
+  then open a sync PR in LDM and AICA, whose docs CI checks that their copy has
+  the same content. The footer text itself is per-site: it comes from each
+  site's `copyright:` in mkdocs.yml. See CONTRIBUTING.md, "Shared docs files".
+
+  Material's partials/copyright.html (mkdocs-material 9.7.7), plus a link to the
+  About page in every page's footer (lfr-tunnel #2383).
+
+  Why a partial and not a link inside `copyright:`: that string is raw HTML and
+  is NOT Jinja-processed, so it cannot interpolate `site_url`. A relative
+  "about/" there 404s on every nested page, and a root-relative "/about/"
+  resolves to github.io/about/ on a project site. The `url` filter resolves
+  against the CURRENT page, so the link is correct on nested pages and under
+  `mkdocs serve` alike, and cannot drift from `site_url` because it is derived
+  from it.
 -#}
 <div class="md-copyright">
   <div class="md-copyright__highlight">

@@ -2,6 +2,9 @@
 
 Welcome to the Liferay Tunnel documentation! This is the central hub for learning how to use, deploy, and contribute to `lfr-tunnel`.
 
+> [!IMPORTANT]
+> ℹ️ **Community project** — not an official Liferay product and not covered by Liferay Support. [About this project](about.md)
+
 ## 📖 Developer & Client Guides
 
 - **[Getting Started Guide](getting_started.md)**: Learn the basic concepts, registration flow, and how to start your first tunnel.

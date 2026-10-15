@@ -297,11 +297,14 @@ fi
 RENDERED="$REPO_ROOT/scripts/check-docs-rendered.sh"
 TAG='<meta name="google-site-verification" content="x">'
 FOOT='<p><em>Last Updated: 2026-01-01</em> | <em>Last Reviewed: 2026-01-01</em></p>'
+NOTICE_HTML='<div class="admonition info"><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support. <a href="about/">About this project</a></p></div>'
 make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
     mkdir -p "$1/nested"
     for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
     printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/nested/index.html"
     printf '<html><head>%s</head><body>not found</body></html>\n' "$TAG" >"$1/404.html"
+    printf '<html><head>%s</head><body><h1>Home</h1>%s<h2>Guides</h2>%s</body></html>\n' \
+        "$TAG" "$NOTICE_HTML" "$FOOT" >"$1/index.html"
 }
 
 run_rendered() { # run_rendered <label> <dir> <expected marker>
@@ -330,6 +333,16 @@ make_site "$SANDBOX/site-notag"
 printf '<html><head></head><body>%s</body></html>\n' "$FOOT" >"$SANDBOX/site-notag/a.html"
 run_rendered "a page without the verification tag" "$SANDBOX/site-notag" 'MISSING-VERIFICATION'
 
+make_site "$SANDBOX/site-nonotice"
+printf '<html><head>%s</head><body><h1>Home</h1><h2>Guides</h2>%s%s</body></html>\n' \
+    "$TAG" "$NOTICE_HTML" "$FOOT" >"$SANDBOX/site-nonotice/index.html"
+run_rendered "a home page whose notice sits below the first section" "$SANDBOX/site-nonotice" 'NO-NOTICE'
+
+make_site "$SANDBOX/site-outside"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition note"><p>Unrelated.</p></div><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support.</p><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-outside/index.html"
+run_rendered "a notice beside an unrelated callout rather than in one" "$SANDBOX/site-outside" 'NO-NOTICE'
+
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.
 make_site "$SANDBOX/site-good"
@@ -338,6 +351,83 @@ if [ $? -eq 0 ]; then
     pass "check-docs-rendered.sh accepts a dated, tagged site given as 'dir/' (narrowness control)"
 else
     fail "check-docs-rendered.sh refused a correct site: $(echo "$OUT" | head -3 | tr '\n' ' ')"
+fi
+
+# ---------------------------------------------------------------------------
+# 7. check-docs-routing.py — a landing page without the community-project notice above its
+#    first `##` heading (#2385). It reads README.md, docs/ and mkdocs.yml from the working
+#    directory, so the fixture is a copy of the real three, then one mutation each.
+# ---------------------------------------------------------------------------
+ROUTING="$REPO_ROOT/scripts/check-docs-routing.py"
+make_landing() { # make_landing <dir>
+    mkdir -p "$1"
+    cp -R "$REPO_ROOT/docs" "$REPO_ROOT/README.md" "$REPO_ROOT/mkdocs.yml" "$1/"
+}
+run_routing() { # run_routing <label> <dir>
+    OUT=$(cd "$2" && python3 "$ROUTING" 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "check-docs-routing.py PASSED $1"
+    elif grep -q 'NO-NOTICE' <<<"$OUT"; then
+        pass "check-docs-routing.py fires on $1"
+    else
+        fail "check-docs-routing.py exited $RC on $1 without reporting NO-NOTICE: $(echo "$OUT" | head -2 | tr '\n' ' ')"
+    fi
+}
+
+make_landing "$SANDBOX/land-missing"
+grep -v 'Community project' "$REPO_ROOT/README.md" >"$SANDBOX/land-missing/README.md"
+run_routing "a README without the notice" "$SANDBOX/land-missing"
+
+make_landing "$SANDBOX/land-below"
+python3 - "$SANDBOX/land-below/docs/README.md" <<'PY'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+notice = [l for l in lines if "Community project" in l]
+rest = [l for l in lines if "Community project" not in l]
+first = next(i for i, l in enumerate(rest) if l.startswith("## "))
+rest[first + 1:first + 1] = [""] + notice
+open(path, "w", encoding="utf-8").write("\n".join(rest))
+PY
+run_routing "a docs home whose notice is below its first heading" "$SANDBOX/land-below"
+
+# move_notice <file> <where>: before-h1 | before-description | below-rule | plain
+move_notice() {
+    python3 - "$1" "$2" <<'PY'
+import sys
+path, where = sys.argv[1], sys.argv[2]
+lines = open(path, encoding="utf-8").read().split("\n")
+i = next(n for n, l in enumerate(lines) if "**Community project**" in l)
+notice = lines[i]
+if where == "plain":
+    lines[i] = notice[2:]                      # drop the "> ": a paragraph, not a callout
+else:
+    del lines[i]
+    if lines[i - 1] == "":
+        del lines[i - 1]
+    if where == "before-h1":
+        lines[0:0] = [notice, ""]
+    elif where == "before-description":
+        lines[1:1] = ["", notice]
+    elif where == "below-rule":
+        r = next(n for n, l in enumerate(lines) if l == "---")
+        lines[r + 1:r + 1] = ["", notice]
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+PY
+}
+for where in before-h1 before-description below-rule plain; do
+    make_landing "$SANDBOX/land-$where"
+    move_notice "$SANDBOX/land-$where/README.md" "$where"
+    run_routing "a README notice moved $where" "$SANDBOX/land-$where"
+done
+
+make_landing "$SANDBOX/land-good"
+OUT=$(cd "$SANDBOX/land-good" && python3 "$ROUTING" 2>&1)
+if [ $? -eq 0 ]; then
+    pass "check-docs-routing.py accepts the real landing pages (narrowness control)"
+else
+    fail "check-docs-routing.py refused the real landing pages: $(echo "$OUT" | head -3 | tr '\n' ' ')"
 fi
 
 echo

@@ -388,6 +388,11 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          # git-revision-date-localized dates each page from its git history (#2391). A shallow
+          # clone has one commit, so every page would claim today -- and this build must match
+          # Deploy Documentation's, which fetches the same.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7

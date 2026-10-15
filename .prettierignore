@@ -26,3 +26,8 @@ package-lock.json
 # mangled workflow is a broken merge gate rather than an ugly file.
 *.yml
 *.yaml
+
+# --- Shared docs palette ------------------------------------------------------------
+# Kept byte-identical across the three Liferay tools sites (LDM, AICA, lfr-tunnel; #2391);
+# it is changed in one repo and copied to the others. Reformatting it here would fork it.
+docs/assets/stylesheets/liferay-blue.css

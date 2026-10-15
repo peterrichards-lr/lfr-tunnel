@@ -432,7 +432,7 @@ fi
 RENDERED="$REPO_ROOT/scripts/check-docs-rendered.sh"
 TAG='<meta name="google-site-verification" content="x">'
 FOOT='<p><em>Last Updated: 2026-01-01</em> | <em>Last Reviewed: 2026-01-01</em></p>'
-NOTICE_HTML='<div class="admonition info"><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support. <a href="about/">About this project</a></p></div>'
+NOTICE_HTML='<div class="admonition info"><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support. <a href="about/">About this project</a></p></div>'
 make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
     mkdir -p "$1/nested"
     for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
@@ -474,9 +474,20 @@ printf '<html><head>%s</head><body><h1>Home</h1><h2>Guides</h2>%s%s</body></html
 run_rendered "a home page whose notice sits below the first section" "$SANDBOX/site-nonotice" 'NO-NOTICE'
 
 make_site "$SANDBOX/site-outside"
-printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition note"><p>Unrelated.</p></div><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support.</p><h2>Guides</h2>%s</body></html>\n' \
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition note"><p>Unrelated.</p></div><p class="admonition-title">Community project</p><p>Not an official Liferay product and not covered by Liferay Support.</p><h2>Guides</h2>%s</body></html>\n' \
     "$TAG" "$FOOT" >"$SANDBOX/site-outside/index.html"
 run_rendered "a notice beside an unrelated callout rather than in one" "$SANDBOX/site-outside" 'NO-NOTICE'
+
+# The two halves of the titled callout (#2391): the pre-#2391 untitled shape -- the disclaimer
+# inside a callout headed "Info" -- and the right title over a body that lost the disclaimer.
+make_site "$SANDBOX/site-untitled"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Info</p><p>ℹ️ <strong>Community project</strong> — not an official Liferay product and not covered by Liferay Support.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-untitled/index.html"
+run_rendered "a notice callout not titled Community project" "$SANDBOX/site-untitled" 'NO-NOTICE'
+make_site "$SANDBOX/site-emptybody"
+printf '<html><head>%s</head><body><h1>Home</h1><div class="admonition info"><p class="admonition-title">Community project</p><p>See the About page.</p></div><h2>Guides</h2>%s</body></html>\n' \
+    "$TAG" "$FOOT" >"$SANDBOX/site-emptybody/index.html"
+run_rendered "a Community project callout without the disclaimer" "$SANDBOX/site-emptybody" 'NO-NOTICE'
 
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.

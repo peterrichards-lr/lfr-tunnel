@@ -29,6 +29,19 @@ _TYPES = {
 
 _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
 
+# GitHub alerts cannot carry a title, so a source that wants one writes it as the first line's
+# lead: an emoji, a bold phrase, an em dash -- `> ℹ️ **Community project** — not an official…`.
+# On github.com that reads as a title; here it becomes one (#2391), and the emoji is dropped
+# because the admonition draws its own icon.
+#
+# The emoji is the opt-in, not decoration. A bold lead alone is not enough: aws_setup_guide.md
+# opens a NOTE with `**Cost Explorer must already be enabled for the account** — a one-time
+# toggle … — before any of the above will work`, a sentence that runs on past the dash.
+# Lifting that lead into a title would cut it in half.
+# The emoji is matched as a run of non-ASCII characters rather than as "not a word character":
+# Python counts ℹ (U+2139) as a letter.
+_TITLE_LEAD = re.compile(r"^([^\x00-\x7F]+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
+
 # CommonMark fences, and the rule that matters here: a fence is CLOSED only by a line of the
 # same character, at least as long, carrying no info string. `` ```bash `` therefore cannot
 # close a block -- it is content inside one.
@@ -81,7 +94,14 @@ def _convert(markdown: str) -> str:
             body.append(re.sub(r"^>\s?", "", lines[i]))
             i += 1
 
-        out.append(f"!!! {kind}")
+        title = _TITLE_LEAD.match(body[0]) if body else None
+        if title is not None:
+            # The remainder now opens a paragraph under its own heading, so it takes a capital.
+            rest = title.group(3)
+            body[0] = rest[:1].upper() + rest[1:]
+            out.append(f'!!! {kind} "{title.group(2).strip()}"')
+        else:
+            out.append(f"!!! {kind}")
         out.append("")
         # Blank lines stay blank: indenting them would end the admonition early on some
         # Python-Markdown versions and is invisible either way.

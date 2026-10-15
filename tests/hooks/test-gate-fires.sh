@@ -436,7 +436,7 @@ NOTICE_HTML='<div class="admonition info"><p class="admonition-title">Community 
 # The shared home-page layout (#2401), as the real build renders it: everything after the notice.
 # check-docs-home-layout.py reads the <article>, so the fixtures wrap the page in one.
 HOME_H1='<h1 id="liferay-tunnel-documentation">Liferay Tunnel documentation</h1>'
-HOME_BODY='<h2 id="i-want-to">I want to…</h2><table><thead><tr><th>I want to…</th><th>Go to</th></tr></thead><tbody><tr><td>Share my local Liferay</td><td><a href="a/">A</a></td></tr><tr><td>Run my own gateway</td><td><a href="b/">B</a></td></tr></tbody></table><h2 id="by-subject">By subject</h2><h3 id="client-guides">Client guides</h3><ul><li><a href="a/">A</a></li></ul><h2 id="related-liferay-tools">Related Liferay tools</h2><p>Three community tools from the same maintainer. None is an official Liferay product or covered by Liferay Support.</p><table><thead><tr><th>Tool</th><th>What it does</th></tr></thead><tbody><tr><td><a href="https://x/ldm/">Liferay Docker Manager</a></td><td>Run LDM.</td></tr><tr><td><a href="https://x/aica/">Liferay AI Commerce Accelerator</a></td><td>Generate data.</td></tr><tr><td>Liferay Tunnel</td><td>You are here. Securely expose.</td></tr></tbody></table>'
+HOME_BODY='<h2 id="i-want-to">I want to…</h2><table><thead><tr><th>I want to…</th><th>Go to</th></tr></thead><tbody><tr><td>Share my local Liferay</td><td><a href="a/">A</a></td></tr><tr><td>Run my own gateway</td><td><a href="b/">B</a></td></tr></tbody></table><h2 id="by-subject">By subject</h2><h3 id="client-guides">Client guides</h3><ul><li><a href="a/">A</a></li></ul><h2 id="related-liferay-tools">Related Liferay tools</h2><p>Three community tools from the same maintainer. None is an official Liferay product or covered by Liferay Support.</p><table><thead><tr><th>Tool</th><th>What it does</th></tr></thead><tbody><tr><td><a href="https://peterrichards-lr.github.io/liferay-docker-manager/">Liferay Docker Manager</a></td><td>Run, manage and develop Liferay DXP and Portal environments in Docker.</td></tr><tr><td><a href="https://peterrichards-lr.github.io/liferay-ai-commerce-accelerator/">Liferay AI Commerce Accelerator</a></td><td>Generate and manage AI-driven commerce data in Liferay DXP.</td></tr><tr><td>Liferay Tunnel</td><td>You are here. Securely expose a local Liferay environment on a public HTTPS subdomain.</td></tr></tbody></table>'
 make_site() { # make_site <dir> -- six good pages plus a theme 404 with no footer
     mkdir -p "$1/nested"
     for n in a b c d e; do printf '<html><head>%s</head><body>%s</body></html>\n' "$TAG" "$FOOT" >"$1/$n.html"; done
@@ -559,20 +559,42 @@ run_layout() { # run_layout <label> <sed expression applied to index.html> <expe
 LAYOUT_N=0
 make_site "$SANDBOX/site-good-layout"
 run_layout "an H1 in title case" 's/>Liferay Tunnel documentation</>Liferay Tunnel Documentation</' 'H1 is'
-run_layout "a missing #by-subject heading" 's/<h2 id="by-subject">By subject<\/h2>//' 'need #i-want-to, then #by-subject'
-run_layout "related tools above By subject" 's/<h2 id="by-subject">/<h2 id="related-liferay-tools">X<\/h2><h2 id="by-subject">/' 'need #i-want-to, then #by-subject'
-run_layout 'a second "Related" heading' 's/<h3 id="client-guides">/<h3 id="related-reading">Related reading<\/h3><h3 id="client-guides">/' 'headings mentioning "Related"'
-run_layout "a section after Related Liferay tools" 's/<\/tbody><\/table><p><em>/<\/tbody><\/table><h2 id="showcase">Showcase<\/h2><p><em>/' 'the last H2 is'
-run_layout 'an I-want-to column headed "Read"' 's/<th>Go to<\/th>/<th>Read<\/th>/' 'the #i-want-to table headers'
-run_layout 'a task row with a leading "…"' 's/<td>Share my local Liferay/<td>…share my local Liferay/' 'task rows not in sentence case'
-run_layout "a task row ending in a full stop" 's/<td>Run my own gateway</<td>Run my own gateway.</' 'task rows not in sentence case'
+run_layout "a missing #by-subject heading" 's/<h2 id="by-subject">By subject<\/h2>//' 'H2s (id, text) are'
+run_layout '"I want to..." written with three dots' 's/>I want to…<\/h2>/>I want to...<\/h2>/' 'H2s (id, text) are'
+run_layout '"By Subject" in title case' 's/>By subject<\/h2>/>By Subject<\/h2>/' 'H2s (id, text) are'
+run_layout "an extra section before By subject" 's/<h2 id="by-subject">/<h2 id="showcase">Showcase<\/h2><h2 id="by-subject">/' 'H2s (id, text) are'
+run_layout "related tools above By subject" 's/<h2 id="by-subject">/<h2 id="related-liferay-tools">X<\/h2><h2 id="by-subject">/' 'H2s (id, text) are'
+run_layout "a section after Related Liferay tools" 's/<\/tbody><\/table><p><em>/<\/tbody><\/table><h2 id=\"showcase\">Showcase<\/h2><p><em>/' 'H2s (id, text) are'
+run_layout 'a second "Related" heading' 's/<h3 id="client-guides">/<h3 id="related-reading">Related reading<\/h3><h3 id="client-guides">/' 'headings with the word "Related"'
+run_layout 'an I-want-to column headed "Read"' 's/<th>Go to<\/th>/<th>Read<\/th>/' 'directly under #i-want-to'
+run_layout "a paragraph between #i-want-to and its table" 's/<h2 id="i-want-to">I want to…<\/h2>/&<p>Pick one.<\/p>/' 'directly under #i-want-to'
+run_layout 'a task row with a leading "…"' 's/<td>Share my local Liferay/<td>…share my local Liferay/' 'task rows that start lower-case'
+run_layout "a task row starting lower-case" 's/<td>Share my local Liferay/<td>share my local Liferay/' 'task rows that start lower-case'
+run_layout "a task row ending in a full stop" 's/<td>Run my own gateway</<td>Run my own gateway.</' 'task rows that start lower-case'
 run_layout "a numbered By-subject subsection" 's/>Client guides</>1. Client guides</' 'subsections'
-run_layout "a reworded related-tools intro" 's/None is an official/Neither is an official/' 'related-tools intro'
-run_layout 'a related-tools table headed "Description"' 's/<th>What it does<\/th>/<th>Description<\/th>/' 'related-liferay-tools table headers'
-run_layout "related tools in another order" 's/Liferay Docker Manager<\/a>/Liferay Docker Manager-X<\/a>/' 'related-tools rows are'
-run_layout 'a second "You are here." row' 's/<td>Run LDM.<\/td>/<td>You are here. Run LDM.<\/td>/' 'You are here.'
-run_layout "this site's own row linked" 's/<td>Liferay Tunnel<\/td>/<td><a href="x\/">Liferay Tunnel<\/a><\/td>/' 'only this site'
+run_layout "a reworded related-tools intro" 's/None is an official/Neither is an official/' 'directly under #related-liferay-tools'
+run_layout "the related-tools intro below its table" 's/\(<p>Three community tools[^<]*<\/p>\)\(<table>.*<\/table>\)/\2\1/' 'directly under #related-liferay-tools'
+run_layout 'a related-tools table headed "Description"' 's/<th>What it does<\/th>/<th>Description<\/th>/' 'after the related-tools intro'
+run_layout "related tools in another order" 's/\(<tr><td><a href="[^"]*">[^<]*<\/a><\/td><td>[^<]*<\/td><\/tr>\)\(<tr><td><a href="[^"]*">[^<]*<\/a><\/td><td>[^<]*<\/td><\/tr>\)/\2\1/' 'related-tools rows (tool, link, description)'
+run_layout "a reworded related-tools description" 's/Run, manage and develop/Run and develop/' 'related-tools rows (tool, link, description)'
+run_layout "a related-tools link to the wrong place" 's|https://peterrichards-lr.github.io/liferay-docker-manager/|https://example.com/|' 'related-tools rows (tool, link, description)'
+run_layout 'a second "You are here." row' 's/<td>Run, manage/<td>You are here. Run, manage/' 'related-tools rows (tool, link, description)'
+run_layout '"You are here." at the end of the row' 's/<td>You are here. Securely expose a local Liferay environment on a public HTTPS subdomain.<\/td>/<td>Securely expose a local Liferay environment on a public HTTPS subdomain. You are here.<\/td>/' 'related-tools rows (tool, link, description)'
+run_layout "this site's own row linked" 's/<td>Liferay Tunnel<\/td>/<td><a href=\"x\/\">Liferay Tunnel<\/a><\/td>/' 'related-tools rows (tool, link, description)'
 run_layout "an emoji in a heading" 's/>Client guides</>📖 Client guides</' 'headings with emoji'
+run_layout "a keycap emoji without its variation selector" 's/>Client guides</>Client guides 1⃣</' 'headings with emoji'
+run_layout "the information emoji without its variation selector" 's/>Client guides</>ℹ Client guides</' 'headings with emoji'
+# Narrowness controls: a trademark sign, and a word that merely contains "related", are fine.
+for expr in 's/>Client guides</>Liferay™ guides</' 's/>Client guides</>Unrelated notes</'; do
+    make_site "$SANDBOX/site-layout-ok"
+    sed -i.bak -e "$expr" "$SANDBOX/site-layout-ok/index.html" && rm -f "$SANDBOX/site-layout-ok/index.html.bak"
+    if bash "$RENDERED" "$SANDBOX/site-layout-ok" >/dev/null 2>&1; then
+        pass "check-docs-rendered.sh accepts a heading edited by '$expr' (narrowness control)"
+    else
+        fail "check-docs-rendered.sh refused a heading edited by '$expr'"
+    fi
+    rm -rf "$SANDBOX/site-layout-ok"
+done
 
 # Narrowness control, given with a trailing slash: the theme's footerless 404 must stay exempt
 # however the directory is spelled.

@@ -165,12 +165,14 @@ HOME_H1="Liferay Tunnel documentation"
 HOME_SELF="Liferay Tunnel"
 layout=$(python3 "$(dirname "$0")/check-docs-home-layout.py" "$home" "$HOME_H1" "$HOME_SELF" 2>&1) || {
   echo "[HOME-LAYOUT] the home page does not follow the shared home-page layout (#2401):"
-  case "$layout" in
-    *FAIL*) printf '%s\n' "$layout" | grep '^FAIL' | sed 's/^FAIL /  /' ;;
-    # No assertion line at all: the script itself broke (no home page, a parse error). Show it
-    # rather than a header with nothing under it.
-    *) printf '%s\n' "$layout" | sed 's/^/  /' ;;
-  esac
+  # A line STARTING with FAIL is an assertion; anything else means the script itself broke (no
+  # home page, a parse error) -- show its output rather than a header with nothing under it. Not
+  # `case *FAIL*`: that also matched a traceback whose path happened to contain "FAIL".
+  if grep -q '^FAIL' <<<"$layout"; then
+    printf '%s\n' "$layout" | sed -n 's/^FAIL /  /p'
+  else
+    printf '%s\n' "$layout" | sed 's/^/  /'
+  fi
   fail=1
 }
 

@@ -42,6 +42,16 @@ _MARKER = re.compile(r"^>\s*\[!(" + "|".join(_TYPES) + r")\]\s*(.*)$")
 _TITLE_LEAD = re.compile(r"^(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*)$")
 
 
+# A lifted title renders as `info`, whatever the alert's type ("option B", the family decision on
+# #2391). The community-project notice is written as `[!NOTE]` on all three Liferay tools sites and
+# must render as the shared `info` callout titled "Community project"; the strict opt-in above is
+# what keeps this from reaching any other alert. Untitled alerts keep _TYPES unchanged.
+#
+# This file is meant to be identical in all three repos (LDM may keep it at a different path), like
+# liferay-blue.css -- change it here and copy it to the others.
+_TITLED_KIND = "info"
+
+
 def _is_emoji(token: str) -> bool:
     """True when every character is a symbol, or one of the joiners and variation selectors an
     emoji is built from. Not "non-ASCII": that let `→`'s neighbours in, and a word such as
@@ -114,6 +124,7 @@ def _convert(markdown: str) -> str:
             if re.fullmatch(r"[a-z]+[.,;:]?", first):
                 rest = rest[:1].upper() + rest[1:]
             body[0] = rest
+            kind = _TITLED_KIND
             out.append(f'!!! {kind} "{title.group(2).strip()}"')
         else:
             out.append(f"!!! {kind}")

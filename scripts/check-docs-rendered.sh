@@ -87,7 +87,7 @@ fi
 # Community-project notice on the site's home page (#2385). check-docs-routing.py holds the
 # markdown; this holds what readers get: a callout, above the first section heading. The source
 # writes it as a GitHub alert, so a broken alerts hook would print it as a plain blockquote with
-# a literal "[!IMPORTANT]" -- which the leaked-marker check above would also report.
+# a literal "[!NOTE]" -- which the leaked-marker check above would also report.
 home="$SITE/index.html"
 above=""
 page=""
@@ -101,28 +101,32 @@ fi
 # notice satisfied two separate greps. Take the text from the first admonition to its first
 # </div> -- the converted alert is a single div holding a title and a paragraph -- and look there.
 #
-# Both halves are required: the callout's title is "Community project" (the alerts hook lifts the
-# source's emoji + bold lead into it, #2391), and its body carries the disclaimer itself. A
-# callout with the disclaimer but titled "Info", or titled correctly with the text gone, fails.
+# All three parts are required. The callout's title is "Community project" (the alerts hook lifts
+# the source's emoji + bold lead into it, #2391); its body carries the disclaimer itself; and it
+# links to the About page, which the shared shape includes (#2393). A callout titled "Info", one
+# titled correctly with the text gone, or one that lost its link, fails.
 notice_ok=0
 case "$page" in *"<h2"*) ;; *) above="" ;; esac   # no section heading: nothing is "above" one
 case "$above" in
-  *'class="admonition'*)
-    callout=${above#*class=\"admonition}
+  *'class="admonition info"'*)
+    # Exactly `info` (#2393): the shared rendered shape on all three Liferay tools sites, whatever
+    # alert type the source uses. A `note` callout here means the sites have drifted apart.
+    callout=${above#*class=\"admonition info\"}
     callout=${callout%%</div>*}
     # What a reader sees, not what the markup holds: drop HTML comments (a disclaimer inside one
     # is invisible) and fold line breaks, so a source that wraps the sentence still matches.
     callout=$(printf '%s' "$callout" | tr '\n\t' '  ' | sed -E 's/<!--([^-]|-[^-])*-->//g' | tr -s ' ')
     if grep -q '<p class="admonition-title">Community project</p>' <<<"$callout" \
-      && grep -q 'Not an official Liferay product and not covered by Liferay Support' <<<"$callout"; then
+      && grep -q 'Not an official Liferay product and not covered by Liferay Support' <<<"$callout" \
+      && grep -q '<a href="about/">About this project</a>' <<<"$callout"; then
       notice_ok=1
     fi
     ;;
 esac
 if [ "$notice_ok" -ne 1 ]; then
-  echo "[NO-NOTICE] the home page does not show the community-project notice as a callout titled \"Community project\" above its first section."
+  echo "[NO-NOTICE] the home page does not show the community-project notice as a callout of class info titled \"Community project\" above its first section."
   echo "  Readers must see that this is not an official Liferay product before they decide to adopt it."
-  echo "  Source: the [!IMPORTANT] alert straight after the opening paragraph of docs/README.md."
+  echo "  Source: the [!NOTE] alert straight after the opening paragraph of docs/README.md."
   fail=1
 fi
 

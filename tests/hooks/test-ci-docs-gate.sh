@@ -73,7 +73,7 @@ DOCS_PATTERN=$(grep -B 2 'DOCS=true' "$CI" | grep -oE "grep -qE '[^']+'" | head 
 if [ -z "$DOCS_PATTERN" ]; then
   fail "could not find the docs filter pattern in $CI"
 else
-  for path in "docs/README.md" "docs/server/edge_setup_guide.md" "mkdocs.yml" "requirements-dev.txt" "overrides/main.html" "scripts/mkdocs_github_alerts.py" "scripts/check-docs-rendered.sh" "scripts/check-docs-routing.py" "README.md"; do
+  for path in "docs/README.md" "docs/server/edge_setup_guide.md" "mkdocs.yml" "requirements-dev.txt" "overrides/main.html" "scripts/mkdocs_github_alerts.py" "scripts/check-docs-rendered.sh" "scripts/check-docs-home-layout.py" "scripts/check-docs-routing.py" "README.md"; do
     if echo "$path" | grep -qE "$DOCS_PATTERN"; then
       pass "docs filter matches '$path'"
     else

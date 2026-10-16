@@ -73,6 +73,33 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/peterrichards-lr
       name: More Liferay tools by Peter Richards
+  # Read by scripts/check_docs_rendered.py, the template's rendered-output check (#2407), from
+  # the Liferay profile in ai-agent-template v2.2.0. See its docs-site-standard skill.
+  docs_standard:
+    project_name: Liferay Tunnel
+    # Names a sentence-case nav label may capitalise mid-label. Acronyms (SSO, AWS) and
+    # inner-capital names (InfoSec) pass by their shape.
+    proper_nouns: [Liferay]
+    home_layout: true
+    notice:
+      title: Community project
+      text: Not an official Liferay product and not covered by Liferay Support
+      link_text: About this project
+    related:
+      heading: Related Liferay tools
+      intro: >-
+        Three community tools from the same maintainer. None is an official
+        Liferay product or covered by Liferay Support.
+      rows:
+        - name: Liferay Docker Manager
+          url: https://peterrichards-lr.github.io/liferay-docker-manager/
+          description: Run, manage and develop Liferay DXP and Portal environments in Docker.
+        - name: Liferay AI Commerce Accelerator
+          url: https://peterrichards-lr.github.io/liferay-ai-commerce-accelerator/
+          description: Generate and manage AI-driven commerce data in Liferay DXP.
+        - name: Liferay Tunnel
+          url: https://peterrichards-lr.github.io/lfr-tunnel/
+          description: Securely expose a local Liferay environment on a public HTTPS subdomain.
 
 # Without these, the published site silently loses two things the source clearly intends.
 # Measured on the built output before they were added: 33 GitHub alert markers printed to the
@@ -127,7 +154,7 @@ nav:
   # The shared top-level order (ai-agent-template#135, docs-site-standard; #2405): Home, Tutorials,
   # How-to guides, Reference, Explanation, Troubleshooting, Showcase, Project and contributing,
   # About these docs -- in that order, in sentence case, a section with no pages omitted, never
-  # renamed or reordered. check-docs-rendered.sh holds the built site to it. Moving a page between
+  # renamed or reordered. check_docs_rendered.py holds the built site to it. Moving a page between
   # sections is a nav edit only: the file stays put, so its published URL does not change.
   - Tutorials:
     - Getting started: getting_started.md

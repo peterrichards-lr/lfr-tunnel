@@ -53,6 +53,15 @@ jobs:
       - name: Build site
         run: mkdocs build --site-dir _site --strict
 
+      # Before the upload, never after: a check on the deployed site reports a broken page
+      # readers already have. Both are the template's (ai-agent-template v2.2.0, #2407); CI's
+      # Documentation Build runs the same two on every PR.
+      - name: Check the built site against the docs-site standard
+        run: python3 scripts/check_docs_rendered.py _site
+
+      - name: Shared docs files must match the template
+        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:

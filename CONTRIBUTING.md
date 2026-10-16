@@ -67,18 +67,19 @@ To ensure we build the capabilities that provide the highest impact for the Sale
 
 ### Shared docs files
 
-Four files of the docs site are shared with the two sibling Liferay tools sites, [Liferay Docker Manager](https://github.com/peterrichards-lr/liferay-docker-manager) (LDM) and the [Liferay AI Commerce Accelerator](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator) (AICA). **This repository holds the canonical copy** (#2391, #2399):
+Five files of the docs site are shared with the two sibling Liferay tools sites, [Liferay Docker Manager](https://github.com/peterrichards-lr/liferay-docker-manager) (LDM) and the [Liferay AI Commerce Accelerator](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator) (AICA). **The canonical copy is in [ai-agent-template](https://github.com/peterrichards-lr/ai-agent-template)** (its #135; #2407 here). It was this repository until v2.2.0.
 
-| File | What it is |
-|---|---|
-| `docs/assets/stylesheets/liferay-blue.css` | The shared palette: blue light-mode header, navy dark mode |
-| `scripts/mkdocs_github_alerts.py` | The hook that renders GitHub `> [!NOTE]` alerts as admonitions (LDM keeps it at `mkdocs_hooks/github_alerts.py`) |
-| `overrides/main.html` | Search-console, Open Graph/Twitter and favicon tags |
-| `overrides/partials/copyright.html` | The footer's "About these docs" link |
+| File | What it is | Upstream path |
+|---|---|---|
+| `docs/assets/stylesheets/liferay-blue.css` | The shared palette: blue light-mode header, navy dark mode | `.agents/templates/docs-profiles/liferay/liferay-blue.css` (mapped in `.agents/TEMPLATE_REF.md`) |
+| `scripts/mkdocs_github_alerts.py` | The hook that renders GitHub `> [!NOTE]` alerts as admonitions | same |
+| `scripts/check_docs_rendered.py` | The built-site check: alerts, review dates, the notice, the home-page layout, the nav | same |
+| `overrides/main.html` | Search-console, Open Graph/Twitter and favicon tags | same |
+| `overrides/partials/copyright.html` | The footer's "About these docs" link | same |
 
-- **Change them only here.** A change to any of the four needs a follow-up sync PR in LDM and AICA, copying the file across unchanged. Their docs CI is to check that their copy has the same content as this repository's `master`; those checks are planned, not yet live (the sync plan is on [AICA #1329](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator/issues/1329)).
-- **A site-specific need goes in a separate file** — for example an extra stylesheet listed after `liferay-blue.css` in `extra_css` — never in a shared file. The per-site values — verification tokens, the social image, the footer text and the site name — come from each site's `mkdocs.yml`. A few things are fixed in the shared files, so every site must match them: a 1280×640 social image, `docs/assets/apple-touch-icon.png`, and an About page at `docs/about.md`.
-- **Keep them out of formatters.** All four are listed by name in `.prettierignore`: a formatter rewriting one here would make every downstream check fail at once. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["\u2139"]` for ruff): the copies must stay byte-identical, so rewording a comment to silence the linter breaks the downstream check.
+- **Never edit them here.** A change goes to ai-agent-template first, through a PR there, and is then copied here unchanged. The template's rules are its CONTRIBUTING.md, "Shared docs files", and `.agents/skills/docs-site-standard/SKILL.md`. Docs CI runs `python3 scripts/check_template_drift.py --docs-site --fail-on-drift`. A local edit fails it, printing both files' SHA-256 prefix and size and the direction to copy.
+- **Per-site values go in `mkdocs.yml`**: the verification token, the social image, the footer text, and `extra.docs_standard` (this tool's name, the notice, the related rows, and the proper nouns a nav label may use). A site-specific style goes in a separate stylesheet listed after `liferay-blue.css` in `extra_css`.
+- **Keep them out of formatters.** All five are listed by name in `.prettierignore`. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["\u2139"]` for ruff).
 
 ## 🤖 AI-Assisted Contributions
 
@@ -148,4 +149,4 @@ Verify these administrative control flows on the Portal Dashboard:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*
+*Last Updated: 2026-10-16* | *Last Reviewed: 2026-10-16*

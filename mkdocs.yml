@@ -77,12 +77,11 @@ extra:
   # the Liferay profile in ai-agent-template (synced to v2.4.0, #2411). See its docs-site-standard skill.
   docs_standard:
     project_name: Liferay Tunnel
-    # Checks this site cannot lose by deleting a key: each fails, naming the key or sub-key,
-    # instead of being skipped -- except the whole `related:` block, whose deletion still skips
-    # the related-section check (ai-agent-template#163; held meanwhile by
-    # scripts/check-docs-config.py) (#2381 was a deleted verification key that left every build
-    # green). The Liferay profile requires the same four by default; listing them here keeps the
-    # promise visible. Drop one only through a `waive:` entry with a reason.
+    # Checks this site cannot lose by deleting a key: each fails, naming the key, sub-key or
+    # the related block, instead of being skipped (#2381 was a deleted verification key that
+    # left every build green). The Liferay profile requires the same four by default, Google's
+    # token specifically; listing them here keeps the promise visible. Drop one only through a
+    # `waive:` entry with a reason.
     required: [MISSING-VERIFICATION, MISSING-SOCIAL, NO-NOTICE, HOME-LAYOUT]
     # Names a sentence-case nav label may capitalise mid-label. Acronyms (SSO, AWS) and
     # inner-capital names (InfoSec) pass by their shape.

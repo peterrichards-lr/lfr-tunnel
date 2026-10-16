@@ -129,8 +129,8 @@ fi
 
 # The docs checks must stay wired in (#2407). test-ci-runs-every-gate.sh scans only
 # scripts/check-*.sh, so a deleted step running one of these Python checks would go unnoticed.
-for step in "python3 scripts/check_docs_rendered.py _site" "python3 scripts/check-docs-config.py" \
-            "python3 scripts/check_template_drift.py --docs-site --fail-on-drift"; do
+for step in "python3 scripts/check_docs_rendered.py _site" \
+            "python3 scripts/check_template_drift.py --docs-site --fail-on-drift --against-recorded"; do
   if grep -qF -- "$step" "$CI"; then
     pass "ci.yml runs: $step"
   else
@@ -153,11 +153,21 @@ if [ -n "$drift_line" ] && [ -n "$upload_line" ] && [ "$drift_line" -lt "$upload
 else
   fail "docs.yml does not check the shared files with --against-recorded before the Pages upload"
 fi
-if grep -qF -- '--against-recorded' "$CI"; then
-  fail "ci.yml uses --against-recorded: PR CI must compare against HEAD to flag a due sync"
-else
-  pass "ci.yml compares the shared files against the template's HEAD"
-fi
+# Dependabot skips the drift step, and only that step (template v2.5.0, #2413): a step-level if
+# directly above each drift step's run, and none on the build or the rendered check.
+for wf in "$CI" "$DOCS_WF"; do
+  if awk '/if: .*dependabot\[bot\]/ { cond = NR } /check_template_drift\.py --docs-site/ { if (cond && NR - cond <= 2) ok = 1 } END { exit !ok }' "$wf"; then
+    pass "$(basename "$wf"): the drift step skips Dependabot PRs"
+  else
+    fail "$(basename "$wf"): the drift step has no Dependabot condition directly above its run"
+  fi
+  before_build=$(grep -B2 -E 'check_docs_rendered\.py _site|mkdocs build' "$wf")
+  if grep -q 'dependabot' <<<"$before_build"; then
+    fail "$(basename "$wf"): Dependabot PRs skip the build or the rendered check"
+  else
+    pass "$(basename "$wf"): Dependabot PRs still build the site and run the rendered check"
+  fi
+done
 
 echo
 echo "  ${PASS} passed, ${FAIL} failed"

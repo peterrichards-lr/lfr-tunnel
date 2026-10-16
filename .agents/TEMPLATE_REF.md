@@ -3,7 +3,7 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v2.4.0` (main @ `d7abfa6`, 2026-10-16)
+**Reference version at last check**: `v2.5.0` (main @ `cadd17b`, 2026-10-16)
 **Last checked**: 2026-10-16
 
 ## Path mapping
@@ -16,27 +16,18 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-Three cases v2.4.0 still lets through, reported on
-[ai-agent-template#155](https://github.com/peterrichards-lr/ai-agent-template/issues/155) rather
-than worked around here:
+- **The profile is recognised by `liferay-blue.css` in `extra_css`.** Removing that entry
+  entirely, plus deleting `required` and the token, switches its four default requirements off
+  (exit 0 at v2.5.0). By design upstream, and a visible change (the site loses its palette), so
+  recorded rather than guarded. A cache-busting suffix no longer hides it (v2.5.0, #164).
 
-- **A required MISSING-VERIFICATION is satisfied by Bing's token alone.** Swapping
-  `google_site_verification` for `bing_site_verification` passes, though Search Console is what
-  this site depends on (#2381).
-- **The profile's default requirements are keyed on `liferay-blue.css` in `extra_css`,** matched by
-  exact filename. Removing that entry, or adding a cache-busting suffix (`liferay-blue.css?v=2`),
-  plus deleting `required`, switches them off.
-- **Deleting the whole `related:` block switches off the related-section check.** HOME-LAYOUT
-  needs `related.heading`, `intro` and `rows` only when a `related` block exists; delete the block
-  (and the section from the home page) and it passes. Raised as
-  [ai-agent-template#163](https://github.com/peterrichards-lr/ai-agent-template/issues/163) and
-  held meanwhile by this repo's `scripts/check-docs-config.py`, cut to that one case; delete it,
-  its CI step, filter entry and fixtures when #163 ships.
-
-#141 is resolved by v2.3.0/v2.3.1, and #155's sub-key, icon and default-requirement changes by
-v2.4.0, apart from the three cases above. The other local stopgaps are removed:
-the `--path` arguments ([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)) and
-the rest of `scripts/check-docs-config.py` ([#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411)).
+Resolved upstream and their local stopgaps removed: #141 by v2.3.0/v2.3.1 (the `--path`
+arguments, [#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)); #155 by v2.4.0
+(most of `scripts/check-docs-config.py`, [#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411));
+and by v2.5.0, the related block, Google's token by name and the stylesheet suffix
+([ai-agent-template#163](https://github.com/peterrichards-lr/ai-agent-template/issues/163); the last
+of `scripts/check-docs-config.py`, [#2413](https://github.com/peterrichards-lr/lfr-tunnel/issues/2413)).
+No local stopgap remains.
 
 The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
@@ -86,6 +77,16 @@ v2.3.1 tag's own commit, `84bf45a`; the template's `main` was one CHANGELOG-only
 `check_template_drift.py` changed; the hook, both overrides and `liferay-blue.css` did not. The
 deploy's drift step takes the template's stamp-aware form. Stamped on `d7abfa6`, the v2.4.0 tag,
 which was also the template's `main`.
+
+## 2026-10-16: synced to v2.5.0
+
+[#2413](https://github.com/peterrichards-lr/lfr-tunnel/issues/2413): `check_docs_rendered.py` and
+`check_template_drift.py` changed; the hook, both overrides and `liferay-blue.css` did not. PR CI
+and the deploy both run the drift check `--against-recorded`, and Dependabot's PRs skip it with a
+step-level `if` while still building and running the rendered check. Stamped on `cadd17b`, the
+v2.5.0 tag, which was also the template's `main`. The template's mkdocs `>= 2` Dependabot ignore
+is not added: this repo's Dependabot has no `pip` entry, and `requirements-dev.txt` pins
+`mkdocs==1.6.1`, so nothing can propose a 2.x bump.
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 

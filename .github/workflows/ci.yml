@@ -183,12 +183,12 @@ jobs:
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
           # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
           # docs/ change at all (#2381). The alerts hook is code mkdocs runs on every page, and
-          # check_docs_rendered.py and check_template_drift.py (the template's, #2407),
-          # check-docs-config.py and check-docs-routing.py are the job's own assertions -- edited
-          # alone, none would otherwise run before reaching master (#2383). The drift check also
+          # check_docs_rendered.py and check_template_drift.py (the template's, #2407) and
+          # check-docs-routing.py are the job's own assertions -- edited alone, none would
+          # otherwise run before reaching master (#2383). The drift check also
           # reads TEMPLATE_REF.md's stamp and path mapping.
           # README.md is one of the two landing pages check-docs-routing.py guards (#2385).
-          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check-docs-config\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
+          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false
@@ -429,16 +429,11 @@ jobs:
       # literal "[!WARNING]" text and every architecture diagram rendered as code. A build
       # that succeeds is not a build that says what the source meant.
       #
-      # The check is the template's (ai-agent-template, #2407; synced to v2.4.0, #2411), configured by
+      # The check is the template's (ai-agent-template, #2407; synced to v2.5.0, #2413), configured by
       # extra.docs_standard in mkdocs.yml: alerts, diagrams, review dates, the verification
       # tag, the footer About link, the community notice, the home-page layout and the nav.
       - name: Published output must match what the source asks for
         run: python3 scripts/check_docs_rendered.py _site
-
-      # TEMPORARY, until ai-agent-template#163: the shared check requires the related block's
-      # sub-keys but not the block itself, so deleting it skips the related-section check.
-      - name: The related-projects block must stay while HOME-LAYOUT is required
-        run: python3 scripts/check-docs-config.py
 
       # The shared docs files are verbatim copies of ai-agent-template's, and a local edit is
       # drift: it fails here, with both SHA-256 prefixes and the copy direction, rather than
@@ -446,11 +441,18 @@ jobs:
       # template or file fails (exit 3), and so does a profile stylesheet with no path mapping;
       # a network failure only warns. --docs-site covers the drift checker itself too (#2409).
       #
-      # Against the template's HEAD, deliberately: a change merged there turns this red with
-      # nothing changed here, which is the signal to open a sync PR. The deploy job compares
-      # against the recorded version instead, so the same merge cannot block publishing.
+      # Against the commit recorded in .agents/TEMPLATE_REF.md, as the deploy does (template
+      # v2.5.0, #2413): compared against upstream HEAD, every template merge turned this red
+      # with nothing changed here. A newer upstream release is printed as a notice naming the
+      # shared files it changes, and exits 0 -- that notice is the signal to open a sync PR. The
+      # script falls back to HEAD itself while the stamp is `unknown`.
+      #
+      # Dependabot's PRs skip this step (they never touch a shared file, and a red drift check
+      # on a dependency bump helps nobody) but still build the site and run the rendered check
+      # above, because dependency bumps are what break rendering.
       - name: Shared docs files must match the template
-        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift
+        if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift --against-recorded
 
       # Source-level, and the other half of the same story: an unclosed fence swallows the
       # prose below it, so a heading stops being a heading and leaves the table of contents

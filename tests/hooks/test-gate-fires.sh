@@ -585,54 +585,5 @@ else
     fail "check-docs-routing.py refused the real landing pages: $(echo "$OUT" | head -3 | tr '\n' ' ')"
 fi
 
-# ---------------------------------------------------------------------------
-# 7. check-docs-config.py — TEMPORARY until ai-agent-template#163: the related-projects block
-#    deleted while HOME-LAYOUT is required. Delete this section with the script.
-# ---------------------------------------------------------------------------
-DOCS_CONFIG="$REPO_ROOT/scripts/check-docs-config.py"
-# Delete the related: block under docs_standard (the line and everything indented below it).
-drop_related() {
-    awk '
-        skip { match($0, /^ */); if (RLENGTH > depth) next; skip = 0 }
-        /^    related:/ { skip = 1; depth = 4; next }
-        { print }
-    ' "$1"
-}
-drop_related "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-no-related.yml"
-if cmp -s "$SANDBOX/mkdocs-no-related.yml" "$REPO_ROOT/mkdocs.yml"; then
-    harness "the no-related fixture removed nothing"
-elif OUT=$(python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-no-related.yml" 2>&1); then
-    fail "check-docs-config.py PASSED a mkdocs.yml with no related block"
-elif grep -qF "extra.docs_standard.related is missing while HOME-LAYOUT is required" <<<"$OUT"; then
-    pass "check-docs-config.py fires on a deleted related block"
-else
-    fail "check-docs-config.py failed without naming the related block: $(head -2 <<<"$OUT" | tr '\n' ' ')"
-fi
-# Still required through the Liferay profile when the explicit list no longer names it.
-sed 's/^\( *required: \[.*\), HOME-LAYOUT\]/\1]/' "$SANDBOX/mkdocs-no-related.yml" >"$SANDBOX/mkdocs-no-related-unlisted.yml"
-if cmp -s "$SANDBOX/mkdocs-no-related-unlisted.yml" "$SANDBOX/mkdocs-no-related.yml"; then
-    harness "the unlisted-HOME-LAYOUT fixture changed nothing"
-elif python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-no-related-unlisted.yml" >/dev/null 2>&1; then
-    fail "check-docs-config.py PASSED a deleted related block once HOME-LAYOUT left the list (the profile still requires it)"
-else
-    pass "check-docs-config.py fires on a deleted related block while only the profile requires HOME-LAYOUT"
-fi
-# Narrowness controls: HOME-LAYOUT waived with a reason; and the real configuration.
-sed 's/^\(  docs_standard:\)$/\1\
-    waive:\
-      HOME-LAYOUT: fixture -- no related tools section on this site/' "$SANDBOX/mkdocs-no-related.yml" >"$SANDBOX/mkdocs-no-related-waived.yml"
-if ! grep -q "HOME-LAYOUT: fixture" "$SANDBOX/mkdocs-no-related-waived.yml"; then
-    harness "the waived fixture added no waive entry"
-elif python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-no-related-waived.yml" >/dev/null 2>&1; then
-    pass "check-docs-config.py accepts no related block when HOME-LAYOUT is waived (narrowness control)"
-else
-    fail "check-docs-config.py refused a waived HOME-LAYOUT"
-fi
-if python3 "$DOCS_CONFIG" "$REPO_ROOT/mkdocs.yml" >/dev/null 2>&1; then
-    pass "check-docs-config.py accepts the real mkdocs.yml (narrowness control)"
-else
-    fail "check-docs-config.py refused the real mkdocs.yml"
-fi
-
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

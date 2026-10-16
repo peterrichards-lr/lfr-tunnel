@@ -429,7 +429,7 @@ jobs:
       # literal "[!WARNING]" text and every architecture diagram rendered as code. A build
       # that succeeds is not a build that says what the source meant.
       #
-      # The check is the template's (ai-agent-template, #2407; synced to v2.5.0, #2413), configured by
+      # The check is the template's (ai-agent-template, #2407; synced to v2.6.0, #2415), configured by
       # extra.docs_standard in mkdocs.yml: alerts, diagrams, review dates, the verification
       # tag, the footer About link, the community notice, the home-page layout and the nav.
       - name: Published output must match what the source asks for

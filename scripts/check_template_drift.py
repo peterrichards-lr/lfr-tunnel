@@ -51,8 +51,10 @@ Exit codes:
      since the recorded ref are reported but are not drift: only content is
   3  nothing could be compared: the upstream repository was not found or refused access, a
      governed path does not exist upstream, or --against-recorded's recorded commit is not in
-     the upstream template, or (under --docs-site) a profile stylesheet is present locally with no path
-     mapping, so the shared file was never compared. Fails with or without --fail-on-drift
+     the upstream template, or (under --docs-site) a profile stylesheet is present locally
+     with no path mapping, so the shared file was never compared: found by its
+     `docs-profile:` marker line wherever it is kept, or by its shipped name. Fails with or
+     without --fail-on-drift
 """
 
 import argparse
@@ -680,18 +682,46 @@ def is_shared_file(path: str, mappings: Optional[dict] = None) -> bool:
             or (path.startswith(DOCS_PROFILE_DIR + '/') and path.endswith('.css')))
 
 
+# A profile stylesheet's `docs-profile: <name>` line: what identifies a copy of it, wherever it
+# is kept and whatever it is called (#162). The same pattern is in check_docs_rendered.py.
+PROFILE_MARKER = re.compile(r"^[ \t]*\*?[ \t]*docs-profile:[ \t]*([a-z0-9-]+)[ \t]*$", re.M)
+
+
+def _profile_marker(path: Path) -> Optional[str]:
+    try:
+        match = PROFILE_MARKER.search(path.read_text(encoding='utf-8', errors='replace'))
+    except OSError:
+        return None
+    return match.group(1) if match else None
+
+
 def unmapped_profile_stylesheets(upstream_root: Path, local_root: Path, mappings: dict) -> list:
     """Suggested mapping lines for profile stylesheets present locally but not mapped.
 
     A TEMPLATE_REF.md written before the Path mapping section existed maps nothing, so its copy
-    of a shared stylesheet would never be compared -- and nothing would say so.
+    of a shared stylesheet would never be compared -- and nothing would say so. A copy is found
+    by its marker line anywhere in the repository, and by its shipped name where bootstrap puts
+    it, so renaming or moving it and deleting its mapping cannot leave it uncompared (#162).
     """
-    suggestions = []
+    upstream_by_marker, suggestions = {}, []
     for upstream_css in sorted((upstream_root / DOCS_PROFILE_DIR).glob('*/*.css')):
         upstream = upstream_css.relative_to(upstream_root).as_posix()
+        marker = _profile_marker(upstream_css)
+        if marker:
+            upstream_by_marker[marker] = upstream
         local = f'{DOCS_PROFILE_STYLESHEET_DIR}/{upstream_css.name}'
         if upstream not in mappings and (local_root / local).is_file():
             suggestions.append(f"- `{local}` ← `{upstream}`")
+    for local_css in sorted(local_root.rglob('*.css')):
+        relative = local_css.relative_to(local_root)
+        local = relative.as_posix()
+        if (any(part in COMPARISON_IGNORE_DIRS for part in relative.parts)
+                or local.startswith(DOCS_PROFILE_DIR + '/')):
+            continue
+        upstream = upstream_by_marker.get(_profile_marker(local_css))
+        line = f"- `{local}` ← `{upstream}`"
+        if upstream and mappings.get(upstream) != local and line not in suggestions:
+            suggestions.append(line)
     return suggestions
 
 

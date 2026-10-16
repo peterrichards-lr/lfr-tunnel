@@ -74,7 +74,7 @@ extra:
       link: https://github.com/peterrichards-lr
       name: More Liferay tools by Peter Richards
   # Read by scripts/check_docs_rendered.py, the template's rendered-output check (#2407), from
-  # the Liferay profile in ai-agent-template (synced to v2.5.0, #2413). See its docs-site-standard skill.
+  # the Liferay profile in ai-agent-template (synced to v2.6.0, #2415). See its docs-site-standard skill.
   docs_standard:
     project_name: Liferay Tunnel
     # Checks this site cannot lose by deleting a key: each fails, naming the key, sub-key or

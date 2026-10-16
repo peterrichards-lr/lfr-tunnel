@@ -183,11 +183,11 @@ jobs:
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
           # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
           # docs/ change at all (#2381). The alerts hook is code mkdocs runs on every page, and
-          # check-docs-rendered.sh (with check-docs-home-layout.py, #2401) and check-docs-routing.py
-          # are the job's own assertions -- edited alone, none would otherwise run before
-          # reaching master (#2383). README.md is one of the two landing pages
-          # check-docs-routing.py guards (#2385).
-          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check-docs-rendered\.sh$|^scripts/check-docs-home-layout\.py$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
+          # check-docs-rendered.sh (with check-docs-home-layout.py, #2401, and
+          # check-docs-nav-order.py, #2405) and check-docs-routing.py are the job's own
+          # assertions -- edited alone, none would otherwise run before reaching master (#2383).
+          # README.md is one of the two landing pages check-docs-routing.py guards (#2385).
+          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check-docs-rendered\.sh$|^scripts/check-docs-home-layout\.py$|^scripts/check-docs-nav-order\.py$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false

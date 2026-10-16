@@ -21,12 +21,12 @@ To prevent information overload, our documentation is divided into dedicated, to
 
 ### 🚀 Getting Started & CLI Usage
 *   **[Getting Started Guide](docs/getting_started.md)** — Step-by-step instructions to install the client CLI (`lfr-tunnel`), register for access, claim your Personal Access Token (PAT), and connect your first tunnel.
-*   **[Client Configuration File](docs/client_configuration.md)** — Complete reference for `~/.lfr-tunnel/config.yaml`: every setting with its type, default and flag/environment equivalent, how flags, environment and file interact, and why `server_url:` avoids the pinning that `-pin` applies.
+*   **[Client configuration file](docs/client_configuration.md)** — Complete reference for `~/.lfr-tunnel/config.yaml`: every setting with its type, default and flag/environment equivalent, how flags, environment and file interact, and why `server_url:` avoids the pinning that `-pin` applies.
 *   **[Liferay Sales Engineering (SE) Guide](docs/liferay-se-guide.md)** — Team-specific quickstart instructions, Dockerized wrapper scripts, EDR/SentinelOne bypass instructions, and Tomcat/Docker network setups.
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
 *   **[Exposing Any Local HTTP Service](docs/exposing-any-http-service.md)** — The tunnel does not inspect what is listening on the port it publishes, so a Node service, a client extension in dev mode or any other local HTTP server works with `-ports`.
 *   **[Using Your Own Domain](docs/custom_domains.md)** — Serve a tunnel at a domain you own. Point it at the gateway with a `CNAME` and register it in the portal; the gateway obtains and renews the certificate for you.
-*   **[About These Docs](docs/about.md)** — Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
+*   **[About these docs](docs/about.md)** — Who maintains the project, that it is not an official Liferay product, and how these pages are written and reviewed.
 
 ### 🛠️ Server Administration
 *   **[Server Gateway Setup Guide](docs/server/setup_guide.md)** — Comprehensive setup guide to host your own gateway server (`lfr-tunneld`), configure wildcard DNS, Caddy/Nginx reverse proxies, Postfix secure TLS SMTP relays, and scheduled backups.

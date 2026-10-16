@@ -186,7 +186,7 @@ jobs:
           # check_docs_rendered.py and check_template_drift.py (the template's, #2407),
           # check-docs-config.py and check-docs-routing.py are the job's own assertions -- edited
           # alone, none would otherwise run before reaching master (#2383). The drift check also
-          # reads TEMPLATE_REF.md's path mapping and imports check_docs_review.py.
+          # reads TEMPLATE_REF.md's stamp and path mapping.
           # README.md is one of the two landing pages check-docs-routing.py guards (#2385).
           if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check-docs-config\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
             DOCS=true
@@ -429,7 +429,7 @@ jobs:
       # literal "[!WARNING]" text and every architecture diagram rendered as code. A build
       # that succeeds is not a build that says what the source meant.
       #
-      # The check is the template's (ai-agent-template v2.2.0, #2407), configured by
+      # The check is the template's (ai-agent-template, #2407; synced to v2.3.1, #2409), configured by
       # extra.docs_standard in mkdocs.yml: alerts, diagrams, review dates, the verification
       # tag, the footer About link, the community notice, the home-page layout and the nav.
       - name: Published output must match what the source asks for

@@ -28,7 +28,7 @@ package-lock.json
 *.yaml
 
 # --- Shared docs files --------------------------------------------------------------
-# Verbatim copies of ai-agent-template's canonical files (v2.2.0; #2407, ai-agent-template
+# Verbatim copies of ai-agent-template's canonical files (v2.3.1; #2409, ai-agent-template
 # #135). Docs CI fails unless each matches the template byte for byte apart from line endings
 # and surrounding blank space (check_template_drift.py --docs-site --fail-on-drift), so
 # Prettier rewriting one here would read as drift. Keep all of them listed by name: the two

@@ -54,8 +54,7 @@ jobs:
         run: mkdocs build --site-dir _site --strict
 
       # Before the upload, never after: a check on the deployed site reports a broken page
-      # readers already have. The template's check (ai-agent-template v2.2.0, #2407).
-      #
+      # readers already have. The template's check (ai-agent-template, #2407).
       - name: Check the built site against the docs-site standard
         run: python3 scripts/check_docs_rendered.py _site
 

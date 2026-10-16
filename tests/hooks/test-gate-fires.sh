@@ -592,7 +592,7 @@ echo
 #    are not (ai-agent-template#155). One fixture per key.
 # ---------------------------------------------------------------------------
 DOCS_CONFIG="$REPO_ROOT/scripts/check-docs-config.py"
-for key in text link_text heading; do
+for key in text link_text heading google_site_verification required; do
     cfg="$SANDBOX/mkdocs-no-$key.yml"
     # Delete the key's line under extra:, and for a block value the more-indented lines under it.
     awk -v k="$key" '
@@ -616,6 +616,17 @@ for key in text link_text heading; do
         fail "check-docs-config.py exited $RC without naming '$key': $(head -3 <<<"$OUT" | tr '\n' ' ')"
     fi
 done
+# Dropping one name from the required list switches that check back to opt-in.
+sed 's/^\( *required: \[\)MISSING-VERIFICATION, /\1/' "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-required-short.yml"
+if cmp -s "$SANDBOX/mkdocs-required-short.yml" "$REPO_ROOT/mkdocs.yml"; then
+    harness "the shortened-required fixture changed nothing"
+elif OUT=$(python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-required-short.yml" 2>&1); then
+    fail "check-docs-config.py PASSED a required list without MISSING-VERIFICATION"
+elif grep -qF "does not list ['MISSING-VERIFICATION']" <<<"$OUT"; then
+    pass "check-docs-config.py fires on a required list without MISSING-VERIFICATION"
+else
+    fail "check-docs-config.py failed without naming MISSING-VERIFICATION: $(head -3 <<<"$OUT" | tr '\n' ' ')"
+fi
 # Narrowness control: the real configuration passes.
 if python3 "$DOCS_CONFIG" "$REPO_ROOT/mkdocs.yml" >/dev/null 2>&1; then
     pass "check-docs-config.py accepts the real mkdocs.yml (narrowness control)"

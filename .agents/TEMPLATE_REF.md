@@ -17,9 +17,15 @@ instead of reporting one as missing and the other as extra.
 ## Known drift as of this check
 
 - **The profile is recognised by `liferay-blue.css` in `extra_css`.** Removing that entry
-  entirely, plus deleting `required` and the token, switches its four default requirements off
-  (exit 0 at v2.5.0). By design upstream, and a visible change (the site loses its palette), so
-  recorded rather than guarded. A cache-busting suffix no longer hides it (v2.5.0, #164).
+  entirely (which also loses the site's palette) has two effects at v2.5.0, both recorded rather
+  than guarded:
+  - with `required` and the token also deleted, the profile's four default requirements are off;
+  - **even with `required` kept**, the `related` block is no longer required: the profile's keys
+    apply only to checks the profile requires, not to a HOME-LAYOUT listed in `required`.
+    Deleting `related` then passes. Raised as
+    [ai-agent-template#175](https://github.com/peterrichards-lr/ai-agent-template/issues/175).
+
+  A cache-busting suffix no longer hides the profile (v2.5.0, #164).
 
 Resolved upstream and their local stopgaps removed: #141 by v2.3.0/v2.3.1 (the `--path`
 arguments, [#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)); #155 by v2.4.0

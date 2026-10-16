@@ -145,27 +145,69 @@ if [ -n "$check_line" ] && [ -n "$upload_line" ] && [ "$check_line" -lt "$upload
 else
   fail "docs.yml does not check the built site before the Pages upload"
 fi
-# The deploy compares against the recorded template version, and PR CI against HEAD (#2409):
-# swapped, a template merge would block publishing and PR CI would never say a sync is due.
+# Both workflows compare against the recorded template version (template v2.5.0, #2413): against
+# HEAD, every template merge turned PR CI red with nothing changed here, and could block a deploy.
+# A newer upstream release is a notice, not a failure.
 drift_line=$(grep -nF 'check_template_drift.py --docs-site --fail-on-drift --against-recorded' "$DOCS_WF" | head -1 | cut -d: -f1)
 if [ -n "$drift_line" ] && [ -n "$upload_line" ] && [ "$drift_line" -lt "$upload_line" ]; then
   pass "docs.yml checks the shared files against the recorded version before the Pages upload"
 else
   fail "docs.yml does not check the shared files with --against-recorded before the Pages upload"
 fi
-# Dependabot skips the drift step, and only that step (template v2.5.0, #2413): a step-level if
-# directly above each drift step's run, and none on the build or the rendered check.
+# Dependabot skips the drift step, and only that step (template v2.5.0, #2413). Read step by
+# step, not line by line: every step that runs the drift check carries exactly the skip condition
+# below, and no other step, and no job-level `if`, mentions dependabot[bot] at all -- so an
+# inverted condition, the condition moved onto the build or the rendered check, or a job-level
+# skip of the whole Documentation Build each fail here.
+DEPENDABOT_SKIP="if: \${{ github.event.pull_request.user.login != 'dependabot[bot]' }}"
+dependabot_verdict() { # dependabot_verdict <workflow> -- prints ok, or the first problem found
+  awk -v want="$DEPENDABOT_SKIP" '
+    function close_step() {
+      if (in_step && drift && !has_skip) { print "a drift step lacks the exact skip condition"; bad = 1 }
+      in_step = 0; drift = 0; has_skip = 0
+    }
+    /^[[:space:]]*#/ { next }
+    /^  [A-Za-z0-9_-]+:/ { close_step() }
+    /^      - (name|uses):/ { close_step(); in_step = 1 }
+    /check_template_drift\.py --docs-site/ { drift = 1; drifts++ }
+    /dependabot\[bot\]/ {
+      line = $0; sub(/^[[:space:]]+/, "", line)
+      if (!in_step) { print "a job-level condition mentions dependabot[bot]"; bad = 1 }
+      else if (line != want) { print "a condition other than the exact skip: " line; bad = 1 }
+      else has_skip = 1
+      skips_line[NR] = 1
+    }
+    END {
+      close_step()
+      if (!drifts) { print "no drift step found"; bad = 1 }
+      if (!bad) print "ok"
+    }
+  ' "$1" | head -1
+}
+# Second pass: the skip condition may only sit in a step that runs the drift check.
+skip_outside_drift() { # prints the name of any non-drift step carrying a dependabot[bot] line
+  awk '
+    function close_step() { if (in_step && mention && !drift) print name; in_step = 0; drift = 0; mention = 0 }
+    /^[[:space:]]*#/ { next }
+    /^  [A-Za-z0-9_-]+:/ { close_step() }
+    /^      - (name|uses):/ { close_step(); in_step = 1; name = $0 }
+    /check_template_drift\.py --docs-site/ { drift = 1 }
+    /dependabot\[bot\]/ { mention = 1 }
+    END { close_step() }
+  ' "$1"
+}
 for wf in "$CI" "$DOCS_WF"; do
-  if awk '/if: .*dependabot\[bot\]/ { cond = NR } /check_template_drift\.py --docs-site/ { if (cond && NR - cond <= 2) ok = 1 } END { exit !ok }' "$wf"; then
-    pass "$(basename "$wf"): the drift step skips Dependabot PRs"
+  verdict=$(dependabot_verdict "$wf")
+  if [ "$verdict" = "ok" ]; then
+    pass "$(basename "$wf"): every drift step skips Dependabot PRs with the exact condition"
   else
-    fail "$(basename "$wf"): the drift step has no Dependabot condition directly above its run"
+    fail "$(basename "$wf"): $verdict"
   fi
-  before_build=$(grep -B2 -E 'check_docs_rendered\.py _site|mkdocs build' "$wf")
-  if grep -q 'dependabot' <<<"$before_build"; then
-    fail "$(basename "$wf"): Dependabot PRs skip the build or the rendered check"
-  else
+  stray=$(skip_outside_drift "$wf")
+  if [ -z "$stray" ]; then
     pass "$(basename "$wf"): Dependabot PRs still build the site and run the rendered check"
+  else
+    fail "$(basename "$wf"): a non-drift step skips Dependabot PRs: ${stray//$'\n'/ }"
   fi
 done
 

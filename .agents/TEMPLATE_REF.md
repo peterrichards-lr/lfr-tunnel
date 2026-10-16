@@ -16,17 +16,22 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-Two cases v2.4.0 still lets through, reported on
+Three cases v2.4.0 still lets through, reported on
 [ai-agent-template#155](https://github.com/peterrichards-lr/ai-agent-template/issues/155) rather
 than worked around here:
 
 - **A required MISSING-VERIFICATION is satisfied by Bing's token alone.** Swapping
   `google_site_verification` for `bing_site_verification` passes, though Search Console is what
   this site depends on (#2381).
-- **The profile's default requirements are keyed on `liferay-blue.css` in `extra_css`.** Removing
-  that entry, plus `required`, switches them off.
+- **The profile's default requirements are keyed on `liferay-blue.css` in `extra_css`,** matched by
+  exact filename. Removing that entry, or adding a cache-busting suffix (`liferay-blue.css?v=2`),
+  plus deleting `required`, switches them off.
+- **Deleting the whole `related:` block switches off the related-section check.** HOME-LAYOUT
+  needs `related.heading`, `intro` and `rows` only when a `related` block exists; delete the block
+  (and the section from the home page) and it passes. The old local guard caught this.
 
-The #141 and #155 items are resolved by v2.3.0 to v2.4.0, and every local stopgap is removed:
+#141 is resolved by v2.3.0/v2.3.1, and #155's sub-key, icon and default-requirement changes by
+v2.4.0, apart from the three cases above. The local stopgaps are removed:
 the `--path` arguments ([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)) and
 `scripts/check-docs-config.py` ([#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411)).
 

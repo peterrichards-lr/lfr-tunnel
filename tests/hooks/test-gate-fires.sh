@@ -585,7 +585,5 @@ else
     fail "check-docs-routing.py refused the real landing pages: $(echo "$OUT" | head -3 | tr '\n' ' ')"
 fi
 
-echo
-
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

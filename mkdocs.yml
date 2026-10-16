@@ -78,7 +78,8 @@ extra:
   docs_standard:
     project_name: Liferay Tunnel
     # Checks this site cannot lose by deleting a key: each fails, naming the key or sub-key,
-    # instead of being skipped (#2381 was a deleted verification key that left every build
+    # instead of being skipped -- except the whole `related:` block, whose deletion still skips
+    # the related-section check (ai-agent-template#155) (#2381 was a deleted verification key that left every build
     # green). The Liferay profile requires the same four by default; listing them here keeps the
     # promise visible. Drop one only through a `waive:` entry with a reason.
     required: [MISSING-VERIFICATION, MISSING-SOCIAL, NO-NOTICE, HOME-LAYOUT]

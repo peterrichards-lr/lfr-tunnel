@@ -28,12 +28,15 @@ than worked around here:
   plus deleting `required`, switches them off.
 - **Deleting the whole `related:` block switches off the related-section check.** HOME-LAYOUT
   needs `related.heading`, `intro` and `rows` only when a `related` block exists; delete the block
-  (and the section from the home page) and it passes. The old local guard caught this.
+  (and the section from the home page) and it passes. Raised as
+  [ai-agent-template#163](https://github.com/peterrichards-lr/ai-agent-template/issues/163) and
+  held meanwhile by this repo's `scripts/check-docs-config.py`, cut to that one case; delete it,
+  its CI step, filter entry and fixtures when #163 ships.
 
 #141 is resolved by v2.3.0/v2.3.1, and #155's sub-key, icon and default-requirement changes by
-v2.4.0, apart from the three cases above. The local stopgaps are removed:
+v2.4.0, apart from the three cases above. The other local stopgaps are removed:
 the `--path` arguments ([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)) and
-`scripts/check-docs-config.py` ([#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411)).
+the rest of `scripts/check-docs-config.py` ([#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411)).
 
 The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch

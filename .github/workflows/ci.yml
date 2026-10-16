@@ -183,12 +183,12 @@ jobs:
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
           # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
           # docs/ change at all (#2381). The alerts hook is code mkdocs runs on every page, and
-          # check_docs_rendered.py and check_template_drift.py (the template's, #2407) and
-          # check-docs-routing.py are the job's own assertions -- edited alone, none would
-          # otherwise run before reaching master (#2383). The drift check also
+          # check_docs_rendered.py and check_template_drift.py (the template's, #2407),
+          # check-docs-config.py and check-docs-routing.py are the job's own assertions -- edited
+          # alone, none would otherwise run before reaching master (#2383). The drift check also
           # reads TEMPLATE_REF.md's stamp and path mapping.
           # README.md is one of the two landing pages check-docs-routing.py guards (#2385).
-          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
+          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check-docs-config\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false
@@ -434,6 +434,11 @@ jobs:
       # tag, the footer About link, the community notice, the home-page layout and the nav.
       - name: Published output must match what the source asks for
         run: python3 scripts/check_docs_rendered.py _site
+
+      # TEMPORARY, until ai-agent-template#163: the shared check requires the related block's
+      # sub-keys but not the block itself, so deleting it skips the related-section check.
+      - name: The related-projects block must stay while HOME-LAYOUT is required
+        run: python3 scripts/check-docs-config.py
 
       # The shared docs files are verbatim copies of ai-agent-template's, and a local edit is
       # drift: it fails here, with both SHA-256 prefixes and the copy direction, rather than

@@ -129,7 +129,7 @@ fi
 
 # The docs checks must stay wired in (#2407). test-ci-runs-every-gate.sh scans only
 # scripts/check-*.sh, so a deleted step running one of these Python checks would go unnoticed.
-for step in "python3 scripts/check_docs_rendered.py _site" \
+for step in "python3 scripts/check_docs_rendered.py _site" "python3 scripts/check-docs-config.py" \
             "python3 scripts/check_template_drift.py --docs-site --fail-on-drift"; do
   if grep -qF -- "$step" "$CI"; then
     pass "ci.yml runs: $step"

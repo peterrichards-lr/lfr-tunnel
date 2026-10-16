@@ -38,5 +38,6 @@ package-lock.json
 docs/assets/stylesheets/liferay-blue.css
 scripts/mkdocs_github_alerts.py
 scripts/check_docs_rendered.py
+scripts/check_template_drift.py
 overrides/main.html
 overrides/partials/copyright.html

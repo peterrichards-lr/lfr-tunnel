@@ -586,5 +586,51 @@ else
 fi
 
 echo
+# ---------------------------------------------------------------------------
+# 7. check-docs-config.py — mkdocs.yml stops switching on a built-site check this site promises.
+#    The template's check_docs_rendered.py runs each site-specific check only when its key is
+#    set, so deleting the key passes the build (#2407, after #2381). One fixture per key.
+# ---------------------------------------------------------------------------
+DOCS_CONFIG="$REPO_ROOT/scripts/check-docs-config.py"
+for key in google_site_verification social_image project_name home_layout title text link_text heading intro rows; do
+    cfg="$SANDBOX/mkdocs-no-$key.yml"
+    # Delete the key's line under extra:, and for a block value the more-indented lines under it.
+    awk -v k="$key" '
+        /^extra:/ { in_extra = 1 }
+        /^[a-z]/ && !/^extra:/ { in_extra = 0 }
+        skip { match($0, /^ */); if (RLENGTH > depth) next; skip = 0 }
+        in_extra && $0 ~ "^ +" k ":" { skip = 1; match($0, /^ */); depth = RLENGTH; next }
+        { print }
+    ' "$REPO_ROOT/mkdocs.yml" >"$cfg"
+    if cmp -s "$cfg" "$REPO_ROOT/mkdocs.yml"; then
+        harness "check-docs-config fixture for '$key' removed nothing"
+        continue
+    fi
+    OUT=$(python3 "$DOCS_CONFIG" "$cfg" 2>&1)
+    RC=$?
+    if [ "$RC" -eq 0 ]; then
+        fail "check-docs-config.py PASSED a mkdocs.yml without '$key'"
+    elif grep -q '\[DOCS-CONFIG\]' <<<"$OUT" && grep -qF ".$key is missing" <<<"$OUT"; then
+        pass "check-docs-config.py fires on a mkdocs.yml without '$key'"
+    else
+        fail "check-docs-config.py exited $RC without naming '$key': $(head -3 <<<"$OUT" | tr '\n' ' ')"
+    fi
+done
+# A key set to false switches its check off too.
+sed 's/^\( *home_layout:\) true/\1 false/' "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-layout-off.yml"
+if cmp -s "$SANDBOX/mkdocs-layout-off.yml" "$REPO_ROOT/mkdocs.yml"; then
+    harness "the home_layout: false fixture changed nothing"
+elif python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-layout-off.yml" >/dev/null 2>&1; then
+    fail "check-docs-config.py PASSED home_layout: false"
+else
+    pass "check-docs-config.py fires on home_layout: false"
+fi
+# Narrowness control: the real configuration passes.
+if python3 "$DOCS_CONFIG" "$REPO_ROOT/mkdocs.yml" >/dev/null 2>&1; then
+    pass "check-docs-config.py accepts the real mkdocs.yml (narrowness control)"
+else
+    fail "check-docs-config.py refused the real mkdocs.yml"
+fi
+
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

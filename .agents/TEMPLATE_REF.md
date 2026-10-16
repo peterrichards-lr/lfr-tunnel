@@ -16,7 +16,20 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-None open. The three items recorded at the 2026-08-05 check are all closed:
+From the v2.2.0 docs-site migration, raised upstream as
+[ai-agent-template#141](https://github.com/peterrichards-lr/ai-agent-template/issues/141), each
+worked around here meanwhile:
+
+- **The shared check's site-specific checks are opt-in per key.** Worked around by this repo's
+  `scripts/check-docs-config.py`, which fails if a key this site relies on is removed.
+- **`check_template_drift.py` isn't in the `--docs-site` set, and an unmapped stylesheet only
+  warns.** Worked around by passing both as explicit `--path` arguments in CI.
+- **A default (non `--docs-site`) run prints "copy the file FROM" over files this repo customises
+  on purpose** (`ci.yml`, `AGENTS.md`, `check_docs_review.py`). Ignore the instruction for those.
+- **The drift check compares against the template's HEAD.** A template merge turns this repo's
+  PR CI red until a sync PR. It is deliberately not run on deploy.
+
+The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
 naming), [#932](https://github.com/peterrichards-lr/lfr-tunnel/issues/932) (the EDR rule stated
 three ways) and [#933](https://github.com/peterrichards-lr/lfr-tunnel/issues/933) (the doc-review

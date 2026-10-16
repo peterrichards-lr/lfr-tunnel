@@ -54,13 +54,14 @@ jobs:
         run: mkdocs build --site-dir _site --strict
 
       # Before the upload, never after: a check on the deployed site reports a broken page
-      # readers already have. Both are the template's (ai-agent-template v2.2.0, #2407); CI's
-      # Documentation Build runs the same two on every PR.
+      # readers already have. The template's check (ai-agent-template v2.2.0, #2407).
+      #
+      # The shared-files drift check is deliberately NOT here. It compares against the
+      # template's HEAD, so a merge there would block every deploy until a sync PR lands, and
+      # what it protects -- no local edit to a shared file -- is already gated on every PR by
+      # CI's Documentation Build.
       - name: Check the built site against the docs-site standard
         run: python3 scripts/check_docs_rendered.py _site
-
-      - name: Shared docs files must match the template
-        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

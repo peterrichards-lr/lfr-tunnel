@@ -183,11 +183,12 @@ jobs:
           # requirements-dev.txt because it pins the toolchain that decides what is a warning.
           # overrides/ is the theme's custom_dir: a Jinja error there fails the build with no
           # docs/ change at all (#2381). The alerts hook is code mkdocs runs on every page, and
-          # check_docs_rendered.py and check_template_drift.py (the template's, #2407) and
-          # check-docs-routing.py are the job's own assertions -- edited alone, none would
-          # otherwise run before reaching master (#2383).
+          # check_docs_rendered.py and check_template_drift.py (the template's, #2407),
+          # check-docs-config.py and check-docs-routing.py are the job's own assertions -- edited
+          # alone, none would otherwise run before reaching master (#2383). The drift check also
+          # reads TEMPLATE_REF.md's path mapping and imports check_docs_review.py.
           # README.md is one of the two landing pages check-docs-routing.py guards (#2385).
-          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
+          if echo "$CHANGED" | grep -qE '^docs/|^README\.md$|^mkdocs\.yml$|^requirements-dev\.txt$|^overrides/|^scripts/mkdocs_github_alerts\.py$|^scripts/check_docs_rendered\.py$|^scripts/check_template_drift\.py$|^scripts/check-docs-config\.py$|^scripts/check_docs_review\.py$|^\.agents/TEMPLATE_REF\.md$|^scripts/check-docs-routing\.py$|^\.github/workflows/'; then
             DOCS=true
           else
             DOCS=false
@@ -434,12 +435,26 @@ jobs:
       - name: Published output must match what the source asks for
         run: python3 scripts/check_docs_rendered.py _site
 
+      # The template's check is opt-in per key, so deleting a key from mkdocs.yml switches its
+      # check off and the step above stays green. This site has promised all of them; this
+      # holds the configuration that asks for them (#2407, after #2381).
+      - name: The built-site checks this site promises must stay switched on
+        run: python3 scripts/check-docs-config.py
+
       # The shared docs files are verbatim copies of ai-agent-template's, and a local edit is
       # drift: it fails here, with both SHA-256 prefixes and the copy direction, rather than
       # diverging silently as the three sites' copies did within a day (#2407). A missing
       # template or file fails (exit 3); a network failure only warns.
+      #
+      # The two --path entries are named, not left to --docs-site: the checker itself is a
+      # verbatim copy too, and naming the stylesheet means a deleted path mapping fails (exit 3)
+      # instead of quietly leaving it uncompared. It compares against the template's HEAD, so a
+      # change merged there turns this red with no change here: the fix is a sync PR.
       - name: Shared docs files must match the template
-        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift
+        run: >-
+          python3 scripts/check_template_drift.py --docs-site --fail-on-drift
+          --path scripts/check_template_drift.py
+          --path docs/assets/stylesheets/liferay-blue.css
 
       # Source-level, and the other half of the same story: an unclosed fence swallows the
       # prose below it, so a heading stops being a heading and leaves the table of contents

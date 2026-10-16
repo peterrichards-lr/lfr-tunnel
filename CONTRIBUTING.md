@@ -67,7 +67,7 @@ To ensure we build the capabilities that provide the highest impact for the Sale
 
 ### Shared docs files
 
-Five files of the docs site are shared with the two sibling Liferay tools sites, [Liferay Docker Manager](https://github.com/peterrichards-lr/liferay-docker-manager) (LDM) and the [Liferay AI Commerce Accelerator](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator) (AICA). **The canonical copy is in [ai-agent-template](https://github.com/peterrichards-lr/ai-agent-template)** (its #135; #2407 here). It was this repository until v2.2.0.
+Six files of the docs site are shared with the two sibling Liferay tools sites, [Liferay Docker Manager](https://github.com/peterrichards-lr/liferay-docker-manager) (LDM) and the [Liferay AI Commerce Accelerator](https://github.com/peterrichards-lr/liferay-ai-commerce-accelerator) (AICA). **The canonical copy is in [ai-agent-template](https://github.com/peterrichards-lr/ai-agent-template)** (its #135; #2407 here). It was this repository until v2.2.0.
 
 | File | What it is | Upstream path |
 |---|---|---|
@@ -76,10 +76,12 @@ Five files of the docs site are shared with the two sibling Liferay tools sites,
 | `scripts/check_docs_rendered.py` | The built-site check: alerts, review dates, the notice, the home-page layout, the nav | same |
 | `overrides/main.html` | Search-console, Open Graph/Twitter and favicon tags | same |
 | `overrides/partials/copyright.html` | The footer's "About these docs" link | same |
+| `scripts/check_template_drift.py` | The check that holds all six to the template | same |
 
-- **Never edit them here.** A change goes to ai-agent-template first, through a PR there, and is then copied here unchanged. The template's rules are its CONTRIBUTING.md, "Shared docs files", and `.agents/skills/docs-site-standard/SKILL.md`. Docs CI runs `python3 scripts/check_template_drift.py --docs-site --fail-on-drift`. A local edit fails it, printing both files' SHA-256 prefix and size and the direction to copy.
+- **Never edit them here.** A change goes to ai-agent-template first, through a PR there, and is then copied here unchanged. The template's rules are its CONTRIBUTING.md, "Shared docs files", and `.agents/skills/docs-site-standard/SKILL.md`. CI's Documentation Build runs `python3 scripts/check_template_drift.py --docs-site --fail-on-drift`, naming the checker and the stylesheet explicitly. A local edit fails it, printing both files' SHA-256 prefix and size and the direction to copy. It compares against the template's **HEAD**, so a change merged there also turns it red, with nothing changed here: the fix is a sync PR copying the new versions in, never an edit here. Deploy Documentation doesn't run it, so a template merge can't block publishing.
 - **Per-site values go in `mkdocs.yml`**: the verification token, the social image, the footer text, and `extra.docs_standard` (this tool's name, the notice, the related rows, and the proper nouns a nav label may use). A site-specific style goes in a separate stylesheet listed after `liferay-blue.css` in `extra_css`.
-- **Keep them out of formatters.** All five are listed by name in `.prettierignore`. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["\u2139"]` for ruff).
+- **Those values switch the checks on.** The shared check runs each site-specific check only when its key is set, so `scripts/check-docs-config.py` (this repo's own) fails CI if any key this site relies on is removed. Dropping a check means editing its list in the same PR.
+- **Keep them out of formatters.** All six are listed by name in `.prettierignore`. If Python linting is ever added, allow the hook's `ℹ` rather than rewording it (`allowed-confusables = ["\u2139"]` for ruff).
 
 ## 🤖 AI-Assisted Contributions
 

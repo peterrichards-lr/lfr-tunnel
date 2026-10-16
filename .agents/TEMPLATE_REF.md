@@ -3,7 +3,7 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v2.2.0` (main @ `60904e9`, 2026-10-16)
+**Reference version at last check**: `v2.3.1` (main @ `84bf45a`, 2026-10-16)
 **Last checked**: 2026-10-16
 
 ## Path mapping
@@ -16,18 +16,18 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-From the v2.2.0 docs-site migration, raised upstream as
-[ai-agent-template#141](https://github.com/peterrichards-lr/ai-agent-template/issues/141), each
-worked around here meanwhile:
+- **Three sub-keys can still be deleted to weaken a required check silently**
+  ([ai-agent-template#155](https://github.com/peterrichards-lr/ai-agent-template/issues/155)):
+  `docs_standard.notice.text`, `notice.link_text` and `related.heading`. Held meanwhile by this
+  repo's `scripts/check-docs-config.py`; delete it, and its CI step, when #155 lands.
 
-- **The shared check's site-specific checks are opt-in per key.** Worked around by this repo's
-  `scripts/check-docs-config.py`, which fails if a key this site relies on is removed.
-- **`check_template_drift.py` isn't in the `--docs-site` set, and an unmapped stylesheet only
-  warns.** Worked around by passing both as explicit `--path` arguments in CI.
-- **A default (non `--docs-site`) run prints "copy the file FROM" over files this repo customises
-  on purpose** (`ci.yml`, `AGENTS.md`, `check_docs_review.py`). Ignore the instruction for those.
-- **The drift check compares against the template's HEAD.** A template merge turns this repo's
-  PR CI red until a sync PR. It is deliberately not run on deploy.
+The v2.2.0 items raised as
+[ai-agent-template#141](https://github.com/peterrichards-lr/ai-agent-template/issues/141) are
+resolved by v2.3.0/v2.3.1 and their stopgaps removed here
+([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)): `docs_standard.required`
+replaces most of `check-docs-config.py`, `--docs-site` covers the drift checker and fails an
+unmapped stylesheet (so the hand-added `--path` arguments are gone), the copy direction is printed
+only for differing shared files, and the deploy job compares `--against-recorded`.
 
 The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
@@ -61,8 +61,15 @@ them (`check_template_drift.py --docs-site --fail-on-drift`). `check_docs_render
 this repo's `check-docs-rendered.sh`, `check-docs-home-layout.py` and `check-docs-nav-order.py`.
 
 **Deliberate divergence**: `scripts/check_docs_review.py` is this repo's own (`--review-only`,
-`--changed-files`, #2389) and is kept. Only `FOOTER_REGEX`, which the drift checker imports, is
-added to it.
+`--changed-files`, #2389) and is kept. Since v2.3.1 the drift checker imports nothing from it, so
+the `FOOTER_REGEX` once added for that import is gone again (#2409).
+
+## 2026-10-16: synced to v2.3.1
+
+[#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409): one sync from v2.2.0, skipping
+v2.2.1 and v2.3.0. Changed files: `liferay-blue.css` (the section-title rule), `check_docs_rendered.py`
+and `check_template_drift.py`; the hook and both overrides were unchanged. The stamp records the
+v2.3.1 tag's own commit, `84bf45a`; the template's `main` was one CHANGELOG-only commit ahead.
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 

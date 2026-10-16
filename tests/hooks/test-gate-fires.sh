@@ -587,12 +587,12 @@ fi
 
 echo
 # ---------------------------------------------------------------------------
-# 7. check-docs-config.py — mkdocs.yml stops switching on a built-site check this site promises.
-#    The template's check_docs_rendered.py runs each site-specific check only when its key is
-#    set, so deleting the key passes the build (#2407, after #2381). One fixture per key.
+# 7. check-docs-config.py — mkdocs.yml loses a sub-key that silently weakens a built-site check.
+#    extra.docs_standard.required covers the top-level keys since v2.3.1 (#2409); these three
+#    are not (ai-agent-template#155). One fixture per key.
 # ---------------------------------------------------------------------------
 DOCS_CONFIG="$REPO_ROOT/scripts/check-docs-config.py"
-for key in google_site_verification social_image project_name home_layout title text link_text heading intro rows; do
+for key in text link_text heading google_site_verification required; do
     cfg="$SANDBOX/mkdocs-no-$key.yml"
     # Delete the key's line under extra:, and for a block value the more-indented lines under it.
     awk -v k="$key" '
@@ -616,14 +616,16 @@ for key in google_site_verification social_image project_name home_layout title 
         fail "check-docs-config.py exited $RC without naming '$key': $(head -3 <<<"$OUT" | tr '\n' ' ')"
     fi
 done
-# A key set to false switches its check off too.
-sed 's/^\( *home_layout:\) true/\1 false/' "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-layout-off.yml"
-if cmp -s "$SANDBOX/mkdocs-layout-off.yml" "$REPO_ROOT/mkdocs.yml"; then
-    harness "the home_layout: false fixture changed nothing"
-elif python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-layout-off.yml" >/dev/null 2>&1; then
-    fail "check-docs-config.py PASSED home_layout: false"
+# Dropping one name from the required list switches that check back to opt-in.
+sed 's/^\( *required: \[\)MISSING-VERIFICATION, /\1/' "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-required-short.yml"
+if cmp -s "$SANDBOX/mkdocs-required-short.yml" "$REPO_ROOT/mkdocs.yml"; then
+    harness "the shortened-required fixture changed nothing"
+elif OUT=$(python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-required-short.yml" 2>&1); then
+    fail "check-docs-config.py PASSED a required list without MISSING-VERIFICATION"
+elif grep -qF "does not list ['MISSING-VERIFICATION']" <<<"$OUT"; then
+    pass "check-docs-config.py fires on a required list without MISSING-VERIFICATION"
 else
-    pass "check-docs-config.py fires on home_layout: false"
+    fail "check-docs-config.py failed without naming MISSING-VERIFICATION: $(head -3 <<<"$OUT" | tr '\n' ' ')"
 fi
 # Narrowness control: the real configuration passes.
 if python3 "$DOCS_CONFIG" "$REPO_ROOT/mkdocs.yml" >/dev/null 2>&1; then

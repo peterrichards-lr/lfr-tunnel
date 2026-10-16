@@ -16,10 +16,19 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-None. v2.6.0 cleared the last item: a check listed in `required` now holds everything the
-profile's default does (ai-agent-template#175), and the profile stylesheet is identified by a
-`docs-profile: liferay` marker line inside it, so removing it from `extra_css`, renaming or moving
-it no longer switches the profile's checks off, and a renamed, unmapped, edited copy exits 3.
+- **`exclude_docs` on the profile stylesheet switches the profile off.** v2.6.0 looks for the
+  `docs-profile: liferay` marker only in the built site, and `exclude_docs` drops the file from the
+  build while the source stays byte-identical, so the drift check stays green. With the stylesheet
+  also removed from `extra_css`, and `required` and the Google token deleted, everything passes.
+  It takes those four edits together. Raised as
+  [ai-agent-template#179](https://github.com/peterrichards-lr/ai-agent-template/issues/179). The
+  variant that keeps `required` (Google's token swapped for Bing's) is closed here by listing
+  `MISSING-VERIFICATION:google` in `required`.
+
+v2.6.0 cleared the earlier items: a check listed in `required` now holds everything the profile's
+default does (ai-agent-template#175), and the profile stylesheet is identified by the marker, so
+a query string, a rename, a move or dropping it from `extra_css` alone no longer switches the
+profile's checks off, and a renamed, unmapped, edited copy exits 3.
 
 Resolved upstream and their local stopgaps removed: #141 by v2.3.0/v2.3.1 (the `--path`
 arguments, [#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)); #155 by v2.4.0
@@ -94,7 +103,8 @@ is not added: this repo's Dependabot has no `pip` entry, and `requirements-dev.t
 [#2415](https://github.com/peterrichards-lr/lfr-tunnel/issues/2415): `liferay-blue.css` (the
 `docs-profile: liferay` marker comment), `check_docs_rendered.py` and `check_template_drift.py`
 changed; the hook and both overrides did not, nor the template's `docs.yml` or `dependabot.yml`.
-Stamped on `82860fb`, the v2.6.0 tag and the template's `main`. Known drift is now empty.
+Stamped on `82860fb`, the v2.6.0 tag and the template's `main`. One known-drift item remains
+(`exclude_docs`, above).
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 

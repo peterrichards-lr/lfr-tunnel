@@ -27,17 +27,17 @@ package-lock.json
 *.yml
 *.yaml
 
-# --- Canonical shared docs files ----------------------------------------------------
-# This repo holds the CANONICAL copy of four files shared by the three Liferay tools docs
-# sites (LDM, AICA, lfr-tunnel; #2391, #2397). LDM and AICA are to copy them, and their
-# docs CI is to fail unless their copy has the same content as this repo's master -- LDM
-# may keep the hook at a different path (sync plan: AICA #1329). Once those checks exist,
-# Prettier rewriting any of these here would fail all of them at once: a formatting change
-# that reads as upstream drift. Keep all four listed by name. The two templates are also
-# matched by *.html above, but that glob exists for unrelated reasons and must not be what
-# protects them. The .py hook is outside Prettier's scope today; it is listed so this
-# block stays the complete set.
+# --- Shared docs files --------------------------------------------------------------
+# Verbatim copies of ai-agent-template's canonical files (v2.2.0; #2407, ai-agent-template
+# #135). Docs CI fails unless each matches the template byte for byte apart from line endings
+# and surrounding blank space (check_template_drift.py --docs-site --fail-on-drift), so
+# Prettier rewriting one here would read as drift. Keep all of them listed by name: the two
+# templates are also matched by *.html above, but that glob exists for unrelated reasons and
+# must not be what protects them. The .py files are outside Prettier's scope today; they are
+# listed so this block stays the complete set.
 docs/assets/stylesheets/liferay-blue.css
 scripts/mkdocs_github_alerts.py
+scripts/check_docs_rendered.py
+scripts/check_template_drift.py
 overrides/main.html
 overrides/partials/copyright.html

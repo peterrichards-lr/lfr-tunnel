@@ -73,7 +73,7 @@ DOCS_PATTERN=$(grep -B 2 'DOCS=true' "$CI" | grep -oE "grep -qE '[^']+'" | head 
 if [ -z "$DOCS_PATTERN" ]; then
   fail "could not find the docs filter pattern in $CI"
 else
-  for path in "docs/README.md" "docs/server/edge_setup_guide.md" "mkdocs.yml" "requirements-dev.txt" "overrides/main.html" "scripts/mkdocs_github_alerts.py" "scripts/check-docs-rendered.sh" "scripts/check-docs-home-layout.py" "scripts/check-docs-nav-order.py" "scripts/check-docs-routing.py" "README.md"; do
+  for path in "docs/README.md" "docs/server/edge_setup_guide.md" "mkdocs.yml" "requirements-dev.txt" "overrides/main.html" "scripts/mkdocs_github_alerts.py" "scripts/check_docs_rendered.py" "scripts/check_template_drift.py" "docs/assets/stylesheets/liferay-blue.css" "scripts/check-docs-routing.py" "README.md"; do
     if echo "$path" | grep -qE "$DOCS_PATTERN"; then
       pass "docs filter matches '$path'"
     else
@@ -125,6 +125,26 @@ if printf '%s\n' "$GATE_NEEDS" | grep -qxF 'docs-build'; then
   pass "docs-build is in ci-gate's needs:"
 else
   fail "docs-build is missing from ci-gate's needs: -- it would be ungated while CI Gate reports green"
+fi
+
+# The docs checks must stay wired in (#2407). test-ci-runs-every-gate.sh scans only
+# scripts/check-*.sh, so a deleted step running one of these Python checks would go unnoticed.
+for step in "python3 scripts/check_docs_rendered.py _site" "python3 scripts/check-docs-config.py" \
+            "python3 scripts/check_template_drift.py --docs-site --fail-on-drift" \
+            "--path scripts/check_template_drift.py" "--path docs/assets/stylesheets/liferay-blue.css"; do
+  if grep -qF -- "$step" "$CI"; then
+    pass "ci.yml runs: $step"
+  else
+    fail "ci.yml no longer runs: $step"
+  fi
+done
+# Deploy Documentation checks the build before uploading it.
+check_line=$(grep -nF 'python3 scripts/check_docs_rendered.py _site' "$DOCS_WF" | head -1 | cut -d: -f1)
+upload_line=$(grep -nF 'upload-pages-artifact' "$DOCS_WF" | head -1 | cut -d: -f1)
+if [ -n "$check_line" ] && [ -n "$upload_line" ] && [ "$check_line" -lt "$upload_line" ]; then
+  pass "docs.yml checks the built site before the Pages upload"
+else
+  fail "docs.yml does not check the built site before the Pages upload"
 fi
 
 echo

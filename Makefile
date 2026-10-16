@@ -555,5 +555,5 @@ check-access-mode-parity:
 # at whatever you built:  make check-docs-rendered SITE=site
 SITE ?= _site
 check-docs-rendered:
-	@./scripts/check-docs-rendered.sh $(SITE)
+	@python3 scripts/check_docs_rendered.py $(SITE)
 

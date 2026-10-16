@@ -3,12 +3,33 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v2.1.0` (main @ `f304c4a`, 2026-09-22)
-**Last checked**: 2026-10-13
+**Reference version at last check**: `v2.2.0` (main @ `60904e9`, 2026-10-16)
+**Last checked**: 2026-10-16
+
+## Path mapping
+
+A governed file this repo keeps at a different path from the template, one per line as
+`` `local path` ← `upstream path` ``. `scripts/check_template_drift.py` compares the two files
+instead of reporting one as missing and the other as extra.
+
+- `docs/assets/stylesheets/liferay-blue.css` ← `.agents/templates/docs-profiles/liferay/liferay-blue.css`
 
 ## Known drift as of this check
 
-None open. The three items recorded at the 2026-08-05 check are all closed:
+From the v2.2.0 docs-site migration, raised upstream as
+[ai-agent-template#141](https://github.com/peterrichards-lr/ai-agent-template/issues/141), each
+worked around here meanwhile:
+
+- **The shared check's site-specific checks are opt-in per key.** Worked around by this repo's
+  `scripts/check-docs-config.py`, which fails if a key this site relies on is removed.
+- **`check_template_drift.py` isn't in the `--docs-site` set, and an unmapped stylesheet only
+  warns.** Worked around by passing both as explicit `--path` arguments in CI.
+- **A default (non `--docs-site`) run prints "copy the file FROM" over files this repo customises
+  on purpose** (`ci.yml`, `AGENTS.md`, `check_docs_review.py`). Ignore the instruction for those.
+- **The drift check compares against the template's HEAD.** A template merge turns this repo's
+  PR CI red until a sync PR. It is deliberately not run on deploy.
+
+The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
 naming), [#932](https://github.com/peterrichards-lr/lfr-tunnel/issues/932) (the EDR rule stated
 three ways) and [#933](https://github.com/peterrichards-lr/lfr-tunnel/issues/933) (the doc-review
@@ -30,9 +51,22 @@ compared as merged template code.
 | 5. Reversible setup | **Not applicable**: no bootstrap. The one destructive helper, `make prune-branches`, already writes a recovery manifest and refuses `master` and `checksums`. |
 | 6. Measure whether instructions help (skill evals) | **Not adopted yet**: the brief records its harness as never run against a real model, and here it would mean running agents in throwaway worktrees on an EDR-watched machine. Revisit once the template has results. |
 
+## 2026-10-16: the docs-site standard (v2.2.0)
+
+The shared docs files moved from this repo to the template (ai-agent-template#135;
+[#2407](https://github.com/peterrichards-lr/lfr-tunnel/issues/2407) here). The alerts hook, both
+overrides, `liferay-blue.css` (mapped above), `scripts/check_docs_rendered.py` and
+`scripts/check_template_drift.py` are verbatim copies of v2.2.0. Docs CI fails on any local edit to
+them (`check_template_drift.py --docs-site --fail-on-drift`). `check_docs_rendered.py` replaced
+this repo's `check-docs-rendered.sh`, `check-docs-home-layout.py` and `check-docs-nav-order.py`.
+
+**Deliberate divergence**: `scripts/check_docs_review.py` is this repo's own (`--review-only`,
+`--changed-files`, #2389) and is kept. Only `FOOTER_REGEX`, which the drift checker imports, is
+added to it.
+
 ## Skills available in the reference repo (for comparison; not all apply here)
 
-`coding-standards`, `documentation`, `documentation-review`, `e2e-verification`, `github-workflow`,
+`coding-standards`, `docs-site-standard`, `documentation`, `documentation-review`, `e2e-verification`, `github-workflow`,
 `human-in-the-loop`, `multi-agent-orchestration`, `no-assumptions`, `reflection-and-planning`,
 `release-management`, `rule-adherence`, `template-sync`, `tool-use-react`, `unit-testing`
 
@@ -44,4 +78,4 @@ Update the "Last checked" date and the drift list above whenever this comparison
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*
+*Last Updated: 2026-10-16* | *Last Reviewed: 2026-10-16*

@@ -35,13 +35,6 @@ from datetime import datetime
 
 FOOTER_PATTERN = re.compile(r'\*Last Updated:\s*([\d\-]+)\*\s*\|\s*\*Last Reviewed:\s*([\d\-]+)\*')
 IGNORE_DIRS = {'.git', 'node_modules', '.venv', '.smoke_venv'}
-# The template's name and shape for the footer, imported by check_template_drift.py (copied
-# verbatim from ai-agent-template, #2407) to ignore footer-only differences. This file has
-# diverged from the template's (--review-only, --changed-files), so it is kept, and only the
-# name the drift checker needs is added.
-FOOTER_REGEX = re.compile(
-    r"([*_])Last Updated:\s*(\d{4}-\d{2}-\d{2})\1\s*\|\s*\1Last Reviewed:\s*(\d{4}-\d{2}-\d{2})\1"
-)
 
 
 def is_nested_worktree_root(path):

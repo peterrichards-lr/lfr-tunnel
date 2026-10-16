@@ -3,15 +3,14 @@
 
 Usage: check-docs-config.py [mkdocs.yml]
 
-scripts/check_docs_rendered.py is the template's shared check (ai-agent-template v2.2.0, #2407),
-and it is opt-in by design: each of its site-specific checks runs only when mkdocs.yml configures
-it. That is right for a template, and wrong for this site, which has promised all of them. The
-check it replaced held them unconditionally, so deleting a key from mkdocs.yml now switches its
-check off and every build stays green -- exactly the failure #2381 guarded against for the
-Search Console token, where Google quietly unverifies the property.
+scripts/check_docs_rendered.py is the template's shared check, and each of its site-specific
+checks runs only when mkdocs.yml configures it. Since v2.3.1, extra.docs_standard.required stops a
+deleted top-level key from switching a check off (#2409). Three sub-keys are not covered: delete
+one and its part of the check is skipped while the build stays green. Measured on this site's
+build at v2.3.1, each deletion exits 0. Raised as ai-agent-template#155.
 
-So this holds the configuration itself. Each key below must be present and set; removing one is
-a decision to make in the PR that removes it, by editing this list, not a side effect.
+So this holds those three until the template does; then delete this file and its CI step.
+Removing one is a decision to make in the PR that removes it, by editing this list.
 Exits 1 with one line per missing key.
 """
 
@@ -21,17 +20,12 @@ import yaml
 
 # (dotted path under extra, what it switches on, why this site needs it)
 REQUIRED = (
-    ("google_site_verification", "MISSING-VERIFICATION",
-     "Search Console ownership: without the tag on every page Google unverifies the site (#2381)"),
-    ("social_image", "MISSING-SOCIAL", "the link-preview card on Slack, Teams and LinkedIn"),
-    ("docs_standard.project_name", "HOME-LAYOUT", "the H1 and this site's related-tools row"),
-    ("docs_standard.home_layout", "HOME-LAYOUT", "the shared home-page layout (#2401)"),
-    ("docs_standard.notice.title", "NO-NOTICE", "the community-project notice (#2385, #2391)"),
-    ("docs_standard.notice.text", "NO-NOTICE", "the disclaimer the notice must carry"),
-    ("docs_standard.notice.link_text", "NO-NOTICE", "the notice's link to the About page"),
-    ("docs_standard.related.heading", "HOME-LAYOUT", "the Related Liferay tools section"),
-    ("docs_standard.related.intro", "HOME-LAYOUT", "its shared intro line"),
-    ("docs_standard.related.rows", "HOME-LAYOUT", "its three shared rows"),
+    ("docs_standard.notice.text", "NO-NOTICE",
+     "without it the notice's disclaimer is not checked (ai-agent-template#155)"),
+    ("docs_standard.notice.link_text", "NO-NOTICE",
+     "without it the notice's About link is not checked (ai-agent-template#155)"),
+    ("docs_standard.related.heading", "HOME-LAYOUT",
+     "without it the whole Related Liferay tools section is not checked (ai-agent-template#155)"),
 )
 
 

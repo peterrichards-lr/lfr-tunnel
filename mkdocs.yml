@@ -77,6 +77,9 @@ extra:
   # the Liferay profile in ai-agent-template v2.2.0. See its docs-site-standard skill.
   docs_standard:
     project_name: Liferay Tunnel
+    # Checks this site cannot lose by deleting a key: each fails, naming the key, instead of
+    # being skipped (#2381 was a deleted verification key that left every build green).
+    required: [MISSING-VERIFICATION, MISSING-SOCIAL, NO-NOTICE, HOME-LAYOUT]
     # Names a sentence-case nav label may capitalise mid-label. Acronyms (SSO, AWS) and
     # inner-capital names (InfoSec) pass by their shape.
     proper_nouns: [Liferay]

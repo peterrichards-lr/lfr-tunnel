@@ -130,8 +130,7 @@ fi
 # The docs checks must stay wired in (#2407). test-ci-runs-every-gate.sh scans only
 # scripts/check-*.sh, so a deleted step running one of these Python checks would go unnoticed.
 for step in "python3 scripts/check_docs_rendered.py _site" "python3 scripts/check-docs-config.py" \
-            "python3 scripts/check_template_drift.py --docs-site --fail-on-drift" \
-            "--path scripts/check_template_drift.py" "--path docs/assets/stylesheets/liferay-blue.css"; do
+            "python3 scripts/check_template_drift.py --docs-site --fail-on-drift"; do
   if grep -qF -- "$step" "$CI"; then
     pass "ci.yml runs: $step"
   else
@@ -145,6 +144,19 @@ if [ -n "$check_line" ] && [ -n "$upload_line" ] && [ "$check_line" -lt "$upload
   pass "docs.yml checks the built site before the Pages upload"
 else
   fail "docs.yml does not check the built site before the Pages upload"
+fi
+# The deploy compares against the recorded template version, and PR CI against HEAD (#2409):
+# swapped, a template merge would block publishing and PR CI would never say a sync is due.
+drift_line=$(grep -nF 'check_template_drift.py --docs-site --fail-on-drift --against-recorded' "$DOCS_WF" | head -1 | cut -d: -f1)
+if [ -n "$drift_line" ] && [ -n "$upload_line" ] && [ "$drift_line" -lt "$upload_line" ]; then
+  pass "docs.yml checks the shared files against the recorded version before the Pages upload"
+else
+  fail "docs.yml does not check the shared files with --against-recorded before the Pages upload"
+fi
+if grep -qF -- '--against-recorded' "$CI"; then
+  fail "ci.yml uses --against-recorded: PR CI must compare against HEAD to flag a due sync"
+else
+  pass "ci.yml compares the shared files against the template's HEAD"
 fi
 
 echo

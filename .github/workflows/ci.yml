@@ -435,26 +435,23 @@ jobs:
       - name: Published output must match what the source asks for
         run: python3 scripts/check_docs_rendered.py _site
 
-      # The template's check is opt-in per key, so deleting a key from mkdocs.yml switches its
-      # check off and the step above stays green. This site has promised all of them; this
-      # holds the configuration that asks for them (#2407, after #2381).
+      # extra.docs_standard.required keeps each site-specific check from being switched off by a
+      # deleted key (#2409). Three sub-keys can still be deleted to weaken a check silently
+      # (ai-agent-template#155); this holds those until the template does.
       - name: The built-site checks this site promises must stay switched on
         run: python3 scripts/check-docs-config.py
 
       # The shared docs files are verbatim copies of ai-agent-template's, and a local edit is
       # drift: it fails here, with both SHA-256 prefixes and the copy direction, rather than
       # diverging silently as the three sites' copies did within a day (#2407). A missing
-      # template or file fails (exit 3); a network failure only warns.
+      # template or file fails (exit 3), and so does a profile stylesheet with no path mapping;
+      # a network failure only warns. --docs-site covers the drift checker itself too (#2409).
       #
-      # The two --path entries are named, not left to --docs-site: the checker itself is a
-      # verbatim copy too, and naming the stylesheet means a deleted path mapping fails (exit 3)
-      # instead of quietly leaving it uncompared. It compares against the template's HEAD, so a
-      # change merged there turns this red with no change here: the fix is a sync PR.
+      # Against the template's HEAD, deliberately: a change merged there turns this red with
+      # nothing changed here, which is the signal to open a sync PR. The deploy job compares
+      # against the recorded version instead, so the same merge cannot block publishing.
       - name: Shared docs files must match the template
-        run: >-
-          python3 scripts/check_template_drift.py --docs-site --fail-on-drift
-          --path scripts/check_template_drift.py
-          --path docs/assets/stylesheets/liferay-blue.css
+        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift
 
       # Source-level, and the other half of the same story: an unclosed fence swallows the
       # prose below it, so a heading stops being a heading and leaves the table of contents

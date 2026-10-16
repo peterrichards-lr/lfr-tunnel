@@ -3,7 +3,7 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v2.5.0` (main @ `cadd17b`, 2026-10-16)
+**Reference version at last check**: `v2.6.0` (main @ `82860fb`, 2026-10-16)
 **Last checked**: 2026-10-16
 
 ## Path mapping
@@ -16,21 +16,25 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-- **The profile is recognised by `liferay-blue.css` in `extra_css`.** Removing that entry
-  entirely (which also loses the site's palette) has two effects at v2.5.0, both recorded rather
-  than guarded:
-  - with `required` and the token also deleted, the profile's four default requirements are off;
-  - **even with `required` kept**, the `related` block is no longer required: the profile's keys
-    apply only to checks the profile requires, not to a HOME-LAYOUT listed in `required`.
-    Deleting `related` then passes. Raised as
-    [ai-agent-template#175](https://github.com/peterrichards-lr/ai-agent-template/issues/175).
+- **`exclude_docs` on the profile stylesheet switches the profile off.** v2.6.0 looks for the
+  `docs-profile: liferay` marker only in the built site, and `exclude_docs` drops the file from the
+  build while the source stays byte-identical, so the drift check stays green. With the stylesheet
+  also removed from `extra_css`, and `required` and the Google token deleted, everything passes.
+  It takes those four edits together. Raised as
+  [ai-agent-template#179](https://github.com/peterrichards-lr/ai-agent-template/issues/179). The
+  variant that keeps `required` (Google's token swapped for Bing's) is closed here by listing
+  `MISSING-VERIFICATION:google` in `required`.
 
-  A cache-busting suffix no longer hides the profile (v2.5.0, #164).
+v2.6.0 cleared the earlier items: a check listed in `required` now holds everything the profile's
+default does (ai-agent-template#175), and the profile stylesheet is identified by the marker, so
+a query string, a rename, a move or dropping it from `extra_css` alone no longer switches the
+profile's checks off, and a renamed, unmapped, edited copy exits 3.
 
 Resolved upstream and their local stopgaps removed: #141 by v2.3.0/v2.3.1 (the `--path`
 arguments, [#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)); #155 by v2.4.0
 (most of `scripts/check-docs-config.py`, [#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411));
-and by v2.5.0, the related block, Google's token by name and the stylesheet suffix
+by v2.5.0, the related block, Google's token by name and the stylesheet suffix; and by v2.6.0
+#175 and the stylesheet marker
 ([ai-agent-template#163](https://github.com/peterrichards-lr/ai-agent-template/issues/163); the last
 of `scripts/check-docs-config.py`, [#2413](https://github.com/peterrichards-lr/lfr-tunnel/issues/2413)).
 No local stopgap remains.
@@ -93,6 +97,14 @@ step-level `if` while still building and running the rendered check. Stamped on 
 v2.5.0 tag, which was also the template's `main`. The template's mkdocs `>= 2` Dependabot ignore
 is not added: this repo's Dependabot has no `pip` entry, and `requirements-dev.txt` pins
 `mkdocs==1.6.1`, so nothing can propose a 2.x bump.
+
+## 2026-10-16: synced to v2.6.0
+
+[#2415](https://github.com/peterrichards-lr/lfr-tunnel/issues/2415): `liferay-blue.css` (the
+`docs-profile: liferay` marker comment), `check_docs_rendered.py` and `check_template_drift.py`
+changed; the hook and both overrides did not, nor the template's `docs.yml` or `dependabot.yml`.
+Stamped on `82860fb`, the v2.6.0 tag and the template's `main`. One known-drift item remains
+(`exclude_docs`, above).
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 

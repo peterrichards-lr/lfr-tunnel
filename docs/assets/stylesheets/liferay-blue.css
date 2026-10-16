@@ -2,6 +2,14 @@
  * Liferay Blue -- shared documentation palette for the Liferay tools family
  * (lfr-tunnel, liferay-docker-manager, liferay-ai-commerce-accelerator).
  *
+ * docs-profile: liferay
+ *
+ * The line above is the marker the checks identify this stylesheet by, not its
+ * name or path: check_docs_rendered.py finds it in the built site to apply the
+ * Liferay profile's required checks, and check_template_drift.py finds an
+ * unmapped copy wherever it is kept. A query string, a rename or a move cannot
+ * switch them off (ai-agent-template#164, #162).
+ *
  * SHARED FILE. The canonical copy is
  * .agents/templates/docs-profiles/liferay/liferay-blue.css on the main branch
  * of peterrichards-lr/ai-agent-template; `bootstrap_template.py --docs-site

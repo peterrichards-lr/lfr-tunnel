@@ -429,16 +429,15 @@ jobs:
       # literal "[!WARNING]" text and every architecture diagram rendered as code. A build
       # that succeeds is not a build that says what the source meant.
       #
-      # The check is the template's (ai-agent-template, #2407; synced to v2.3.1, #2409), configured by
+      # The check is the template's (ai-agent-template, #2407; synced to v2.4.0, #2411), configured by
       # extra.docs_standard in mkdocs.yml: alerts, diagrams, review dates, the verification
       # tag, the footer About link, the community notice, the home-page layout and the nav.
       - name: Published output must match what the source asks for
         run: python3 scripts/check_docs_rendered.py _site
 
-      # extra.docs_standard.required keeps each site-specific check from being switched off by a
-      # deleted key (#2409). Three sub-keys can still be deleted to weaken a check silently
-      # (ai-agent-template#155); this holds those until the template does.
-      - name: The built-site checks this site promises must stay switched on
+      # TEMPORARY, until ai-agent-template#163: the shared check requires the related block's
+      # sub-keys but not the block itself, so deleting it skips the related-section check.
+      - name: The related-projects block must stay while HOME-LAYOUT is required
         run: python3 scripts/check-docs-config.py
 
       # The shared docs files are verbatim copies of ai-agent-template's, and a local edit is

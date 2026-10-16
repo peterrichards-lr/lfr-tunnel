@@ -3,7 +3,7 @@
 This repo's AI-agent governance files (`AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`) were established independently and have no automated relationship to any other repo. `ai-agent-template` (https://github.com/peterrichards-lr/ai-agent-template) is maintained as the shared "lessons learned" reference for AI-agent rules across the Liferay tooling repos, but nothing here pulls updates from it automatically. This file is a manual checkpoint so drift gets tracked deliberately instead of silently.
 
 **Reference repo**: <https://github.com/peterrichards-lr/ai-agent-template>
-**Reference version at last check**: `v2.3.1` (main @ `84bf45a`, 2026-10-16)
+**Reference version at last check**: `v2.4.0` (main @ `d7abfa6`, 2026-10-16)
 **Last checked**: 2026-10-16
 
 ## Path mapping
@@ -16,18 +16,27 @@ instead of reporting one as missing and the other as extra.
 
 ## Known drift as of this check
 
-- **Three sub-keys can still be deleted to weaken a required check silently**
-  ([ai-agent-template#155](https://github.com/peterrichards-lr/ai-agent-template/issues/155)):
-  `docs_standard.notice.text`, `notice.link_text` and `related.heading`. Held meanwhile by this
-  repo's `scripts/check-docs-config.py`; delete it, and its CI step, when #155 lands.
+Three cases v2.4.0 still lets through, reported on
+[ai-agent-template#155](https://github.com/peterrichards-lr/ai-agent-template/issues/155) rather
+than worked around here:
 
-The v2.2.0 items raised as
-[ai-agent-template#141](https://github.com/peterrichards-lr/ai-agent-template/issues/141) are
-resolved by v2.3.0/v2.3.1 and their stopgaps removed here
-([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)): `docs_standard.required`
-replaces most of `check-docs-config.py`, `--docs-site` covers the drift checker and fails an
-unmapped stylesheet (so the hand-added `--path` arguments are gone), the copy direction is printed
-only for differing shared files, and the deploy job compares `--against-recorded`.
+- **A required MISSING-VERIFICATION is satisfied by Bing's token alone.** Swapping
+  `google_site_verification` for `bing_site_verification` passes, though Search Console is what
+  this site depends on (#2381).
+- **The profile's default requirements are keyed on `liferay-blue.css` in `extra_css`,** matched by
+  exact filename. Removing that entry, or adding a cache-busting suffix (`liferay-blue.css?v=2`),
+  plus deleting `required`, switches them off.
+- **Deleting the whole `related:` block switches off the related-section check.** HOME-LAYOUT
+  needs `related.heading`, `intro` and `rows` only when a `related` block exists; delete the block
+  (and the section from the home page) and it passes. Raised as
+  [ai-agent-template#163](https://github.com/peterrichards-lr/ai-agent-template/issues/163) and
+  held meanwhile by this repo's `scripts/check-docs-config.py`, cut to that one case; delete it,
+  its CI step, filter entry and fixtures when #163 ships.
+
+#141 is resolved by v2.3.0/v2.3.1, and #155's sub-key, icon and default-requirement changes by
+v2.4.0, apart from the three cases above. The other local stopgaps are removed:
+the `--path` arguments ([#2409](https://github.com/peterrichards-lr/lfr-tunnel/issues/2409)) and
+the rest of `scripts/check-docs-config.py` ([#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411)).
 
 The three items recorded at the 2026-08-05 check are all closed:
 [#931](https://github.com/peterrichards-lr/lfr-tunnel/issues/931) (release-bump volume and branch
@@ -70,6 +79,13 @@ the `FOOTER_REGEX` once added for that import is gone again (#2409).
 v2.2.1 and v2.3.0. Changed files: `liferay-blue.css` (the section-title rule), `check_docs_rendered.py`
 and `check_template_drift.py`; the hook and both overrides were unchanged. The stamp records the
 v2.3.1 tag's own commit, `84bf45a`; the template's `main` was one CHANGELOG-only commit ahead.
+
+## 2026-10-16: synced to v2.4.0
+
+[#2411](https://github.com/peterrichards-lr/lfr-tunnel/issues/2411): `check_docs_rendered.py` and
+`check_template_drift.py` changed; the hook, both overrides and `liferay-blue.css` did not. The
+deploy's drift step takes the template's stamp-aware form. Stamped on `d7abfa6`, the v2.4.0 tag,
+which was also the template's `main`.
 
 ## Skills available in the reference repo (for comparison; not all apply here)
 

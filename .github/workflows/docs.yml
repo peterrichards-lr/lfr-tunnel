@@ -58,11 +58,22 @@ jobs:
       - name: Check the built site against the docs-site standard
         run: python3 scripts/check_docs_rendered.py _site
 
-      # Against the version recorded in .agents/TEMPLATE_REF.md, not the template's HEAD: a
+      # Against the commit recorded in .agents/TEMPLATE_REF.md, not the template's HEAD: a
       # merge there must not block publishing, while a local edit to a shared file still does.
-      # PR CI compares against HEAD, which is what tells us a sync is due (#2409).
+      # PR CI compares against HEAD, which is what tells us a sync is due (#2409). Taken from
+      # the template's docs.yml (v2.4.0, #2411): while a stamp records no commit (`unknown`),
+      # --against-recorded would exit 3, so it falls back to HEAD. The stamp is read with the
+      # drift checker's own parser, so the two cannot disagree about its format.
       - name: Shared docs files must match the recorded template version
-        run: python3 scripts/check_template_drift.py --docs-site --fail-on-drift --against-recorded
+        run: |
+          recorded=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from pathlib import Path; from check_template_drift import UNKNOWN_STAMP_VALUE, parse_template_reference; commit = parse_template_reference(Path(".agents/TEMPLATE_REF.md").read_text(encoding="utf-8")).commit; print("" if commit == UNKNOWN_STAMP_VALUE else commit)')
+          if [ -n "$recorded" ]; then
+            echo "Comparing against the recorded commit $recorded."
+            python3 scripts/check_template_drift.py --docs-site --fail-on-drift --against-recorded
+          else
+            echo "The stamp records no commit yet (unknown): comparing against upstream HEAD."
+            python3 scripts/check_template_drift.py --docs-site --fail-on-drift
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

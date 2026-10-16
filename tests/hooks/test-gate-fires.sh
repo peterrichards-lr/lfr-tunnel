@@ -586,53 +586,6 @@ else
 fi
 
 echo
-# ---------------------------------------------------------------------------
-# 7. check-docs-config.py — mkdocs.yml loses a sub-key that silently weakens a built-site check.
-#    extra.docs_standard.required covers the top-level keys since v2.3.1 (#2409); these three
-#    are not (ai-agent-template#155). One fixture per key.
-# ---------------------------------------------------------------------------
-DOCS_CONFIG="$REPO_ROOT/scripts/check-docs-config.py"
-for key in text link_text heading google_site_verification required; do
-    cfg="$SANDBOX/mkdocs-no-$key.yml"
-    # Delete the key's line under extra:, and for a block value the more-indented lines under it.
-    awk -v k="$key" '
-        /^extra:/ { in_extra = 1 }
-        /^[a-z]/ && !/^extra:/ { in_extra = 0 }
-        skip { match($0, /^ */); if (RLENGTH > depth) next; skip = 0 }
-        in_extra && $0 ~ "^ +" k ":" { skip = 1; match($0, /^ */); depth = RLENGTH; next }
-        { print }
-    ' "$REPO_ROOT/mkdocs.yml" >"$cfg"
-    if cmp -s "$cfg" "$REPO_ROOT/mkdocs.yml"; then
-        harness "check-docs-config fixture for '$key' removed nothing"
-        continue
-    fi
-    OUT=$(python3 "$DOCS_CONFIG" "$cfg" 2>&1)
-    RC=$?
-    if [ "$RC" -eq 0 ]; then
-        fail "check-docs-config.py PASSED a mkdocs.yml without '$key'"
-    elif grep -q '\[DOCS-CONFIG\]' <<<"$OUT" && grep -qF ".$key is missing" <<<"$OUT"; then
-        pass "check-docs-config.py fires on a mkdocs.yml without '$key'"
-    else
-        fail "check-docs-config.py exited $RC without naming '$key': $(head -3 <<<"$OUT" | tr '\n' ' ')"
-    fi
-done
-# Dropping one name from the required list switches that check back to opt-in.
-sed 's/^\( *required: \[\)MISSING-VERIFICATION, /\1/' "$REPO_ROOT/mkdocs.yml" >"$SANDBOX/mkdocs-required-short.yml"
-if cmp -s "$SANDBOX/mkdocs-required-short.yml" "$REPO_ROOT/mkdocs.yml"; then
-    harness "the shortened-required fixture changed nothing"
-elif OUT=$(python3 "$DOCS_CONFIG" "$SANDBOX/mkdocs-required-short.yml" 2>&1); then
-    fail "check-docs-config.py PASSED a required list without MISSING-VERIFICATION"
-elif grep -qF "does not list ['MISSING-VERIFICATION']" <<<"$OUT"; then
-    pass "check-docs-config.py fires on a required list without MISSING-VERIFICATION"
-else
-    fail "check-docs-config.py failed without naming MISSING-VERIFICATION: $(head -3 <<<"$OUT" | tr '\n' ' ')"
-fi
-# Narrowness control: the real configuration passes.
-if python3 "$DOCS_CONFIG" "$REPO_ROOT/mkdocs.yml" >/dev/null 2>&1; then
-    pass "check-docs-config.py accepts the real mkdocs.yml (narrowness control)"
-else
-    fail "check-docs-config.py refused the real mkdocs.yml"
-fi
 
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

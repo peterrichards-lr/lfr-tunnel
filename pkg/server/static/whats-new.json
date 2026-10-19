@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.52.5",
+    "release_date": "2026-10-19",
+    "features": [
+      "Security update: the web portal now uses the latest version of its HTTP library, closing published security advisories, and the gateway and client pick up routine library updates. Nothing changes in how you use the tunnel."
+    ]
+  },
+  {
     "version": "v1.52.4",
     "release_date": "2026-10-13",
     "features": [
@@ -25,16 +32,6 @@
     "release_date": "2026-10-07",
     "features": [
       "Maintenance release: the tunnel transport is updated to chisel 1.12.1, which brings its upstream security fixes. Reconnection after a gateway restart and region failover behave exactly as before."
-    ]
-  },
-  {
-    "version": "v1.52.0",
-    "release_date": "2026-10-06",
-    "features": [
-      "Clearer token errors: when your access token is rejected or missing, the client now says where the token came from and how to replace it (usually by signing in again with the login command), instead of retrying every region and reporting an outage.",
-      "Token expiry warnings: you now get one email, and a notice each time you start a tunnel, in the days before an access token expires (7 by default). Requests for a token that never expires are answered by email, whether approved or not.",
-      "Fewer dropped tunnels: if the gateway briefly cannot check your token, your tunnel now waits and retries instead of stopping.",
-      "Token names: line breaks and other control characters are no longer accepted, and names are limited to 100 characters. Portal V1 now shows why a token could not be created."
     ]
   }
 ]

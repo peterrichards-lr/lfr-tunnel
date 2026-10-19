@@ -9,6 +9,12 @@ updates:
     labels:
       - "dependencies"
       - "no-issue-needed"
+    ignore:
+      # chisel 1.13.0 is an upstream prerelease (Docker latest/1.12 stay on 1.12.x)
+      # and was merged without review (#2376). Pinned to 1.12.1 (#2419). Only this
+      # exact version is ignored, so a later 1.13.x still raises a PR to judge.
+      - dependency-name: "github.com/jpillora/chisel"
+        versions: ["1.13.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

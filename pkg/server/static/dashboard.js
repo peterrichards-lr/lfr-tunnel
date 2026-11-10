@@ -9729,6 +9729,7 @@ async function loadAlertSettings() {
     const data = await res.json();
     renderAlertSettings(container, data);
     renderGeoProviderSettings(data);
+    renderAlertMethodSettings(data);
   } catch (e) {
     console.error('Failed to load alert settings', e);
     // Keys stay empty so a later Save cannot post checkbox states nobody chose --
@@ -9738,6 +9739,7 @@ async function loadAlertSettings() {
     // Same reason as alertSettingKeys: a later Save must not post a vendor nobody chose.
     geoProviderOptions = [];
     geoProviderLoaded = false;
+    alertMethodLoaded = false;
     container.textContent = t(
       'admin_load_failed',
       'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
@@ -9756,6 +9758,81 @@ async function loadAlertSettings() {
 // live A/B test (#1866), so a control present in one and not the other is a defect.
 let geoProviderOptions = [];
 let geoProviderLoaded = false;
+
+// --- Admin alert method (#2435) ----------------------------------------------
+// Email or the Slack/Teams webhook, one at a time. Kept in step with V2's copy in
+// ui/src/pages/AdminSettings.tsx (A/B parity). The select shows the owner's stored choice
+// ('' = use server-config.yaml); the line under it says what is actually in force, and the two
+// differ when a chosen webhook has lost its URL and alerts fell back to email.
+let alertMethodLoaded = false;
+let canChangeAlertMethod = false;
+
+function renderAlertMethodSettings(data) {
+  const container = document.getElementById('alert-method-container');
+  const select = document.getElementById('alert-method-select');
+  if (!container || !select) return;
+
+  // A gateway that did not say which method is in force has not described itself; saving
+  // from that state would post a choice nobody made.
+  alertMethodLoaded = !!data.admin_alert_method;
+  canChangeAlertMethod = data.can_change_alert_method === true;
+  container.style.display = alertMethodLoaded ? 'block' : 'none';
+  if (!alertMethodLoaded) return;
+
+  const label = (m) =>
+    m === 'webhook'
+      ? t('alert_method_webhook', 'Slack / Teams webhook')
+      : t('alert_method_email', 'Email');
+  const webhookConfigured =
+    data.webhook_slack_configured === true ||
+    data.webhook_teams_configured === true;
+
+  select.innerHTML = '';
+  const options = [
+    [
+      '',
+      t('alert_method_use_config', 'Server config default ({0})').replace(
+        '{0}',
+        label(data.admin_alert_method_config),
+      ),
+    ],
+    ['email', label('email')],
+    ['webhook', label('webhook')],
+  ];
+  options.forEach(([value, text]) => {
+    const el = document.createElement('option');
+    el.value = value;
+    el.textContent = text;
+    // Not offered without a URL: the server refuses it.
+    if (value === 'webhook' && !webhookConfigured) el.disabled = true;
+    select.appendChild(el);
+  });
+  select.value = data.admin_alert_method_override || '';
+  select.disabled = !canChangeAlertMethod;
+
+  const source = document.getElementById('alert-method-source');
+  if (source) {
+    const template =
+      data.admin_alert_method_source === 'portal'
+        ? t('alert_method_source_portal')
+        : t('alert_method_source_config');
+    source.textContent = template.replace(
+      '{0}',
+      label(data.admin_alert_method),
+    );
+  }
+  const show = (id, on) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? 'block' : 'none';
+  };
+  show(
+    'alert-method-fallback',
+    data.admin_alert_method_override === 'webhook' &&
+      data.admin_alert_method === 'email',
+  );
+  show('alert-method-no-webhook', !webhookConfigured);
+  show('alert-method-owner-only', !canChangeAlertMethod);
+}
 
 function renderGeoProviderSettings(data) {
   const select = document.getElementById('geo-provider-select');
@@ -9884,6 +9961,11 @@ async function saveAlertSettings() {
   const geoSelect = document.getElementById('geo-provider-select');
   if (geoProviderLoaded && geoSelect) {
     payload.country_db_provider = geoSelect.value;
+  }
+  // Owner-only server-side (#2435); a non-owner posting it would fail the whole save.
+  const methodSelect = document.getElementById('alert-method-select');
+  if (alertMethodLoaded && canChangeAlertMethod && methodSelect) {
+    payload.admin_alert_method = methodSelect.value;
   }
   const res = await fetch('/api/admin/settings', {
     method: 'POST',
@@ -10267,6 +10349,9 @@ async function saveSystemSettings() {
       const alertsSaved = await saveAlertSettings();
       if (alertsSaved) {
         alert(t('settings_saved', 'System settings saved successfully.'));
+        // Re-read, so the in-force line and the test target reflect what was just saved.
+        loadAlertSettings();
+        loadIntegrationTestTarget();
       } else {
         // Named rather than folded into the success message: the two halves are
         // separate endpoints, and one failing while the other succeeded is exactly

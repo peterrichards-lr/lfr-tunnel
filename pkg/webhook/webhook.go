@@ -20,11 +20,8 @@ const (
 	slackTypeMrkdwn    = "mrkdwn"
 	slackTypePlainText = "plain_text"
 
-	keyType   = "type"
-	keyText   = "text"
-	keyName   = "name"
-	keyReason = "Reason"
-	keyValue  = "value"
+	keyType = "type"
+	keyText = "text"
 
 	teamsTypeMessageCard = "MessageCard"
 	teamsContext         = "http://schema.org/extensions"
@@ -48,23 +45,17 @@ func NewWebhookService(cfg config.WebhookConfig, database db.WebhookQueueReposit
 	}
 }
 
+// sendPayload and sendPayloadSync post to whichever destinations are configured. Whether alerts
+// go to the webhook at all is the server's decision (admin_alerts.method, #2435), made before
+// anything is enqueued; this service no longer second-guesses it with webhooks.enabled.
 func (w *WebhookService) sendPayload(slackData map[string]interface{}, teamsData map[string]interface{}) {
-	if !w.cfg.Enabled {
-		return
-	}
-
 	go func() {
-		if w.cfg.SlackURL != "" && slackData != nil {
-			_ = w.postToURL(w.cfg.SlackURL, slackData, "Slack") //nolint:errcheck
-		}
-		if w.cfg.TeamsURL != "" && teamsData != nil {
-			_ = w.postToURL(w.cfg.TeamsURL, teamsData, "Microsoft Teams") //nolint:errcheck
-		}
+		_ = w.sendPayloadSync(slackData, teamsData) //nolint:errcheck
 	}()
 }
 
 func (w *WebhookService) sendPayloadSync(slackData map[string]interface{}, teamsData map[string]interface{}) error {
-	if !w.cfg.Enabled {
+	if !w.cfg.HasURL() {
 		return nil
 	}
 
@@ -110,21 +101,45 @@ func (w *WebhookService) postToURL(urlStr string, data interface{}, platform str
 	return nil
 }
 
+// Slack's Block Kit limits: a header's plain_text and a section's text. A payload over either is
+// rejected with a 400, and because the queue only deletes what was delivered, one oversized
+// digest would be retried -- and refused -- on every tick, holding up every alert behind it.
+const (
+	slackHeaderMax  = 150
+	slackSectionMax = 3000
+)
+
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	const marker = "\n…(truncated -- see the admin portal for the rest)"
+	keep := max - len([]rune(marker))
+	if keep < 0 {
+		keep = 0
+	}
+	return string(r[:keep]) + marker
+}
+
 func (w *WebhookService) buildPayloads(title, description, themeColor string, facts []map[string]string) (map[string]interface{}, map[string]interface{}) {
 	slackData := map[string]interface{}{
+		// Top-level text is what a notification preview and a screen reader show; without it
+		// Slack shows "This content can't be displayed".
+		"text": title,
 		"blocks": []interface{}{
 			map[string]interface{}{
 				keyType: slackTypeHeader,
 				keyText: map[string]string{
 					keyType: slackTypePlainText,
-					keyText: title,
+					keyText: truncateRunes(title, slackHeaderMax),
 				},
 			},
 			map[string]interface{}{
 				keyType: slackTypeSection,
 				keyText: map[string]string{
 					keyType: slackTypeMrkdwn,
-					keyText: description,
+					keyText: truncateRunes(description, slackSectionMax),
 				},
 			},
 		},
@@ -164,77 +179,15 @@ func (w *WebhookService) enqueueOrSend(title, desc, color string, facts []map[st
 	w.sendPayload(slack, teams)
 }
 
-func (w *WebhookService) SendRegistrationAlert(email, subdomain string) {
-	title := "📬 New User Registration Request"
-	desc := fmt.Sprintf("*Email:* `%s`\n*Requested Subdomain:* `%s`\n\n_Please review and approve or reject this request inside the admin dashboard._", email, subdomain)
-	facts := []map[string]string{
-		{keyName: "Email", keyValue: email},
-		{keyName: "Requested Subdomain", keyValue: subdomain},
-	}
-	w.enqueueOrSend(title, desc, colorDefault, facts)
-}
-
-func (w *WebhookService) SendAbuseReportAlert(subdomain, reason, reporterIP string) {
-	title := "🚨 Tunnel Abuse Report Submitted"
-	desc := fmt.Sprintf("*Subdomain:* `%s`\n*Reason:* %s\n*Reporter IP:* `%s`\n\n_Immediate admin review recommended._", subdomain, reason, reporterIP)
-	facts := []map[string]string{
-		{keyName: "Subdomain", keyValue: subdomain},
-		{keyName: keyReason, keyValue: reason},
-		{keyName: "Reporter IP", keyValue: reporterIP},
-	}
-	w.enqueueOrSend(title, desc, colorDanger, facts)
-}
-
-// SendRateLimitBanAlert reports an automatic ban. A duration of zero or less means the ban does
-// not expire on its own, and is reported that way rather than as "0s" (#1327) -- the caller used
-// to pass 24h for a ban that nothing ever lifted, so the alert told operators the problem would
-// resolve itself when it would not.
-func (w *WebhookService) SendRateLimitBanAlert(ip string, duration time.Duration, reason string) {
-	durationText := duration.String()
-	if duration <= 0 {
-		durationText = "until manually removed"
-	}
-	title := "🛡️ EDR: IP Automatically Rate Limit Banned"
-	desc := fmt.Sprintf("*IP Address:* `%s`\n*Duration:* `%s`\n*Reason:* %s", ip, durationText, reason)
-	facts := []map[string]string{
-		{keyName: "IP Address", keyValue: ip},
-		{keyName: "Duration", keyValue: durationText},
-		{keyName: keyReason, keyValue: reason},
-	}
-	w.enqueueOrSend(title, desc, colorWarning, facts)
-}
-
-func (w *WebhookService) SendVanityDomainHookFailureAlert(action, domain, requestingUserID, reason string) {
-	title := "🔒 Vanity Domain Hook Failed"
-	desc := fmt.Sprintf("*Action:* `%s`\n*Domain:* `%s`\n*Requested By:* `%s`\n*Reason:* %s\n\n_%s likely has no valid SSL certificate or isn't reachable right now._", action, domain, requestingUserID, reason, domain)
-	facts := []map[string]string{
-		{keyName: "Action", keyValue: action},
-		{keyName: "Domain", keyValue: domain},
-		{keyName: "Requested By", keyValue: requestingUserID},
-		{keyName: keyReason, keyValue: reason},
-	}
-	w.enqueueOrSend(title, desc, colorDanger, facts)
-}
-
-func (w *WebhookService) SendIPBlacklistAlert(ip string, reason string) {
-	title := "🚫 Admin Action: IP Blacklisted"
-	desc := fmt.Sprintf("*IP Address:* `%s`\n*Reason:* %s", ip, reason)
-	facts := []map[string]string{
-		{keyName: "IP Address", keyValue: ip},
-		{keyName: keyReason, keyValue: reason},
-	}
-	w.enqueueOrSend(title, desc, colorDanger, facts)
-}
-
-func (w *WebhookService) SendTestAlert(actor, timestamp, version string) {
-	title := "🧪 Liferay Tunnel Integration Test"
-	desc := fmt.Sprintf("This is a test notification dispatched from the Liferay Tunnel gateway.\n\n*Triggered By:* `%s`\n*Timestamp:* `%s`\n*Server Version:* `%s` ", actor, timestamp, version)
-	facts := []map[string]string{
-		{keyName: "Triggered By", keyValue: actor},
-		{keyName: "Timestamp", keyValue: timestamp},
-		{keyName: "Server Version", keyValue: version},
-	}
-	w.enqueueOrSend(title, desc, colorDefault, facts)
+// SendAlert queues one admin alert. title is the alert's subject; text is Slack mrkdwn.
+//
+// One entry point for every alert kind, replacing six hand-built ones (#2435). Those covered five
+// of the ten admin alerts, so a webhook could never be a full alternative to email: extension
+// requests, quota events, watchdog restarts and stalled edge metrics reached email only. The
+// server now hands every alert to this, so coverage follows from the dispatch rather than from
+// someone remembering to write a seventh.
+func (w *WebhookService) SendAlert(title, text string) {
+	w.enqueueOrSend(title, text, colorDefault, nil)
 }
 
 func (w *WebhookService) StartQueueConsumer(ctx context.Context, interval time.Duration) {
@@ -258,7 +211,7 @@ func (w *WebhookService) StartQueueConsumer(ctx context.Context, interval time.D
 }
 
 func (w *WebhookService) processQueueBatch() {
-	if !w.cfg.Enabled {
+	if !w.cfg.HasURL() {
 		return
 	}
 
@@ -296,7 +249,8 @@ func (w *WebhookService) processQueueBatch() {
 		var sb strings.Builder
 		_, _ = fmt.Fprintf(&sb, "This is an aggregated activity digest containing %d events:\n\n", len(msgs))
 		for i, msg := range msgs {
-			_, _ = fmt.Fprintf(&sb, "#### %d. %s\n%s\n\n", i+1, msg.Title, msg.Description)
+			// Bold, not a "####" heading: Slack mrkdwn has no headings and printed the hashes.
+			_, _ = fmt.Fprintf(&sb, "*%d. %s*\n%s\n\n", i+1, msg.Title, msg.Description)
 		}
 
 		slack, teams = w.buildPayloads(title, sb.String(), color, nil)

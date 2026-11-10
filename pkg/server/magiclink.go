@@ -44,7 +44,7 @@ func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	// Blacklist the IP
 	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email") //nolint:errcheck
 	s.blacklist.Store(link.ClientIP, true)
-	s.webhooks.SendAbuseReportAlert(link.Email, "Unauthorized magic link login attempt", link.ClientIP)
+	s.alertAbuseReport(link.Email, "Unauthorized magic link login attempt", link.ClientIP)
 
 	slog.Info(fmt.Sprintf("[Auth] Magic link reported by %s. IP %s has been blacklisted.", link.Email, link.ClientIP))
 
@@ -104,7 +104,7 @@ func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request
 	_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 
 	s.writeAudit(user.Email, "auth.registration_reported", "user", user.Email, "User reported unauthorized registration request", r)
-	s.webhooks.SendAbuseReportAlert(user.Email, "Unauthorized registration request", s.clientIP(r))
+	s.alertAbuseReport(user.Email, "Unauthorized registration request", s.clientIP(r))
 
 	w.Header().Set("Content-Type", "text/html")
 	if _, err := w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process.")); err != nil {

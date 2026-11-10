@@ -171,6 +171,19 @@ export default function AdminSettings() {
 
   const [webhookTesting, setWebhookTesting] = useState(false);
 
+  // Admin alert method (#2435): email or the Slack/Teams webhook, one at a time. Kept in step
+  // with V1's copy in dashboard.js -- the arms are a live A/B test, so a control in one only
+  // is a defect. `alertMethod` is what is in force; `alertMethodOverride` is the owner's
+  // stored choice ('' = use the YAML), and the two differ when a chosen webhook has lost its
+  // URL and alerts fell back to email.
+  const [alertMethod, setAlertMethod] = useState('');
+  const [alertMethodSource, setAlertMethodSource] = useState('');
+  const [alertMethodConfig, setAlertMethodConfig] = useState('');
+  const [alertMethodOverride, setAlertMethodOverride] = useState('');
+  const [canChangeAlertMethod, setCanChangeAlertMethod] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [alertMethodLoaded, setAlertMethodLoaded] = useState(false);
+
   // Broadcast state
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
@@ -227,6 +240,20 @@ export default function AdminSettings() {
       // Same reasoning as alertsLoaded: an empty vocabulary is a gateway that failed to
       // describe itself, and saving from that state would post a vendor nobody chose.
       setGeoLoaded(vendors.length > 0);
+
+      setAlertMethod(aRes.data.admin_alert_method || '');
+      setAlertMethodSource(aRes.data.admin_alert_method_source || '');
+      setAlertMethodConfig(aRes.data.admin_alert_method_config || '');
+      setAlertMethodOverride(aRes.data.admin_alert_method_override || '');
+      setCanChangeAlertMethod(aRes.data.can_change_alert_method === true);
+      setWebhookConfigured(
+        aRes.data.webhook_slack_configured === true ||
+          aRes.data.webhook_teams_configured === true,
+      );
+      // Same rule as the other loaded flags: a gateway that did not say which method is in
+      // force has not described itself, and saving from that state would post a choice
+      // nobody made.
+      setAlertMethodLoaded(!!aRes.data.admin_alert_method);
 
       // Fetched for test_target alone; see the state declaration above.
       const mRes = await axios.get('/api/admin/maintenance');
@@ -350,8 +377,14 @@ export default function AdminSettings() {
           // Only when the vocabulary actually arrived. Posting '' from an unloaded form
           // would clear a vendor the operator chose, and silently stop crediting them.
           ...(geoLoaded ? { country_db_provider: geoProvider } : {}),
+          // Owner-only server-side; a non-owner posting it would fail the whole save.
+          ...(alertMethodLoaded && canChangeAlertMethod
+            ? { admin_alert_method: alertMethodOverride }
+            : {}),
         });
         showToast('System settings saved successfully.', 'success');
+        // Re-read, so the in-force line and the test target reflect what was just saved.
+        fetchAllData();
       } else {
         showToast(
           'System settings were saved, but the email alert toggles were not.',
@@ -1015,7 +1048,7 @@ export default function AdminSettings() {
           <div>
             <h4 className="m-0">Integrations</h4>
             <div className="text-sm text-muted mt-xs">
-              Test your configured webhooks (Slack/Teams).
+              Send a test alert by the method selected below.
             </div>
           </div>
           <button
@@ -1030,6 +1063,83 @@ export default function AdminSettings() {
             (dashboard.html:907); the value already arrives on /api/admin/maintenance as
             test_target (server.go:3201) and V2 simply was not displaying it. Without it
             the button reports success without saying what it reached (#1290). */}
+        {alertMethodLoaded && (
+          <div className="form-group mt-lg" data-testid="alert-method">
+            <label className="form-label" htmlFor="alert-method-select">
+              {t('alert_method_label', 'Send admin alerts by')}
+            </label>
+            <select
+              id="alert-method-select"
+              data-testid="alert-method-select"
+              className="input-field"
+              value={alertMethodOverride}
+              disabled={!canChangeAlertMethod}
+              onChange={(e) => setAlertMethodOverride(e.target.value)}
+            >
+              <option value="">
+                {t(
+                  'alert_method_use_config',
+                  'Server config default ({0})',
+                ).replace(
+                  '{0}',
+                  alertMethodConfig === 'webhook'
+                    ? t('alert_method_webhook', 'Slack / Teams webhook')
+                    : t('alert_method_email', 'Email'),
+                )}
+              </option>
+              <option value="email">{t('alert_method_email', 'Email')}</option>
+              {/* Not offered without a URL: the server refuses it, and an option that
+                  can only fail is worse than a missing one. */}
+              <option value="webhook" disabled={!webhookConfigured}>
+                {t('alert_method_webhook', 'Slack / Teams webhook')}
+              </option>
+            </select>
+            <p
+              className="text-xs text-muted mt-xs"
+              data-testid="alert-method-source"
+            >
+              {(alertMethodSource === 'portal'
+                ? t(
+                    'alert_method_source_portal',
+                    'In force: {0}, chosen here. This overrides admin_alerts.method in server-config.yaml.',
+                  )
+                : t(
+                    'alert_method_source_config',
+                    'In force: {0}, from admin_alerts.method in server-config.yaml.',
+                  )
+              ).replace(
+                '{0}',
+                alertMethod === 'webhook'
+                  ? t('alert_method_webhook', 'Slack / Teams webhook')
+                  : t('alert_method_email', 'Email'),
+              )}
+            </p>
+            {alertMethodOverride === 'webhook' && alertMethod === 'email' && (
+              <div className="alert-banner alert-banner--warning mt-md text-sm">
+                {t(
+                  'alert_method_fallback',
+                  'The webhook was chosen, but no webhook URL is configured, so alerts are going by email.',
+                )}
+              </div>
+            )}
+            {!webhookConfigured && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_no_webhook',
+                  'No webhook URL is set in server-config.yaml, so only email is available.',
+                )}
+              </p>
+            )}
+            {!canChangeAlertMethod && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_owner_only',
+                  'Only the owner can change how admin alerts are delivered.',
+                )}
+              </p>
+            )}
+          </div>
+        )}
         {maintenance?.test_target && (
           <div className="text-sm text-muted mt-md">
             Active Target:{' '}

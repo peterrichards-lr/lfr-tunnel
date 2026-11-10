@@ -141,8 +141,13 @@ smtp_server:
   username: ""      # supply out of band; never commit
   password: ""      # supply out of band; never commit
   from_address: "Liferay Tunnel <noreply@example.com>"
+# How admin alerts are delivered: "email" (to admin_notification_email) or "webhook" (to the
+# slack_url / teams_url below). One or the other, never both. The owner can override this in
+# System Settings; clearing that override returns to this value.
+admin_alerts:
+  method: email
 webhooks:
-  enabled: false
+  enabled: false    # superseded by admin_alerts.method; no longer sends anything on its own
   slack_url: ""     # secret; never commit
   teams_url: ""     # secret; never commit
   batch_interval_seconds: 0

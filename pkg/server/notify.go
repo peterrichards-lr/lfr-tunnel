@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"lfr-tunnel/pkg/config"
 )
 
 // Every notification email the gateway sends goes through this file.
@@ -260,7 +262,14 @@ func (s *Server) clearNotificationFailures(recipient string) {
 // owner's own alert channel is covered by the same recording as everything else. It was the
 // worst-placed of the INFO-only sites: an alert that never arrives is indistinguishable from
 // nothing having happened, which is the failure mode alerts exist to prevent.
+//
+// The one dispatch point for admin alerts, so admin_alerts.method (#2435) decides the route for
+// every alert in one place: exactly one of email or webhook, never both.
 func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
+	if method, _ := s.effectiveAlertMethod(); method == config.AdminAlertMethodWebhook {
+		s.sendAdminAlertWebhook(settingKey, subject, htmlBody)
+		return
+	}
 	if s.notifications == nil {
 		return
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"os"
@@ -231,23 +232,19 @@ func (s *Server) vanityHookEnv() []string {
 	return env
 }
 
-// alertVanityDomainHookFailure notifies the admin (email via SendAdminAlert + webhook,
-// matching the existing pattern for every other admin alert in this codebase -- e.g. IP
-// blacklist) and, separately, the requesting user directly by email, bypassing their
+// alertVanityDomainHookFailure notifies the admin through sendAdminAlert -- email or webhook,
+// whichever admin_alerts.method selects (#2435) -- and, separately, the requesting user directly by email, bypassing their
 // notification preference (see runVanityDomainHook's comment for why). Skips the
 // requesting-user email if they ARE the admin/owner -- they've already gotten the news
 // above, and sending it again as "your domain" would just duplicate it in the same inbox.
 func (s *Server) alertVanityDomainHookFailure(action, domain, requestingUserID string, hookErr error) {
-	if s.notifications != nil {
-		body := fmt.Sprintf(
-			"<p>The vanity domain hook failed.</p><ul><li>Action: %s</li><li>Domain: %s</li><li>Requested by: %s</li><li>Error: %s</li></ul>",
-			action, domain, requestingUserID, hookErr.Error(),
-		)
-		s.sendAdminAlert("alert_notify_vanity_hook_failure", "LFR Tunnel Alert: Vanity Domain Hook Failed", body)
-	}
-	if s.webhooks != nil {
-		s.webhooks.SendVanityDomainHookFailureAlert(action, domain, requestingUserID, hookErr.Error())
-	}
+	// Not gated on s.notifications: with alerts going to a webhook, a gateway with no SMTP is a
+	// supported setup, and this alert would otherwise vanish there.
+	alertBody := fmt.Sprintf(
+		"<p>The vanity domain hook failed.</p><ul><li>Action: %s</li><li>Domain: %s</li><li>Requested by: %s</li><li>Error: %s</li></ul>",
+		html.EscapeString(action), html.EscapeString(domain), html.EscapeString(requestingUserID), html.EscapeString(hookErr.Error()),
+	)
+	s.sendAdminAlert("alert_notify_vanity_hook_failure", "LFR Tunnel Alert: Vanity Domain Hook Failed", alertBody)
 
 	if strings.EqualFold(requestingUserID, s.cfg.AdminNotificationEmail) || strings.EqualFold(requestingUserID, s.cfg.Owner.UserID) {
 		return

@@ -539,6 +539,19 @@ type nginxFlags struct {
 	allowVhostRemoval *bool
 }
 
+// ownedCertRoot picks where a node reads the certificates for the domains it owns: the explicit
+// -cert-root if given, otherwise by role (#2438). See buildRenderConfigFromFlags for why an edge
+// must not read certbot's own directory.
+func ownedCertRoot(role nginxRole, explicit string) string {
+	if v := strings.TrimSpace(explicit); v != "" {
+		return v
+	}
+	if role == RoleEdge {
+		return certRootCertSync
+	}
+	return certRootLetsEncrypt
+}
+
 func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 	return nginxFlags{
 		role: fs.String("role", string(RoleCentral),
@@ -647,13 +660,7 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 	// still pointing at a Cloudflare plugin for zones that no longer existed. Central issues
 	// <edge>.lfr-demo.se and *.<edge>.lfr-demo.se and pushes them with the apex wildcards
 	// (#1302), so an edge reads the pushed copy. An explicit -cert-root still wins.
-	certRoot := strings.TrimSpace(*f.certRoot)
-	if certRoot == "" {
-		certRoot = certRootLetsEncrypt
-		if role == RoleEdge {
-			certRoot = certRootCertSync
-		}
-	}
+	certRoot := ownedCertRoot(role, *f.certRoot)
 	for _, d := range owned {
 		if err := checkApexDomain(d); err != nil {
 			return nginxRenderConfig{}, err

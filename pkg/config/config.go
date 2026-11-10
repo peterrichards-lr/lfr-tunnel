@@ -32,8 +32,8 @@ type SMTPServerConfig struct {
 }
 
 type WebhookConfig struct {
-	// Enabled is superseded by admin_alerts.method (#2435) and no longer sends anything on its
-	// own. Still parsed so an existing file keeps loading; LoadServerConfig warns when it is set.
+	// Enabled is superseded by admin_alerts.slack.method (#2435) and no longer sends anything on
+	// its own. Still parsed so an existing file keeps loading; LoadServerConfig warns when it is set.
 	Enabled              bool   `yaml:"enabled"`
 	SlackURL             string `yaml:"slack_url"`
 	TeamsURL             string `yaml:"teams_url"`
@@ -144,7 +144,7 @@ type ServerConfig struct {
 	CountryDBProvider string           `yaml:"country_db_provider"`
 	SMTPServer        SMTPServerConfig `yaml:"smtp_server"`
 	Webhooks          WebhookConfig    `yaml:"webhooks"`
-	// AdminAlerts.Method chooses between email and the webhook for every admin alert (#2435).
+	// AdminAlerts.Slack chooses how admin alerts reach Slack, alongside email (#2435).
 	AdminAlerts            AdminAlertsConfig `yaml:"admin_alerts"`
 	SlackApp               SlackAppConfig    `yaml:"slack_app"`
 	AdminNotificationEmail string            `yaml:"admin_notification_email"`

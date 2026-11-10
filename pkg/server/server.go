@@ -3913,13 +3913,8 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 		// Where a test alert -- and every real one -- goes right now (#2435).
 		testTarget := "Email: " + s.cfg.AdminNotificationEmail
-		if method, _ := s.effectiveAlertMethod(); method == config.AdminAlertMethodWebhook {
-			if s.cfg.Webhooks.SlackURL != "" {
-				testTarget = "Slack Channel (Webhook)"
-			} else {
-				testTarget = "Microsoft Teams Channel"
-			}
-		}
+		slackMethod, _ := s.effectiveSlackMethod()
+		testTarget += " · Slack: " + slackMethodLabel(slackMethod)
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"status":           maintStr,
@@ -5991,8 +5986,8 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		// An unknown key is now a 400 rather than a shrug, so a typo is visible at the caller
 		// instead of looking like a setting that will not stick.
 		for key := range payload {
-			// The alert method is owner-only and checked against the webhook URLs (#2435).
-			if key == adminAlertMethodSettingKey {
+			// The Slack alert method is owner-only and checked against its destination (#2435).
+			if key == slackAlertMethodSettingKey {
 				if status, msg := s.validateAlertMethodChange(actor, payload[key]); status != 0 {
 					http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), status)
 					return
@@ -6040,13 +6035,13 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			}
 			s.writeAudit(actor, "admin.settings_updated", "system", geoProviderSettingKey, detail, r)
 		}
-		if v, ok := payload[adminAlertMethodSettingKey]; ok {
-			detail := "Owner set admin alerts to go by " + v
+		if v, ok := payload[slackAlertMethodSettingKey]; ok {
+			detail := "Owner set admin alerts to reach Slack by " + v
 			if v == "" {
-				detail = "Owner cleared the alert method set in the portal; admin_alerts.method in " +
+				detail = "Owner cleared the Slack alert method set in the portal; admin_alerts.slack.method in " +
 					"server-config.yaml applies again"
 			}
-			s.writeAudit(actor, "admin.settings_updated", "system", adminAlertMethodSettingKey, detail, r)
+			s.writeAudit(actor, "admin.settings_updated", "system", slackAlertMethodSettingKey, detail, r)
 		}
 		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated email alert configuration", r)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"}) //nolint:errcheck
@@ -6082,8 +6077,9 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
 	version := config.Version
 
-	// 3. Dispatch through the same route every real alert takes (#2435). It used to send a
-	// webhook AND an email, so a test could pass on a route no alert actually used.
+	// 3. Dispatch through the same routes every real alert takes (#2435): the admin inbox, and
+	// Slack by whichever integration is chosen. It used to post to the webhook whether or not
+	// any real alert went there, so a test could pass on a route nothing used.
 	body, err := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
 		"Actor":     actor,
 		"Timestamp": timestamp,
@@ -6091,7 +6087,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 	})
 	_ = err //nolint:errcheck
 	s.sendAdminAlert("alert_notify_test", "Liferay Tunnel Integration Test", body)
-	method, _ := s.effectiveAlertMethod()
+	slackMethod, _ := s.effectiveSlackMethod()
 
 	// 5. Record Audit log
 	s.writeAudit(actor, "admin.test_notification_dispatched", "system", "webhook_test", "Admin triggered an integration test notification", r)
@@ -6099,7 +6095,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 		"status":  "success",
-		"message": fmt.Sprintf("Test alert sent by %s.", method),
+		"message": fmt.Sprintf("Test alert sent to %s; Slack: %s.", s.cfg.AdminNotificationEmail, slackMethodLabel(slackMethod)),
 	})
 }
 

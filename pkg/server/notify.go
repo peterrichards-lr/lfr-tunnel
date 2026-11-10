@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-
-	"lfr-tunnel/pkg/config"
 )
 
 // Every notification email the gateway sends goes through this file.
@@ -263,13 +261,11 @@ func (s *Server) clearNotificationFailures(recipient string) {
 // worst-placed of the INFO-only sites: an alert that never arrives is indistinguishable from
 // nothing having happened, which is the failure mode alerts exist to prevent.
 //
-// The one dispatch point for admin alerts, so admin_alerts.method (#2435) decides the route for
-// every alert in one place: exactly one of email or webhook, never both.
+// The one dispatch point for admin alerts. Email to the admin inbox is unchanged; Slack is a
+// second, independent route chosen by admin_alerts.slack.method (#2435), so every alert reaches
+// the channel by exactly one integration or not at all.
 func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
-	if method, _ := s.effectiveAlertMethod(); method == config.AdminAlertMethodWebhook {
-		s.sendAdminAlertWebhook(settingKey, subject, htmlBody)
-		return
-	}
+	s.sendAdminAlertToSlack(settingKey, subject, htmlBody)
 	if s.notifications == nil {
 		return
 	}

@@ -5,27 +5,35 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/webhook"
 )
 
-// Admin alerts take exactly one route, chosen by admin_alerts.method or the owner's override
-// (#2435). Before this, email and the webhook ran side by side, and an operator whose email
-// already forwarded into Slack got every alert twice.
+// Every admin alert goes to the admin inbox; it can ALSO reach Slack by exactly one of two
+// integrations -- the channel's email address or the incoming webhook -- chosen by
+// admin_alerts.slack.method or the owner's override (#2435).
 
-const testWebhookURL = "http://127.0.0.1:1/slack" // never reached: the queue is read directly
+const (
+	testWebhookURL   = "http://127.0.0.1:1/slack" // never reached: the queue is read directly
+	testChannelEmail = "chan-x@example.slack.com"
+	testInbox        = "alerts@example.com"
+)
 
-// alertRouteServer is a server with both routes configured, so a test can see which one an
-// alert actually took. The webhook queue is the database's, which is how production queues it.
+// alertRouteServer has the inbox and both Slack integrations configured, so a test can see
+// exactly where an alert went. The webhook queue is the database's, as in production.
 func alertRouteServer(t *testing.T) (*Server, *mockMailSender) {
 	t.Helper()
 	srv := setupTestServerForAPI(t)
-	srv.cfg.AdminNotificationEmail = "alerts@example.com"
+	srv.cfg.AdminNotificationEmail = testInbox
 	srv.cfg.Owner.UserID = "owner@example.com"
 	srv.cfg.Webhooks.SlackURL = testWebhookURL
+	srv.cfg.AdminAlerts.Slack.ChannelEmail = testChannelEmail
+	srv.cfg.AdminAlerts.Slack.Method = config.SlackAlertMethodOff
 	m := &mockMailSender{}
 	srv.notifications = NewNotificationService(m, srv.db, srv.cfg)
 	srv.webhooks = webhook.NewWebhookService(srv.cfg.Webhooks, srv.db)
@@ -45,39 +53,68 @@ func queuedWebhookTitles(t *testing.T, srv *Server) []string {
 	return titles
 }
 
-func TestAdminAlertTakesExactlyOneRoute(t *testing.T) {
-	srv, mail := alertRouteServer(t)
-
-	// Email: the default. Nothing may reach the webhook queue.
-	srv.sendAdminAlert("alert_notify_registration", "By email", "<p>body</p>")
-	waitForSentEmail(t, mail)
-	if got := queuedWebhookTitles(t, srv); len(got) != 0 {
-		t.Fatalf("email mode also queued a webhook alert: %v", got)
+// waitForRecipients waits until mail has gone to exactly want (sends are asynchronous), then
+// gives any stray extra send a moment to show itself.
+func waitForRecipients(t *testing.T, m *mockMailSender, want ...string) []string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(m.getSentEmails()) < len(want) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
 	}
+	time.Sleep(100 * time.Millisecond)
+	var got []string
+	for _, e := range m.getSentEmails() {
+		got = append(got, e.To)
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("mail went to %v, want %v", got, want)
+	}
+	return got
+}
 
-	// Webhook, chosen by the owner. The webhook path is synchronous and the email path is
-	// never entered, so the attempt count is final the moment the call returns.
-	if err := srv.db.SetAdminSetting(adminAlertMethodSettingKey, "webhook"); err != nil {
+func setSlackMethod(t *testing.T, srv *Server, m string) {
+	t.Helper()
+	if err := srv.db.SetAdminSetting(slackAlertMethodSettingKey, m); err != nil {
 		t.Fatal(err)
 	}
-	before := mail.sendAttempts()
-	srv.sendAdminAlert("alert_notify_registration", "By webhook", "<p>body</p>")
-	if got := queuedWebhookTitles(t, srv); len(got) != 1 || got[0] != "By webhook" {
-		t.Fatalf("webhook mode: want one queued alert titled %q, got %v", "By webhook", got)
+}
+
+func TestSlackOffSendsOnlyToTheInbox(t *testing.T) {
+	srv, mail := alertRouteServer(t)
+	srv.sendAdminAlert("alert_notify_registration", "Inbox only", "<p>body</p>")
+	waitForRecipients(t, mail, testInbox)
+	if got := queuedWebhookTitles(t, srv); len(got) != 0 {
+		t.Fatalf("Slack is off but the webhook got %v", got)
 	}
-	if after := mail.sendAttempts(); after != before {
-		t.Fatalf("webhook mode also sent %d email(s)", after-before)
+}
+
+func TestSlackByChannelEmailAddsTheChannelAndNotTheWebhook(t *testing.T) {
+	srv, mail := alertRouteServer(t)
+	setSlackMethod(t, srv, "email")
+	srv.sendAdminAlert("alert_notify_registration", "Channel email", "<p>body</p>")
+	waitForRecipients(t, mail, testInbox, testChannelEmail)
+	if got := queuedWebhookTitles(t, srv); len(got) != 0 {
+		t.Fatalf("channel email chosen but the webhook also got %v -- the channel would see it twice", got)
+	}
+}
+
+func TestSlackByWebhookAddsTheWebhookAndNotTheChannelEmail(t *testing.T) {
+	srv, mail := alertRouteServer(t)
+	setSlackMethod(t, srv, "webhook")
+	srv.sendAdminAlert("alert_notify_registration", "Webhook", "<p>body</p>")
+	waitForRecipients(t, mail, testInbox)
+	if got := queuedWebhookTitles(t, srv); len(got) != 1 || got[0] != "Webhook" {
+		t.Fatalf("want one webhook alert, got %v", got)
 	}
 }
 
 // TestEveryAlertReachesTheWebhook: the webhook used to carry five of the alerts, so it could not
-// stand in for email. Every declared key must now arrive, which is what makes it an alternative
-// rather than a subset.
+// stand in for the channel email. Every declared key must now arrive.
 func TestEveryAlertReachesTheWebhook(t *testing.T) {
 	srv, _ := alertRouteServer(t)
-	if err := srv.db.SetAdminSetting(adminAlertMethodSettingKey, "webhook"); err != nil {
-		t.Fatal(err)
-	}
+	setSlackMethod(t, srv, "webhook")
 	for _, a := range AlertSettings {
 		// tunnel_offline defaults off; switch everything on so default-off is not mistaken
 		// for missing coverage.
@@ -86,51 +123,45 @@ func TestEveryAlertReachesTheWebhook(t *testing.T) {
 		}
 		srv.sendAdminAlert(a.Key, a.Key, "<p>x</p>")
 	}
-	got := queuedWebhookTitles(t, srv)
-	if len(got) != len(AlertSettings) {
+	if got := queuedWebhookTitles(t, srv); len(got) != len(AlertSettings) {
 		t.Fatalf("want all %d alerts on the webhook, got %d: %v", len(AlertSettings), len(got), got)
 	}
 }
 
-// TestAlertTogglesGateTheWebhookToo: switching method must not change WHICH alerts arrive.
-func TestAlertTogglesGateTheWebhookToo(t *testing.T) {
+// TestAlertTogglesGateSlackToo: turning Slack on must not change WHICH alerts arrive.
+func TestAlertTogglesGateSlackToo(t *testing.T) {
 	srv, _ := alertRouteServer(t)
-	if err := srv.db.SetAdminSetting(adminAlertMethodSettingKey, "webhook"); err != nil {
-		t.Fatal(err)
-	}
+	setSlackMethod(t, srv, "webhook")
 	if err := srv.db.SetAdminSetting("alert_notify_registration", alertSettingOff); err != nil {
 		t.Fatal(err)
 	}
 	srv.sendAdminAlert("alert_notify_registration", "Muted", "<p>x</p>")
-	// Control: an alert that is on still goes, so an empty queue above means "gated", not
-	// "the webhook path is broken".
+	// Control: an alert that is on still goes, so the absence above means "gated", not "the
+	// webhook path is broken".
 	srv.sendAdminAlert("alert_notify_blacklist", "Not muted", "<p>x</p>")
-
-	got := queuedWebhookTitles(t, srv)
-	if len(got) != 1 || got[0] != "Not muted" {
+	if got := queuedWebhookTitles(t, srv); len(got) != 1 || got[0] != "Not muted" {
 		t.Fatalf("want only the enabled alert queued, got %v", got)
 	}
 }
 
-// TestWebhookChoiceWithoutURLFallsBackToEmail: an owner chose the webhook, then the URL was
-// removed from the YAML. Alerts go by email rather than into a queue that can never deliver.
-func TestWebhookChoiceWithoutURLFallsBackToEmail(t *testing.T) {
+// TestUnavailableOverrideFallsBackToTheYAML: the owner chose the webhook, then its URL was removed
+// from the YAML. The YAML's own method applies rather than alerts queueing for nowhere.
+func TestUnavailableOverrideFallsBackToTheYAML(t *testing.T) {
 	srv, mail := alertRouteServer(t)
-	if err := srv.db.SetAdminSetting(adminAlertMethodSettingKey, "webhook"); err != nil {
-		t.Fatal(err)
-	}
+	srv.cfg.AdminAlerts.Slack.Method = config.SlackAlertMethodEmail
+	setSlackMethod(t, srv, "webhook")
 	srv.cfg.Webhooks.SlackURL = ""
 
-	if m, _ := srv.effectiveAlertMethod(); m != config.AdminAlertMethodEmail {
-		t.Fatalf("with no URL the method in force must be email, got %q", m)
+	if m, src := srv.effectiveSlackMethod(); m != config.SlackAlertMethodEmail || src != alertMethodSourceServerConfig {
+		t.Fatalf("want the YAML's email method in force, got %q from %q", m, src)
 	}
 	srv.sendAdminAlert("alert_notify_registration", "Fallback", "<p>x</p>")
-	waitForSentEmail(t, mail)
+	waitForRecipients(t, mail, testInbox, testChannelEmail)
 }
 
-func postAlertMethod(t *testing.T, srv *Server, actor, value string) *httptest.ResponseRecorder {
+func postSlackMethod(t *testing.T, srv *Server, actor, value string) *httptest.ResponseRecorder {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{adminAlertMethodSettingKey: value})
+	body, _ := json.Marshal(map[string]string{slackAlertMethodSettingKey: value})
 	rec := httptest.NewRecorder()
 	srv.handleAdminSettings(rec, httptest.NewRequest(http.MethodPost, "/api/admin/settings", bytes.NewReader(body)), actor)
 	return rec
@@ -150,14 +181,14 @@ func getSettings(t *testing.T, srv *Server, actor string) map[string]interface{}
 	return out
 }
 
-func TestAlertMethodOverrideIsOwnerOnlyAndReportsItsSource(t *testing.T) {
+func TestSlackMethodOverrideIsOwnerOnlyAndReportsItsSource(t *testing.T) {
 	srv, _ := alertRouteServer(t)
 
 	out := getSettings(t, srv, "owner@example.com")
-	if out["admin_alert_method"] != "email" || out["admin_alert_method_source"] != "server_config" {
-		t.Fatalf("unset override: want email from server_config, got %v from %v", out["admin_alert_method"], out["admin_alert_method_source"])
+	if out["admin_alert_slack_method"] != "off" || out["admin_alert_slack_method_source"] != "server_config" {
+		t.Fatalf("unset override: want off from server_config, got %v from %v", out["admin_alert_slack_method"], out["admin_alert_slack_method_source"])
 	}
-	if out["can_change_alert_method"] != true || out["webhook_slack_configured"] != true {
+	if out["can_change_alert_method"] != true || out["slack_webhook_configured"] != true || out["slack_channel_email"] != testChannelEmail {
 		t.Fatalf("owner view: %v", out)
 	}
 	for k, v := range out {
@@ -166,40 +197,39 @@ func TestAlertMethodOverrideIsOwnerOnlyAndReportsItsSource(t *testing.T) {
 		}
 	}
 
-	if rec := postAlertMethod(t, srv, "admin@example.com", "webhook"); rec.Code != http.StatusForbidden {
-		t.Fatalf("a non-owner changed the alert method: %d %s", rec.Code, rec.Body.String())
+	if rec := postSlackMethod(t, srv, "admin@example.com", "webhook"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a non-owner changed the Slack method: %d %s", rec.Code, rec.Body.String())
 	}
 	if got := getSettings(t, srv, "admin@example.com")["can_change_alert_method"]; got != false {
 		t.Fatalf("non-owner told they can change the method: %v", got)
 	}
-	if rec := postAlertMethod(t, srv, "owner@example.com", "pigeon"); rec.Code != http.StatusBadRequest {
+	if rec := postSlackMethod(t, srv, "owner@example.com", "pigeon"); rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown method accepted: %d", rec.Code)
 	}
 
-	if rec := postAlertMethod(t, srv, "owner@example.com", "webhook"); rec.Code != http.StatusOK {
+	if rec := postSlackMethod(t, srv, "owner@example.com", "webhook"); rec.Code != http.StatusOK {
 		t.Fatalf("owner could not choose the webhook: %d %s", rec.Code, rec.Body.String())
 	}
 	out = getSettings(t, srv, "owner@example.com")
-	if out["admin_alert_method_override"] != "webhook" {
-		t.Fatalf("override not reported: %v", out["admin_alert_method_override"])
-	}
-	if out["admin_alert_method"] != "webhook" || out["admin_alert_method_source"] != "portal" {
-		t.Fatalf("after override: want webhook from portal, got %v from %v", out["admin_alert_method"], out["admin_alert_method_source"])
+	if out["admin_alert_slack_method_override"] != "webhook" || out["admin_alert_slack_method"] != "webhook" || out["admin_alert_slack_method_source"] != "portal" {
+		t.Fatalf("after override: %v / %v / %v", out["admin_alert_slack_method_override"], out["admin_alert_slack_method"], out["admin_alert_slack_method_source"])
 	}
 
 	// Clearing returns to the YAML.
-	if rec := postAlertMethod(t, srv, "owner@example.com", ""); rec.Code != http.StatusOK {
+	if rec := postSlackMethod(t, srv, "owner@example.com", ""); rec.Code != http.StatusOK {
 		t.Fatalf("clear: %d %s", rec.Code, rec.Body.String())
 	}
-	out = getSettings(t, srv, "owner@example.com")
-	if out["admin_alert_method"] != "email" || out["admin_alert_method_source"] != "server_config" {
-		t.Fatalf("after clearing: want email from server_config, got %v from %v", out["admin_alert_method"], out["admin_alert_method_source"])
+	if out = getSettings(t, srv, "owner@example.com"); out["admin_alert_slack_method"] != "off" || out["admin_alert_slack_method_source"] != "server_config" {
+		t.Fatalf("after clearing: want off from server_config, got %v from %v", out["admin_alert_slack_method"], out["admin_alert_slack_method_source"])
 	}
 
-	// No URL: the owner cannot pick a webhook that has nowhere to post.
+	// A method with no destination cannot be chosen.
 	srv.cfg.Webhooks.SlackURL = ""
-	if rec := postAlertMethod(t, srv, "owner@example.com", "webhook"); rec.Code != http.StatusBadRequest {
-		t.Fatalf("webhook accepted with no URL: %d", rec.Code)
+	srv.cfg.AdminAlerts.Slack.ChannelEmail = ""
+	for _, m := range []string{"webhook", "email"} {
+		if rec := postSlackMethod(t, srv, "owner@example.com", m); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s accepted with no destination: %d", m, rec.Code)
+		}
 	}
 }
 

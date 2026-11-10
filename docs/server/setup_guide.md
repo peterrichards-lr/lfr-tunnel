@@ -405,19 +405,27 @@ to `-check-config`.
 
 > [!NOTE]
 > **Slack & Microsoft Teams Notifications Configuration**
-> Liferay Tunnel supports two secure options for routing gateway notification alerts (user registration requests, rate limit blocks, abuse reports, manual IP bans) directly to your Slack or Teams channels:
-> 
-> 1. **Incoming Webhook URL (Preferred)**:
->    - Create an Incoming Webhook App inside your corporate Slack or Teams workspace mapped to a target channel (public or private).
->    - Add the generated secret webhook URL to the `webhooks.slack_url` or `webhooks.teams_url` parameter in `server-config.yaml` and set `webhooks.enabled: true`.
->    - This uses rich markdown formatting (Slack Block Kit or Office 365 Message Cards) to deliver beautiful notifications asynchronously.
-> 
-> 2. **Slack Channel Email Address (Alternative)**:
->    - Generate an email address for your target Slack channel inside Slack channel settings (under *Integrations > Send emails to this channel*).
->    - Configure `admin_notification_email` to point directly to that address in `server-config.yaml` (e.g. `admin_notification_email: '"lfr-tunnel-admin (Slack)" <lfr-tunnel-admin-xxx@liferay.slack.com>'`).
->    - Our mail client fully parses name-formatted email recipients natively, ensuring standard SMTP notifications are safely delivered and displayed directly inside the channel without requiring Slack App authorization.
+> Admin alerts (registrations, extension requests, IP bans, abuse reports, quota events, watchdog restarts, stalled edge metrics, tunnels going offline, custom-domain hook failures) always go to `admin_notification_email`. They can **also** go to a Slack channel by one of two integrations. These are either/or: with both on, the channel gets every alert twice.
+>
+> ```yaml
+> admin_notification_email: you@example.com   # the admin inbox; unaffected by the setting below
+> admin_alerts:
+>   slack:
+>     method: off          # off | email | webhook
+>     channel_email: "lfr-tunnel-admin-xxx@example.slack.com"
+> webhooks:
+>   slack_url: ""          # used by method: webhook; a secret
+> ```
+>
+> 1. **`email`**: alerts are emailed to the channel's own address, which you generate under channel settings, *Integrations > Send emails to this channel*. This needs no Slack app. Name-formatted addresses (`'"lfr-tunnel-admin (Slack)" <…@….slack.com>'`) are accepted.
+> 2. **`webhook`**: alerts are posted by an Incoming Webhook. On your Slack app, open *Incoming Webhooks > Add New Webhook to Workspace* and pick the channel, then put the URL in `webhooks.slack_url`. `webhooks.teams_url` works the same way for Teams. Anyone holding the URL can post to the channel.
+>
+> Both methods carry every alert, and the per-alert toggles in System Settings apply to both. The gateway refuses to start if the chosen method has no destination configured.
+>
+> The **owner** can override `method` in **System Settings > Integrations** in either portal. The page says which method is in force and whether it came from the portal or from `server-config.yaml`; *Server config default* removes the override. Admins see the setting but cannot change it. If a method chosen in the portal later loses its destination in the YAML, the YAML's own method applies. **Send Test Alert** goes to the admin inbox and to Slack by the method in force.
+>
+> If you previously pointed `admin_notification_email` at the channel's address, move that address to `admin_alerts.slack.channel_email` with `method: email`, and set `admin_notification_email` to a real inbox. Otherwise the channel receives the inbox copy as well. `webhooks.enabled` is superseded: it no longer sends anything on its own, and the gateway logs a warning if it is set while the Slack method is not `webhook`.
 
-> [!NOTE]
 > **Slack App "Add to Slack" Redirect URL (Distribution, Not Notifications)**
 > The two options above cover *receiving* alerts and don't require a Slack App at all. If you've instead created a real Slack App (e.g. to get an "Add to Slack" button so others can install it into their own workspace), Slack's app dashboard requires at least one **Redirect URL** before it will activate that button — this is a standard OAuth v2 installation flow, not a notification channel.
 >
@@ -2034,4 +2042,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-06* | *Last Reviewed: 2026-10-06*
+*Last Updated: 2026-11-10* | *Last Reviewed: 2026-11-10*

@@ -260,7 +260,12 @@ func (s *Server) clearNotificationFailures(recipient string) {
 // owner's own alert channel is covered by the same recording as everything else. It was the
 // worst-placed of the INFO-only sites: an alert that never arrives is indistinguishable from
 // nothing having happened, which is the failure mode alerts exist to prevent.
+//
+// The one dispatch point for admin alerts. Email to the admin inbox is unchanged; Slack is a
+// second, independent route chosen by admin_alerts.slack.method (#2435), so every alert reaches
+// the channel by exactly one integration or not at all.
 func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
+	s.sendAdminAlertToSlack(settingKey, subject, htmlBody)
 	if s.notifications == nil {
 		return
 	}

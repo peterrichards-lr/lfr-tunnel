@@ -1431,8 +1431,21 @@
                 <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
                     <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>
                     <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
-                        Trigger a test message to all configured collaboration and notification channels (Slack, Microsoft Teams, and Administrator Email relay) to verify that integration alerting is working correctly.
+                        Send a test alert to the admin inbox, and to Slack by the method selected below.
                     </p>
+                    <!-- How admin alerts reach Slack (#2435): off, the channel's email address, or the
+                         webhook -- either/or. Kept in step with V2's AdminSettings.tsx; filled by
+                         renderAlertMethodSettings. -->
+                    <div id="alert-method-container" style="display: none; margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 4px; font-weight: 500;" for="alert-method-select" data-i18n="alert_method_label">Send admin alerts to Slack by</label>
+                        <select id="alert-method-select" class="input-field" style="width: 100%; box-sizing: border-box;"></select>
+                        <p id="alert-method-source" style="color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0; line-height: 1.4;"></p>
+                        <div id="alert-method-fallback" class="alert-warning" style="display: none; margin-top: 12px; font-size: 13px;" data-i18n="alert_method_fallback">The method chosen here is no longer configured in server-config.yaml, so the server config default is in force.</div>
+                        <p id="alert-method-inbox-note" style="display: none; color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0;"></p>
+                        <p id="alert-method-no-channel-email" style="display: none; color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0;" data-i18n="alert_method_no_channel_email">No channel address is set (admin_alerts.slack.channel_email in server-config.yaml).</p>
+                        <p id="alert-method-no-webhook" style="display: none; color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0;" data-i18n="alert_method_no_webhook">No webhook URL is set in server-config.yaml.</p>
+                        <p id="alert-method-owner-only" style="display: none; color: var(--text-muted); font-size: 12px; margin: 6px 0 0 0;" data-i18n="alert_method_owner_only">Only the owner can change how admin alerts reach Slack.</p>
+                    </div>
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()" data-i18n="btn_send_test_alert">Send Test Alert</button>
                         <span id="test-integration-status" style="font-size: 13px; color: var(--text-muted); display: none;"></span>

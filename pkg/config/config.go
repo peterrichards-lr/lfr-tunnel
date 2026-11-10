@@ -32,6 +32,8 @@ type SMTPServerConfig struct {
 }
 
 type WebhookConfig struct {
+	// Enabled is superseded by admin_alerts.slack.method (#2435) and no longer sends anything on
+	// its own. Still parsed so an existing file keeps loading; LoadServerConfig warns when it is set.
 	Enabled              bool   `yaml:"enabled"`
 	SlackURL             string `yaml:"slack_url"`
 	TeamsURL             string `yaml:"teams_url"`
@@ -139,18 +141,20 @@ type ServerConfig struct {
 	//
 	// Valid values are geo.Provider's: "maxmind", "dbip", "ip2location". Empty disables the
 	// feature even when CountryDBPath is set, and the panel says which of the two is missing.
-	CountryDBProvider      string           `yaml:"country_db_provider"`
-	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
-	Webhooks               WebhookConfig    `yaml:"webhooks"`
-	SlackApp               SlackAppConfig   `yaml:"slack_app"`
-	AdminNotificationEmail string           `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool             `yaml:"insecure_skip_verify"`
-	Owner                  OwnerConfig      `yaml:"owner"`
-	AllowedEmailDomains    []string         `yaml:"allowed_email_domains"`
-	IPBlacklist            []string         `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int              `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool             `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
+	CountryDBProvider string           `yaml:"country_db_provider"`
+	SMTPServer        SMTPServerConfig `yaml:"smtp_server"`
+	Webhooks          WebhookConfig    `yaml:"webhooks"`
+	// AdminAlerts.Slack chooses how admin alerts reach Slack, alongside email (#2435).
+	AdminAlerts            AdminAlertsConfig `yaml:"admin_alerts"`
+	SlackApp               SlackAppConfig    `yaml:"slack_app"`
+	AdminNotificationEmail string            `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool              `yaml:"insecure_skip_verify"`
+	Owner                  OwnerConfig       `yaml:"owner"`
+	AllowedEmailDomains    []string          `yaml:"allowed_email_domains"`
+	IPBlacklist            []string          `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit     int               `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal       bool              `yaml:"enable_user_portal"`
+	PortalSessionDuration  time.Duration     `yaml:"portal_session_duration"`
 	// PortalSessionMaxLifetime bounds the TOTAL life of a session, however active it is
 	// (#1679). PortalSessionDuration above is an idle timeout and slides on use, which means a
 	// continuously-used session renews forever -- and since #1676 that sliding is suppressed by
@@ -1144,6 +1148,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	// as a file that does, and gets the same refusal.
 	applyNeverExpiresEnv(cfg)
 	if err := cfg.NeverExpires.Validate(); err != nil {
+		return nil, err
+	}
+	if err := validateAdminAlerts(cfg); err != nil {
 		return nil, err
 	}
 

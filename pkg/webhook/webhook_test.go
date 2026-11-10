@@ -40,20 +40,18 @@ func TestWebhookAlerts(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// Enabled deliberately left false: it no longer gates sending (#2435). The server decides
+	// whether alerts go to the webhook before it calls SendAlert at all.
 	cfg := config.WebhookConfig{
-		Enabled:  true,
 		SlackURL: server.URL + "/slack",
 		TeamsURL: server.URL + "/teams",
 	}
 
 	service := NewWebhookService(cfg, nil)
 
-	// Send alerts
-	service.SendRegistrationAlert("test@example.com", "my-subdomain")
-	service.SendAbuseReportAlert("my-subdomain", "spamming", "127.0.0.1")
-	service.SendRateLimitBanAlert("127.0.0.1", 10*time.Minute, "DDOS")
-	service.SendIPBlacklistAlert("127.0.0.1", "spam")
-	service.SendTestAlert("admin@example.com", "2026-07-15 16:30:00 UTC", "v1.34.3")
+	for _, title := range []string{"Registration", "Abuse report", "IP banned", "Quota stopped", "Test"} {
+		service.SendAlert(title, "body for "+title)
+	}
 
 	// Wait for async goroutines to deliver payloads. Fail-safe (#2038): the assertions below
 	// require all five to have arrived, so too short a wait reports "got 3", not a pass.
@@ -153,7 +151,6 @@ func TestWebhookBatchConsumer(t *testing.T) {
 	defer server.Close()
 
 	cfg := config.WebhookConfig{
-		Enabled:  true,
 		SlackURL: server.URL + "/slack",
 		TeamsURL: server.URL + "/teams",
 	}
@@ -165,9 +162,9 @@ func TestWebhookBatchConsumer(t *testing.T) {
 	service := NewWebhookService(cfg, mockDB)
 
 	// 1. Enqueue multiple alerts
-	service.SendRegistrationAlert("test1@liferay.com", "sub1")
-	service.SendRegistrationAlert("test2@liferay.com", "sub2")
-	service.SendIPBlacklistAlert("127.0.0.1", "spam")
+	service.SendAlert("New registration", "test1@liferay.com")
+	service.SendAlert("New registration", "test2@liferay.com")
+	service.SendAlert("IP banned", "127.0.0.1")
 
 	// Verify no immediate server delivery happened
 	mu.Lock()
@@ -225,5 +222,52 @@ func TestWebhookBatchConsumer(t *testing.T) {
 		!strings.Contains(descText, "test2@liferay.com") ||
 		!strings.Contains(descText, "127.0.0.1") {
 		t.Errorf("digest payload does not contain coalesced details: %q", descText)
+	}
+}
+
+// TestSlackPayloadStaysInsideBlockLimits: Slack refuses a section over 3000 characters with a
+// 400, and the queue retries anything undelivered -- so one long digest used to be refused on
+// every tick and hold up every alert behind it.
+func TestSlackPayloadStaysInsideBlockLimits(t *testing.T) {
+	w := NewWebhookService(config.WebhookConfig{SlackURL: "http://unused"}, nil)
+	slack, _ := w.buildPayloads(strings.Repeat("T", 400), strings.Repeat("é", 5000), colorDefault, nil)
+
+	blocks := slack["blocks"].([]interface{})
+	header := blocks[0].(map[string]interface{})["text"].(map[string]string)["text"]
+	section := blocks[1].(map[string]interface{})["text"].(map[string]string)["text"]
+
+	// Runes, not bytes: Slack counts characters, and slicing bytes would split "é".
+	if n := len([]rune(header)); n > slackHeaderMax {
+		t.Errorf("header is %d characters, limit %d", n, slackHeaderMax)
+	}
+	if n := len([]rune(section)); n > slackSectionMax {
+		t.Errorf("section is %d characters, limit %d", n, slackSectionMax)
+	}
+	if !strings.Contains(section, "truncated") {
+		t.Error("a truncated section must say so, or the reader takes it as the whole alert")
+	}
+	if slack["text"] != strings.Repeat("T", 400) {
+		t.Error("top-level fallback text must carry the title")
+	}
+
+	// Control: a short alert is untouched.
+	slack, _ = w.buildPayloads("Short", "short body", colorDefault, nil)
+	if got := slack["blocks"].([]interface{})[1].(map[string]interface{})["text"].(map[string]string)["text"]; got != "short body" {
+		t.Errorf("a short section was altered: %q", got)
+	}
+}
+
+// TestNoURLPostsNothing: with no destination configured, processing the queue sends nothing and
+// leaves the messages queued rather than deleting alerts that were never delivered.
+func TestNoURLPostsNothing(t *testing.T) {
+	q := &mockWebhookQueue{}
+	w := NewWebhookService(config.WebhookConfig{Enabled: true}, q)
+	w.SendAlert("Kept", "not delivered")
+	w.processQueueBatch()
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.queued) != 1 {
+		t.Fatalf("expected the undelivered alert to stay queued, got %d", len(q.queued))
 	}
 }

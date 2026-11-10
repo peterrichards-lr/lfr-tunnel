@@ -171,6 +171,27 @@ export default function AdminSettings() {
 
   const [webhookTesting, setWebhookTesting] = useState(false);
 
+  // How admin alerts reach Slack (#2435): off, the channel's email address, or the webhook --
+  // either/or, since both would post every alert twice. Email to the admin inbox is not part
+  // of this. Kept in step with V1's copy in dashboard.js (live A/B test). `alertMethod` is
+  // what is in force; `alertMethodOverride` is the owner's stored choice ('' = use the YAML),
+  // and they differ when a chosen method has lost its destination in the YAML.
+  const [alertMethod, setAlertMethod] = useState('');
+  const [alertMethodSource, setAlertMethodSource] = useState('');
+  const [alertMethodConfig, setAlertMethodConfig] = useState('');
+  const [alertMethodOverride, setAlertMethodOverride] = useState('');
+  const [canChangeAlertMethod, setCanChangeAlertMethod] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [slackChannelEmail, setSlackChannelEmail] = useState('');
+  const [alertInbox, setAlertInbox] = useState('');
+  const [alertMethodLoaded, setAlertMethodLoaded] = useState(false);
+  const slackMethodLabel = (m: string) =>
+    m === 'webhook'
+      ? t('alert_method_webhook', 'Webhook (Slack app)')
+      : m === 'email'
+        ? t('alert_method_email', 'Channel email address')
+        : t('alert_method_off', 'Not sent to Slack');
+
   // Broadcast state
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
@@ -227,6 +248,19 @@ export default function AdminSettings() {
       // Same reasoning as alertsLoaded: an empty vocabulary is a gateway that failed to
       // describe itself, and saving from that state would post a vendor nobody chose.
       setGeoLoaded(vendors.length > 0);
+
+      setAlertMethod(aRes.data.admin_alert_slack_method || '');
+      setAlertMethodSource(aRes.data.admin_alert_slack_method_source || '');
+      setAlertMethodConfig(aRes.data.admin_alert_slack_method_config || '');
+      setAlertMethodOverride(aRes.data.admin_alert_slack_method_override || '');
+      setCanChangeAlertMethod(aRes.data.can_change_alert_method === true);
+      setWebhookConfigured(aRes.data.slack_webhook_configured === true);
+      setSlackChannelEmail(aRes.data.slack_channel_email || '');
+      setAlertInbox(aRes.data.admin_notification_email || '');
+      // Same rule as the other loaded flags: a gateway that did not say which method is in
+      // force has not described itself, and saving from that state would post a choice
+      // nobody made.
+      setAlertMethodLoaded(!!aRes.data.admin_alert_slack_method);
 
       // Fetched for test_target alone; see the state declaration above.
       const mRes = await axios.get('/api/admin/maintenance');
@@ -350,8 +384,14 @@ export default function AdminSettings() {
           // Only when the vocabulary actually arrived. Posting '' from an unloaded form
           // would clear a vendor the operator chose, and silently stop crediting them.
           ...(geoLoaded ? { country_db_provider: geoProvider } : {}),
+          // Owner-only server-side; a non-owner posting it would fail the whole save.
+          ...(alertMethodLoaded && canChangeAlertMethod
+            ? { admin_alert_slack_method: alertMethodOverride }
+            : {}),
         });
         showToast('System settings saved successfully.', 'success');
+        // Re-read, so the in-force line and the test target reflect what was just saved.
+        fetchAllData();
       } else {
         showToast(
           'System settings were saved, but the email alert toggles were not.',
@@ -1015,7 +1055,8 @@ export default function AdminSettings() {
           <div>
             <h4 className="m-0">Integrations</h4>
             <div className="text-sm text-muted mt-xs">
-              Test your configured webhooks (Slack/Teams).
+              Send a test alert to the admin inbox, and to Slack by the method
+              selected below.
             </div>
           </div>
           <button
@@ -1030,6 +1071,94 @@ export default function AdminSettings() {
             (dashboard.html:907); the value already arrives on /api/admin/maintenance as
             test_target (server.go:3201) and V2 simply was not displaying it. Without it
             the button reports success without saying what it reached (#1290). */}
+        {alertMethodLoaded && (
+          <div className="form-group mt-lg" data-testid="alert-method">
+            <label className="form-label" htmlFor="alert-method-select">
+              {t('alert_method_label', 'Send admin alerts to Slack by')}
+            </label>
+            <select
+              id="alert-method-select"
+              data-testid="alert-method-select"
+              className="input-field"
+              value={alertMethodOverride}
+              disabled={!canChangeAlertMethod}
+              onChange={(e) => setAlertMethodOverride(e.target.value)}
+            >
+              <option value="">
+                {t(
+                  'alert_method_use_config',
+                  'Server config default ({0})',
+                ).replace('{0}', slackMethodLabel(alertMethodConfig))}
+              </option>
+              <option value="off">{slackMethodLabel('off')}</option>
+              {/* A method with no destination is not offered: the server refuses it, and an
+                  option that can only fail is worse than a missing one. */}
+              <option value="email" disabled={!slackChannelEmail}>
+                {slackMethodLabel('email')}
+                {slackChannelEmail ? ` (${slackChannelEmail})` : ''}
+              </option>
+              <option value="webhook" disabled={!webhookConfigured}>
+                {slackMethodLabel('webhook')}
+              </option>
+            </select>
+            <p
+              className="text-xs text-muted mt-xs"
+              data-testid="alert-method-source"
+            >
+              {(alertMethodSource === 'portal'
+                ? t(
+                    'alert_method_source_portal',
+                    'In force: {0}, chosen here. This overrides admin_alerts.slack.method in server-config.yaml.',
+                  )
+                : t(
+                    'alert_method_source_config',
+                    'In force: {0}, from admin_alerts.slack.method in server-config.yaml.',
+                  )
+              ).replace('{0}', slackMethodLabel(alertMethod))}
+            </p>
+            {alertMethodOverride !== '' &&
+              alertMethodOverride !== alertMethod && (
+                <div className="alert-banner alert-banner--warning mt-md text-sm">
+                  {t(
+                    'alert_method_fallback',
+                    'The method chosen here is no longer configured in server-config.yaml, so the server config default is in force.',
+                  )}
+                </div>
+              )}
+            {alertInbox && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_inbox_note',
+                  'Every alert also goes to {0}. This setting only decides how alerts reach Slack.',
+                ).replace('{0}', alertInbox)}
+              </p>
+            )}
+            {!slackChannelEmail && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_no_channel_email',
+                  'No channel address is set (admin_alerts.slack.channel_email in server-config.yaml).',
+                )}
+              </p>
+            )}
+            {!webhookConfigured && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_no_webhook',
+                  'No webhook URL is set in server-config.yaml.',
+                )}
+              </p>
+            )}
+            {!canChangeAlertMethod && (
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'alert_method_owner_only',
+                  'Only the owner can change how admin alerts reach Slack.',
+                )}
+              </p>
+            )}
+          </div>
+        )}
         {maintenance?.test_target && (
           <div className="text-sm text-muted mt-md">
             Active Target:{' '}

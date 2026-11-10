@@ -9729,6 +9729,7 @@ async function loadAlertSettings() {
     const data = await res.json();
     renderAlertSettings(container, data);
     renderGeoProviderSettings(data);
+    renderAlertMethodSettings(data);
   } catch (e) {
     console.error('Failed to load alert settings', e);
     // Keys stay empty so a later Save cannot post checkbox states nobody chose --
@@ -9738,6 +9739,7 @@ async function loadAlertSettings() {
     // Same reason as alertSettingKeys: a later Save must not post a vendor nobody chose.
     geoProviderOptions = [];
     geoProviderLoaded = false;
+    alertMethodLoaded = false;
     container.textContent = t(
       'admin_load_failed',
       'Could not load this page. The server may be unreachable \u2014 what you see is not current.',
@@ -9756,6 +9758,100 @@ async function loadAlertSettings() {
 // live A/B test (#1866), so a control present in one and not the other is a defect.
 let geoProviderOptions = [];
 let geoProviderLoaded = false;
+
+// --- Slack alert method (#2435) ---------------------------------------------
+// How admin alerts reach Slack: off, the channel's email address, or the webhook -- either/or,
+// since both would post every alert twice. Email to the admin inbox is not part of this. Kept in
+// step with V2's copy in ui/src/pages/AdminSettings.tsx (A/B parity). The select shows the owner's
+// stored choice ('' = use server-config.yaml); the line under it says what is actually in force,
+// and the two differ when a chosen method has lost its destination in the YAML.
+let alertMethodLoaded = false;
+let canChangeAlertMethod = false;
+
+function slackMethodLabel(m) {
+  if (m === 'webhook') return t('alert_method_webhook', 'Webhook (Slack app)');
+  if (m === 'email') return t('alert_method_email', 'Channel email address');
+  return t('alert_method_off', 'Not sent to Slack');
+}
+
+function renderAlertMethodSettings(data) {
+  const container = document.getElementById('alert-method-container');
+  const select = document.getElementById('alert-method-select');
+  if (!container || !select) return;
+
+  // A gateway that did not say which method is in force has not described itself; saving
+  // from that state would post a choice nobody made.
+  alertMethodLoaded = !!data.admin_alert_slack_method;
+  canChangeAlertMethod = data.can_change_alert_method === true;
+  container.style.display = alertMethodLoaded ? 'block' : 'none';
+  if (!alertMethodLoaded) return;
+
+  const channelEmail = data.slack_channel_email || '';
+  const webhookConfigured = data.slack_webhook_configured === true;
+
+  select.innerHTML = '';
+  const options = [
+    [
+      '',
+      t('alert_method_use_config', 'Server config default ({0})').replace(
+        '{0}',
+        slackMethodLabel(data.admin_alert_slack_method_config),
+      ),
+      true,
+    ],
+    ['off', slackMethodLabel('off'), true],
+    [
+      'email',
+      slackMethodLabel('email') +
+        (channelEmail ? ' (' + channelEmail + ')' : ''),
+      !!channelEmail,
+    ],
+    ['webhook', slackMethodLabel('webhook'), webhookConfigured],
+  ];
+  options.forEach(([value, text, available]) => {
+    const el = document.createElement('option');
+    el.value = value;
+    // textContent: the channel address comes from the server config.
+    el.textContent = text;
+    // A method with no destination is not offered: the server refuses it.
+    el.disabled = !available;
+    select.appendChild(el);
+  });
+  select.value = data.admin_alert_slack_method_override || '';
+  select.disabled = !canChangeAlertMethod;
+
+  const source = document.getElementById('alert-method-source');
+  if (source) {
+    const template =
+      data.admin_alert_slack_method_source === 'portal'
+        ? t('alert_method_source_portal')
+        : t('alert_method_source_config');
+    source.textContent = template.replace(
+      '{0}',
+      slackMethodLabel(data.admin_alert_slack_method),
+    );
+  }
+  const show = (id, on) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? 'block' : 'none';
+  };
+  const override = data.admin_alert_slack_method_override || '';
+  show(
+    'alert-method-fallback',
+    override !== '' && override !== data.admin_alert_slack_method,
+  );
+  const inboxNote = document.getElementById('alert-method-inbox-note');
+  if (inboxNote) {
+    inboxNote.textContent = t('alert_method_inbox_note').replace(
+      '{0}',
+      data.admin_notification_email || '',
+    );
+  }
+  show('alert-method-inbox-note', !!data.admin_notification_email);
+  show('alert-method-no-channel-email', !channelEmail);
+  show('alert-method-no-webhook', !webhookConfigured);
+  show('alert-method-owner-only', !canChangeAlertMethod);
+}
 
 function renderGeoProviderSettings(data) {
   const select = document.getElementById('geo-provider-select');
@@ -9884,6 +9980,11 @@ async function saveAlertSettings() {
   const geoSelect = document.getElementById('geo-provider-select');
   if (geoProviderLoaded && geoSelect) {
     payload.country_db_provider = geoSelect.value;
+  }
+  // Owner-only server-side (#2435); a non-owner posting it would fail the whole save.
+  const methodSelect = document.getElementById('alert-method-select');
+  if (alertMethodLoaded && canChangeAlertMethod && methodSelect) {
+    payload.admin_alert_slack_method = methodSelect.value;
   }
   const res = await fetch('/api/admin/settings', {
     method: 'POST',
@@ -10267,6 +10368,9 @@ async function saveSystemSettings() {
       const alertsSaved = await saveAlertSettings();
       if (alertsSaved) {
         alert(t('settings_saved', 'System settings saved successfully.'));
+        // Re-read, so the in-force line and the test target reflect what was just saved.
+        loadAlertSettings();
+        loadIntegrationTestTarget();
       } else {
         // Named rather than folded into the success message: the two halves are
         // separate endpoints, and one failing while the other succeeded is exactly

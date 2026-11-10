@@ -63,6 +63,11 @@ var AlertSettings = []AlertSetting{
 	// owner may want to raise their allowance. Stopped is somebody's demo ending.
 	{Key: "alert_notify_quota_throttled", LabelKey: "alert_quota_throttled", DefaultOn: true},
 	{Key: "alert_notify_quota_stopped", LabelKey: "alert_quota_stopped", DefaultOn: true},
+	// Someone used the "this wasn't me" link on a magic-link or registration email (#2435).
+	// It used to reach the webhook only -- never email, and with no toggle -- so on a gateway
+	// that alerted by email the owner was never told. Defaults on: it means an address was
+	// blacklisted or a registration deleted on a stranger's say-so, which an owner should see.
+	{Key: "alert_notify_abuse_report", LabelKey: "alert_abuse_report", DefaultOn: true},
 }
 
 // alertSettingDefault reports whether an unset row means on, and whether the key is one this

@@ -610,11 +610,24 @@ Three things differ from central, and they are the whole reason an edge needs it
   `lfr-demo.se` itself. Putting a shared domain in `-domains` would have every edge claim the
   control plane's own hostname -- and nginx treats a duplicate `server_name` as a *warning*, so
   it would pass `nginx -t` and silently steal traffic.
-- **Different certificate roots.** `-domains` reads certbot's `/etc/letsencrypt/live/<d>/`;
-  `-apex-domains` reads `/etc/lfr-tunneld/certs/<d>/`, where `lfr-install-certs.sh` puts the
-  wildcard bundle pushed from central. Central holds the DNS-write credential and renews those,
-  so an edge only ever receives them -- run `setup-certsync-edge.sh` too, or nginx will fail to
-  start on a missing certificate.
+- **Every edge certificate comes from central.** On an edge, `-domains` AND `-apex-domains` both
+  read `/etc/lfr-tunneld/certs/<d>/`, where `lfr-install-certs.sh` puts the bundle pushed from
+  central (#1302). That is the edge default for `-cert-root` since #2438; central still reads
+  certbot's `/etc/letsencrypt/live/<d>/`. Central holds the only DNS-write credential (edges have
+  no IAM role), so **a certbot lineage on an edge is issued once and never renews**. That is how
+  all four edges' own certificates expired on 2026-11-02, still set to a Cloudflare plugin for
+  zones that no longer existed, while the pushed wildcards beside them stayed current.
+
+  So an edge's own hostname certificate is issued **on central** and pushed with the rest:
+
+  ```bash
+  # on central, once per edge; central's certbot timer renews it from then on
+  sudo certbot certonly --dns-route53 --cert-name <e>.lfr-demo.se -d <e>.lfr-demo.se -d '*.<e>.lfr-demo.se'
+  sudo /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs   # push now; it starts sleeping edges
+  ```
+
+  Run `setup-certsync-edge.sh` on a new edge too, or nginx will fail to start on a missing
+  certificate.
 - **`-trusted-proxy` is the control plane's EXACT address** -- a bare IP, a `/32` or a `/128`.
   A wider prefix is refused unless it lies entirely inside non-routable space (RFC1918, CGNAT,
   link-local, loopback, IPv6 ULA), because `set_real_ip_from` lets anything inside the range
@@ -979,4 +992,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-13* | *Last Reviewed: 2026-10-13*
+*Last Updated: 2026-11-10* | *Last Reviewed: 2026-11-10*

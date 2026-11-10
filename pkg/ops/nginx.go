@@ -539,6 +539,19 @@ type nginxFlags struct {
 	allowVhostRemoval *bool
 }
 
+// ownedCertRoot picks where a node reads the certificates for the domains it owns: the explicit
+// -cert-root if given, otherwise by role (#2438). See buildRenderConfigFromFlags for why an edge
+// must not read certbot's own directory.
+func ownedCertRoot(role nginxRole, explicit string) string {
+	if v := strings.TrimSpace(explicit); v != "" {
+		return v
+	}
+	if role == RoleEdge {
+		return certRootCertSync
+	}
+	return certRootLetsEncrypt
+}
+
 func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 	return nginxFlags{
 		role: fs.String("role", string(RoleCentral),
@@ -547,8 +560,8 @@ func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 			"comma-separated APEX domains this node owns, e.g. lfr-demo.se,lfr-demo.online -- never a hostname like tunnel.lfr-demo.se"),
 		apexDomains: fs.String("apex-domains", "",
 			"comma-separated apex domains served WILDCARD-ONLY here because another node owns the apex, e.g. an edge answering *.lfr-demo.se edge-direct"),
-		certRoot: fs.String("cert-root", certRootLetsEncrypt,
-			"directory holding <domain>/fullchain.pem for -domains (certbot's own live directory)"),
+		certRoot: fs.String("cert-root", "",
+			"directory holding <domain>/fullchain.pem for -domains. Default by role: central reads certbot's own live directory ("+certRootLetsEncrypt+"); an edge reads the bundle pushed from central ("+certRootCertSync+"), because an edge holds no DNS-write credential and cannot renew anything itself (#2438)"),
 		apexCertRoot: fs.String("apex-cert-root", certRootCertSync,
 			"directory holding <domain>/fullchain.pem for -apex-domains (where lfr-install-certs.sh puts a bundle pushed from central)"),
 		redirectDomain: fs.String("redirect-domain", "",
@@ -640,11 +653,19 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 				"control plane above it. Central IS forwarded to -- by its edges -- and it trusts " +
 				"them via -dns-spec automatically (#1767); there is nothing to pass here")
 	}
+	// The owned domains' certificate root depends on who can RENEW them (#2438). Central holds
+	// the Route53 credential and runs certbot, so it reads certbot's live directory. An edge
+	// holds no DNS-write credential, so a certbot lineage on an edge is issued once and never
+	// renews: that is exactly how all four edges' own certificates expired on 2026-11-02,
+	// still pointing at a Cloudflare plugin for zones that no longer existed. Central issues
+	// <edge>.lfr-demo.se and *.<edge>.lfr-demo.se and pushes them with the apex wildcards
+	// (#1302), so an edge reads the pushed copy. An explicit -cert-root still wins.
+	certRoot := ownedCertRoot(role, *f.certRoot)
 	for _, d := range owned {
 		if err := checkApexDomain(d); err != nil {
 			return nginxRenderConfig{}, err
 		}
-		cfg.Groups = append(cfg.Groups, nginxDomainGroup{Domain: d, CertRoot: *f.certRoot})
+		cfg.Groups = append(cfg.Groups, nginxDomainGroup{Domain: d, CertRoot: certRoot})
 	}
 	for _, d := range wildcardOnly {
 		if err := checkApexDomain(d); err != nil {

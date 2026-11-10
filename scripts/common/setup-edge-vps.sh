@@ -42,9 +42,12 @@ TUNNEL_DOMAINS=""
 # silently steal traffic. Certificates for these arrive from the control plane via certsync
 # (scripts/common/setup-certsync-edge.sh), which is why they read from a different cert root.
 APEX_DOMAINS=""
-# Which Certbot DNS-01 plugin proves domain control. No default on purpose: this is the
-# generic layer, and which provider is right is a property of the deployment, not of this
-# tool (#1015/#1016/#1187).
+# -n/-N used to name the Certbot DNS-01 plugin this script ran ON THE EDGE to issue the edge's own
+# certificate. That lineage could never renew: renewal needs a DNS-write credential, and only the
+# control plane holds one. All four Liferay edges' own certificates expired on 2026-11-02 that way
+# (#2438). An edge now receives EVERY certificate from the control plane, so nothing is issued
+# here. Both flags are still accepted, so an existing wrapper keeps working, and ignored with a
+# warning saying where the certificate comes from instead.
 DNS_AUTHENTICATOR=""
 DNS_AUTHENTICATOR_ARGS=""
 # Which dynamic-DNS updater to install, if any. Default none: a node with a static or elastic
@@ -71,11 +74,8 @@ usage() {
   echo "  -D: Dynamic DNS updater to install: none (default), cloudflare, or route53."
   echo "      Only needed when this node's public address can change. A node with a static"
   echo "      or elastic address should leave this as none."
-  echo "  -n: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
-  echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
-  echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
-  echo "  -N: Extra arguments for that authenticator (optional), e.g."
-  echo "      \"--dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini\""
+  echo "  -n, -N: IGNORED (#2438). An edge issues no certificates of its own; the control plane"
+  echo "      issues <domain> and *.<domain> for each -d entry and pushes them by certsync."
   echo "  -a: Comma-separated subset of -d that tunnels may be issued on (optional)."
   echo "      Set this to the shared domain so a tunnel's public URL never names the edge"
   echo "      serving it, and does not change when the client moves (see #1285). The regional"
@@ -123,10 +123,15 @@ while getopts "s:t:i:u:d:c:C:p:r:a:A:n:N:D:" opt; do
 done
 
 if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z "$KEY_PATH" ] || \
-   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ] || \
-   [ -z "$DNS_AUTHENTICATOR" ]; then
-  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, -p and -n are all required parameters."
+   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ]; then
+  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c and -p are all required parameters."
   usage
+fi
+
+if [ -n "$DNS_AUTHENTICATOR" ] || [ -n "$DNS_AUTHENTICATOR_ARGS" ]; then
+  echo "⚠️  -n/-N are ignored (#2438): this edge issues no certificates. Issue <domain> and"
+  echo "   *.<domain> for each -d entry on the CONTROL PLANE, which holds the DNS-write"
+  echo "   credential and renews them, and let certsync push them here."
 fi
 
 # -C is checked separately from the block above so the message can say what it is FOR. Its
@@ -183,30 +188,20 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Versio
 go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 
 # 2. Update and install packages on the remote VPS (including security hardening packages)
-echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
+#    No certbot: an edge renews nothing (#2438), and a lineage left here is one somebody
+#    eventually points nginx at.
+echo "=> Connecting to $VPS_IP to install dependencies (Nginx, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using whichever Certbot DNS-01 plugin the
-#    operator named. The plugin is a parameter, not a constant -- hardcoding --dns-cloudflare
-#    here is how #1297 survived the move to another DNS provider unnoticed.
+# 3. Certificates: none are issued here (#2438). Every certificate this edge serves -- its own
+#    -d domains and the -A apex wildcards -- is issued and renewed on the control plane and pushed
+#    by certsync into /etc/lfr-tunneld/certs/<domain>/, which is where render-nginx-config points
+#    an edge by default. They are checked for at the end of this script, because on a brand-new
+#    edge they only arrive once setup-certsync-edge.sh has run.
 IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
-for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
-  echo "=========================================================="
-  echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
-  echo "=========================================================="
-
-  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo apt-get install -y python3-certbot-$DNS_AUTHENTICATOR"
-  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --$DNS_AUTHENTICATOR $DNS_AUTHENTICATOR_ARGS \
-    --agree-tos \
-    --non-interactive \
-    --register-unsafely-without-email \
-    -d '$DOMAIN' \
-    -d '*.$DOMAIN'"
-done
 
 # 4. Generate stateless server-config.yaml locally and upload
 echo "=> Generating server-config.yaml locally..."
@@ -500,3 +495,30 @@ else
   echo "  minutes while systemd records success (#1300)."
 fi
 echo "=========================================================="
+
+# Certificates (#2438). Checked, not assumed: nginx cannot start without them, and on a new edge
+# they only arrive after certsync is set up. Every missing one is named with the control-plane
+# commands that produce it, so the next step is printed rather than discovered.
+CERT_DOMAINS="$DOMAINS"
+[ -n "$APEX_DOMAINS" ] && CERT_DOMAINS="$CERT_DOMAINS,$APEX_DOMAINS"
+MISSING=""
+IFS=',' read -r -a CERT_DOMAIN_ARRAY <<< "$CERT_DOMAINS"
+for DOMAIN in "${CERT_DOMAIN_ARRAY[@]}"; do
+  if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/lfr-tunneld/certs/$DOMAIN/fullchain.pem"; then
+    MISSING="$MISSING $DOMAIN"
+  fi
+done
+if [ -n "$MISSING" ]; then
+  echo "⚠️  Certificates not yet on this edge:$MISSING"
+  echo "   nginx will not serve until they arrive. They are issued and renewed on the CONTROL"
+  echo "   PLANE, which holds the DNS-write credential -- never on the edge (#2438):"
+  echo "     1. ./scripts/common/setup-certsync-edge.sh for this node, if not done yet."
+  for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
+    case " $MISSING " in *" $DOMAIN "*)
+      echo "     2. On the control plane:  sudo certbot certonly --<dns-plugin> --cert-name $DOMAIN -d $DOMAIN -d '*.$DOMAIN'" ;;
+    esac
+  done
+  echo "     3. On the control plane:  sudo /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs"
+else
+  echo "Certificates: every domain this edge serves has a pushed certificate in /etc/lfr-tunneld/certs."
+fi

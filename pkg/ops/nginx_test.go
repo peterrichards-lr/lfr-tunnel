@@ -983,3 +983,43 @@ func TestBuildRenderConfigFromFlags_AcceptsAnExactAddressOrAPrivateSubnet(t *tes
 		})
 	}
 }
+
+// An edge's own domains must read the certificate central pushes, not certbot's live directory
+// (#2438). An edge holds no DNS-write credential, so a certbot lineage on an edge is issued once
+// and never renews: all four edges' own certificates expired on 2026-11-02 that way, while the
+// pushed wildcards beside them stayed current. Central keeps reading certbot's directory, because
+// central is the node that renews. An explicit -cert-root still wins on either role.
+func TestBuildRenderConfigFromFlags_OwnedCertRootFollowsWhoCanRenew(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"edge defaults to the pushed bundle",
+			[]string{"-role", "edge", "-domains", "sa.example.com", "-redirect-domain", "example.com", "-dns-spec", ""},
+			"ssl_certificate /etc/lfr-tunneld/certs/sa.example.com/fullchain.pem;"},
+		{"central defaults to certbot's live directory",
+			[]string{"-role", "central", "-domains", "example.com", "-dns-spec", ""},
+			"ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;"},
+		{"an explicit -cert-root wins on an edge",
+			[]string{"-role", "edge", "-domains", "sa.example.com", "-redirect-domain", "example.com", "-dns-spec", "", "-cert-root", "/srv/certs"},
+			"ssl_certificate /srv/certs/sa.example.com/fullchain.pem;"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := buildRenderConfigFromFlags(renderFlags(t, tc.args...), "8090")
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			got := buildNginxConfig(cfg)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("want %q in:\n%s", tc.want, got)
+			}
+			// Control: the edge case must not ALSO reference certbot's directory for its own
+			// domain, or nginx could still be serving the lineage that never renews.
+			if strings.Contains(tc.name, "edge defaults") && strings.Contains(got, "/etc/letsencrypt/live/sa.example.com/") {
+				t.Fatalf("edge still reads its own domain from certbot's live directory:\n%s", got)
+			}
+		})
+	}
+}

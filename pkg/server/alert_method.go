@@ -204,7 +204,12 @@ func (s *Server) addAlertMethodSettings(out map[string]interface{}, actor string
 	// The stored override as written, which can differ from the method in force when its
 	// destination has since been removed from the YAML. The form shows the choice;
 	// admin_alert_slack_method says what is actually happening.
-	stored, _ := s.storedSlackMethod()
+	// An unreadable row reports no override; effectiveSlackMethod has already fallen back to the
+	// YAML for the same reason, so the in-force line and the form agree.
+	stored, err := s.storedSlackMethod()
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[Alerts] Could not read %s for System Settings: %v", slackAlertMethodSettingKey, err))
+	}
 	out["admin_alert_slack_method_override"] = string(stored)
 
 	channelEmail, webhook := "", false

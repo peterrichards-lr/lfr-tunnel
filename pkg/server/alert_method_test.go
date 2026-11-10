@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
-	"lfr-tunnel/pkg/webhook"
 )
 
 // Every admin alert goes to the admin inbox; it can ALSO reach Slack by exactly one of two
@@ -36,7 +35,10 @@ func alertRouteServer(t *testing.T) (*Server, *mockMailSender) {
 	srv.cfg.AdminAlerts.Slack.Method = config.SlackAlertMethodOff
 	m := &mockMailSender{}
 	srv.notifications = NewNotificationService(m, srv.db, srv.cfg)
-	srv.webhooks = webhook.NewWebhookService(srv.cfg.Webhooks, srv.db)
+	// srv.webhooks is NOT replaced: NewServer's queue consumer is already reading it, and
+	// swapping it races that goroutine (CI's race detector). The existing service queues into
+	// srv.db, which is all these tests read. Its own copy of the config has no URL, so the
+	// consumer never drains the queue out from under an assertion.
 	return srv, m
 }
 

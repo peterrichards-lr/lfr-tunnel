@@ -157,11 +157,19 @@ function statusBadgeClass(status) {
   return STATUS_BADGE[status] || '';
 }
 
-// Whether a registration is still waiting on an admin decision. Written out twice identically
-// (:3533, :3640) and negated by hand a third time (:3544), which is three chances for the set to
-// drift as statuses are added.
-function isAwaitingDecision(u) {
+// Whether a row is a registration rather than an account: it belongs on the Registrations tab,
+// not Users. Written out twice identically (:3533, :3640) and negated by hand a third time
+// (:3544), which is three chances for the set to drift as statuses are added.
+function isRegistration(u) {
   return u.status === 'pending' || u.status === 'unverified';
+}
+
+// Whether a registration is waiting on an ADMIN -- what the sidebar pill counts. Narrower than
+// isRegistration: an unverified applicant has not confirmed their email, and pkg/db/user_status.go
+// defines that as "nobody has been asked to approve anything". Counting them made V1's pill
+// disagree with V2's for the same queue (#2428).
+function isAwaitingDecision(u) {
+  return u.status === 'pending';
 }
 
 function getFlagSVG(lang) {
@@ -4507,10 +4515,9 @@ async function loadUsers() {
   const res = await fetch('/api/admin/users');
   if (res.ok) {
     const allUsers = (await res.json()) || [];
-    const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
-    setQueueBadge('reg-badge', pendingUsers.length);
+    setQueueBadge('reg-badge', allUsers.filter(isAwaitingDecision).length);
 
-    const users = allUsers.filter((u) => !isAwaitingDecision(u));
+    const users = allUsers.filter((u) => !isRegistration(u));
     renderTable('users-table-body', users, (u) => {
       const isSelf = currentUser && u.email === currentUser.email;
       const rowStyle = isSelf ? 'opacity: 0.6;' : '';
@@ -4613,8 +4620,8 @@ async function loadRegistrations() {
   const res = await fetch('/api/admin/users');
   if (res.ok) {
     const allUsers = (await res.json()) || [];
-    const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
-    setQueueBadge('reg-badge', pendingUsers.length);
+    const pendingUsers = allUsers.filter((u) => isRegistration(u));
+    setQueueBadge('reg-badge', allUsers.filter(isAwaitingDecision).length);
 
     renderTable('registrations-table-body', pendingUsers, (u) => {
       return `

@@ -8,6 +8,7 @@ import Skeleton from '../components/Skeleton';
 import ActionMenu from '../components/ActionMenu';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import { reportAdminQueueCount } from '../hooks/useAdminQueueCounts';
 
 interface ExtRequest {
   id: string;
@@ -77,6 +78,7 @@ export default function AdminExtensions() {
     try {
       const res = await axios.get('/api/admin/reservations/extensions');
       setRequests(res.data || []);
+      reportAdminQueueCount('extensions', (res.data || []).length);
     } catch (err: any) {
       console.error(err);
       setLoadError(

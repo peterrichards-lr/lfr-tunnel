@@ -140,6 +140,10 @@ const STATUS_BADGE: Record<string, string> = {
 // An unrecognised status is a bug -- either the server grew one the portal has not learned, or a
 // literal is misspelled. Neutral styling makes it visible instead of dressing it as success or
 // failure; the gate is what stops it reaching here in the first place.
+// A registration rather than an account: listed on the Registrations tab, not Active Users.
+const isRegistration = (u: { status: string }) =>
+  u.status === 'pending' || u.status === 'unverified';
+
 const statusBadgeClass = (status: string): string =>
   STATUS_BADGE[status] ?? 'badge-secondary';
 
@@ -667,16 +671,16 @@ export default function AdminUsers() {
       setIsInviting(false);
     }
   };
+  // The tab holds every registration; the badge counts only those waiting on an admin. An
+  // unverified applicant has not confirmed their email, so nobody has been asked to decide yet
+  // (pkg/db/user_status.go). Unverified rows used to sit in Active Users, while V1 listed them
+  // here -- the same people in different places depending on the arm (#2428).
   const pendingCount = users.filter((u) => u.status === 'pending').length;
   const filteredUsers = useMemo(
     () =>
-      users.filter((u) => {
-        if (activeTab === 'users') {
-          return u.status !== 'pending';
-        } else {
-          return u.status === 'pending';
-        }
-      }),
+      users.filter((u) =>
+        activeTab === 'users' ? !isRegistration(u) : isRegistration(u),
+      ),
     [users, activeTab],
   );
 
@@ -849,7 +853,7 @@ export default function AdminUsers() {
           className={`sub-tab ${activeTab === 'users' ? 'sub-tab--active' : ''}`}
         >
           {t('users_tab_active', 'Active Users')} (
-          {users.filter((u) => u.status !== 'pending').length})
+          {users.filter((u) => !isRegistration(u)).length})
         </button>
         <button
           onClick={() => setActiveTab('registrations')}

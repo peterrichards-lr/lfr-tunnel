@@ -7,6 +7,7 @@ import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import { reportAdminQueueCount } from '../hooks/useAdminQueueCounts';
 
 /**
  * The admin side of never_expires `approval` for Personal Access Tokens (#2280).
@@ -88,6 +89,7 @@ export default function AdminTokenPermanence() {
     try {
       const res = await axios.get('/api/admin/tokens/permanence-requests');
       setRequests(res.data || []);
+      reportAdminQueueCount('permanence', (res.data || []).length);
       // Cleared on success, which the pages this was modelled on do not do. They load once;
       // this one reloads after every decision, so a single transient failure would otherwise
       // leave "what you see is not current" banner-ed over data that is.

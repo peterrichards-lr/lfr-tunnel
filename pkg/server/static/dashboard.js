@@ -1401,7 +1401,7 @@ async function showDashboard() {
     // to be revealed separately -- it was previously never hidden at all, and
     // every role saw it, including an owner previewing as a plain user (#1289).
     document.getElementById('nav-system').classList.remove('hidden');
-    loadUsers(); // This updates the registration badge count
+    // The queue badges are filled by showTab(), which runs at the end of this function.
     updateMaintenanceModeUI(
       currentUser.maintenance_mode || 'false',
       currentUser.iron_curtain || false,
@@ -3151,6 +3151,13 @@ function showTab(tabName, skipHistory = false) {
     // nothing else. Idempotent behind its own domainsLoaded guard.
     loadDomains();
   }
+  // Not a branch: the pills sit in the sidebar, outside every tab.
+  if (
+    currentUser &&
+    (currentUser.role === 'admin' || currentUser.role === 'owner')
+  ) {
+    loadAdminQueueBadges();
+  }
   if (tabName === 'users') loadUsers();
   if (tabName === 'admin-subdomains') loadAdminSubdomains();
   if (tabName === 'registrations') loadRegistrations();
@@ -4182,6 +4189,7 @@ async function loadAdminTokenPermanence() {
     }
     {
       const list = (await res.json()) || [];
+      setQueueBadge('permanence-badge', list.length);
       if (!tbody) return;
       tbody.innerHTML = '';
 
@@ -4458,18 +4466,49 @@ async function submitBlacklist() {
   }
 }
 
+// Sidebar pill for an admin approval queue (#2427). Registrations were the only queue with one,
+// so an extension or token-permanence request sat unseen until an admin opened the tab that
+// happens to hold it. Hidden for zero and for a failed load: an unknown count is not shown as one.
+function setQueueBadge(id, count) {
+  const badge = document.getElementById(id);
+  if (!badge) return;
+  if (count > 0) {
+    badge.style.display = 'inline-block';
+    badge.innerText = count;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Counts only, for queues whose lists live on a tab the admin is not necessarily on. Run on
+// every tab switch, so a new request shows up on the next click -- no timer,
+// matching V2 and keeping #1208's reason for not polling.
+async function loadAdminQueueBadges() {
+  const count = async (url, keep = () => true) => {
+    try {
+      const res = await fetch(url);
+      return res.ok ? ((await res.json()) || []).filter(keep).length : null;
+    } catch (e) {
+      console.error('Failed to load ' + url + ' for sidebar badge', e);
+      return null;
+    }
+  };
+  const [registrations, extensions, permanence] = await Promise.all([
+    count('/api/admin/users', isAwaitingDecision),
+    count('/api/admin/reservations/extensions'),
+    count('/api/admin/tokens/permanence-requests'),
+  ]);
+  setQueueBadge('reg-badge', registrations);
+  setQueueBadge('extensions-badge', extensions);
+  setQueueBadge('permanence-badge', permanence);
+}
+
 async function loadUsers() {
   const res = await fetch('/api/admin/users');
   if (res.ok) {
     const allUsers = (await res.json()) || [];
     const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
-    const badge = document.getElementById('reg-badge');
-    if (pendingUsers.length > 0) {
-      badge.style.display = 'inline-block';
-      badge.innerText = pendingUsers.length;
-    } else {
-      badge.style.display = 'none';
-    }
+    setQueueBadge('reg-badge', pendingUsers.length);
 
     const users = allUsers.filter((u) => !isAwaitingDecision(u));
     renderTable('users-table-body', users, (u) => {
@@ -4575,13 +4614,7 @@ async function loadRegistrations() {
   if (res.ok) {
     const allUsers = (await res.json()) || [];
     const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
-    const badge = document.getElementById('reg-badge');
-    if (pendingUsers.length > 0) {
-      badge.style.display = 'inline-block';
-      badge.innerText = pendingUsers.length;
-    } else {
-      badge.style.display = 'none';
-    }
+    setQueueBadge('reg-badge', pendingUsers.length);
 
     renderTable('registrations-table-body', pendingUsers, (u) => {
       return `
@@ -7704,6 +7737,7 @@ async function loadAdminExtensions() {
     const res = await fetch('/api/admin/reservations/extensions');
     if (res.ok) {
       const list = (await res.json()) || [];
+      setQueueBadge('extensions-badge', list.length);
       const tbody = document.getElementById('admin-extensions-table-body');
       tbody.innerHTML = '';
 

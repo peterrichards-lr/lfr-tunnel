@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.52.6",
+    "release_date": "2026-11-10",
+    "features": [
+      "Admins: the sidebar now shows a count beside every approval queue -- pending registrations, extension requests and token permanence requests -- and it updates as soon as a request is decided.",
+      "Admins: admin alerts can now also be sent to a Slack channel, either by email to the channel or through the Liferay Tunnel Slack app. The owner chooses which in System Settings, and every alert type is covered.",
+      "Admins: unverified registrations are listed under Registrations in both portals, and only registrations waiting for a decision are counted.",
+      "Security update: library updates close published security advisories. Nothing changes in how you use the tunnel."
+    ]
+  },
+  {
     "version": "v1.52.5",
     "release_date": "2026-10-19",
     "features": [
@@ -25,13 +35,6 @@
     "release_date": "2026-10-13",
     "features": [
       "Security update: the gateway and client are now built with Go 1.26.9 and an updated HTTP/2 library, fixing 12 published vulnerabilities in HTTP/1 and HTTP/2 handling, TLS and HTML templating. Nothing changes in how you use the tunnel."
-    ]
-  },
-  {
-    "version": "v1.52.1",
-    "release_date": "2026-10-07",
-    "features": [
-      "Maintenance release: the tunnel transport is updated to chisel 1.12.1, which brings its upstream security fixes. Reconnection after a gateway restart and region failover behave exactly as before."
     ]
   }
 ]

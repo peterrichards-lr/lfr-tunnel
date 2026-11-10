@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import GeoAttribution from './GeoAttribution';
 import { useI18n } from '../contexts/I18nContext';
+import { useAdminQueueCounts } from '../hooks/useAdminQueueCounts';
 
 interface SidebarProps {
   user: any;
@@ -76,25 +76,16 @@ export default function Sidebar({
   }, []);
 
   const { t } = useI18n();
-  const [pendingCount, setPendingCount] = useState(0);
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const { pathname } = useLocation();
+  const queueCounts = useAdminQueueCounts(isAdmin, pathname);
 
-  useEffect(() => {
-    if (user?.role === 'admin' || user?.role === 'owner') {
-      axios
-        .get('/api/admin/users')
-        .then((res) => {
-          const list = res.data || [];
-          const count = list.filter((u: any) => u.status === 'pending').length;
-          setPendingCount(count);
-        })
-        .catch((err) =>
-          console.error('Failed to load users for sidebar badge', err),
-        );
-    }
-    // Keyed on identity and role rather than the polled user object: this fetches the whole
-    // user list to count pending registrations, and was doing so every 10 seconds (#1208).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.role]);
+  // A pill beside a nav item only when its queue has work in it; nothing while the count is
+  // unknown, so a failed fetch is not dressed up as a number.
+  const queueBadge = (count: number | null) =>
+    count ? (
+      <span className="badge badge-danger text-2xs py-2xs px-xs">{count}</span>
+    ) : null;
 
   return (
     <>
@@ -198,10 +189,11 @@ export default function Sidebar({
                   to="/admin/extensions"
                   onClick={onClose}
                   className={({ isActive }) =>
-                    `nav-item ${isActive ? 'active' : ''}`
+                    `nav-item flex justify-between items-center ${isActive ? 'active' : ''}`
                   }
                 >
-                  {t('extensions', 'Extensions')}
+                  <span>{t('extensions', 'Extensions')}</span>
+                  {queueBadge(queueCounts.extensions)}
                 </NavLink>
                 {/*
                   Beside Extensions, which is the queue this mirrors: an admin working pending
@@ -212,10 +204,13 @@ export default function Sidebar({
                   to="/admin/token-permanence"
                   onClick={onClose}
                   className={({ isActive }) =>
-                    `nav-item ${isActive ? 'active' : ''}`
+                    `nav-item flex justify-between items-center ${isActive ? 'active' : ''}`
                   }
                 >
-                  {t('sidebar_token_permanence', 'Token Permanence')}
+                  <span>
+                    {t('sidebar_token_permanence', 'Token Permanence')}
+                  </span>
+                  {queueBadge(queueCounts.permanence)}
                 </NavLink>
                 <NavLink
                   to="/admin/users"
@@ -225,11 +220,7 @@ export default function Sidebar({
                   }
                 >
                   <span>{t('sidebar_users', 'Users')}</span>
-                  {pendingCount > 0 && (
-                    <span className="badge badge-danger text-2xs py-2xs px-xs">
-                      {pendingCount}
-                    </span>
-                  )}
+                  {queueBadge(queueCounts.registrations)}
                 </NavLink>
                 <NavLink
                   to="/admin/tokens"

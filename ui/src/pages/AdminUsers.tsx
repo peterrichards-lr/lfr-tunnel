@@ -9,6 +9,7 @@ import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import ModalShell from '../components/ModalShell';
+import { reportAdminQueueCount } from '../hooks/useAdminQueueCounts';
 
 interface User {
   id: string;
@@ -499,6 +500,10 @@ export default function AdminUsers() {
         axios.get('/api/domains').catch(() => ({ data: [] })),
       ]);
       setUsers(res.data);
+      reportAdminQueueCount(
+        'registrations',
+        (res.data || []).filter((u: User) => u.status === 'pending').length,
+      );
       if (domRes.data) _setDomains(domRes.data);
     } catch (e: any) {
       // An empty table is indistinguishable from "no results" (#1868). Say which.

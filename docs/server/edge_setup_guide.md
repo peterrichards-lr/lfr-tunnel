@@ -63,35 +63,22 @@ For a multi-region deployment, configure DNS records as follows:
 
 Regional edge nodes require wildcard SSL certificates to secure dynamic visitor subdomains (e.g., `*.us.lfr-demo.online`).
 
-Because HTTP-01 challenge validation cannot work for wildcard subdomains without complex dynamic routing, you must use the **ACME DNS-01** challenge.
+Because HTTP-01 challenge validation cannot work for wildcard subdomains without complex dynamic routing, you must use the **ACME DNS-01** challenge, and that needs a credential that can write DNS records.
 
-### Example: Provisioning Wildcard Certs via Certbot & Cloudflare DNS API
+**Every certificate is issued on the control plane, never on an edge.** Only the control plane holds the DNS-write credential, so a certificate issued on an edge is issued once and can never renew. All four Liferay edges' own certificates expired on 2026-11-02 that way: they were left over from an edge-side Certbot setup still pointing at a DNS provider the deployment had moved away from (#2438). The control plane renews everything and pushes it to the edges (§5D), where it lands in `/etc/lfr-tunneld/certs/<domain>/`. That is where an edge's nginx reads it.
 
-1. Install Certbot and the Cloudflare DNS plugin on the server:
-   ```bash
-   sudo apt update
-   sudo apt install certbot python3-certbot-dns-cloudflare
-   ```
+For each edge, issue its own domain on the control plane with whichever DNS-01 plugin your DNS provider needs (`dns-route53` for Liferay's):
 
-2. Create a restricted credentials file (e.g., `/etc/letsencrypt/cloudflare.ini`):
-   ```ini
-   dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
-   ```
-   ```bash
-   sudo chmod 600 /etc/letsencrypt/cloudflare.ini
-   ```
+```bash
+# on the control plane; its certbot timer renews this from then on
+sudo certbot certonly --dns-route53 \
+  --cert-name us.lfr-demo.se -d "us.lfr-demo.se" -d "*.us.lfr-demo.se"
 
-3. Obtain the wildcard certificate:
-   ```bash
-   sudo certbot certonly \
-     --dns-cloudflare \
-     --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-     -d "us.lfr-demo.online" \
-     -d "*.us.lfr-demo.online" \
-     --preferred-challenges dns-01
-   ```
+# push it now rather than waiting for the next renewal (it starts a powered-off edge and stops it again)
+sudo /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs
+```
 
-The certificate files will be generated at `/etc/letsencrypt/live/us.lfr-demo.online/`.
+`setup-edge-vps.sh` issues nothing. At the end it checks the edge for every certificate it needs and prints these commands for any that are missing.
 
 ---
 
@@ -544,7 +531,7 @@ What the rendered config contains, and why:
 | `map $http_upgrade $connection_upgrade` | once per file; nginx errors on a duplicate `map` |
 | `:80` for `<edge>` and `*.<edge>` | redirect to HTTPS. No ACME fallback: an edge issues no vanity certificates, so it has no fall-through window to protect (unlike central, #979) |
 | `:443` for `<edge>` | the edge's own hostname. Browser traffic is redirected to the control plane -- there is no portal here -- while `/api/` and `/tunnel` are served locally |
-| `:443` for `*.<edge>` | the regional data plane, certificate from `/etc/letsencrypt/live/<edge>/` |
+| `:443` for `*.<edge>` | the regional data plane, certificate from `/etc/lfr-tunneld/certs/<edge>/`, issued on and pushed from central like the apex bundle (#2438) |
 | `:443` for `*.<apex>` | apex wildcards served edge-direct, certificate from `/etc/lfr-tunneld/certs/<apex>/` where certsync installs the bundle pushed from central |
 
 Three things that are easy to get wrong:
@@ -611,4 +598,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-17* | *Last Reviewed: 2026-09-17*
+*Last Updated: 2026-11-10* | *Last Reviewed: 2026-11-10*

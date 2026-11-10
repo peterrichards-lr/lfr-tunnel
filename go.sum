@@ -22,8 +22,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.24 h1:jGzHjc
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.24/go.mod h1:uJt75pK2cEyY80F5C+DK9YkCkJWsMkJViHxLYZRHl8Y=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.11 h1:PO7Tx443ecMI00nIxDrT99DVcbeMBQ6BUtJlDMRnY24=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.11/go.mod h1:n/9RixikO12YvNomZLP8k4TgUSoEkT1W23QIrpFAPvw=
-github.com/aws/aws-sdk-go-v2/service/route53 v1.70.8 h1:NDAttzkvUfZUq129VofuyM3IYDpVC1hrHA7P7YpLSFg=
-github.com/aws/aws-sdk-go-v2/service/route53 v1.70.8/go.mod h1:mNkft+nyhDUXdlydo21eiCOQz2U59hju1TSCpkC2D30=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.70.9 h1:Ra0VARSA9E/6j/yuOAVlj7cZzzYbCl8miCErREFeVe8=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.70.9/go.mod h1:+0qUQQSnPore/nAHXEDYGaeV4aXsNpTRHuqG8gvyoCo=
 github.com/aws/aws-sdk-go-v2/service/scheduler v1.25.4 h1:m76q/2Ty77F7semxZjMoMp7LRMG3446NpWjyTxf/jco=
 github.com/aws/aws-sdk-go-v2/service/scheduler v1.25.4/go.mod h1:aV6G9uwt0zfczQ7/IZ7gieGdKxDkXhOvb8WdVzezbBs=
 github.com/aws/aws-sdk-go-v2/service/signin v1.12.4 h1:uo84u6f6YatFOBwk3DKM+ToqgVEB0cDjHQLsfrRm44A=

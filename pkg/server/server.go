@@ -5953,18 +5953,21 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		s.addGeoProviderSettings(out)
 		s.addAlertMethodSettings(out, actor)
 		for _, a := range AlertSettings {
-			stored, err := s.db.GetAdminSetting(a.Key)
-			if err != nil {
-				// An unreadable row falls back to the declared default rather than
-				// failing the page: the rest of System Settings is still usable, and a
-				// toggle showing its default is better than a blank form.
-				slog.Warn(fmt.Sprintf("[Settings] Could not read %s: %v", a.Key, err))
-				stored = ""
-			}
-			if alertSettingEnabled(a.Key, stored) {
-				out[a.Key] = alertSettingOn
-			} else {
-				out[a.Key] = alertSettingOff
+			// Both destinations' toggles (#2445).
+			for _, key := range []string{a.Key, a.SlackKey} {
+				stored, err := s.db.GetAdminSetting(key)
+				if err != nil {
+					// An unreadable row falls back to the declared default rather than
+					// failing the page: the rest of System Settings is still usable, and a
+					// toggle showing its default is better than a blank form.
+					slog.Warn(fmt.Sprintf("[Settings] Could not read %s: %v", key, err))
+					stored = ""
+				}
+				if alertSettingEnabled(key, stored) {
+					out[key] = alertSettingOn
+				} else {
+					out[key] = alertSettingOff
+				}
 			}
 		}
 		_ = json.NewEncoder(w).Encode(out) //nolint:errcheck
@@ -6043,7 +6046,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			}
 			s.writeAudit(actor, "admin.settings_updated", "system", slackAlertMethodSettingKey, detail, r)
 		}
-		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated email alert configuration", r)
+		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated which alerts go to email and Slack", r)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"}) //nolint:errcheck
 		return
 	}

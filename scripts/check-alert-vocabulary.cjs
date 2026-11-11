@@ -168,11 +168,22 @@ for (const arm of ARMS) {
       '  Render from the server-declared table; a list held in the portal is the drift.',
     );
   }
+  // Each alert has a Slack toggle beside its email one (#2445). An arm that renders only the
+  // email column leaves the owner unable to keep an alert out of the inbox while it still
+  // reaches Slack in the other arm -- the #1866 parity defect, one column wide.
+  if (!src.includes('slack_key')) {
+    fail(
+      `${arm.name} (${rel(arm.file)}) does not read slack_key, so it has no Slack column.`,
+    );
+    fail(
+      '  Render a Slack toggle per alert from alert_settings[].slack_key, as the other arm does.',
+    );
+  }
   // A hardcoded key is the exact regression this replaced, so name it rather than waiting
   // for the counts to disagree somewhere else.
-  const inline = [...src.matchAll(/['"`](alert_notify_[a-z_]+)['"`]/g)].map(
-    (m) => m[1],
-  );
+  const inline = [
+    ...src.matchAll(/['"`](alert_(?:notify|slack)_[a-z_]+)['"`]/g),
+  ].map((m) => m[1]);
   if (inline.length) {
     fail(
       `${arm.name} (${rel(arm.file)}) names alert keys inline: ${[...new Set(inline)].join(', ')}.`,

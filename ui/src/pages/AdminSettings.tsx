@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import Skeleton from '../components/Skeleton';
@@ -133,7 +133,13 @@ export default function AdminSettings() {
   // `settingsLoaded` does: an unloaded form reads as "everything off", and posting that would
   // silently disable every alert on the gateway.
   const [alertSettings, setAlertSettings] = useState<
-    { key: string; label_key: string; default_on: boolean }[]
+    {
+      key: string;
+      // The alert's Slack toggle (#2445). Optional so a gateway from before it still renders.
+      slack_key?: string;
+      label_key: string;
+      default_on: boolean;
+    }[]
   >([]);
   const [alertValues, setAlertValues] = useState<Record<string, boolean>>({});
   const [alertsLoaded, setAlertsLoaded] = useState(false);
@@ -180,6 +186,10 @@ export default function AdminSettings() {
   const [alertMethodSource, setAlertMethodSource] = useState('');
   const [alertMethodConfig, setAlertMethodConfig] = useState('');
   const [alertMethodOverride, setAlertMethodOverride] = useState('');
+  // The override as the server last returned it. The fallback warning compares THIS with
+  // the method in force, never the dropdown: an unsaved selection is not a fallback, and
+  // comparing it raised the warning the moment a different option was picked (#2445).
+  const [alertMethodSaved, setAlertMethodSaved] = useState('');
   const [canChangeAlertMethod, setCanChangeAlertMethod] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [slackChannelEmail, setSlackChannelEmail] = useState('');
@@ -227,10 +237,11 @@ export default function AdminSettings() {
       setAlertSettings(declared);
       setAlertValues(
         Object.fromEntries(
-          declared.map((a: { key: string }) => [
-            a.key,
-            aRes.data[a.key] === 'true',
-          ]),
+          declared
+            .flatMap((a: { key: string; slack_key?: string }) =>
+              a.slack_key ? [a.key, a.slack_key] : [a.key],
+            )
+            .map((key: string) => [key, aRes.data[key] === 'true']),
         ),
       );
       // Only true when the server actually declared a vocabulary: an empty list is a
@@ -253,6 +264,7 @@ export default function AdminSettings() {
       setAlertMethodSource(aRes.data.admin_alert_slack_method_source || '');
       setAlertMethodConfig(aRes.data.admin_alert_slack_method_config || '');
       setAlertMethodOverride(aRes.data.admin_alert_slack_method_override || '');
+      setAlertMethodSaved(aRes.data.admin_alert_slack_method_override || '');
       setCanChangeAlertMethod(aRes.data.can_change_alert_method === true);
       setWebhookConfigured(aRes.data.slack_webhook_configured === true);
       setSlackChannelEmail(aRes.data.slack_channel_email || '');
@@ -376,10 +388,9 @@ export default function AdminSettings() {
       if (alertsLoaded) {
         await axios.post('/api/admin/settings', {
           ...Object.fromEntries(
-            alertSettings.map((a) => [
-              a.key,
-              alertValues[a.key] ? 'true' : 'false',
-            ]),
+            alertSettings
+              .flatMap((a) => (a.slack_key ? [a.key, a.slack_key] : [a.key]))
+              .map((key) => [key, alertValues[key] ? 'true' : 'false']),
           ),
           // Only when the vocabulary actually arrived. Posting '' from an unloaded form
           // would clear a vendor the operator chose, and silently stop crediting them.
@@ -394,7 +405,10 @@ export default function AdminSettings() {
         fetchAllData();
       } else {
         showToast(
-          'System settings were saved, but the email alert toggles were not.',
+          t(
+            'alert_settings_not_saved',
+            'System settings were saved, but the alert toggles were not.',
+          ),
           'error',
         );
       }
@@ -638,34 +652,62 @@ export default function AdminSettings() {
           at all, switchable only by writing the admin_settings row by hand. */}
       <div className="card mb-xl">
         <h4 className="section-title mb-xs">
-          {t('alert_settings_title', 'Email Alerts')}
+          {t('alert_settings_title', 'Alerts')}
         </h4>
         <p className="text-sm text-muted mb-lg">
           {t(
             'alert_settings_desc',
-            'Choose which events email the administrator address. Unchecked events still appear in the audit log.',
+            "Choose where each event is sent: the administrator's email, Slack, or both. Slack only applies when a Slack method is chosen under Integrations. Every event still appears in the audit log.",
           )}
         </p>
         {alertsLoaded ? (
-          <div className="flex flex-col gap-sm">
-            {alertSettings.map((a) => (
-              <label
-                key={a.key}
-                className="flex items-center gap-sm text-sm cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!alertValues[a.key]}
-                  onChange={(e) =>
-                    setAlertValues((prev) => ({
-                      ...prev,
-                      [a.key]: e.target.checked,
-                    }))
-                  }
-                />
-                <span>{t(a.label_key, a.key)}</span>
-              </label>
-            ))}
+          // One row per alert, one column per destination (#2445): an owner who works from
+          // Slack can keep alerts already actioned there out of the inbox.
+          <div
+            data-testid="alert-settings-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto auto',
+              columnGap: '24px',
+              rowGap: '8px',
+              alignItems: 'center',
+            }}
+          >
+            <span />
+            <span className="text-xs text-muted text-center">
+              {t('alert_column_email', 'Email')}
+            </span>
+            <span className="text-xs text-muted text-center">
+              {t('alert_column_slack', 'Slack')}
+            </span>
+            {alertSettings.map((a) => {
+              const label = t(a.label_key, a.key);
+              return (
+                <Fragment key={a.key}>
+                  <span className="text-sm">{label}</span>
+                  {[
+                    [a.key, t('alert_column_email', 'Email')],
+                    [a.slack_key, t('alert_column_slack', 'Slack')],
+                  ].map(([key, column], i) => (
+                    <span key={i} className="text-center">
+                      {key && (
+                        <input
+                          type="checkbox"
+                          aria-label={`${label} \u2014 ${column}`}
+                          checked={!!alertValues[key]}
+                          onChange={(e) =>
+                            setAlertValues((prev) => ({
+                              ...prev,
+                              [key]: e.target.checked,
+                            }))
+                          }
+                        />
+                      )}
+                    </span>
+                  ))}
+                </Fragment>
+              );
+            })}
           </div>
         ) : (
           <div className="text-sm text-muted">
@@ -1064,7 +1106,9 @@ export default function AdminSettings() {
             disabled={webhookTesting}
             onClick={testWebhook}
           >
-            {webhookTesting ? 'Sending...' : 'Trigger Test Webhook'}
+            {webhookTesting
+              ? 'Sending...'
+              : t('btn_send_test_alert', 'Send Test Alert')}
           </button>
         </div>
         {/* Where the test alert actually goes. V1 shows this beside the same button
@@ -1116,15 +1160,14 @@ export default function AdminSettings() {
                   )
               ).replace('{0}', slackMethodLabel(alertMethod))}
             </p>
-            {alertMethodOverride !== '' &&
-              alertMethodOverride !== alertMethod && (
-                <div className="alert-banner alert-banner--warning mt-md text-sm">
-                  {t(
-                    'alert_method_fallback',
-                    'The method chosen here is no longer configured in server-config.yaml, so the server config default is in force.',
-                  )}
-                </div>
-              )}
+            {alertMethodSaved !== '' && alertMethodSaved !== alertMethod && (
+              <div className="alert-banner alert-banner--warning mt-md text-sm">
+                {t(
+                  'alert_method_fallback',
+                  'The method chosen here is no longer configured in server-config.yaml, so the server config default is in force.',
+                )}
+              </div>
+            )}
             {alertInbox && (
               <p className="text-xs text-muted mt-xs">
                 {t(
@@ -1156,6 +1199,20 @@ export default function AdminSettings() {
                   'Only the owner can change how admin alerts reach Slack.',
                 )}
               </p>
+            )}
+            {/* Its own Save (#2445). The nearest one was two cards up, so a method could be
+                picked, tested and found unchanged with nothing saying it had never been sent. */}
+            {canChangeAlertMethod && (
+              <button
+                className="btn btn-primary mt-lg"
+                data-testid="alert-method-save"
+                onClick={saveSystemSettings}
+                disabled={
+                  !settingsLoaded || alertMethodOverride === alertMethodSaved
+                }
+              >
+                {t('save_settings', 'Save Settings')}
+              </button>
             )}
           </div>
         )}

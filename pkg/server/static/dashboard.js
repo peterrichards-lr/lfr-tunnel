@@ -1005,9 +1005,23 @@ async function showLogin() {
     if (data.providers && data.providers.length > 0) {
       data.providers.forEach((p) => {
         const a = document.createElement('a');
-        a.href = `/api/auth/login?provider=${p.id}`;
+        a.href = `/api/auth/login?provider=${encodeURIComponent(p.id)}`;
         a.className = 'btn btn-primary';
-        a.innerHTML = `<span class="btn-icon">⚡</span> Continue with ${p.name}`;
+        const icon = document.createElement('span');
+        icon.className = 'btn-icon';
+        icon.textContent = '⚡';
+        a.appendChild(icon);
+        // textContent, not innerHTML: the name comes from the operator's config, and the
+        // label is a translated string shared with Portal V2 (#2447).
+        a.appendChild(
+          document.createTextNode(
+            ' ' +
+              t('btn_continue_with', 'Continue with {0}').replace(
+                '{0}',
+                p.name,
+              ),
+          ),
+        );
         container.appendChild(a);
       });
       divider.style.display = 'flex';
@@ -1015,10 +1029,21 @@ async function showLogin() {
       divider.style.display = 'none';
     }
 
+    const desc = document.querySelector(
+      '[data-i18n="portal_login_desc"], [data-i18n="portal_login_desc_sso"]',
+    );
     if (data.disable_email_login) {
       divider.style.display = 'none';
       document.getElementById('btn-show-email').classList.add('hidden');
       document.getElementById('btn-show-register').classList.add('hidden');
+      // The default description asks for an email address this gateway will not accept.
+      if (desc) {
+        desc.setAttribute('data-i18n', 'portal_login_desc_sso');
+        desc.textContent = t(
+          'portal_login_desc_sso',
+          "Sign in with your organisation's account.",
+        );
+      }
     } else {
       document.getElementById('btn-show-email').classList.remove('hidden');
       document.getElementById('btn-show-register').classList.remove('hidden');

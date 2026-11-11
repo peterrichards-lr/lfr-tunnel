@@ -31,6 +31,26 @@ const ActionSSODeniedRejected = "user.sso_denied.rejected"
 // bool made both of them read as a refusal to the person signing in.
 var errSSORegistrationRejected = errors.New("registration was rejected by an administrator")
 
+// ssoPortalCookie remembers which portal started an SSO sign-in, so the callback can return the
+// person to it (#2447). The callback used to redirect to "/" unconditionally, so a sign-in started
+// from Portal V2 landed in V1 -- one arm of a live A/B test handing its users to the other.
+//
+// It holds a fixed value, never a URL: a return URL carried through the identity provider is an
+// open redirect waiting for someone to put an address in it. ssoReturnPath maps the value to a
+// path, and anything it does not recognise returns to V1, the old behaviour.
+const ssoPortalCookie = "oidc_portal"
+
+// ssoPortalV2 is the only value ssoPortalCookie can usefully hold.
+const ssoPortalV2 = "v2"
+
+// ssoReturnPath is where the callback sends someone who has just signed in.
+func ssoReturnPath(r *http.Request) string {
+	if c, err := r.Cookie(ssoPortalCookie); err == nil && c.Value == ssoPortalV2 {
+		return "/portalv2/dashboard"
+	}
+	return "/"
+}
+
 // generateRandomState generates a secure random state for OAuth2 CSRF protection
 func generateRandomState() string {
 	b := make([]byte, 32)
@@ -87,6 +107,7 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state := generateRandomState()
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 	// In production, you should set this as a secure HttpOnly cookie to verify in callback.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oidc_state",
@@ -94,7 +115,22 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  time.Now().Add(10 * time.Minute),
 		HttpOnly: true,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	// Always written, so a V1 sign-in clears a V2 one abandoned in the same browser rather than
+	// inheriting its destination.
+	portal := ""
+	if r.URL.Query().Get("portal") == ssoPortalV2 {
+		portal = ssoPortalV2
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     ssoPortalCookie,
+		Value:    portal,
+		Path:     "/",
+		Expires:  time.Now().Add(10 * time.Minute),
+		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -265,8 +301,8 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		IPAddress:  s.clientIP(r),
 	})
 
-	// Redirect to Dashboard (Root)
-	http.Redirect(w, r, "/", http.StatusFound)
+	// Back to the portal the sign-in started from (#2447).
+	http.Redirect(w, r, ssoReturnPath(r), http.StatusFound)
 }
 
 // approveOnSSOSignIn completes the approval of an existing user who has just authenticated

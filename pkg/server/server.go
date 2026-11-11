@@ -4323,6 +4323,13 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
+	// SSO-only means no emailed link signs anyone in: not an invite, not one requested before the
+	// switch, not the owner's (#2449). The link is left as it is, so it simply expires.
+	if s.cfg.DisableEmailLogin {
+		respondJSON(w, http.StatusForbidden, map[string]string{"error": "Email login is disabled. Please use SSO."})
+		return
+	}
+
 	var req struct {
 		Token string `json:"token"`
 		Lang  string `json:"lang"`
@@ -4600,6 +4607,13 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, actor string) {
 	if s.db == nil {
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	// An invite creates an approved account and emails it a sign-in link, which SSO-only forbids
+	// (#2449). Under SSO a person is added by signing in through the identity provider.
+	if s.cfg.DisableEmailLogin {
+		respondJSON(w, http.StatusForbidden, map[string]string{"error": "Invitations are sent by email, and email login is disabled. The person can sign in with SSO."})
 		return
 	}
 

@@ -56,7 +56,7 @@ Unlike generic reverse proxy utilities, `lfr-tunnel` has been engineered with st
 * **Passwordless Magic Links & MFA Safeguards:**
     For administrative dashboard actions, local static user passwords are removed. Authentication is conducted using short-lived, secure, single-use **Magic Links** delivered to verified user mailboxes. Multi-Factor Authentication (MFA/TOTP) acts as a mandatory secondary gate on top of magic links.
 * **SSO-Only Lockdown (No-Backdoor Policy):**
-    To satisfy strict corporate compliance and prevent bypass channels, the gateway supports a `disable_email_login` configuration flag. When active, it disables email-based magic link logins and registration requests globally at both the API and interface levels. This locks the application down so that federated OIDC corporate SSO is the **exclusive** method of entry.
+    To satisfy strict corporate compliance and prevent bypass channels, the gateway supports a `disable_email_login` configuration flag. When active, it disables email-based magic link logins, registration requests and admin invites globally at both the API and interface levels, and the gateway refuses to redeem any magic link, including one issued before the switch. This locks the application down so that federated OIDC corporate SSO is the **exclusive** method of entry.
 * **Single-Session Concurrency:**
     Lease mapping enforces strict single-session concurrency per token or subdomain. A token or reserved subdomain cannot be used to multiplex simultaneous connections across multiple machines, preventing credentials from being shared or hijacked.
 * **Secure Webhook Alerts (Outgoing-Only, Tokenized URLs):**
@@ -229,4 +229,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*

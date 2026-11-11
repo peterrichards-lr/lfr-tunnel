@@ -3191,7 +3191,10 @@ function showTab(tabName, skipHistory = false) {
   ) {
     loadAdminQueueBadges();
   }
-  if (tabName === 'users') loadUsers();
+  if (tabName === 'users') {
+    loadUsers();
+    loadInviteAvailability();
+  }
   if (tabName === 'admin-subdomains') loadAdminSubdomains();
   if (tabName === 'registrations') loadRegistrations();
   if (tabName === 'blacklist') loadBlacklist();
@@ -5156,6 +5159,24 @@ function openBlacklistModal() {
 
 function closeBlacklistModal() {
   document.getElementById('blacklist-modal').style.display = 'none';
+}
+
+// An invite is an emailed sign-in link, which the server refuses while sign-in is SSO-only
+// (#2449), so the control is withdrawn and the reason given in its place, as Portal V2 does.
+async function loadInviteAvailability() {
+  let disabled = false;
+  try {
+    const res = await fetch('/api/auth/providers');
+    if (res.ok) disabled = (await res.json()).disable_email_login === true;
+  } catch {
+    // Unknown: keep the button. The server refuses an invite it should not send either way.
+  }
+  document
+    .getElementById('btn-invite-user')
+    .classList.toggle('hidden', disabled);
+  document
+    .getElementById('invite-disabled-note')
+    .classList.toggle('hidden', !disabled);
 }
 
 function openInviteModal() {

@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.52.7",
+    "release_date": "2026-11-11",
+    "features": [
+      "Admins: each alert can now go to email, to Slack, or both. The owner sets this per alert in System Settings, so an alert handled in Slack no longer has to land in the inbox too.",
+      "Single sign-on: Portal V2 now offers the same \"Continue with ...\" sign-in as V1, and returns you to V2 afterwards. When a gateway is set to SSO-only, both portals hide the email sign-in form.",
+      "Single sign-on: on an SSO-only gateway, admins can no longer send email invitations and emailed sign-in links no longer work. New people join by signing in through the identity provider.",
+      "Security update: SSO sign-in now uses PKCE and a nonce, and only accepts an email address the identity provider has verified.",
+      "Analytics: Export PDF prints the wide sections (gateways, sessions, latency, node placement) on landscape pages, and charts are redrawn at their printed size instead of shrunk from the screen. Tested in Chrome.",
+      "Analytics: Personal Usage now says when you have no tunnel traffic in the period, instead of showing an empty section."
+    ]
+  },
+  {
     "version": "v1.52.6",
     "release_date": "2026-11-10",
     "features": [
@@ -28,13 +40,6 @@
     "release_date": "2026-10-13",
     "features": [
       "Better gateway reports: when your tunnel connects through a regional gateway, the service now records which region you chose and how quickly each one responded, as it already did for direct connections. This feeds the reports used to decide where gateways should run. Nothing changes in how you use the tunnel."
-    ]
-  },
-  {
-    "version": "v1.52.2",
-    "release_date": "2026-10-13",
-    "features": [
-      "Security update: the gateway and client are now built with Go 1.26.9 and an updated HTTP/2 library, fixing 12 published vulnerabilities in HTTP/1 and HTTP/2 handling, TLS and HTML templating. Nothing changes in how you use the tunnel."
     ]
   }
 ]

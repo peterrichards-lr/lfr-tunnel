@@ -186,7 +186,22 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
        icon: "key"
    ```
 
+---
+
+## 5. SSO-Only Mode (`disable_email_login`)
+
+```yaml
+disable_email_login: true
+```
+
+With this set, no emailed link can sign anyone in or create an account (#2449):
+
+- Self-registration (`/api/register-request`) and requesting a sign-in link (`/api/auth/magic-link`) return 403.
+- Admin invites (`/api/admin/invite`) return 403, and neither portal offers the Invite User button; each shows why in its place. A new person joins by signing in through the identity provider.
+- `/api/auth/verify` refuses every magic link, including links sent before the switch and the owner's own. Nobody has an email fallback.
+
+**Recovery if the identity provider is unavailable:** set `disable_email_login: false` in `server-config.yaml` on the gateway over SSH and restart `lfr-tunneld`. Email sign-in is back as soon as the service is. This is the only route back in, so keep SSH access to the gateway working before switching to SSO-only.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*
+*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*

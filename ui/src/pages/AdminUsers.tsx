@@ -352,6 +352,19 @@ export default function AdminUsers() {
   const [isSendingTargeted, setIsSendingTargeted] = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
+  // An invite is an emailed sign-in link, which the server refuses while sign-in is SSO-only
+  // (#2449), so the control is withdrawn and the reason given in its place, as Portal V1 does.
+  const [emailLoginDisabled, setEmailLoginDisabled] = useState(false);
+  useEffect(() => {
+    axios
+      .get('/api/auth/providers')
+      .then((res) =>
+        setEmailLoginDisabled(res.data?.disable_email_login === true),
+      )
+      .catch(() => {
+        // Unknown: keep the button. The server refuses an invite it should not send either way.
+      });
+  }, []);
   const [modalRateLimit, setModalRateLimit] = useState(0);
   const [modalMaxReservations, setModalMaxReservations] = useState(3);
   const [modalMaxCustomDomains, setModalMaxCustomDomains] = useState(1);
@@ -838,13 +851,25 @@ export default function AdminUsers() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="btn btn-primary flex items-center gap-xs"
-        >
-          <span>➕</span>
-          <span>{t('invite_user', 'Invite User')}</span>
-        </button>
+        {emailLoginDisabled ? (
+          <p
+            className="text-muted text-sm m-0"
+            data-testid="invite-disabled-note"
+          >
+            {t(
+              'invite_disabled_sso',
+              'Invitations are off because sign-in is SSO-only. People join by signing in with SSO.',
+            )}
+          </p>
+        ) : (
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="btn btn-primary flex items-center gap-xs"
+          >
+            <span>➕</span>
+            <span>{t('invite_user', 'Invite User')}</span>
+          </button>
+        )}
       </div>
 
       <div className="sub-tabs mb-xl">

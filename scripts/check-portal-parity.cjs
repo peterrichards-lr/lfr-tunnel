@@ -69,6 +69,18 @@ const CAPABILITIES = [
     },
   },
   {
+    // An invite is an emailed sign-in link; SSO-only refuses it, so neither arm may offer it (#2449).
+    name: 'withdraw admin invites when email sign-in is disabled',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: "getElementById('invite-disabled-note')",
+    },
+    v2: {
+      files: ['ui/src/pages/AdminUsers.tsx'],
+      needle: 'data-testid="invite-disabled-note"',
+    },
+  },
+  {
     name: 'set a reservation passcode / IP whitelist',
     v1: {
       files: ['pkg/server/static/dashboard.js'],

@@ -20,6 +20,29 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [statusMsg, setStatusMsg] = useState({ text: '', isError: false });
 
+  // SSO providers and whether email sign-in is closed, from the same endpoint V1's login page
+  // reads (#2447). V2 had neither: no SSO button at all, and a magic-link form still offered on
+  // a gateway that refuses every magic link. Email sign-in stays offered if the endpoint does not
+  // answer -- a login page with no way in is worse than one whose form the server may refuse.
+  const [ssoProviders, setSsoProviders] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [emailLoginDisabled, setEmailLoginDisabled] = useState(false);
+  useEffect(() => {
+    axios
+      .get('/api/auth/providers')
+      .then((res) => {
+        setSsoProviders(
+          Array.isArray(res.data?.providers) ? res.data.providers : [],
+        );
+        setEmailLoginDisabled(res.data?.disable_email_login === true);
+      })
+      .catch(() => {
+        setSsoProviders([]);
+        setEmailLoginDisabled(false);
+      });
+  }, []);
+
   // Failure is tolerated in silence: a credit is owed only when a database is open, and a
   // login screen must still render if the gateway does not answer.
   useEffect(() => {
@@ -240,107 +263,140 @@ export default function Login() {
             </h1>
             <p className="text-center text-muted mb-xl text-base">
               {mode === 'login'
-                ? t(
-                    'portal_login_desc',
-                    'Enter your email to request a secure passwordless login link.',
-                  )
+                ? emailLoginDisabled
+                  ? t(
+                      'portal_login_desc_sso',
+                      "Sign in with your organisation's account.",
+                    )
+                  : t(
+                      'portal_login_desc',
+                      'Enter your email to request a secure passwordless login link.',
+                    )
                 : t(
                     'portal_register_desc',
                     "Don't have an account yet? Register here:",
                   )}
             </p>
 
-            <form id="email-form" className="mt-xl" onSubmit={handleSubmit}>
-              {mode === 'register' && (
-                <div className="flex gap-md mb-lg">
+            {ssoProviders.length > 0 && (
+              <div
+                className="flex flex-col gap-sm mt-xl"
+                data-testid="sso-providers"
+              >
+                {ssoProviders.map((p) => (
+                  // portal=v2 so the callback returns here rather than to V1.
+                  <a
+                    key={p.id}
+                    href={`/api/auth/login?provider=${encodeURIComponent(p.id)}&portal=v2`}
+                    className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm"
+                  >
+                    {t('btn_continue_with', 'Continue with {0}').replace(
+                      '{0}',
+                      p.name,
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
+            {ssoProviders.length > 0 && !emailLoginDisabled && (
+              <p className="text-center text-muted text-sm mt-lg mb-0">
+                {t('login_divider_or', 'or')}
+              </p>
+            )}
+
+            {!emailLoginDisabled && (
+              <form id="email-form" className="mt-xl" onSubmit={handleSubmit}>
+                {mode === 'register' && (
+                  <div className="flex gap-md mb-lg">
+                    <input
+                      type="text"
+                      name="first_name"
+                      className="input-field w-full"
+                      placeholder={t('label_first_name', 'First Name')}
+                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      aria-label={t('first_name', 'First name')}
+                    />
+                    <input
+                      type="text"
+                      name="last_name"
+                      className="input-field w-full"
+                      placeholder={t('label_last_name', 'Last Name')}
+                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      aria-label={t('last_name', 'Last name')}
+                    />
+                  </div>
+                )}
+
+                <div className="mb-lg">
                   <input
-                    type="text"
-                    name="first_name"
+                    type="email"
+                    id="email-input"
+                    name="email"
+                    autoComplete="email"
                     className="input-field w-full"
-                    placeholder={t('label_first_name', 'First Name')}
+                    placeholder={t('label_email', 'Email Address')}
                     required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    aria-label={t('first_name', 'First name')}
-                  />
-                  <input
-                    type="text"
-                    name="last_name"
-                    className="input-field w-full"
-                    placeholder={t('label_last_name', 'Last Name')}
-                    required
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    aria-label={t('last_name', 'Last name')}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-              )}
-
-              <div className="mb-lg">
-                <input
-                  type="email"
-                  id="email-input"
-                  name="email"
-                  autoComplete="email"
-                  className="input-field w-full"
-                  placeholder={t('label_email', 'Email Address')}
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm"
-                id="btn-magic-link"
-                disabled={isSending || (mode === 'login' && countdown > 0)}
-              >
-                {isSending ? (
-                  <>
-                    <span className="spinner spinner--sm" />
-                    {t('sending', 'Sending...')}
-                  </>
-                ) : mode === 'login' ? (
-                  countdown > 0 ? (
-                    t('resend_in', 'Resend in {0}s').replace(
-                      '{0}',
-                      String(countdown),
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm"
+                  id="btn-magic-link"
+                  disabled={isSending || (mode === 'login' && countdown > 0)}
+                >
+                  {isSending ? (
+                    <>
+                      <span className="spinner spinner--sm" />
+                      {t('sending', 'Sending...')}
+                    </>
+                  ) : mode === 'login' ? (
+                    countdown > 0 ? (
+                      t('resend_in', 'Resend in {0}s').replace(
+                        '{0}',
+                        String(countdown),
+                      )
+                    ) : (
+                      t('btn_send_magic_link', 'Send Magic Link')
                     )
                   ) : (
-                    t('btn_send_magic_link', 'Send Magic Link')
-                  )
-                ) : (
-                  t('btn_register_account', 'Register Account')
-                )}
-              </button>
-
-              {statusMsg.text && (
-                <div
-                  id="email-msg"
-                  className={`mt-lg text-center text-sm fw-medium ${statusMsg.isError ? 'text-danger' : 'text-success'}`}
-                >
-                  {statusMsg.text}
-                </div>
-              )}
-
-              <div className="mt-xl text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode(mode === 'login' ? 'register' : 'login');
-                    setStatusMsg({ text: '', isError: false });
-                  }}
-                  className="btn-bare text-muted text-sm underline cursor-pointer"
-                >
-                  {mode === 'login'
-                    ? t(
-                        'portal_register_desc',
-                        "Don't have an account yet? Register here:",
-                      )
-                    : t('btn_login_with_email', 'Login with Email')}
+                    t('btn_register_account', 'Register Account')
+                  )}
                 </button>
-              </div>
-            </form>
+
+                {statusMsg.text && (
+                  <div
+                    id="email-msg"
+                    className={`mt-lg text-center text-sm fw-medium ${statusMsg.isError ? 'text-danger' : 'text-success'}`}
+                  >
+                    {statusMsg.text}
+                  </div>
+                )}
+
+                <div className="mt-xl text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode(mode === 'login' ? 'register' : 'login');
+                      setStatusMsg({ text: '', isError: false });
+                    }}
+                    className="btn-bare text-muted text-sm underline cursor-pointer"
+                  >
+                    {mode === 'login'
+                      ? t(
+                          'portal_register_desc',
+                          "Don't have an account yet? Register here:",
+                        )
+                      : t('btn_login_with_email', 'Login with Email')}
+                  </button>
+                </div>
+              </form>
+            )}
           </>
         )}
       </div>

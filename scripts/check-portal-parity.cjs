@@ -43,6 +43,32 @@ const ROOT = path.join(__dirname, '..');
 // endpoint or the handler -- rather than wording, which changes without the capability changing.
 const CAPABILITIES = [
   {
+    // #2447. V2's login page never asked which SSO providers exist, so a V2 user had no way to
+    // sign in with SSO at all -- and the Okta rollout would have depended on V1 alone.
+    name: 'sign in with a configured SSO provider',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: "'/api/auth/providers'",
+    },
+    v2: {
+      files: ['ui/src/pages/Login.tsx'],
+      needle: "'/api/auth/providers'",
+    },
+  },
+  {
+    // Same defect, other half: V2 kept offering a magic-link form on a gateway that refuses
+    // every magic link.
+    name: 'withdraw email sign-in when the operator disables it',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: 'data.disable_email_login',
+    },
+    v2: {
+      files: ['ui/src/pages/Login.tsx'],
+      needle: '{!emailLoginDisabled && (',
+    },
+  },
+  {
     name: 'set a reservation passcode / IP whitelist',
     v1: {
       files: ['pkg/server/static/dashboard.js'],

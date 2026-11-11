@@ -36,14 +36,18 @@ fi
 #   v1-nofetch V1 never calls the endpoint
 #   v2-inline  V2 names an alert key inline instead of rendering the table
 #   v2-missing the V2 file does not exist at all
+#   v1-noslack V1 renders only the email column (#2445)
+#   v2-slack-inline V2 names a Slack toggle key inline
 write_arms() {
     local dir="$1" arms="$2"
     mkdir -p "$dir/pkg/server/static" "$dir/ui/src/pages"
-    local v1="fetch('/api/admin/settings'); data.alert_settings.map(x => x.key);"
-    local v2="axios.get('/api/admin/settings'); res.data.alert_settings.forEach(a => a.key);"
+    local v1="fetch('/api/admin/settings'); data.alert_settings.map(x => [x.key, x.slack_key]);"
+    local v2="axios.get('/api/admin/settings'); res.data.alert_settings.forEach(a => [a.key, a.slack_key]);"
     case "$arms" in
-        v1-nofetch) v1="renderAlertSettings(data.alert_settings);" ;;
+        v1-nofetch) v1="renderAlertSettings(data.alert_settings, x => x.slack_key);" ;;
         v2-inline)  v2="$v2 if (k === 'alert_notify_registration') show();" ;;
+        v1-noslack) v1="fetch('/api/admin/settings'); data.alert_settings.map(x => x.key);" ;;
+        v2-slack-inline) v2="$v2 if (k === 'alert_slack_registration') show();" ;;
     esac
     printf '%s\n' "$v1" > "$dir/pkg/server/static/dashboard.js"
     if [ "$arms" != "v2-missing" ]; then
@@ -134,6 +138,13 @@ run_case "an arm naming an alert key inline" 1 "registration,blacklist" "registr
 # FIRING. A missing arm must fail rather than be quietly skipped -- a parity check that
 # silently ignores the arm it cannot find is the #1866 defect with extra steps.
 run_case "a missing portal arm is not a pass" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-missing"
+
+# FIRING. An arm with only the email column (#2445): the owner could keep an alert out of the
+# inbox in one portal and not the other.
+run_case "an arm with no Slack column" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v1-noslack"
+
+# FIRING. A Slack key named inline is the same drift as an email key named inline.
+run_case "an arm naming a Slack toggle key inline" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-slack-inline"
 
 # CONTROL. Both sides empty. Without an anti-vacuity floor this reports agreement and the gate
 # passes forever on a tree it cannot parse.

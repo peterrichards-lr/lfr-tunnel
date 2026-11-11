@@ -81,23 +81,24 @@ func (s *Server) effectiveSlackMethod() (config.SlackAlertMethod, alertMethodSou
 	return stored, alertMethodSourcePortal
 }
 
-// alertEnabledForSlack applies the per-alert toggles to the Slack route, exactly as they apply to
-// email, so turning Slack on never changes WHICH alerts arrive.
+// alertEnabledForSlack applies the alert's Slack toggle (#2445). It is separate from the email
+// toggle so the owner can take an alert in Slack and keep it out of the inbox, or the reverse.
 //
 // The admin's personal notification preference does not apply: that is a choice about one
 // person's inbox, and a channel post is not an email to them. A read failure sends anyway --
 // there is no inbox owner whose preference that could override, and an alert held back by a read
 // error is the silent loss this route must not introduce.
 func (s *Server) alertEnabledForSlack(settingKey string) bool {
+	key := slackAlertKey(settingKey)
 	if s.db == nil {
 		return true
 	}
-	stored, err := s.db.GetAdminSetting(settingKey)
+	stored, err := s.db.GetAdminSetting(key)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("[Alerts] Could not read %s; sending the Slack alert regardless: %v", settingKey, err))
+		slog.Warn(fmt.Sprintf("[Alerts] Could not read %s; sending the Slack alert regardless: %v", key, err))
 		return true
 	}
-	return alertSettingEnabled(settingKey, stored)
+	return alertSettingEnabled(key, stored)
 }
 
 // sendAdminAlertToSlack is the Slack half of sendAdminAlert: one route or none.

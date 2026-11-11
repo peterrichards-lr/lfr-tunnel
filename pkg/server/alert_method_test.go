@@ -120,7 +120,7 @@ func TestEveryAlertReachesTheWebhook(t *testing.T) {
 	for _, a := range AlertSettings {
 		// tunnel_offline defaults off; switch everything on so default-off is not mistaken
 		// for missing coverage.
-		if err := srv.db.SetAdminSetting(a.Key, alertSettingOn); err != nil {
+		if err := srv.db.SetAdminSetting(a.SlackKey, alertSettingOn); err != nil {
 			t.Fatal(err)
 		}
 		srv.sendAdminAlert(a.Key, a.Key, "<p>x</p>")
@@ -130,19 +130,37 @@ func TestEveryAlertReachesTheWebhook(t *testing.T) {
 	}
 }
 
-// TestAlertTogglesGateSlackToo: turning Slack on must not change WHICH alerts arrive.
-func TestAlertTogglesGateSlackToo(t *testing.T) {
-	srv, _ := alertRouteServer(t)
+// TestEmailAndSlackTogglesAreIndependent: each destination has its own toggle (#2445). The owner
+// takes alerts in Slack and does not want the inbox filling with ones already actioned there --
+// which one shared toggle could not express, because muting the email also muted Slack.
+func TestEmailAndSlackTogglesAreIndependent(t *testing.T) {
+	srv, mail := alertRouteServer(t)
 	setSlackMethod(t, srv, "webhook")
-	if err := srv.db.SetAdminSetting("alert_notify_registration", alertSettingOff); err != nil {
-		t.Fatal(err)
+	for key, value := range map[string]string{
+		"alert_notify_registration": alertSettingOff, // Slack only
+		"alert_slack_blacklist":     alertSettingOff, // inbox only
+	} {
+		if err := srv.db.SetAdminSetting(key, value); err != nil {
+			t.Fatal(err)
+		}
 	}
-	srv.sendAdminAlert("alert_notify_registration", "Muted", "<p>x</p>")
-	// Control: an alert that is on still goes, so the absence above means "gated", not "the
-	// webhook path is broken".
-	srv.sendAdminAlert("alert_notify_blacklist", "Not muted", "<p>x</p>")
-	if got := queuedWebhookTitles(t, srv); len(got) != 1 || got[0] != "Not muted" {
-		t.Fatalf("want only the enabled alert queued, got %v", got)
+	srv.sendAdminAlert("alert_notify_registration", "Slack only", "<p>x</p>")
+	srv.sendAdminAlert("alert_notify_blacklist", "Inbox only", "<p>x</p>")
+	// Control: an alert with both toggles at their default reaches both, so each absence
+	// below is the toggle and not a broken route.
+	srv.sendAdminAlert("alert_notify_extension_requested", "Both", "<p>x</p>")
+
+	if got := queuedWebhookTitles(t, srv); strings.Join(got, ",") != "Slack only,Both" {
+		t.Fatalf("webhook got %v, want [Slack only Both]", got)
+	}
+	waitForRecipients(t, mail, testInbox, testInbox)
+	var subjects []string
+	for _, e := range mail.getSentEmails() {
+		subjects = append(subjects, e.Subject)
+	}
+	sort.Strings(subjects)
+	if strings.Join(subjects, ",") != "Both,Inbox only" {
+		t.Fatalf("inbox got %v, want [Both Inbox only]", subjects)
 	}
 }
 

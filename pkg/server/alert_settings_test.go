@@ -35,19 +35,24 @@ func TestEveryDeclaredAlertIsReturnedByTheSettingsEndpoint(t *testing.T) {
 	}
 
 	for _, a := range AlertSettings {
-		v, present := out[a.Key]
-		if !present {
-			t.Errorf("%s is declared but the settings endpoint does not return it -- no toggle can be rendered for it", a.Key)
-			continue
+		if a.SlackKey == "" || a.SlackKey == a.Key {
+			t.Errorf("%s has no Slack toggle of its own (slack_key %q)", a.Key, a.SlackKey)
 		}
-		// Unset rows must resolve to the declared default, not to a blank the portal
-		// would render as off.
-		want := "false"
-		if a.DefaultOn {
-			want = "true"
-		}
-		if v != want {
-			t.Errorf("%s with no stored row: want %q (its declared default), got %v", a.Key, want, v)
+		for _, key := range []string{a.Key, a.SlackKey} {
+			v, present := out[key]
+			if !present {
+				t.Errorf("%s is declared but the settings endpoint does not return it -- no toggle can be rendered for it", key)
+				continue
+			}
+			// Unset rows must resolve to the declared default, not to a blank the portal
+			// would render as off.
+			want := "false"
+			if a.DefaultOn {
+				want = "true"
+			}
+			if v != want {
+				t.Errorf("%s with no stored row: want %q (its declared default), got %v", key, want, v)
+			}
 		}
 	}
 }
@@ -57,12 +62,14 @@ func TestEveryDeclaredAlertCanActuallyBeSaved(t *testing.T) {
 
 	// Flip every key away from its default. A key the POST silently ignores reads back as
 	// its default, which is exactly how three of these were lost.
+	// The Slack toggle is flipped the other way from the email one, so a save that wrote one
+	// key's value under the other would read back wrong.
 	payload := map[string]string{}
 	for _, a := range AlertSettings {
 		if a.DefaultOn {
-			payload[a.Key] = "false"
+			payload[a.Key], payload[a.SlackKey] = "false", "true"
 		} else {
-			payload[a.Key] = "true"
+			payload[a.Key], payload[a.SlackKey] = "true", "false"
 		}
 	}
 	body, _ := json.Marshal(payload)
@@ -73,13 +80,13 @@ func TestEveryDeclaredAlertCanActuallyBeSaved(t *testing.T) {
 		t.Fatalf("POST settings: want 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
-	for _, a := range AlertSettings {
-		stored, err := srv.db.GetAdminSetting(a.Key)
+	for key, want := range payload {
+		stored, err := srv.db.GetAdminSetting(key)
 		if err != nil {
-			t.Fatalf("read back %s: %v", a.Key, err)
+			t.Fatalf("read back %s: %v", key, err)
 		}
-		if stored != payload[a.Key] {
-			t.Errorf("%s: posted %q but the row holds %q -- the save was accepted and discarded", a.Key, payload[a.Key], stored)
+		if stored != want {
+			t.Errorf("%s: posted %q but the row holds %q -- the save was accepted and discarded", key, want, stored)
 		}
 	}
 }

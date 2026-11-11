@@ -4,6 +4,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import GeoAttribution from '../components/GeoAttribution';
+import { usePrintSizedCharts } from '../hooks/usePrintSizedCharts';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -183,6 +184,8 @@ export default function AdminAnalytics() {
     getSortIndicator,
     getAriaSort,
   } = useTableSort(clientStats, ['version', 'os', 'count']);
+
+  usePrintSizedCharts();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -380,6 +383,10 @@ export default function AdminAnalytics() {
           <button
             className="btn btn-secondary analytics-control w-auto inline-flex items-center gap-sm"
             onClick={handlePrint}
+            title={t(
+              'export_pdf_hint',
+              'Tested in Chrome, which prints the wide sections on landscape pages. Other browsers may print every page portrait.',
+            )}
           >
             📄 {t('export_pdf', 'Export PDF')}
           </button>
@@ -410,81 +417,94 @@ export default function AdminAnalytics() {
           <h3 className="text-lg fw-bold mb-lg">
             {t('personal_usage', 'Personal Usage')}
           </h3>
-          <div className="auto-grid-lg mb-2xl">
-            {data.personal.daily && data.personal.daily.length > 0 && (
-              <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">
-                  {t('bandwidth_over_time', 'Bandwidth Over Time')}
-                </h4>
-                <div className="chart-container">
-                  <Line
-                    data={{
-                      labels: data.personal.daily.map((d: any) => d.date),
-                      datasets: [
-                        {
-                          label: t('data_in', 'Data In'),
-                          data: data.personal.daily.map((d: any) => d.bytes_in),
-                          borderColor: '#3b82f6',
-                          backgroundColor: '#3b82f620',
-                          fill: true,
-                          tension: 0.4,
-                        },
-                        {
-                          label: t('data_out', 'Data Out'),
-                          data: data.personal.daily.map(
-                            (d: any) => d.bytes_out,
-                          ),
-                          borderColor: '#10b981',
-                          backgroundColor: '#10b98120',
-                          fill: true,
-                          tension: 0.4,
-                        },
-                      ],
-                    }}
-                    options={chartOptions()}
-                  />
+          {/* Both charts are conditional, so with no personal traffic the heading stood alone --
+              on screen, and as the whole of page 1 of an export (#2430). */}
+          {!data.personal.daily?.length && !data.personal.tunnels?.length ? (
+            <p className="text-muted mb-2xl" data-testid="personal-usage-empty">
+              {t(
+                'personal_usage_empty',
+                'You have no tunnel traffic in this period.',
+              )}
+            </p>
+          ) : (
+            <div className="auto-grid-lg mb-2xl">
+              {data.personal.daily && data.personal.daily.length > 0 && (
+                <div className="card p-xl">
+                  <h4 className="text-muted text-base mb-lg">
+                    {t('bandwidth_over_time', 'Bandwidth Over Time')}
+                  </h4>
+                  <div className="chart-container">
+                    <Line
+                      data={{
+                        labels: data.personal.daily.map((d: any) => d.date),
+                        datasets: [
+                          {
+                            label: t('data_in', 'Data In'),
+                            data: data.personal.daily.map(
+                              (d: any) => d.bytes_in,
+                            ),
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f620',
+                            fill: true,
+                            tension: 0.4,
+                          },
+                          {
+                            label: t('data_out', 'Data Out'),
+                            data: data.personal.daily.map(
+                              (d: any) => d.bytes_out,
+                            ),
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b98120',
+                            fill: true,
+                            tension: 0.4,
+                          },
+                        ],
+                      }}
+                      options={chartOptions()}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {data.personal.tunnels && data.personal.tunnels.length > 0 && (
-              <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">
-                  {t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}
-                </h4>
-                <div className="chart-container">
-                  <Doughnut
-                    data={{
-                      labels: data.personal.tunnels.map(
-                        (t: any) => t.full_host,
-                      ),
-                      datasets: [
-                        {
-                          label: t(
-                            'analytics_total_bandwidth',
-                            'Total Bandwidth',
-                          ),
-                          data: data.personal.tunnels.map(
-                            (t: any) => t.bytes_in + t.bytes_out,
-                          ),
-                          backgroundColor: [
-                            '#3b82f6',
-                            '#10b981',
-                            '#f59e0b',
-                            '#ef4444',
-                            '#8b5cf6',
-                            '#ec4899',
-                          ],
-                          borderWidth: 0,
-                        },
-                      ],
-                    }}
-                    options={doughnutOptions}
-                  />
+              {data.personal.tunnels && data.personal.tunnels.length > 0 && (
+                <div className="card p-xl">
+                  <h4 className="text-muted text-base mb-lg">
+                    {t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}
+                  </h4>
+                  <div className="chart-container">
+                    <Doughnut
+                      data={{
+                        labels: data.personal.tunnels.map(
+                          (t: any) => t.full_host,
+                        ),
+                        datasets: [
+                          {
+                            label: t(
+                              'analytics_total_bandwidth',
+                              'Total Bandwidth',
+                            ),
+                            data: data.personal.tunnels.map(
+                              (t: any) => t.bytes_in + t.bytes_out,
+                            ),
+                            backgroundColor: [
+                              '#3b82f6',
+                              '#10b981',
+                              '#f59e0b',
+                              '#ef4444',
+                              '#8b5cf6',
+                              '#ec4899',
+                            ],
+                            borderWidth: 0,
+                          },
+                        ],
+                      }}
+                      options={doughnutOptions}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -690,7 +710,7 @@ export default function AdminAnalytics() {
               shown. That is the figure a dead reporting path appears in -- #1958/#1970 was an
               edge whose bytes stopped being recorded, and against an unlabelled all-time
               aggregate it read as a flat number rather than as a drop. */}
-          <div className="card p-xl mb-xl">
+          <div className="card p-xl mb-xl print-wide">
             <h4 className="text-muted text-base mb-lg">
               {t('bandwidth_by_gateway', 'Bandwidth by Gateway')}
             </h4>
@@ -754,7 +774,7 @@ export default function AdminAnalytics() {
               scheduled power window from a dead control channel -- both just show an edge
               with no sessions right now. */}
           {data.global && (
-            <div className="card p-xl mb-xl">
+            <div className="card p-xl mb-xl print-wide">
               <h4 className="text-muted text-base mb-lg">
                 {t('sessions_per_edge', 'Sessions per Gateway')}
               </h4>
@@ -811,7 +831,7 @@ export default function AdminAnalytics() {
               decision turns on -- a region can look healthy on its own median while the
               people using it have no good option anywhere, and only this number shows
               that. */}
-          <div className="card p-xl mb-xl">
+          <div className="card p-xl mb-xl print-wide">
             <h4 className="text-muted text-base mb-lg">
               {t('region_latency', 'Region Latency')}
             </h4>
@@ -883,7 +903,7 @@ export default function AdminAnalytics() {
               choice runs no probe, so there is nothing that day to compare against. Rendering
               those as part of a pass/fail bar would report "40% wrong" for sessions that were
               merely unmeasured, and somebody would move an edge because of it. */}
-          <div className="card p-xl mb-xl">
+          <div className="card p-xl mb-xl print-wide">
             <h4 className="text-muted text-base mb-lg">
               {t('node_placement', 'Node Placement')}
             </h4>

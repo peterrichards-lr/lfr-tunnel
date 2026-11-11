@@ -108,6 +108,19 @@ run_case "a colour value is not mistaken for a selector" 0 \
     '<div className="sidebar" />' \
     '<div class="sidebar"></div>'
 
+# FIRING. #2430: an attribute selector whose value no markup carries. V2 printed with
+# div[style*='display: grid'] -- V1's inline grids -- while its own grids were classes.
+run_case "an attribute value no markup carries is reported" 1 \
+    "  .sidebar div[style*='display: grid'] { display: block; }" \
+    '<div className="sidebar auto-grid-lg" />' \
+    '<div class="sidebar" style="display: grid;"></div>'
+
+# BOUNDING. The same rule is live where the markup does carry the value.
+run_case "an attribute value present in the markup passes" 0 \
+    "  .sidebar div[style*='display: grid'] { display: block; }" \
+    '<div className="sidebar" style="display: grid;" />' \
+    '<div class="sidebar" style="display: grid;"></div>'
+
 # CONTROL. Nothing to check on either side. Without an anti-vacuity floor this reports
 # agreement and the gate passes forever on a tree it cannot parse.
 run_case "an empty print block must NOT be reported as agreement" 1 \

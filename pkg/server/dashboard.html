@@ -636,7 +636,7 @@
                             <option value="30" selected data-i18n="range_30_days">Last 30 Days</option>
                             <option value="0" data-i18n="range_all_time">All Time</option>
                         </select>
-                        <button class="btn btn-secondary analytics-control" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf">Export PDF</button>
+                        <button class="btn btn-secondary analytics-control" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf" data-i18n-title="export_pdf_hint" title="Tested in Chrome, which prints the wide sections on landscape pages. Other browsers may print every page portrait.">Export PDF</button>
                     </div>
                 </div>
                 <!-- The bounds of the window every figure below covers (#1981). This replaced a
@@ -679,7 +679,7 @@
                              stopped being recorded, and against an unlabelled all-time
                              aggregate it read as a flat number rather than as a drop.
                              V1 and V2 are an A/B test (#1866), so the panel lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="bandwidth_by_gateway_desc" title="Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.">
+                        <div class="glass print-wide" style="padding: 16px; grid-column: span 3;" data-i18n-title="bandwidth_by_gateway_desc" title="Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="bandwidth_by_gateway">Bandwidth by Gateway</h4>
                             <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 12px;" data-i18n="bandwidth_by_gateway_desc">Bytes each gateway moved during the period shown above. A gateway sitting at zero while others carry traffic has stopped reporting, which a single all-time figure cannot show.</p>
                             <p id="gateway-bandwidth-total" style="font-size: 13px; margin: 0 0 12px;"></p>
@@ -698,7 +698,7 @@
                              between the two arms of the V1/V2 comparison rather than a
                              missing nicety. Both portals now carry the snapshot and the
                              history. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="sessions_per_edge_desc" title="Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.">
+                        <div class="glass print-wide" style="padding: 16px; grid-column: span 3;" data-i18n-title="sessions_per_edge_desc" title="Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="sessions_per_edge">Sessions per Gateway</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="nodeSessionsChart"></canvas>
@@ -708,7 +708,7 @@
                         <!-- Region latency (#1151). The data path shipped in #1501 with no
                              reader in either portal; V1 and V2 are an A/B test, so the panel
                              lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_region_latency_desc" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
+                        <div class="glass print-wide" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_region_latency_desc" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="region_latency">Region Latency</h4>
                             <p id="region-latency-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
                             <!-- Hidden until there are rows, like the other two panels on
@@ -726,7 +726,7 @@
                              user could reach? Same data as Region Latency above, joined to
                              which node actually served each session, so it sits beside it.
                              V1 and V2 are an A/B test, so the panel lands in both. -->
-                        <div class="glass" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_node_placement_desc" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
+                        <div class="glass print-wide" style="padding: 16px; grid-column: span 3;" data-i18n-title="chart_node_placement_desc" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="node_placement">Node Placement</h4>
                             <p id="node-placement-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
                             <!-- Hidden until there are rows, like the other two panels on
@@ -812,7 +812,8 @@
                 <!-- Personal Section -->
                 <div>
                     <h3 style="margin-bottom: 16px;" data-i18n="my_usage">My Usage</h3>
-                    <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                    <p id="my-usage-empty" class="hidden" data-testid="personal-usage-empty" style="color: var(--text-muted);" data-i18n="personal_usage_empty">You have no tunnel traffic in this period.</p>
+                    <div id="my-usage-grid" class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
                         <div class="glass" style="padding: 16px;" data-i18n-title="chart_my_bandwidth_desc" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">

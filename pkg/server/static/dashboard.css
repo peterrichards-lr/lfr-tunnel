@@ -865,9 +865,22 @@ html[dir='rtl'] th {
 
 /* --- PRINT MEDIA RULES FOR PDF EXPORT --- */
 @media print {
+  /* Orientation per section (#2430), as in Portal V2's index.css: the four wide sections print
+     on landscape pages, everything else portrait. A change of named page is a forced page break.
+     Tested in Chrome only; elsewhere every page prints portrait, with nothing lost. The content
+     widths these leave are hard-coded in dashboard.js (sizeChartsForPrint); change both. */
   @page {
-    size: portrait;
+    size: A4 portrait;
     margin: 20mm 15mm;
+  }
+
+  @page wide {
+    size: A4 landscape;
+    margin: 15mm 20mm;
+  }
+
+  .print-wide {
+    page: wide;
   }
 
   body {

@@ -81,6 +81,42 @@ const CAPABILITIES = [
     },
   },
   {
+    // #2430: an analytics export prints the wide sections on landscape pages.
+    name: 'print the wide analytics sections on landscape pages',
+    v1: {
+      files: ['pkg/server/dashboard.html'],
+      needle: 'class="glass print-wide"',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminAnalytics.tsx'],
+      needle: 'card p-xl mb-xl print-wide',
+    },
+  },
+  {
+    // #2430: charts are redrawn at their printed size rather than scaled from the screen.
+    name: 'redraw analytics charts at their printed size',
+    v1: {
+      files: ['pkg/server/static/dashboard.js'],
+      needle: "addEventListener('beforeprint', sizeChartsForPrint)",
+    },
+    v2: {
+      files: ['ui/src/pages/AdminAnalytics.tsx'],
+      needle: 'usePrintSizedCharts();',
+    },
+  },
+  {
+    // #2430: no personal traffic is stated, not left as an empty section.
+    name: 'say so when there is no personal usage to show',
+    v1: {
+      files: ['pkg/server/dashboard.html'],
+      needle: 'data-testid="personal-usage-empty"',
+    },
+    v2: {
+      files: ['ui/src/pages/AdminAnalytics.tsx'],
+      needle: 'data-testid="personal-usage-empty"',
+    },
+  },
+  {
     name: 'set a reservation passcode / IP whitelist',
     v1: {
       files: ['pkg/server/static/dashboard.js'],

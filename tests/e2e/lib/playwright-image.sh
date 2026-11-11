@@ -47,20 +47,24 @@ lft_playwright_image() {
     export PLAYWRIGHT_VERSION PLAYWRIGHT_IMAGE
 }
 
-# Builds the runner image. The docker CLI is installed because analytics.spec.ts drives the client
+# Builds the runner image. The docker CLI is included because analytics.spec.ts drives the client
 # with `docker exec ${E2E_PROJECT_NAME}-lfr-tunnel-1`; the daemon is the host's, reached through
-# the socket the caller mounts. Built rather than `docker run mcr.microsoft.com/playwright` with an
-# inline apt-get: installing it on every run re-fetches from the apt mirrors each time, the same
-# transient flakiness #1530 added a retry for one layer up. Build context is stdin, so nothing is
-# uploaded, and the tag makes it a no-op on every run after the first.
+# the socket the caller mounts. Build context is stdin, so nothing is uploaded, and the tag makes
+# it a no-op on every run after the first -- locally. CI starts clean, so it builds every run.
+#
+# The CLI is copied from Docker's own CLI image, not installed with apt (#2430). `apt-get install
+# docker.io` made every CI run depend on archive.ubuntu.com, and on 2026-11-11 the runners could
+# not resolve it for over an hour: the E2E job failed three times in a row on a PR whose tests
+# never ran. The image comes from Docker Hub, which the stack's own builds already depend on, and
+# the binary is static, so it runs on the Playwright image's Ubuntu unchanged. `docker exec` is
+# all the specs use; the CLI negotiates the API version down to whatever the host daemon speaks.
 lft_playwright_build() {
     docker build -t "$PLAYWRIGHT_IMAGE" --build-arg "PW_VERSION=$PLAYWRIGHT_VERSION" - <<'DOCKERFILE'
 ARG PW_VERSION
+FROM docker:27.3.1-cli AS dockercli
 FROM mcr.microsoft.com/playwright:v${PW_VERSION}-jammy
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker.io \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
 # pnpm, not npm: tests/e2e/ui is a pnpm project (#1863).
 RUN corepack enable

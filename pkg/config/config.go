@@ -489,6 +489,10 @@ type SSOProviderConfig struct {
 	IssuerURL       string `yaml:"issuer_url"`
 	Icon            string `yaml:"icon"`
 	SkipIssuerCheck bool   `yaml:"skip_issuer_check"`
+	// SkipEmailVerifiedCheck accepts an ID token without email_verified: true (#2451). Only for
+	// a provider that never sends the claim (Microsoft Entra ID) and whose directory owns every
+	// address it asserts; otherwise an unverified address could sign in as whoever owns it here.
+	SkipEmailVerifiedCheck bool `yaml:"skip_email_verified_check"`
 }
 
 // AutoBanConfig governs the automatic bans the API rate limiter issues (#1353).

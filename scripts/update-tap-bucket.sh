@@ -2,11 +2,20 @@
 # update-tap-bucket.sh
 #
 # Called by .github/workflows/release.yml after a new tag is published.
-# Pushes updated Formula and Scoop manifest to the companion tap/bucket repos.
+# Publishes the updated Formula and Scoop manifest to the companion tap/bucket repos.
+#
+# Through a signed pull request, never a push (2026-11-11). Both repos protect main: pull
+# requests only, squash merges, signed commits. v1.52.7's release was the first to meet that
+# and its `git push` was refused (GH013), leaving Homebrew and Scoop a version behind. Each repo
+# ships scripts/open-signed-pr.sh, which its own scheduled updates already use: it commits
+# through the createCommitOnBranch API -- signed by GitHub -- then opens the PR and
+# squash-merges it. Using the target repo's helper rather than a copy here means the two cannot
+# drift: whatever that repo requires of a change, its own script already does.
 #
 # Usage: ./scripts/update-tap-bucket.sh <version-tag> <pat> <checksums-file> [--dry-run]
 #   version-tag    e.g. v1.7.1
-#   pat            GitHub PAT with contents:write on homebrew-tap and scoop-bucket
+#   pat            GitHub PAT with contents:write and pull-requests:write on homebrew-tap and
+#                  scoop-bucket
 #   checksums-file path to the checksums.txt produced by the release build
 #   --dry-run      authenticate and report what WOULD be written, push nothing (#1969)
 #
@@ -114,6 +123,37 @@ assert_can_push "scoop-bucket"
 
 VERSION_NUM="${VERSION#v}"   # e.g. 1.7.1
 
+# publish_via_pr <repo> <path>: run inside that repo's clone, after <path> has been rendered.
+# Nothing to publish when the rendered file matches main -- a re-run for a version that already
+# landed -- so an identical render is a clean no-op rather than an empty PR.
+publish_via_pr() {
+  repo="$1"
+  path="$2"
+  if git diff --quiet -- "${path}"; then
+    echo "  (no change: ${repo} already has ${VERSION})"
+    return 0
+  fi
+  if [ "${DRY_RUN}" = "true" ]; then
+    echo "DRY RUN: would open and merge a signed pull request on ${repo} for ${VERSION}. Nothing was pushed."
+    git --no-pager diff --stat -- "${path}"
+    return 0
+  fi
+  if [ ! -f scripts/open-signed-pr.sh ]; then
+    echo "::error::${repo} has no scripts/open-signed-pr.sh, so ${VERSION} cannot reach its" >&2
+    echo "::error::protected main. Restore the helper there rather than pushing around the ruleset." >&2
+    exit 1
+  fi
+  body="$(mktemp)"
+  printf 'Published by the lfr-tunnel release workflow for [%s](https://github.com/peterrichards-lr/lfr-tunnel/releases/tag/%s).\n' \
+    "${VERSION}" "${VERSION}" > "${body}"
+  # GITHUB_REPOSITORY is set explicitly: in Actions it names lfr-tunnel, and the helper would
+  # otherwise open the pull request against the wrong repository.
+  branch="auto/lfr-tunnel-${VERSION}-$(date -u +%Y%m%d-%H%M%S)"
+  GH_TOKEN="${TAP_BUCKET_PAT}" GITHUB_REPOSITORY="peterrichards-lr/${repo}" \
+    bash scripts/open-signed-pr.sh "${branch}" "chore: bump lfr-tunnel to ${VERSION}" "${body}" "${path}"
+  rm -f "${body}"
+}
+
 # ---------------------------------------------------------------------------
 # Extract SHA-256 hashes from checksums.txt
 # Format produced by sha256sum: "<hash>  <filename>"
@@ -140,8 +180,6 @@ echo "  windows/amd64: ${HASH_WINDOWS_AMD64}"
 # ---------------------------------------------------------------------------
 git clone "https://x-access-token:${TAP_BUCKET_PAT}@github.com/peterrichards-lr/homebrew-tap.git" _tap-repo
 cd _tap-repo
-git config user.name  "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
 
 # Write the formula. Shell expands ${VERSION}, ${HASH_*}, ${VERSION_NUM}.
 # Ruby's #{} interpolation is written as-is — shell does NOT expand it because
@@ -187,26 +225,18 @@ class LfrTunnel < Formula
 end
 FORMULA
 
-git add Formula/lfr-tunnel.rb
-# Commit only if there are staged changes (idempotent on re-runs)
-git diff --cached --quiet || git commit -m "chore: bump lfr-tunnel to ${VERSION}"
-if [ "${DRY_RUN}" = "true" ]; then
-  echo "DRY RUN: would push the Homebrew formula for ${VERSION}. Nothing was pushed."
-  git --no-pager diff --stat HEAD~1 HEAD 2>/dev/null || echo "  (no change: the tap already has ${VERSION})"
-else
-  git push
-fi
+publish_via_pr homebrew-tap Formula/lfr-tunnel.rb
 cd ..
 rm -rf _tap-repo
-echo "Homebrew Tap updated."
+if [ "${DRY_RUN}" != "true" ]; then
+  echo "Homebrew Tap updated."
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Scoop Bucket  (peterrichards-lr/scoop-bucket)
 # ---------------------------------------------------------------------------
 git clone "https://x-access-token:${TAP_BUCKET_PAT}@github.com/peterrichards-lr/scoop-bucket.git" _bucket-repo
 cd _bucket-repo
-git config user.name  "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
 
 # jq builds the JSON cleanly. Note: "$version" inside jq string literals is
 # NOT a jq variable reference — jq only interpolates \(.expr), so the literal
@@ -243,14 +273,7 @@ jq -n \
     }
   }' > bucket/lfr-tunnel.json
 
-git add bucket/lfr-tunnel.json
-git diff --cached --quiet || git commit -m "chore: bump lfr-tunnel to ${VERSION}"
-if [ "${DRY_RUN}" = "true" ]; then
-  echo "DRY RUN: would push the Scoop manifest for ${VERSION}. Nothing was pushed."
-  git --no-pager diff --stat HEAD~1 HEAD 2>/dev/null || echo "  (no change: the bucket already has ${VERSION})"
-else
-  git push
-fi
+publish_via_pr scoop-bucket bucket/lfr-tunnel.json
 cd ..
 rm -rf _bucket-repo
 if [ "${DRY_RUN}" = "true" ]; then

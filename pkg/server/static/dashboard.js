@@ -9713,11 +9713,14 @@ async function loadSystemSettings() {
   }
 }
 
-// --- Email alert toggles (#1882) ---------------------------------------------
+// --- Alert toggles (#1882, #2445) --------------------------------------------
 // The checkboxes are built from the vocabulary the SERVER declares (AlertSettings,
 // returned as alert_settings), not from a list kept here. Three of the six alerts used
 // to have no control at all because that list lived in the portal and in the endpoint
 // and the two drifted; rendering from the response means they cannot drift again.
+//
+// Two per alert: email (key) and Slack (slack_key), so an owner who works from Slack can
+// keep alerts they have already actioned there out of their inbox. Both are posted back.
 let alertSettingKeys = [];
 
 async function loadAlertSettings() {
@@ -9939,7 +9942,9 @@ function renderAlertSettings(container, data) {
   const settings = Array.isArray(data.alert_settings)
     ? data.alert_settings
     : [];
-  alertSettingKeys = settings.map((s) => s.key);
+  alertSettingKeys = settings.flatMap((s) =>
+    s.slack_key ? [s.key, s.slack_key] : [s.key],
+  );
   container.innerHTML = '';
   if (!settings.length) {
     container.textContent = t(
@@ -9948,20 +9953,45 @@ function renderAlertSettings(container, data) {
     );
     return;
   }
+  // A grid rather than a table element so it inherits the card's flex spacing: one label
+  // column, then one narrow column per destination.
+  container.style.display = 'grid';
+  container.style.gridTemplateColumns = '1fr auto auto';
+  container.style.columnGap = '24px';
+  container.style.alignItems = 'center';
+  const heading = (text) => {
+    const h = document.createElement('span');
+    h.style.cssText =
+      'font-size: 12px; font-weight: 600; color: var(--text-muted); text-align: center;';
+    h.textContent = text;
+    return h;
+  };
+  container.appendChild(document.createElement('span'));
+  container.appendChild(heading(t('alert_column_email', 'Email')));
+  container.appendChild(heading(t('alert_column_slack', 'Slack')));
   settings.forEach((setting) => {
-    const row = document.createElement('label');
-    row.style.cssText =
-      'display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer;';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.id = 'setting-' + setting.key;
-    box.checked = data[setting.key] === 'true';
-    const text = document.createElement('span');
     // textContent, not innerHTML: the label text is a translation bundle value.
-    text.textContent = t(setting.label_key, setting.key);
-    row.appendChild(box);
-    row.appendChild(text);
-    container.appendChild(row);
+    const label = t(setting.label_key, setting.key);
+    const text = document.createElement('span');
+    text.style.fontSize = '14px';
+    text.textContent = label;
+    container.appendChild(text);
+    [
+      [setting.key, t('alert_column_email', 'Email')],
+      [setting.slack_key, t('alert_column_slack', 'Slack')],
+    ].forEach(([key, column]) => {
+      const cell = document.createElement('span');
+      cell.style.textAlign = 'center';
+      if (key) {
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.id = 'setting-' + key;
+        box.checked = data[key] === 'true';
+        box.setAttribute('aria-label', label + ' \u2014 ' + column);
+        cell.appendChild(box);
+      }
+      container.appendChild(cell);
+    });
   });
 }
 

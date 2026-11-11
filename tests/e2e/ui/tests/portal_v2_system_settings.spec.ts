@@ -39,7 +39,7 @@ test.describe('Portal V2 System Settings', () => {
   }) => {
     await page.goto('/portalv2/admin/settings');
 
-    const button = page.getByRole('button', { name: /Trigger Test Webhook/i });
+    const button = page.getByRole('button', { name: /Send Test Alert/i });
     await expect(button).toBeVisible();
 
     // Assert the request actually goes to the same endpoint V1 uses, rather than that a

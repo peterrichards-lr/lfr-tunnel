@@ -405,10 +405,10 @@ to `-check-config`.
 
 > [!NOTE]
 > **Slack & Microsoft Teams Notifications Configuration**
-> Admin alerts (registrations, extension requests, IP bans, abuse reports, quota events, watchdog restarts, stalled edge metrics, tunnels going offline, custom-domain hook failures) always go to `admin_notification_email`. They can **also** go to a Slack channel by one of two integrations. These are either/or: with both on, the channel gets every alert twice.
+> Admin alerts (registrations, extension requests, IP bans, abuse reports, quota events, watchdog restarts, stalled edge metrics, tunnels going offline, custom-domain hook failures) go to `admin_notification_email`, and can **also** go to a Slack channel by one of two integrations. These are either/or: with both on, the channel gets every alert twice.
 >
 > ```yaml
-> admin_notification_email: you@example.com   # the admin inbox; unaffected by the setting below
+> admin_notification_email: you@example.com   # the admin inbox
 > admin_alerts:
 >   slack:
 >     method: off          # off | email | webhook
@@ -420,7 +420,9 @@ to `-check-config`.
 > 1. **`email`**: alerts are emailed to the channel's own address, which you generate under channel settings, *Integrations > Send emails to this channel*. This needs no Slack app. Name-formatted addresses (`'"lfr-tunnel-admin (Slack)" <…@….slack.com>'`) are accepted.
 > 2. **`webhook`**: alerts are posted by an Incoming Webhook. On your Slack app, open *Incoming Webhooks > Add New Webhook to Workspace* and pick the channel, then put the URL in `webhooks.slack_url`. `webhooks.teams_url` works the same way for Teams. Anyone holding the URL can post to the channel.
 >
-> Both methods carry every alert, and the per-alert toggles in System Settings apply to both. The gateway refuses to start if the chosen method has no destination configured.
+> Both methods carry every alert. The gateway refuses to start if the chosen method has no destination configured.
+>
+> **Which alerts go where** is chosen per alert under **System Settings > Alerts**, in either portal: each alert has an **Email** and a **Slack** checkbox. If you work from Slack, untick **Email** for the alerts you action there and they stay out of the inbox. Both default to the alert's own default (on, except *A tunnel goes offline*). The Slack column only matters while a Slack method is in force.
 >
 > The **owner** can override `method` in **System Settings > Integrations** in either portal. The page says which method is in force and whether it came from the portal or from `server-config.yaml`; *Server config default* removes the override. Admins see the setting but cannot change it. If a method chosen in the portal later loses its destination in the YAML, the YAML's own method applies. **Send Test Alert** goes to the admin inbox and to Slack by the method in force.
 >
@@ -676,7 +678,8 @@ to the admin notification address at startup and hourly thereafter.
 - The alert reports **how many restarts happened in the last hour**. Three in an hour is a
   different problem from one: something is putting the service back into the state the watchdog
   keeps healing.
-- Set `alert_notify_watchdog_restart` to `false` in admin settings to turn it off. It defaults
+- Untick it under **System Settings > Alerts** to turn it off, for email, Slack or both
+  (`alert_notify_watchdog_restart` and `alert_slack_watchdog_restart`). It defaults
   **on**, because the whole defect was that nobody was being told.
 - `watchdog_spool_path` in `server-config.yaml` overrides where the gateway looks. It must match
   whatever the watchdog writes -- if the two disagree the gateway reads a file nothing writes and
@@ -2042,4 +2045,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-10* | *Last Reviewed: 2026-11-10*
+*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*

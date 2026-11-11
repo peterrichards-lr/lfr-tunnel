@@ -1,5 +1,7 @@
 package server
 
+import "strings"
+
 // The admin alert vocabulary (#1882).
 //
 // Six alert_notify_* keys existed and the settings endpoint exposed three, so three alerts could
@@ -24,14 +26,19 @@ const (
 	alertSettingOff = "false"
 )
 
-// AlertSetting is one admin alert an owner can switch off.
+// AlertSetting is one admin alert an owner can switch off, separately for each destination.
 type AlertSetting struct {
-	// Key is the admin_settings row, and the name the portals POST back.
+	// Key is the admin_settings row deciding whether the alert is emailed to
+	// admin_notification_email, and the name the portals POST back. Named alert_notify_* from
+	// before Slack was a destination; renaming it would reset every owner's choices.
 	Key string `json:"key"`
+	// SlackKey is the row deciding whether it is posted to Slack, when a Slack method is chosen
+	// (#2445). Derived from Key, never written by hand, so the two cannot drift apart.
+	SlackKey string `json:"slack_key"`
 	// LabelKey is the i18n key for its label. Named rather than derived from Key so a label
 	// can be reworded without renaming a stored setting.
 	LabelKey string `json:"label_key"`
-	// DefaultOn is what an unset row means.
+	// DefaultOn is what an unset row means, for both destinations.
 	//
 	// Not uniform, and the asymmetry is deliberate rather than accidental: a tunnel going
 	// offline is routine on a laptop that closed, so mailing about it by default would train
@@ -70,6 +77,26 @@ var AlertSettings = []AlertSetting{
 	{Key: "alert_notify_abuse_report", LabelKey: "alert_abuse_report", DefaultOn: true},
 }
 
+// Each alert has a toggle per destination (#2445). One toggle used to decide whether the alert
+// was raised at all, so an owner who used Slack as their main channel could not keep actioned
+// alerts out of their inbox without also losing them in Slack.
+//
+// A Slack row that has never been written resolves to the same declared default as the email
+// row, not to a copy of the email row's value: inheriting would make unticking an email box
+// also silence Slack until the Slack box had been saved once, which is the coupling this
+// removes.
+func init() {
+	for i := range AlertSettings {
+		AlertSettings[i].SlackKey = slackAlertKey(AlertSettings[i].Key)
+	}
+}
+
+// slackAlertKey names the Slack toggle for an alert's email key. Applies to undeclared keys too:
+// alert_notify_test resolves to alert_slack_test, which is never stored and so defaults on.
+func slackAlertKey(key string) string {
+	return "alert_slack_" + strings.TrimPrefix(key, "alert_notify_")
+}
+
 // alertSettingDefault reports whether an unset row means on, and whether the key is one this
 // gateway knows about at all.
 //
@@ -77,7 +104,7 @@ var AlertSettings = []AlertSetting{
 // would make a typo'd setting silently enable an alert nobody declared.
 func alertSettingDefault(key string) (defaultOn bool, known bool) {
 	for _, a := range AlertSettings {
-		if a.Key == key {
+		if a.Key == key || a.SlackKey == key {
 			return a.DefaultOn, true
 		}
 	}

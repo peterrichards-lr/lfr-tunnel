@@ -102,6 +102,28 @@ function selectorsIn(block) {
   return out;
 }
 
+/**
+ * Attribute selectors with a value, e.g. div[style*='display: grid'] (#2430).
+ *
+ * selectorsIn() sees only classes and ids, so a rule keyed on an attribute value was invisible:
+ * V2 carried div[style*='display: grid'], copied from V1's inline grids, for as long as the
+ * print block existed. V2's grids are classes, so it matched nothing. The value must occur
+ * somewhere in the arm's markup -- a substring test, which is what *= means and is the loosest
+ * of the operators, so it can only under-report.
+ */
+function attributeValuesIn(block) {
+  const out = new Set();
+  const selectorText = block
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{[^{}]*\}/g, '{}');
+  for (const m of selectorText.matchAll(
+    /\[\s*[\w-]+\s*[*^$~|]?=\s*(['"])(.*?)\1\s*\]/g,
+  )) {
+    out.add(m[2]);
+  }
+  return out;
+}
+
 function collectMarkup(paths, exts) {
   let blob = '';
   const walk = (p) => {
@@ -148,6 +170,16 @@ for (const arm of ARMS) {
   // different things, so they are reported apart rather than lumped together (#2208, after
   // #2201's locateMarker).
   const looseOnly = dead.filter((s) => markup.includes(s));
+  const deadValues = [...attributeValuesIn(block)].filter(
+    (v) => !markup.includes(v),
+  );
+  if (deadValues.length) {
+    fail(
+      `${arm.name} print styles match attribute values no markup carries: ${deadValues
+        .map((v) => `'${v}'`)
+        .join(', ')}`,
+    );
+  }
   if (dead.length) {
     fail(
       `${arm.name} print styles target markup that does not exist: ${dead.join(', ')}`,
@@ -163,7 +195,7 @@ for (const arm of ARMS) {
     fail(
       '  A rule matching nothing looks identical to a rule that works. This is #1916.',
     );
-  } else {
+  } else if (!deadValues.length) {
     console.log(
       `  ${arm.name}: OK -- ${selectors.length} print selector(s) all match markup`,
     );

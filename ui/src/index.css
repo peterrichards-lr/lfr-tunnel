@@ -868,9 +868,26 @@ html[dir='rtl'] th {
 
 /* --- PRINT MEDIA RULES FOR PDF EXPORT --- */
 @media print {
+  /* Orientation per section (#2430). The four wide sections (gateways, sessions, latency,
+     placement) print on landscape pages and everything else on portrait. A change of named page
+     is a forced page break, so a run of wide sections shares landscape pages and the order of
+     sections decides how many breaks there are. Tested in Chrome only; a browser without named
+     page sizes prints every page portrait, with nothing lost.
+     
+     The content widths these leave (680px portrait, 971px landscape) are hard-coded in
+     hooks/usePrintSizedCharts.ts, which redraws the charts to fit; change both together. */
   @page {
-    size: portrait;
+    size: A4 portrait;
     margin: 20mm 15mm;
+  }
+
+  @page wide {
+    size: A4 landscape;
+    margin: 15mm 20mm;
+  }
+
+  .print-wide {
+    page: wide;
   }
 
   body {
@@ -961,7 +978,10 @@ html[dir='rtl'] th {
      stylesheet narrows the CONTAINER, but nothing constrained the canvas, so charts were
      emitted at their on-screen pixel width and clipped by the page edge -- measured in the
      exported PDF at up to 2737pt wide on a 595pt page, 4.6x the paper (#1916). Constraining the
-     box scales the bitmap into it. */
+     box scales the bitmap into it.
+     
+     Since #2430 the charts are redrawn at their printed size before printing, so this no longer
+     scales anything in Chrome; it remains the fallback where that redraw does not happen. */
   canvas {
     max-width: 100% !important;
     height: auto !important;
@@ -985,9 +1005,12 @@ html[dir='rtl'] th {
     height: auto !important;
   }
 
-  /* Convert 2-column grid layout to single-column layout for portrait printing */
-  .analytics-page div[style*='display: grid'] {
-    grid-template-columns: 1fr !important;
+  /* Two columns on paper, always (#2430). This replaces a rule aimed at
+     div[style*='display: grid'] -- V1's inline grids -- which matched nothing here, so the
+     auto-fit track list decided the column count. usePrintSizedCharts sizes each chart to half
+     the page for a card in this grid, so the count has to be fixed rather than inferred. */
+  .analytics-page .auto-grid-lg {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   /* .glass was listed here too and is dead in V2 -- the class exists only in this stylesheet,

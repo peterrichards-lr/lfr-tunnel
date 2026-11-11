@@ -3570,6 +3570,18 @@ async function loadAnalytics() {
       },
     });
 
+    // With no personal traffic both charts are skipped and the section was two empty cards --
+    // on screen, and as a blank page in an export (#2430). Say so instead, as Portal V2 does.
+    const personalEmpty =
+      !(data.personal && data.personal.daily && data.personal.daily.length) &&
+      !(data.personal && data.personal.tunnels && data.personal.tunnels.length);
+    document
+      .getElementById('my-usage-empty')
+      .classList.toggle('hidden', !personalEmpty);
+    document
+      .getElementById('my-usage-grid')
+      .classList.toggle('hidden', personalEmpty);
+
     if (data.personal && data.personal.daily) {
       const ctx = document.getElementById('myBandwidthChart').getContext('2d');
       if (charts['myBandwidth']) charts['myBandwidth'].destroy();
@@ -4762,6 +4774,63 @@ function exportAuditLog() {
 function exportAnalyticsPDF() {
   window.print();
 }
+
+// Redraws every visible chart at the size it will have on paper, for as long as the page prints
+// (#2430). Chart.js draws once, at screen size, and print CSS can only scale that bitmap: exports
+// carried ~5px axis text and half-empty cards. The printed width cannot be measured at
+// beforeprint, so it is derived from the page -- these are dashboard.css's @page rules, and
+// Portal V2's usePrintSizedCharts.ts uses the same numbers; change all three together. Every
+// card prints full width here (the print grids are one column), so there is no column split.
+const PRINT_CONTENT_WIDTH_PX = { portrait: 680, wide: 971 };
+const PRINT_PIXEL_RATIO = 2;
+const chartPrintSaved = new WeakMap();
+
+function printWidthFor(canvas) {
+  const container = canvas.parentElement;
+  const card = container && container.closest('.glass');
+  if (!card) return null;
+  const cardBox = card.getBoundingClientRect();
+  if (cardBox.width === 0) return null;
+  const page = card.closest('.print-wide') ? 'wide' : 'portrait';
+  const inset = cardBox.width - container.getBoundingClientRect().width;
+  return Math.floor(PRINT_CONTENT_WIDTH_PX[page] - inset);
+}
+
+function sizeChartsForPrint() {
+  Object.values(Chart.instances).forEach((chart) => {
+    const width = printWidthFor(chart.canvas);
+    if (width === null || width <= 0) return;
+    const height = chart.canvas.parentElement.clientHeight || chart.height;
+    if (!chartPrintSaved.has(chart)) {
+      chartPrintSaved.set(chart, {
+        ratio: chart.options.devicePixelRatio,
+        width: chart.width,
+        height: chart.height,
+      });
+    }
+    chart.options.devicePixelRatio = PRINT_PIXEL_RATIO;
+    // Chart.js defers a resize while an animation runs, to its next frame -- after the browser
+    // has already laid out the print. A chart still animating in would print at screen size.
+    chart.stop();
+    chart.resize(width, height);
+  });
+}
+
+function restoreChartsAfterPrint() {
+  Object.values(Chart.instances).forEach((chart) => {
+    const saved = chartPrintSaved.get(chart);
+    if (!saved) return;
+    chart.options.devicePixelRatio = saved.ratio;
+    chartPrintSaved.delete(chart);
+    // Back to the size it had, not to whatever its container measures now: the printed canvas
+    // has stretched a grid cell, so the container would hand the print width back.
+    chart.stop();
+    chart.resize(saved.width, saved.height);
+  });
+}
+
+window.addEventListener('beforeprint', sizeChartsForPrint);
+window.addEventListener('afterprint', restoreChartsAfterPrint);
 
 function copyDockerCmd() {
   const textEl = document.getElementById('docker-pull-text');

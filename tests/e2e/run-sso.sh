@@ -249,8 +249,11 @@ echo "  ✅ SSO user verified: email, auth_method, and status are all correct"
 # #2447: it always redirected to "/", so a sign-in started from Portal V2 landed in V1. Each
 # run below starts with fresh cookie jars, so Keycloak shows its form rather than reusing the
 # session from step 4, and the callback's Location is read without following it.
-sso_return_location() {
-    local query="$1" tag="$2"
+# sso_callback signs USER in (default: the verified test user) and prints curl's WRITEOUT for the
+# callback response (default: its Location).
+sso_callback() {
+    local query="$1" tag="$2" user="${3:-$SSO_USER_EMAIL}" writeout="${4:-}"
+    [ -n "$writeout" ] || writeout='%header{location}'
     local jar="/tmp/sso-return-${tag}.txt" kcjar="/tmp/kc-return-${tag}.txt"
     rm -f "$jar" "$kcjar"
     local login html action callback
@@ -267,12 +270,14 @@ print(h.unescape(m.group(1)) if m else "")
     [ -n "$action" ] || fail "[$tag] no Keycloak login form"
     action=$(echo "$action" | sed "s/keycloak:8080/localhost:$E2E_KEYCLOAK_PORT/g")
     callback=$(curl -si -b "$kcjar" -c "$kcjar" --max-redirs 0 \
-      -d "username=${SSO_USER_EMAIL}&password=${SSO_USER_PASSWORD}&credentialId=" \
+      -d "username=${user}&password=${SSO_USER_PASSWORD}&credentialId=" \
       "$action" 2>/dev/null | grep -i '^[Ll]ocation:' | tr -d '\r' | awk '{print $2}' || true)
     [ -n "$callback" ] || fail "[$tag] Keycloak did not redirect back to the callback"
-    curl -s -b "$jar" -c "$jar" -o /dev/null -w '%header{location}' "$callback" 2>/dev/null || true
+    curl -s -b "$jar" -c "$jar" -o /dev/null -w "$writeout" "$callback" 2>/dev/null || true
     rm -f "$jar" "$kcjar"
 }
+
+sso_return_location() { sso_callback "$1" "$2"; }
 
 echo "[5b/7] Verifying the callback returns to the portal that started the sign-in..."
 V2_RETURN=$(sso_return_location "&portal=v2" v2)
@@ -282,6 +287,15 @@ V2_RETURN=$(sso_return_location "&portal=v2" v2)
 V1_RETURN=$(sso_return_location "" v1)
 [ "$V1_RETURN" = "/" ] || fail "A sign-in started from Portal V1 returned to '${V1_RETURN}', want /"
 echo "  ✅ V2 sign-in returned to /portalv2/dashboard; V1 sign-in returned to /"
+
+# ── Step 5c: An email the identity provider has not verified does not sign in ─
+# #2451: email_verified was parsed and ignored. Keycloak issues this user's ID token with
+# email_verified: false. The realm client also requires PKCE, so every sign-in above has already
+# proven the challenge and verifier are sent; the verified user in step 5b is this step's control.
+echo "[5c/7] Verifying an unverified email is refused..."
+UNVERIFIED=$(sso_callback "" unverified "sso-unverified@lfr-demo.local" '%{http_code}')
+[ "$UNVERIFIED" = "403" ] || fail "An unverified email got HTTP '${UNVERIFIED}' from the callback, want 403"
+echo "  ✅ Unverified email refused with 403"
 
 # ── Step 6: Verify user appears in admin list ─────────────────────────────────
 echo "[6/7] Verifying SSO user appears in admin /api/admin/users list..."

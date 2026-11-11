@@ -2,6 +2,8 @@
 
 This guide provides step-by-step instructions to configure **Microsoft Entra ID (Azure AD)**, **Google Cloud Identity (OAuth 2.0)**, and **AWS IAM Identity Center (AWS SSO)** as Identity Providers (IdPs) for `lfr-tunneld`. It also covers how to create configuration files to test these integrations locally.
 
+**What every sign-in checks (#2451).** Each sign-in uses PKCE (S256) and a nonce, so a stolen authorization code or a replayed ID token is refused. You can set your identity provider to *require* PKCE. The provider must also assert `email_verified: true`, because the email address is what the gateway finds the account by. A sign-in without it gets a 403 and an audit row (`user.sso_denied.unverified_email`). When a sign-in fails at the provider, the user sees a generic message and the detail goes to the server log.
+
 ---
 
 ## 1. Microsoft Entra ID (Azure AD)
@@ -33,6 +35,9 @@ sso_providers:
     client_secret: "YOUR_CLIENT_SECRET_VALUE"
     issuer_url: "https://login.microsoftonline.com/YOUR_DIRECTORY_TENANT_ID/v2.0"
     icon: "microsoft"
+    # Entra ID never sends email_verified, so without this every sign-in is refused. Set it only
+    # because your tenant's directory owns every address it asserts.
+    skip_email_verified_check: true
 ```
 
 ---

@@ -31,7 +31,8 @@
         "http://lfr-demo.local"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:8000/*"
+        "post.logout.redirect.uris": "http://localhost:8000/*",
+        "pkce.code.challenge.method": "S256"
       }
     }
   ],
@@ -42,6 +43,21 @@
       "emailVerified": true,
       "enabled": true,
       "firstName": "SSO",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SsoP@ssw0rd!",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "sso-unverified@lfr-demo.local",
+      "email": "sso-unverified@lfr-demo.local",
+      "emailVerified": false,
+      "enabled": true,
+      "firstName": "Unverified",
       "lastName": "User",
       "credentials": [
         {

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -25,6 +26,10 @@ import (
 // the account after the decision, which is the row an owner wants to see if a rejection turns out
 // to have been contentious.
 const ActionSSODeniedRejected = "user.sso_denied.rejected"
+
+// ActionSSODeniedUnverified is written when SSO sign-in is refused because the identity provider
+// has not verified the email address it asserted (#2451).
+const ActionSSODeniedUnverified = "user.sso_denied.unverified_email"
 
 // errSSORegistrationRejected distinguishes "this gateway has decided against this person" from
 // "the approval write failed", which the callback answers with 403 and 500 respectively. A bare
@@ -49,6 +54,40 @@ func ssoReturnPath(r *http.Request) string {
 		return "/portalv2/dashboard"
 	}
 	return "/"
+}
+
+// The PKCE verifier and the nonce live beside oidc_state, in the browser that started the sign-in
+// (#2451). PKCE means an intercepted authorization code cannot be redeemed without the verifier;
+// the nonce means an ID token minted for some other sign-in is not accepted for this one.
+const (
+	ssoVerifierCookie = "oidc_verifier"
+	ssoNonceCookie    = "oidc_nonce"
+)
+
+// ssoSignInFailed is all a person is told when the exchange with the identity provider fails.
+// The underlying error names provider endpoints and library internals, so it goes to the log
+// only (#2451).
+const ssoSignInFailed = "Sign-in with your identity provider failed. Please try again, or contact the gateway administrator if it keeps happening."
+
+// setSSOFlowCookie writes one of the short-lived cookies that carry a sign-in from
+// handleSSOLogin to handleSSOCallback.
+func setSSOFlowCookie(w http.ResponseWriter, name, value string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		Expires:  time.Now().Add(10 * time.Minute),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// cookieMatches reports whether the request carries cookie name with exactly value, comparing in
+// constant time. An empty value never matches.
+func cookieMatches(r *http.Request, name, value string) bool {
+	c, err := r.Cookie(name)
+	return err == nil && value != "" && subtle.ConstantTimeCompare([]byte(c.Value), []byte(value)) == 1
 }
 
 // generateRandomState generates a secure random state for OAuth2 CSRF protection
@@ -107,34 +146,21 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state := generateRandomState()
+	verifier := oauth2.GenerateVerifier()
+	nonce := generateRandomState()
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
-	// In production, you should set this as a secure HttpOnly cookie to verify in callback.
-	http.SetCookie(w, &http.Cookie{
-		Name:     "oidc_state",
-		Value:    state,
-		Path:     "/",
-		Expires:  time.Now().Add(10 * time.Minute),
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSSOFlowCookie(w, "oidc_state", state, secure)
+	setSSOFlowCookie(w, ssoVerifierCookie, verifier, secure)
+	setSSOFlowCookie(w, ssoNonceCookie, nonce, secure)
 	// Always written, so a V1 sign-in clears a V2 one abandoned in the same browser rather than
 	// inheriting its destination.
 	portal := ""
 	if r.URL.Query().Get("portal") == ssoPortalV2 {
 		portal = ssoPortalV2
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     ssoPortalCookie,
-		Value:    portal,
-		Path:     "/",
-		Expires:  time.Now().Add(10 * time.Minute),
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSSOFlowCookie(w, ssoPortalCookie, portal, secure)
 
-	url := oauth2Config.AuthCodeURL(state)
+	url := oauth2Config.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce))
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -157,16 +183,24 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	verifier, err := r.Cookie(ssoVerifierCookie)
+	if err != nil || verifier.Value == "" {
+		http.Error(w, "Sign-in session expired. Please start again.", http.StatusBadRequest)
+		return
+	}
+
 	ctx := context.Background()
-	oauth2Token, err := oauth2Config.Exchange(ctx, r.URL.Query().Get("code"))
+	oauth2Token, err := oauth2Config.Exchange(ctx, r.URL.Query().Get("code"), oauth2.VerifierOption(verifier.Value))
 	if err != nil {
-		http.Error(w, "Failed to exchange token: "+err.Error(), http.StatusInternalServerError)
+		slog.Warn(fmt.Sprintf("[SSO] %s: token exchange failed: %v", providerID, err))
+		http.Error(w, ssoSignInFailed, http.StatusBadGateway)
 		return
 	}
 
 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
 	if !ok {
-		http.Error(w, "No id_token field in oauth2 token", http.StatusInternalServerError)
+		slog.Warn(fmt.Sprintf("[SSO] %s: token response carried no id_token", providerID))
+		http.Error(w, ssoSignInFailed, http.StatusBadGateway)
 		return
 	}
 
@@ -174,10 +208,16 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		ClientID:        oauth2Config.ClientID,
 		SkipIssuerCheck: p.SkipIssuerCheck,
 	}
-	verifier := provider.Verifier(oidcConfig)
-	idToken, err := verifier.Verify(ctx, rawIDToken)
+	idToken, err := provider.Verifier(oidcConfig).Verify(ctx, rawIDToken)
 	if err != nil {
-		http.Error(w, "Failed to verify ID token: "+err.Error(), http.StatusInternalServerError)
+		slog.Warn(fmt.Sprintf("[SSO] %s: ID token rejected: %v", providerID, err))
+		http.Error(w, ssoSignInFailed, http.StatusUnauthorized)
+		return
+	}
+	// The token must be the one minted for the sign-in this browser started.
+	if !cookieMatches(r, ssoNonceCookie, idToken.Nonce) {
+		slog.Warn(fmt.Sprintf("[SSO] %s: ID token nonce does not match this sign-in", providerID))
+		http.Error(w, ssoSignInFailed, http.StatusUnauthorized)
 		return
 	}
 
@@ -189,13 +229,23 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		FamilyName    string `json:"family_name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
-		http.Error(w, "Failed to parse claims: "+err.Error(), http.StatusInternalServerError)
+		slog.Warn(fmt.Sprintf("[SSO] %s: unreadable ID token claims: %v", providerID, err))
+		http.Error(w, ssoSignInFailed, http.StatusBadGateway)
 		return
 	}
 
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if email == "" {
 		http.Error(w, "Email required from provider", http.StatusBadRequest)
+		return
+	}
+
+	// The email is what an account is found by, so an address the provider has not verified
+	// could sign in as whoever owns it here (#2451).
+	if !claims.EmailVerified && !p.SkipEmailVerifiedCheck {
+		s.writeAudit(email, ActionSSODeniedUnverified, "user", email,
+			fmt.Sprintf("Sign-in through %s refused: the identity provider has not verified this email address", providerID), r)
+		http.Error(w, "Your identity provider has not verified your email address. Verify it there, then sign in again.", http.StatusForbidden)
 		return
 	}
 

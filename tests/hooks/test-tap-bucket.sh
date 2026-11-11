@@ -162,6 +162,20 @@ else
     fail "only one repository checks DRY_RUN -- a dry run would still push to the other"
 fi
 
+# FIRING. Both target repos protect main: pull requests only, signed commits. A direct push is
+# refused there (GH013), which is how v1.52.7 missed Homebrew and Scoop. The script must publish
+# through each repo's own scripts/open-signed-pr.sh and never push.
+if grep -qE '^[[:space:]]*git push' "$TAP"; then
+    fail "the script pushes directly -- protected main refuses it, and the release misses the tap"
+else
+    pass "the script never pushes directly to a protected main"
+fi
+if grep -q 'scripts/open-signed-pr.sh' "$TAP" && grep -q 'GITHUB_REPOSITORY="peterrichards-lr/' "$TAP"; then
+    pass "it publishes through the target repo's signed-PR helper, aimed at that repo"
+else
+    fail "it does not use the target repo's signed-PR helper, or would aim it at lfr-tunnel"
+fi
+
 # The recovery path must exist and be dispatchable, or a bad credential again costs a release.
 if [ ! -f "$WORKFLOW" ]; then
     fail "the dispatchable tap workflow is missing -- recovery would need a new release again"

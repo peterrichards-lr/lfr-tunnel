@@ -1251,7 +1251,9 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	}
 
 	if *background {
-		if err := validateRequestedPorts(cfg); err != nil {
+		// Resolved, not just validated, before the hand-off: a discovery refusal (#2462) must
+		// reach this terminal, not only the background log.
+		if _, err := resolvePortsAndMappings(cfg); err != nil {
 			log.Fatalf("[Error] %v", err)
 		}
 		handleBackground(sub)
@@ -1400,13 +1402,24 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, er
 		} else {
 			slog.Info("[Client] No explicit ports provided. Auto-discovering Liferay / LDM instances...")
 			discoveryResult, err := autoDiscoverTarget()
+			// Several candidate containers is a refusal, not a fall-through to 8080, which is
+			// very likely one of them (#2462).
+			var ambiguous *client.AmbiguousDiscoveryError
+			if errors.As(err, &ambiguous) {
+				return nil, err
+			}
 			// len(Ports) is part of the condition so the 8080 fallback below is total:
 			// a result carrying no ports would otherwise leave portMappings nil and the
 			// client would publish nothing at all.
 			if err == nil && discoveryResult != nil && len(discoveryResult.Ports) > 0 {
-				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", discoveryResult.Type, discoveryResult.Host)
+				// Named, so a user can tell which environment is being shared (#2462).
+				what := discoveryResult.Type
+				if discoveryResult.Container != "" {
+					what = fmt.Sprintf("%s container %q", discoveryResult.Type, discoveryResult.Container)
+				}
+				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", what, discoveryResult.Host)
 				facts.portOrigin = "auto-discovered"
-				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
+				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s on host '%s' with ports: %v", what, discoveryResult.Host, discoveryResult.Ports))
 
 				// Discovery is the lowest-priority source of the target host: it fills the
 				// value in only when nobody supplied one. cfg.TargetHost is empty at this

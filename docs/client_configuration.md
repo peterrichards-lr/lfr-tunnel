@@ -257,9 +257,15 @@ Leave it out and the client works the ports out for itself, in this order:
    subdomain; each extension is published alongside it on a subdomain suffixed with the
    extension's key.
 2. **Otherwise** it looks for a running instance: `docker ps` for a container whose name or
-   image mentions `liferay`, `dxp` or `ldm`, then a probe of `8080`, `13000` and `3000` on
-   `127.0.0.1`. This step reports a **host** as well as ports — see
-   [Leaving `target_host` unset](#leaving-target_host-unset).
+   image mentions `liferay`, `dxp` or `ldm` and publishes `80`, `443`, `8080` or `3000`, then a
+   probe of `8080`, `13000` and `3000` on `127.0.0.1`. This step reports a **host** as well as
+   ports — see [Leaving `target_host` unset](#leaving-target_host-unset).
+   - LDM's shared containers (`liferay-proxy-global`, `liferay-search-global`,
+     `liferay-docker-proxy`) are never candidates: they serve every project on the machine.
+   - The startup log names the container whose ports are published.
+   - **More than one candidate container stops the client** with an error naming each one and
+     its ports. Name the port you mean with `-ports`. Until #2462 discovery published every
+     candidate's ports at once, which on a machine running two LDM projects shared both.
 3. **If neither finds anything**, port `8080`.
 
 Worth knowing:

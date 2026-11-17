@@ -303,6 +303,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	// The sign-in before this one, read now: approveOnSSOSignIn overwrites it below (#2490).
+	var previousLoginAt *time.Time
+	if user != nil && user.LastLoginAt != nil {
+		prev := *user.LastLoginAt
+		previousLoginAt = &prev
+	}
 	if err == db.ErrNotFound {
 		// #910: umbrella flag gating NEW account creation regardless of method. Without
 		// this, SSO first-login always auto-provisioned a new account with only the
@@ -356,6 +362,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Record the sign-in (#2490). Only approveOnSSOSignIn set last_login_at, and it runs only for an
+	// account that was not yet approved -- so a new SSO account (created approved) and every
+	// returning SSO user showed "Last Seen: Never". The session carries the previous sign-in for
+	// the portal's "last login" notice, as the magic-link session does.
+	s.recordSSOLogin(user, r)
+
 	// Issue the admin session cookie
 	sessionID, err := generateSecureToken()
 	if err != nil {
@@ -367,6 +379,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
 		AuthProvider:          providerID, // force_mfa is met per session by a satisfies_mfa provider (#2482)
+		PreviousLoginAt:       previousLoginAt,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              s.clientIP(r),
 		KilledPreviousSession: killedPreviousSession,
@@ -395,6 +408,20 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Back to the portal the sign-in started from (#2447).
 	http.Redirect(w, r, ssoReturnPath(r), http.StatusFound)
+}
+
+// recordSSOLogin stamps last_login_at and last_login_ip for an SSO sign-in, as the magic-link
+// path does (#2490). A failed write is logged, not fatal: the user has authenticated, and a stale
+// "last seen" is no reason to refuse them a session.
+func (s *Server) recordSSOLogin(user *db.User, r *http.Request) {
+	now := time.Now().UTC()
+	user.LastLoginAt = &now
+	user.LastLoginIP = s.clientIP(r)
+	if err := s.db.UpdateUser(user); err != nil {
+		slog.Warn(fmt.Sprintf("[SSO] Could not record the sign-in time of %s: %v", user.Email, err))
+		return
+	}
+	s.invalidateUserCache(user.Email)
 }
 
 // approveOnSSOSignIn completes the approval of an existing user who has just authenticated

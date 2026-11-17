@@ -134,4 +134,33 @@ test.describe('arriving from lfr-tunnel login opens the create-token dialog', ()
     await expect(page.locator('h1, h2').first()).toBeVisible(); // anchor
     await expect(page.locator('#generate-token-title')).toBeHidden();
   });
+
+  // The SSO buttons carry the marker too (#2459 review). The Go tests start at /sso/login with
+  // the query already set, so only this proves the button puts it there. Each control anchors on
+  // the button being visible, so it cannot pass on a page that rendered no button at all.
+  test('V1: the SSO button carries the marker only for a CLI visit', async ({
+    page,
+  }) => {
+    await page.goto('/?cli_login=1');
+    const sso = page.locator('#sso-container a').first();
+    await expect(sso).toBeVisible();
+    expect(await sso.getAttribute('href')).toContain('cli_login=1');
+
+    await page.goto('/');
+    await expect(sso).toBeVisible();
+    expect(await sso.getAttribute('href')).not.toContain('cli_login');
+  });
+
+  test('V2: the SSO button carries the marker only for a CLI visit', async ({
+    page,
+  }) => {
+    await page.goto('/portalv2/?cli_login=1');
+    const sso = page.locator('[data-testid="sso-providers"] a').first();
+    await expect(sso).toBeVisible();
+    expect(await sso.getAttribute('href')).toContain('cli_login=1');
+
+    await page.goto('/portalv2/');
+    await expect(sso).toBeVisible();
+    expect(await sso.getAttribute('href')).not.toContain('cli_login');
+  });
 });

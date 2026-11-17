@@ -38,6 +38,39 @@ func TestSSOReturnCarriesTheCLILoginMarker(t *testing.T) {
 	}
 }
 
+// An abandoned CLI sign-in must not mark a later ordinary one in the same browser. The browser
+// keeps the first oidc_cli cookie unless the second sign-in overwrites it, so /sso/login writes it
+// every time -- empty when the request carries no marker.
+func TestAnAbandonedCLISignInDoesNotMarkTheNextOne(t *testing.T) {
+	st := newOIDCStub(t)
+	srv := ssoTestServer(t, st)
+	abandoned, _ := startSignInWithQuery(t, srv, st, "&cli_login=1")
+	ordinary, state := startSignInWithQuery(t, srv, st, "")
+
+	// The browser's jar: the later Set-Cookie replaces the earlier one of the same name.
+	jar := map[string]*http.Cookie{}
+	for _, c := range append(abandoned, ordinary...) {
+		jar[c.Name] = c
+	}
+	cookies := make([]*http.Cookie, 0, len(jar))
+	for _, c := range jar {
+		cookies = append(cookies, c)
+	}
+	// Fixture: the abandoned sign-in really did leave a marker that could go stale.
+	marked := false
+	for _, c := range abandoned {
+		marked = marked || c.Name == ssoCLICookie && c.Value == "1"
+	}
+	if !marked {
+		t.Fatalf("fixture: the abandoned sign-in set no %s=1 cookie to go stale", ssoCLICookie)
+	}
+
+	done := finishSignIn(srv, cookies, state)
+	if got := done.Header().Get("Location"); done.Code != http.StatusFound || got != "/" {
+		t.Errorf("return %d %q, want 302 to %q -- a stale CLI marker carried over", done.Code, got, "/")
+	}
+}
+
 func TestMagicLinkEmailCarriesTheCLILoginMarker(t *testing.T) {
 	for _, tc := range []struct {
 		name, query, referer, want string

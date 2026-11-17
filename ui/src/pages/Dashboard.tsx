@@ -193,10 +193,6 @@ export default function Dashboard() {
       .catch((err) => console.error('Failed to fetch tokens', err));
   };
 
-  // Once per mount. Layout re-fetches /api/me every 10s and calls setUser with a fresh
-  // object, so anything keyed on `user` re-runs on every poll -- which is what filled the
-  // audit log with a portal.visit every 10 seconds (#1208). A visit is a visit, not a
-  // heartbeat, and the server config does not change under us either.
   // Arrived from `lfr-tunnel login` (#2459): open the create-token dialog straight away, named,
   // with a note saying the token goes to the waiting terminal. Creating it hands it off exactly as
   // a manual creation does (deliverTokenToCli).
@@ -212,6 +208,10 @@ export default function Dashboard() {
     setIsCreateTokenModalOpen(true);
   }, []);
 
+  // Once per mount. Layout re-fetches /api/me every 10s and calls setUser with a fresh
+  // object, so anything keyed on `user` re-runs on every poll -- which is what filled the
+  // audit log with a portal.visit every 10 seconds (#1208). A visit is a visit, not a
+  // heartbeat, and the server config does not change under us either.
   useEffect(() => {
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios

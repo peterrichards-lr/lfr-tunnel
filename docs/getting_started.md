@@ -136,8 +136,8 @@ The client includes an interactive **Magic Handoff** flow that automatically com
    lfr-tunnel login
    ```
 2. Your default web browser will open to the gateway's **User Portal**.
-3. Sign in to the portal (with Liferay SSO, or your approved email and magic link). If you are already signed in, this step is skipped.
-4. The portal opens **Generate Personal Access Token** for you, already named `lfr-tunnel login <date>`. Click **Generate Token** (**Generate** in the new portal): the new token is sent straight to your waiting terminal. (Only a token you create now can be sent; the portal never stores existing tokens in readable form.)
+3. Sign in to the portal (with Liferay SSO, or your approved email and magic link). If you are already signed in with an email magic link, this step is skipped; with SSO you may be asked to click the SSO button once more.
+4. The portal opens the **Generate New Token** dialog for you, already named `lfr-tunnel login <date>`. Click **Generate Token** (**Generate** in the new portal): the new token is sent straight to your waiting terminal. (Only a token you create now can be sent; the portal never stores existing tokens in readable form.)
 5. The CLI checks the token with the gateway, then saves it:
    ```
    ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token

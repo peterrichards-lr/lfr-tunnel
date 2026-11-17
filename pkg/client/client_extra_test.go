@@ -214,7 +214,7 @@ func TestRunLogin(t *testing.T) {
 	defer func() { stdinReader = origStdin }()
 
 	go func() {
-		resp, err := http.Post("http://"+(<-addrChan)+"/handoff", "text/plain", strings.NewReader("dummy-token"))
+		resp, err := http.Post("http://"+(<-addrChan)+"/handoff", "text/plain", strings.NewReader(portalPAT))
 		if err != nil {
 			return
 		}
@@ -233,8 +233,8 @@ func TestRunLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected the handed-off token to be saved: %v", err)
 	}
-	if string(saved) != "dummy-token" {
-		t.Errorf("saved token = %q, want %q", saved, "dummy-token")
+	if string(saved) != portalPAT {
+		t.Errorf("saved token = %q, want %q", saved, portalPAT)
 	}
 }
 
@@ -261,7 +261,7 @@ func TestRunLogin_PortBusyFallsBackToManualPaste(t *testing.T) {
 	stdinReader = stdinR
 	defer func() { stdinReader = origStdin }()
 	go func() {
-		if _, err := stdinW.WriteString("pasted-token\n"); err != nil {
+		if _, err := stdinW.WriteString(portalPAT + "\n"); err != nil {
 			log.Printf("[Warning] Failed to write to stdin pipe: %v", err)
 		}
 		if err := stdinW.Close(); err != nil {
@@ -301,8 +301,8 @@ func TestRunLogin_PortBusyFallsBackToManualPaste(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected the pasted token to be saved: %v", err)
 	}
-	if string(saved) != "pasted-token" {
-		t.Errorf("saved token = %q, want %q", saved, "pasted-token")
+	if string(saved) != portalPAT {
+		t.Errorf("saved token = %q, want %q", saved, portalPAT)
 	}
 
 	// The warning has to be actionable, which means naming the port and how to find

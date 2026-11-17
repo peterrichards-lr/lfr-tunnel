@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -34,9 +36,15 @@ func RunLogin(serverURL string) error {
 		if r.Method == http.MethodPost {
 			body, _ := io.ReadAll(r.Body)
 			token := strings.TrimSpace(string(body))
-			if token != "" {
+			// Anything that is not a token is refused and the login keeps waiting (#2457).
+			// This listener answers any local process and any page open in the browser, so
+			// accepting the first body to arrive let a stray POST end the login with junk.
+			if looksLikeAccessToken(token) {
 				w.WriteHeader(http.StatusOK)
-				tokenChan <- token
+				select {
+				case tokenChan <- token:
+				default: // a token was already delivered; this login is finishing
+				}
 				return
 			}
 		}
@@ -117,6 +125,14 @@ func RunLogin(serverURL string) error {
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 	}
 
+	// Only the paste can still be wrong here -- the handoff refuses non-tokens itself. It used to
+	// be saved whatever it was, over a working token, and reported as success (#2457).
+	if !looksLikeAccessToken(token) {
+		return fmt.Errorf("the value entered is not an access token (%s); nothing was saved. "+
+			"Paste a token from the token list in the portal: 32 hex characters, "+
+			"optionally starting with %q", describeRejectedValue(token), claimedTokenPrefix)
+	}
+
 	// Save the token
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -127,13 +143,68 @@ func RunLogin(serverURL string) error {
 		return fmt.Errorf("could not create config dir: %w", err)
 	}
 
-	tokenPath := filepath.Join(dir, "token")
-	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
+	if err := writeTokenFile(dir, token); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 
 	fmt.Println("\n✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token")
 	return nil
+}
+
+// claimedTokenPrefix marks the tokens minted by the registration-claim path.
+const claimedTokenPrefix = "lfr_pat_"
+
+// accessTokenPattern is every shape a gateway has issued (#2457): 32 lowercase hex from the
+// portal (generateSecureToken in pkg/server/server.go), and the same with claimedTokenPrefix
+// from the registration-claim path. The gateway itself accepts any string whose hash it has
+// stored, so this is the client's only way to tell a token from a stray paste before saving.
+var accessTokenPattern = regexp.MustCompile(`^(` + claimedTokenPrefix + `)?[0-9a-f]{32}$`)
+
+func looksLikeAccessToken(s string) bool {
+	return accessTokenPattern.MatchString(s)
+}
+
+// describeRejectedValue says enough about a refused value for the user to recognise what they
+// pasted -- a URL, a secrets-file line -- without printing a secret they pasted by mistake.
+func describeRejectedValue(s string) string {
+	const shown = 4
+	if len(s) <= shown {
+		return fmt.Sprintf("%d characters", len(s))
+	}
+	return fmt.Sprintf("%d characters, starting %q", len(s), s[:shown])
+}
+
+// writeTokenFile replaces the token file atomically, so a failed write cannot leave the user
+// with a truncated token in place of a working one.
+func writeTokenFile(dir, token string) error {
+	tmp, err := os.CreateTemp(dir, "token-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.WriteString(token); err != nil {
+		if closeErr := tmp.Close(); closeErr != nil {
+			slog.Debug(fmt.Sprintf("[Client] Closing the temp token file after a failed write: %v", closeErr))
+		}
+		removeTempToken(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		removeTempToken(tmpPath)
+		return err
+	}
+	// os.CreateTemp already creates the file 0600, the mode the token file has always had.
+	if err := os.Rename(tmpPath, filepath.Join(dir, "token")); err != nil {
+		removeTempToken(tmpPath)
+		return err
+	}
+	return nil
+}
+
+func removeTempToken(path string) {
+	if err := os.Remove(path); err != nil {
+		slog.Debug(fmt.Sprintf("[Client] Removing the temp token file %s: %v", path, err))
+	}
 }
 
 var openBrowserFunc = openBrowser

@@ -77,3 +77,20 @@ func TestSSOLoginDoesNotLoopOnADefaultPort(t *testing.T) {
 		t.Errorf("the canonical host was redirected to itself: %q", loc)
 	}
 }
+
+// Only the gateway's own domains are canonicalised. A host outside them -- localhost in the
+// Keycloak e2e stack, an IP -- signs in where it is, as before #2470; redirecting it to a tunnel.
+// host that does not exist there broke that suite (exit 6, could not resolve host).
+func TestSSOLoginOutsideTheConfiguredDomainsIsNotRedirected(t *testing.T) {
+	st := newOIDCStub(t)
+	srv := ssoTestServer(t, st)
+
+	for _, host := range []string{"localhost", "localhost:8443", "127.0.0.1"} {
+		rec := httptest.NewRecorder()
+		srv.handleSSOLogin(rec, httptest.NewRequest(http.MethodGet, "http://"+host+"/api/auth/login?provider=stub", nil))
+		loc := rec.Header().Get("Location")
+		if !strings.HasPrefix(loc, st.srv.URL) {
+			t.Errorf("%s: sent to %q, want straight to the provider", host, loc)
+		}
+	}
+}

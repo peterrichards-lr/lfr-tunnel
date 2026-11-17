@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -442,6 +443,25 @@ func (s *Server) ssoCanonicalBase(r *http.Request) *url.URL {
 		return nil
 	}
 	if len(s.cfg.Domains) == 0 || strings.TrimSpace(s.cfg.Domains[0]) == "" {
+		return nil
+	}
+	// Only the gateway's own names are moved: a host outside every configured domain --
+	// localhost, an IP, as in the Keycloak e2e stack -- signs in where it is, as it always did.
+	// Sending it to a tunnel. host that does not exist there broke that suite.
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+	own := false
+	for _, d := range s.cfg.Domains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d != "" && (host == d || strings.HasSuffix(host, "."+d)) {
+			own = true
+			break
+		}
+	}
+	if !own {
 		return nil
 	}
 	scheme := "http"

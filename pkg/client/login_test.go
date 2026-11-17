@@ -265,7 +265,11 @@ func TestRunLogin_WritesThroughASymlinkedTokenFile(t *testing.T) {
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("the token file is no longer a symlink (mode %v, err %v)", fi.Mode(), err)
 	}
-	if got, _ := os.ReadFile(target); string(got) != portalPAT {
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("reading the symlink target: %v", err)
+	}
+	if string(got) != portalPAT {
 		t.Errorf("symlink target holds %q, want the new token %q", got, portalPAT)
 	}
 }

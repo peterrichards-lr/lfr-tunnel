@@ -1219,6 +1219,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// `lfr-tunnel login` checking the token it is about to save (#2458). Authenticated by
+		// the token under test, so it must not sit behind a session either.
+		if r.Method == http.MethodGet && r.URL.Path == "/api/client/token-check" {
+			s.handleClientTokenCheck(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/tunnel-status" {
 			s.handleTunnelStatus(w, r)
 			return

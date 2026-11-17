@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,12 +24,23 @@ const (
 	notAToken = "https://portal.example.com/portal?token=0123456789abcdef0123456789abcdef&lang=x"
 )
 
-// stubLoginBrowser stops RunLogin opening a real browser for the length of a test.
+// stubLoginBrowser stops RunLogin opening a real browser for the length of a test, and answers
+// its token check as "verified" so no login test reaches a real gateway. A test about the check
+// itself overrides that with answerTokenCheck afterwards.
 func stubLoginBrowser(t *testing.T) {
 	t.Helper()
 	old := openBrowserFunc
 	openBrowserFunc = func(string) error { return nil }
 	t.Cleanup(func() { openBrowserFunc = old })
+	answerTokenCheck(t, loginTokenVerified, "")
+}
+
+// answerTokenCheck makes the gateway's answer to RunLogin's token check check/reason.
+func answerTokenCheck(t *testing.T, check loginTokenCheck, reason string) {
+	t.Helper()
+	old := verifyLoginToken
+	verifyLoginToken = func(string, string) (loginTokenCheck, string) { return check, reason }
+	t.Cleanup(func() { verifyLoginToken = old })
 }
 
 // handoffBusy makes the handoff listener unavailable, so stdin is the only route in.
@@ -271,6 +283,223 @@ func TestRunLogin_WritesThroughASymlinkedTokenFile(t *testing.T) {
 	}
 	if string(got) != portalPAT {
 		t.Errorf("symlink target holds %q, want the new token %q", got, portalPAT)
+	}
+}
+
+// #2458: each answer the gateway can give is read as exactly one verdict, and only the token-check
+// endpoint's own refusal counts as one.
+func TestCheckLoginTokenReadsEachAnswer(t *testing.T) {
+	type answer struct {
+		status      int
+		contentType string
+	}
+	cases := []struct {
+		name   string
+		answer answer
+		want   loginTokenCheck
+		reason string
+	}{
+		{"valid", answer{http.StatusNoContent, ""}, loginTokenVerified, ""},
+		{"refused", answer{http.StatusUnauthorized, "application/json"}, loginTokenRefused, ""},
+		{"a proxy's 401, not the gateway's", answer{http.StatusUnauthorized, "text/html"}, loginTokenUnknown, "401"},
+		{"an edge", answer{http.StatusMisdirectedRequest, "application/json"}, loginTokenUnknown, "regional edge"},
+		{"an older gateway", answer{http.StatusNotFound, "text/html"}, loginTokenUnknown, "has no token check"},
+		{"token store down", answer{http.StatusServiceUnavailable, "application/json"}, loginTokenUnknown, "503"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotHeader, gotPath, gotQuery string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotHeader, gotPath, gotQuery = r.Header.Get("X-Auth-Token"), r.URL.Path, r.URL.RawQuery
+				if tc.answer.contentType != "" {
+					w.Header().Set("Content-Type", tc.answer.contentType)
+				}
+				w.WriteHeader(tc.answer.status)
+			}))
+			defer srv.Close()
+
+			got, reason := checkLoginToken(srv.URL+"/", portalPAT)
+			if got != tc.want {
+				t.Errorf("verdict %v (%q), want %v", got, reason, tc.want)
+			}
+			if tc.reason != "" && !strings.Contains(reason, tc.reason) {
+				t.Errorf("reason %q does not say %q", reason, tc.reason)
+			}
+			if gotHeader != portalPAT || gotPath != "/api/client/token-check" || gotQuery != "" {
+				t.Errorf("sent header %q to %q?%q; want the token in X-Auth-Token only", gotHeader, gotPath, gotQuery)
+			}
+		})
+	}
+
+	t.Run("unreachable", func(t *testing.T) {
+		srv := httptest.NewServer(http.NotFoundHandler())
+		addr := srv.URL
+		srv.Close()
+		if got, reason := checkLoginToken(addr, portalPAT); got != loginTokenUnknown || !strings.Contains(reason, "could not reach") {
+			t.Errorf("unreachable gateway: %v %q", got, reason)
+		}
+	})
+	t.Run("no gateway configured", func(t *testing.T) {
+		if got, _ := checkLoginToken("", portalPAT); got != loginTokenUnknown {
+			t.Errorf("no gateway: %v", got)
+		}
+	})
+}
+
+// Review of #2467. A redirect must not carry the token anywhere: Go copies a custom header like
+// X-Auth-Token to a redirect's new host, unlike Authorization. Whatever answers there says
+// nothing about this gateway's view of the token.
+func TestCheckLoginTokenDoesNotFollowRedirects(t *testing.T) {
+	var leaked string
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = r.Header.Get("X-Auth-Token")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer elsewhere.Close()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusMovedPermanently)
+	}))
+	defer gateway.Close()
+
+	got, reason := checkLoginToken(gateway.URL, portalPAT)
+	if leaked != "" {
+		t.Errorf("the token was sent to the redirect's host")
+	}
+	if got != loginTokenUnknown || !strings.Contains(reason, "redirect") {
+		t.Errorf("a redirect: %v %q, want unknown naming the redirect", got, reason)
+	}
+}
+
+// Built the way registration builds it: a scheme is added when missing, and only scheme://host
+// is kept, so a server_url that registration accepts is one the check can use too.
+func TestCheckLoginTokenAddressesTheGatewayAsRegistrationDoes(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+
+	for _, configured := range []string{host, srv.URL + "/portal", srv.URL + "/"} {
+		gotPath = ""
+		if got, reason := checkLoginToken(configured, portalPAT); got != loginTokenVerified || gotPath != "/api/client/token-check" {
+			t.Errorf("server_url %q: %v %q, path %q", configured, got, reason, gotPath)
+		}
+	}
+}
+
+// Only the endpoint's 204 is a verification. A 200 is something else answering -- a portal page,
+// a captive portal -- and must not print "Successfully authenticated".
+func TestCheckLoginTokenTreatsA200AsUnverified(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	if got, _ := checkLoginToken(srv.URL, portalPAT); got != loginTokenUnknown {
+		t.Errorf("a 200: %v, want unknown", got)
+	}
+}
+
+// RunLogin must ask the gateway it was given, about the token it received. Every other login test
+// answers the check with a stub that ignores its arguments, so without this the wiring is untested.
+func TestRunLogin_ChecksTheTokenWithItsOwnGateway(t *testing.T) {
+	stubLoginBrowser(t)
+	var gotURL, gotToken string
+	old := verifyLoginToken
+	verifyLoginToken = func(serverURL, token string) (loginTokenCheck, string) {
+		gotURL, gotToken = serverURL, token
+		return loginTokenVerified, ""
+	}
+	t.Cleanup(func() { verifyLoginToken = old })
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	fakeHome(t)
+
+	if err := RunLogin("https://tunnel.example.com"); err != nil {
+		t.Fatalf("RunLogin: %v", err)
+	}
+	if gotURL != "https://tunnel.example.com" || gotToken != portalPAT {
+		t.Errorf("checked token %q against %q", gotToken, gotURL)
+	}
+}
+
+// captureLoginOutput returns what fn printed to stdout.
+func captureLoginOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	done := make(chan string)
+	go func() {
+		b, err := io.ReadAll(r)
+		if err != nil {
+			t.Errorf("reading captured output: %v", err)
+		}
+		done <- string(b)
+	}()
+	fn()
+	os.Stdout = orig
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing pipe: %v", err)
+	}
+	return <-done
+}
+
+// #2458: a token the gateway refuses is not saved, and the working one stays.
+func TestRunLogin_RefusedTokenIsNotSaved(t *testing.T) {
+	stubLoginBrowser(t)
+	answerTokenCheck(t, loginTokenRefused, "")
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	home := fakeHome(t)
+	tokenPath := seedToken(t, home, claimedPAT)
+
+	err := RunLogin("https://tunnel.example.com")
+	if err == nil || !strings.Contains(err.Error(), "refused this token") {
+		t.Fatalf("RunLogin = %v; want the gateway's refusal", err)
+	}
+	saved, err := os.ReadFile(tokenPath)
+	if err != nil {
+		t.Fatalf("reading the token file: %v", err)
+	}
+	if string(saved) != claimedPAT {
+		t.Errorf("token file = %q; the refused token must not replace %q", saved, claimedPAT)
+	}
+}
+
+// #2458: a gateway that cannot answer says nothing about the token. It is saved -- refusing would
+// lock out everyone on a gateway older than this check -- and the output says it is unverified
+// rather than claiming success.
+func TestRunLogin_UnverifiedTokenIsSavedAndSaysSo(t *testing.T) {
+	stubLoginBrowser(t)
+	answerTokenCheck(t, loginTokenUnknown, "the gateway is older than this client")
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	home := fakeHome(t)
+
+	var err error
+	out := captureLoginOutput(t, func() { err = RunLogin("https://tunnel.example.com") })
+	if err != nil {
+		t.Fatalf("RunLogin: %v", err)
+	}
+	saved, readErr := os.ReadFile(filepath.Join(home, ".lfr-tunnel", "token"))
+	if readErr != nil {
+		t.Fatalf("reading the token file: %v", readErr)
+	}
+	if string(saved) != portalPAT {
+		t.Errorf("saved %q, want %q", saved, portalPAT)
+	}
+	if !strings.Contains(out, "not verified: the gateway is older than this client") {
+		t.Errorf("output does not say the token is unverified, and why:\n%s", out)
+	}
+	if strings.Contains(out, "Successfully authenticated") {
+		t.Errorf("an unverified token was reported as a success:\n%s", out)
 	}
 }
 

@@ -122,7 +122,8 @@ func TestPrivacyPageDeclaresItsLocaleAndDirection(t *testing.T) {
 // and never reaches the portal at all.
 func serveDashboardShell(t *testing.T, srv *Server, path string, headers map[string]string) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "http://example.com"+path, nil)
+	// The canonical host: a portal page on the apex is redirected there (#2476).
+	req := httptest.NewRequest(http.MethodGet, "http://tunnel.example.com"+path, nil)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -343,7 +344,7 @@ func TestSetupPageDeclaresTheResolvedLocale(t *testing.T) {
 	// next.
 	get := func(t *testing.T, path string, headers map[string]string) string {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "http://example.com"+path, nil)
+		req := httptest.NewRequest(http.MethodGet, "http://tunnel.example.com"+path, nil)
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}

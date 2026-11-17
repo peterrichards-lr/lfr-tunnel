@@ -186,6 +186,7 @@ func fakeHome(t *testing.T) string {
 func TestRunLogin(t *testing.T) {
 	oldOpenBrowserFunc := openBrowserFunc
 	openBrowserFunc = func(url string) error { return nil }
+	answerTokenCheck(t, loginTokenVerified, "") // no login test reaches a real gateway
 	defer func() { openBrowserFunc = oldOpenBrowserFunc }()
 
 	// Bind an ephemeral port rather than the product's fixed 4444, and post to whatever
@@ -255,6 +256,7 @@ func TestRunLogin(t *testing.T) {
 func TestRunLogin_PortBusyFallsBackToManualPaste(t *testing.T) {
 	oldOpenBrowserFunc := openBrowserFunc
 	openBrowserFunc = func(url string) error { return nil }
+	answerTokenCheck(t, loginTokenVerified, "") // no login test reaches a real gateway
 	defer func() { openBrowserFunc = oldOpenBrowserFunc }()
 
 	oldListen := listenHandoff
@@ -332,6 +334,7 @@ func TestRunLogin_PortBusyFallsBackToManualPaste(t *testing.T) {
 func TestRunLogin_PortBusyAndNoStdinFailsFast(t *testing.T) {
 	oldOpenBrowserFunc := openBrowserFunc
 	openBrowserFunc = func(url string) error { return nil }
+	answerTokenCheck(t, loginTokenVerified, "") // no login test reaches a real gateway
 	defer func() { openBrowserFunc = oldOpenBrowserFunc }()
 
 	oldListen := listenHandoff

@@ -625,3 +625,114 @@ func TestWithCLILoginMarkerKeepsAnExistingQuery(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// #2479: a token copied from chat, a document or an HTTP header arrives wrapped. One pair of
+// surrounding quotes and an Authorization scheme are removed; the shape check still decides, so
+// nothing here makes a non-token acceptable.
+func TestNormaliseToken(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{portalPAT, portalPAT},
+		{"  " + portalPAT + "\r\n", portalPAT},
+		{`"` + portalPAT + `"`, portalPAT},
+		{"'" + portalPAT + "'", portalPAT},
+		{"`" + portalPAT + "`", portalPAT},
+		{`" ` + portalPAT + ` "`, portalPAT},
+		{"Bearer " + portalPAT, portalPAT},
+		{"bearer   " + claimedPAT, claimedPAT},
+		{`"Bearer ` + portalPAT + `"`, portalPAT},
+		{`Bearer "` + portalPAT + `"`, portalPAT},
+		{"Bearer\t " + portalPAT, portalPAT},
+		{`'Bearer "` + portalPAT + `"'`, portalPAT},
+		// The curly quotes macOS, Word and Google Docs substitute (review of #2488).
+		{"\u201c" + portalPAT + "\u201d", portalPAT},
+		{"\u2018" + claimedPAT + "\u2019", claimedPAT},
+		// Only a MATCHING pair, and only one: these stay as they are and are refused.
+		{`"` + portalPAT + `'`, `"` + portalPAT + `'`},
+		{`""` + portalPAT + `""`, `"` + portalPAT + `"`},
+		{`"`, `"`},
+		{"\u201c" + portalPAT + `"`, "\u201c" + portalPAT + `"`},
+		{"Bearer", "Bearer"},
+		{"Bearertoken", "Bearertoken"},
+	} {
+		if got := normaliseToken(tc.in); got != tc.want {
+			t.Errorf("normaliseToken(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	// Narrowness: unwrapping a non-token does not make it one.
+	if looksLikeAccessToken(normaliseToken(`"` + notAToken + `"`)) {
+		t.Errorf("a quoted non-token was accepted after normalising")
+	}
+}
+
+// #2479: a valid token pasted at the prompt with quotes, or as an Authorization value, was
+// refused as "not an access token". `"Bearer <token>"` is the case the old word-by-word read
+// could not save at all: it split the line into `"Bearer` and `<token>"`, refusing both.
+func TestRunLogin_AcceptsAWrappedTokenPastedOnStdin(t *testing.T) {
+	for _, tc := range []struct{ name, pasted, want string }{
+		{"double quotes", `"` + portalPAT + `"`, portalPAT},
+		{"single quotes", "'" + claimedPAT + "'", claimedPAT},
+		{"backticks", "`" + portalPAT + "`", portalPAT},
+		{"curly quotes", "\u201c" + portalPAT + "\u201d", portalPAT},
+		{"a quoted Authorization", `"Bearer ` + portalPAT + `"`, portalPAT},
+		{"no newline before EOF", "'" + portalPAT + "'", portalPAT},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubLoginBrowser(t)
+			handoffBusy(t)
+			input := tc.pasted + "\r\n"
+			if tc.name == "no newline before EOF" {
+				input = tc.pasted
+			}
+			stdinWith(t, input)
+			home := fakeHome(t)
+
+			if err := RunLogin("https://tunnel.example.com"); err != nil {
+				t.Fatalf("RunLogin refused a wrapped token: %v", err)
+			}
+			saved, err := os.ReadFile(filepath.Join(home, ".lfr-tunnel", "token"))
+			if err != nil {
+				t.Fatalf("expected the token to be saved: %v", err)
+			}
+			if string(saved) != tc.want {
+				t.Errorf("saved token = %q, want the bare token %q", saved, tc.want)
+			}
+		})
+	}
+}
+
+// #2479, the handoff route: the same unwrapping applies to what the browser POSTs.
+func TestRunLogin_HandoffAcceptsAQuotedToken(t *testing.T) {
+	stubLoginBrowser(t)
+	addrChan := handoffEphemeral(t)
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdin pipe: %v", err)
+	}
+	old := stdinReader
+	stdinReader = stdinR
+	t.Cleanup(func() {
+		stdinReader = old
+		if err := stdinW.Close(); err != nil {
+			t.Logf("closing stdin pipe: %v", err)
+		}
+	})
+	home := fakeHome(t)
+	errChan := make(chan error, 1)
+	go func() { errChan <- RunLogin("https://tunnel.example.com") }()
+
+	if code := postHandoff(t, <-addrChan, "'"+portalPAT+"'"); code != http.StatusOK {
+		t.Errorf("handoff of a quoted token answered %d, want %d", code, http.StatusOK)
+	}
+	select {
+	case runErr := <-errChan:
+		if runErr != nil {
+			t.Fatalf("RunLogin failed after a quoted token was handed off: %v", runErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunLogin did not finish after a quoted token was handed off")
+	}
+	saved, err := os.ReadFile(filepath.Join(home, ".lfr-tunnel", "token"))
+	if err != nil || string(saved) != portalPAT {
+		t.Errorf("saved token = %q (%v), want %q", saved, err, portalPAT)
+	}
+}

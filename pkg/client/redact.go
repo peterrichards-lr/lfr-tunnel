@@ -33,10 +33,18 @@ import (
 // token here", because those two say different things about what they are looking at.
 const redactedPlaceholder = "[REDACTED]"
 
-// patPattern matches this product's personal access tokens, which carry the lfr_pat_ prefix
-// (pkg/server/server_auth.go:140). Listed first because it is the one secret this repo issues and
-// therefore the one it is responsible for.
-var patPattern = regexp.MustCompile(`\blfr_pat_[A-Za-z0-9_\-]+`)
+// patPattern and bareHexPATPattern match this product's personal access tokens, in both shapes a
+// gateway issues (the same two looksLikeAccessToken accepts, #2457). Listed first because they are
+// the one secret this repo issues and therefore the one it is responsible for.
+//
+// patPattern: the registration-claim path's tokens, which carry claimedTokenPrefix.
+var patPattern = regexp.MustCompile(`\b` + claimedTokenPrefix + `[A-Za-z0-9_\-]+`)
+
+// bareHexPATPattern: every token created in the portal -- 32 lowercase hex characters with no
+// prefix (generateSecureToken, pkg/server/server.go), which only context used to give away
+// (#2460). Whole words only, so a 64-hex SHA-256 is left alone; another 128-bit hex value in a
+// log is redacted with it, which is the safe direction to be wrong in.
+var bareHexPATPattern = regexp.MustCompile(`\b[0-9a-f]{32}\b`)
 
 // bearerPattern catches an Authorization value that reached free text.
 var bearerPattern = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._\-+/=]{8,}`)
@@ -63,6 +71,7 @@ func redactText(s string) string {
 		return s
 	}
 	s = patPattern.ReplaceAllString(s, redactedPlaceholder)
+	s = bareHexPATPattern.ReplaceAllString(s, redactedPlaceholder)
 	s = urlCredentialPattern.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
 	s = bearerPattern.ReplaceAllString(s, "${1} "+redactedPlaceholder)
 	s = queryCredentialPattern.ReplaceAllString(s, "${1}="+redactedPlaceholder)

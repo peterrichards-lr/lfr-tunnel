@@ -21,6 +21,10 @@ export function useDataTable<T>(
   statusKey?: keyof T & string,
   statusOptions?: StatusOption[],
   defaultStatusFilter: string = 'all',
+  // Optional: how two string values compare. Unset, it is localeCompare, as it always has been.
+  // A table whose order a server must reproduce passes its own -- the Audit Log does, so a row
+  // number means the same row in the table and in the export (#2464).
+  compareStrings?: (a: string, b: string) => number,
 ) {
   // LocalStorage storage keys
   const storageKey = `lfr_table_${tableId}`;
@@ -112,7 +116,9 @@ export function useDataTable<T>(
 
       let comp = 0;
       if (typeof aVal === 'string' && typeof bVal === 'string') {
-        comp = aVal.localeCompare(bVal);
+        comp = compareStrings
+          ? compareStrings(aVal, bVal)
+          : aVal.localeCompare(bVal);
       } else if (aVal < bVal) {
         comp = -1;
       } else if (aVal > bVal) {
@@ -121,7 +127,7 @@ export function useDataTable<T>(
 
       return sortConfig.direction === 'asc' ? comp : -comp;
     });
-  }, [filteredItems, sortConfig]);
+  }, [filteredItems, sortConfig, compareStrings]);
 
   // Reset page when search or filters change
   useEffect(() => {

@@ -173,7 +173,7 @@ func TestHandleAdminAuditExport(t *testing.T) {
 			t.Errorf("expected Content-Type text/csv, got %s", cType)
 		}
 
-		if cDisp := w.Header().Get("Content-Disposition"); !strings.Contains(cDisp, "attachment;filename=audit_log.csv") {
+		if cDisp := w.Header().Get("Content-Disposition"); !strings.Contains(cDisp, "attachment; filename=\"audit-log-") {
 			t.Errorf("expected Content-Disposition attachment, got %s", cDisp)
 		}
 

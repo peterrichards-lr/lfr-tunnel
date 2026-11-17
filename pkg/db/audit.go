@@ -62,7 +62,10 @@ func (repo *SQLiteAuditRepo) ListAuditEntries(f AuditFilter) ([]*AuditEntry, err
 		args = append(args, ActionPortalVisit)
 	}
 
-	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	// id breaks ties, so entries written in the same instant page and sort the same way in the
+	// portal and in the export (#2464). Without it, SQLite may return ties in any order, and a row
+	// number would not mean the same row in both.
+	query += " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
 	args = append(args, f.Limit, f.Offset)
 
 	rows, err := repo.conn.Query(query, args...)

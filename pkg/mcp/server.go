@@ -193,13 +193,22 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 
 	case "start_tunnel":
 		var params struct {
-			Subdomain  string `json:"subdomain"`
-			Ports      string `json:"ports"`
-			TargetHost string `json:"target_host"`
+			Subdomain  string          `json:"subdomain"`
+			Ports      json.RawMessage `json:"ports"`
+			TargetHost string          `json:"target_host"`
 		}
 		_ = json.Unmarshal(args, &params) //nolint:errcheck // params are optional; zero values are the documented default
 
-		res, err := startTunnel(params.Subdomain, params.Ports, params.TargetHost)
+		// ports arrives as whatever the agent sent: "9999,3000", 9999 or [9999, 3000]. Decoding it
+		// into a string silently dropped the last two, and the tunnel published discovery's port
+		// instead of the one asked for (review of #2484) -- so every shape is accepted, and any
+		// other is refused rather than ignored.
+		ports, err := mcpPortsParam(params.Ports)
+		if err != nil {
+			sendToolError(id, err.Error())
+			break
+		}
+		res, err := startTunnel(params.Subdomain, ports, params.TargetHost)
 		if err != nil {
 			sendToolError(id, err.Error())
 		} else {
@@ -703,4 +712,31 @@ func sendToolError(id interface{}, errMsg string) {
 		"isError": true,
 	}
 	sendResult(id, result)
+}
+
+// mcpPortsParam turns start_tunnel's ports argument into the -ports form: a string as given, a
+// number, or an array of numbers. Absent or null means "not given". Anything else is an error,
+// never a silent fall-through to discovery (review of #2484).
+func mcpPortsParam(raw json.RawMessage) (string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return "", nil
+	}
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return asString, nil
+	}
+	var asNumber json.Number
+	if err := json.Unmarshal(raw, &asNumber); err == nil {
+		return asNumber.String(), nil
+	}
+	var asList []json.Number
+	if err := json.Unmarshal(raw, &asList); err == nil {
+		parts := make([]string, len(asList))
+		for i, n := range asList {
+			parts[i] = n.String()
+		}
+		return strings.Join(parts, ","), nil
+	}
+	return "", fmt.Errorf("ports must be a string like \"8080,3000\", a number, or an array of numbers; got %s", trimmed)
 }

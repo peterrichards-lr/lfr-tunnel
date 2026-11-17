@@ -240,7 +240,16 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 
 `ports` is the one key here whose default is not a value but a **decision**. Set it — in this
 file, with `-ports`, or via `LFT_CLIENT_PORTS` — and the client publishes exactly that list and
-does nothing else. Leave it out and the client works the ports out for itself, in this order:
+does nothing else.
+
+`-ports` and `LFT_CLIENT_PORTS` take whole numbers from 1 to 65535, separated by commas, with
+spaces around each one allowed (`8080,3000` or `8080, 3000`). Anything else — `9999:80`,
+`localhost:9999`, `9999 8095`, `9999;8095`, an empty entry — stops the client with an error
+that names the bad value. It never falls back to discovery: until #2477 a malformed list was
+silently dropped and the client published whatever answered on `8080`. A `ports:` entry in
+this file outside 1–65535 is refused the same way.
+
+Leave it out and the client works the ports out for itself, in this order:
 
 1. **In a Liferay workspace** (a `client-extensions/` directory, `gradlew`, or
    `gradle.properties` in the working directory) it walks the tree for `client-extension.yaml`
@@ -253,7 +262,7 @@ does nothing else. Leave it out and the client works the ports out for itself, i
    [Leaving `target_host` unset](#leaving-target_host-unset).
 3. **If neither finds anything**, port `8080`.
 
-Two consequences worth knowing:
+Worth knowing:
 
 - `ports: [8080]` and no `ports` key at all are **not** the same thing. The first pins you to
   8080; the second is what gets you the scan. Until #1710 the client could not tell them
@@ -262,6 +271,9 @@ Two consequences worth knowing:
 - Step 2 can publish something other than 8080. A Docker container matching the name test
   above that publishes `80` or `443` and not `8080` will make that port your primary. Set
   `ports` explicitly if you need to be certain what gets published.
+- The dashboard shows what was decided: one `Local:` line per published port, the primary
+  saying where its list came from — `(Primary, from -ports)`, `(Primary, auto-discovered)` and
+  so on. The Inspector's `/api/healthz` and `/api/info` check those same ports.
 
 #### Leaving `target_host` unset
 
@@ -513,4 +525,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-24* | *Last Reviewed: 2026-09-24*
+*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*

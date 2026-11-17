@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 )
 
@@ -268,7 +269,7 @@ func (s *Server) handleAdminDiagnosticsBundles(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+	email := config.NormalizeEmail(r.URL.Query().Get("email"))
 	if email == "" {
 		http.Error(w, `{"error":"An email address is required"}`, http.StatusBadRequest)
 		return

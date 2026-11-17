@@ -690,6 +690,14 @@ function toggleTheme() {
 }
 
 let currentUser = null;
+
+// `lfr-tunnel login` opens the portal with ?cli_login=1 (#2459). The CLI only receives a token
+// when the user creates one here, and nothing used to say so: a signed-in user saw the Overview
+// and the terminal waited forever. Read once, at load, because the address is rewritten before
+// the dashboard shows -- by the magic-link arrival and by the tab router -- and carried through
+// sign-in by the SSO link and the magic-link request so it survives a signed-out start too.
+let cliLoginPending =
+  new URLSearchParams(window.location.search).get('cli_login') === '1';
 let currentLanguage = 'en';
 let generatedRawToken = '';
 
@@ -1017,7 +1025,9 @@ async function showLogin() {
     if (data.providers && data.providers.length > 0) {
       data.providers.forEach((p) => {
         const a = document.createElement('a');
-        a.href = `/api/auth/login?provider=${encodeURIComponent(p.id)}`;
+        a.href =
+          `/api/auth/login?provider=${encodeURIComponent(p.id)}` +
+          (cliLoginPending ? '&cli_login=1' : '');
         a.className = 'btn btn-primary';
         const icon = document.createElement('span');
         icon.className = 'btn-icon';
@@ -1567,8 +1577,12 @@ async function showDashboard() {
 
   showTab(sectionFromLocation(), true);
 
-  // Trigger onboarding walkthrough if user onboarding_status is pending and enabled by server
-  if (
+  // Arrived from `lfr-tunnel login` (#2459): ask for the token first. The walkthrough would cover
+  // the dialog, and it is still pending, so it simply starts on the next visit instead.
+  if (cliLoginPending) {
+    cliLoginPending = false;
+    openCLITokenPrompt();
+  } else if (
     window.latestVersionData &&
     window.latestVersionData.enable_onboarding &&
     currentUser.onboarding_status === 'pending'
@@ -4473,7 +4487,9 @@ document.getElementById('email-form').addEventListener('submit', async (e) => {
 
   try {
     const res = await fetch(
-      '/api/auth/magic-link?lang=' + encodeURIComponent(currentLanguage),
+      '/api/auth/magic-link?lang=' +
+        encodeURIComponent(currentLanguage) +
+        (cliLoginPending ? '&cli_login=1' : ''),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5438,12 +5454,25 @@ function applyTokenExpiryPolicy() {
 
 function openTokenModal() {
   document.getElementById('token-name').value = '';
+  const cliNote = document.getElementById('token-cli-note');
+  if (cliNote) cliNote.hidden = true;
   document.getElementById('token-form-step').classList.remove('hidden');
   document.getElementById('token-result-step').classList.add('hidden');
 
   applyTokenExpiryPolicy();
 
   document.getElementById('token-modal').style.display = 'flex';
+}
+
+// The create-token dialog, opened for someone who arrived from `lfr-tunnel login` (#2459): a
+// named token, and a note saying where it will go. Creating it sends it to the waiting terminal
+// exactly as a manual creation does (generateToken's handoff).
+function openCLITokenPrompt() {
+  openTokenModal();
+  document.getElementById('token-name').value =
+    'lfr-tunnel login ' + new Date().toISOString().slice(0, 10);
+  const cliNote = document.getElementById('token-cli-note');
+  if (cliNote) cliNote.hidden = false;
 }
 
 function closeModal() {

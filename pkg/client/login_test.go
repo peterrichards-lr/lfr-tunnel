@@ -599,3 +599,29 @@ func TestDeploymentURLsAreNotHardcoded(t *testing.T) {
 		}
 	}
 }
+
+// #2459: login opens the portal marked cli_login=1, so the portal asks the user to create a
+// token -- otherwise a signed-in user saw the Overview and the CLI waited forever.
+func TestRunLogin_OpensThePortalMarkedForTheCLI(t *testing.T) {
+	var opened string
+	old := openBrowserFunc
+	openBrowserFunc = func(u string) error { opened = u; return nil }
+	t.Cleanup(func() { openBrowserFunc = old })
+	answerTokenCheck(t, loginTokenVerified, "")
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	fakeHome(t)
+
+	if err := RunLogin("https://tunnel.example.com"); err != nil {
+		t.Fatalf("RunLogin: %v", err)
+	}
+	if opened != "https://portal.example.com?cli_login=1" {
+		t.Errorf("opened %q, want the portal with cli_login=1", opened)
+	}
+}
+
+func TestWithCLILoginMarkerKeepsAnExistingQuery(t *testing.T) {
+	if got := withCLILoginMarker("https://gw.example.org/portal?lang=de"); got != "https://gw.example.org/portal?cli_login=1&lang=de" {
+		t.Errorf("got %q", got)
+	}
+}

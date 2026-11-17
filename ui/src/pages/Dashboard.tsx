@@ -16,6 +16,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
 import SectionHeading from '../components/SectionHeading';
 import ModalShell from '../components/ModalShell';
+import { consumeCLILogin } from '../cliLogin';
 
 function isOlderVersion(current: string, target: string): boolean {
   if (!current || !target) return false;
@@ -72,6 +73,8 @@ export default function Dashboard() {
   const [copiedUpgrade, setCopiedUpgrade] = useState(false);
   const [isCreateTokenModalOpen, setIsCreateTokenModalOpen] = useState(false);
   const [newTokenName, setNewTokenName] = useState('');
+  // Opened for someone who arrived from `lfr-tunnel login` (#2459): says where the token goes.
+  const [cliPrompt, setCliPrompt] = useState(false);
   const [newTokenExpiresDays, setNewTokenExpiresDays] = useState(30);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [handoffStatus, setHandoffStatus] = useState<HandoffStatus | null>(
@@ -194,6 +197,21 @@ export default function Dashboard() {
   // object, so anything keyed on `user` re-runs on every poll -- which is what filled the
   // audit log with a portal.visit every 10 seconds (#1208). A visit is a visit, not a
   // heartbeat, and the server config does not change under us either.
+  // Arrived from `lfr-tunnel login` (#2459): open the create-token dialog straight away, named,
+  // with a note saying the token goes to the waiting terminal. Creating it hands it off exactly as
+  // a manual creation does (deliverTokenToCli).
+  useEffect(() => {
+    if (!consumeCLILogin()) return;
+    setNewTokenName(
+      `lfr-tunnel login ${new Date().toISOString().slice(0, 10)}`,
+    );
+    setNewTokenExpiresDays(30);
+    setGeneratedToken(null);
+    setHandoffStatus(null);
+    setCliPrompt(true);
+    setIsCreateTokenModalOpen(true);
+  }, []);
+
   useEffect(() => {
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios
@@ -507,6 +525,7 @@ export default function Dashboard() {
                   setNewTokenExpiresDays(30);
                   setGeneratedToken(null);
                   setHandoffStatus(null);
+                  setCliPrompt(false);
                   setIsCreateTokenModalOpen(true);
                 }}
               >
@@ -752,6 +771,14 @@ export default function Dashboard() {
 
           {!generatedToken ? (
             <form onSubmit={handleCreateToken}>
+              {cliPrompt && (
+                <p className="text-sm mb-lg" role="status">
+                  {t(
+                    'token_cli_note',
+                    'Your terminal is waiting for a token. Create one here and it is sent to lfr-tunnel login automatically.',
+                  )}
+                </p>
+              )}
               <div className="form-group mb-lg">
                 <label className="form-label" htmlFor="token-name-label">
                   {t('token_name_label', 'Token Name / Description')}

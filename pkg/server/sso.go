@@ -287,8 +287,8 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			Role:       "user",
 			Status:     db.UserStatusApproved,
 			AuthMethod: "sso - " + providerID,
-			CreatedAt:  time.Now(),
-			UpdatedAt:  time.Now(),
+			CreatedAt:  time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
+			UpdatedAt:  time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
 		}
 		// If they match the owner config, grant owner
 		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {

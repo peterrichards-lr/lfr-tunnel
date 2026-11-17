@@ -875,7 +875,8 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 			slog.Warn(fmt.Sprintf("[Users] Could not check for accounts that differ only by email case: %v", err))
 		} else if len(dups) > 0 {
 			slog.Warn(fmt.Sprintf("[Users] %d email address(es) belong to more than one account, differing only in case: %s. "+
-				"Sign-ins use the oldest account for each; merge or remove the others by hand (#2466).",
+				"Sign-ins use the oldest account for each. Merge or remove the others in SQL, BY ID -- not through the admin UI, "+
+				"which addresses users by email and so now acts on the oldest account (#2466).",
 				len(dups), strings.Join(dups, ", ")))
 		}
 	}
@@ -2922,7 +2923,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	if existingUser, err := s.db.GetUser(req.Email); err == nil {
+	if existingUser, err := s.db.GetUserByEmail(req.Email); err == nil { // any case (#2466): GetUser matched the id exactly, so a mixed-case row was missed and duplicated
 		// Log the attempt to the audit log to keep visibility for admins.
 		//
 		// A rejected row gets its own action and detail. This is the cost of blocking rather than
@@ -4471,6 +4472,11 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.UpdateUser(user) //nolint:errcheck
 	}
 
+	// The account's own address, as SSO and MFA store it, not the link's normalised one: sessions are
+	// killed and matched by exact email, so the two forms would not see each other (#2466).
+	if user != nil {
+		email = user.Email
+	}
 	killedPreviousSession := s.sessionStore().killPortalSessionsFor(email)
 
 	s.sessionStore().storePortalSession(sessionToken, PortalSessionData{

@@ -118,3 +118,21 @@ func TestMagicLinkStillRefusesAStrangerOutsideTheAllowedDomains(t *testing.T) {
 		t.Errorf("a stranger outside the allowed domains was sent %d email(s)", n)
 	}
 }
+
+// Registration checked for an existing account by exact id, so a mixed-case row was missed and a
+// second, lowercase row created beside it -- which also let a rejected address register again in
+// another case (review of #2468).
+func TestRegistrationFindsAnExistingAccountInAnotherCase(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+	if err := srv.db.CreateUser(&db.User{ID: "Mixed.Case@Example.com", Email: "Mixed.Case@Example.com",
+		Role: "user", Status: db.UserStatusApproved}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	body := strings.NewReader(`{"email":"mixed.case@example.com","first_name":"M","last_name":"C"}`)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "http://example.com/api/register-request", body))
+	if got := usersWithEmail(t, srv, "mixed.case@example.com"); len(got) != 1 {
+		t.Fatalf("%d accounts after registering an existing address in another case (status %d %s)", len(got), w.Code, w.Body.String())
+	}
+}

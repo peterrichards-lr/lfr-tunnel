@@ -1124,6 +1124,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(r.URL.Path, "/api/auth/") && r.URL.Path != "/api/auth/login" {
 				bypass = true
 			}
+			// A session from an SSO provider that performs MFA itself has met the requirement
+			// (#2482). Per session: the same account signing in by magic link is not exempt.
+			if !bypass && s.sessionSatisfiesMFA(r) {
+				bypass = true
+			}
 			if !bypass {
 				if user, err := s.getCurrentUser(r); err == nil && user != nil {
 					if !user.TOTPEnabled {
@@ -6170,6 +6175,10 @@ type PortalSessionData struct {
 	// applied without a query per request. Zero for a session loaded from a row written before
 	// this existed, which sameSiteFromStored's caller treats as "no cap knowable".
 	CreatedAt time.Time
+	// AuthProvider is the SSO provider id that created this session, or "" for any other
+	// sign-in. A provider configured with satisfies_mfa meets force_mfa for its sessions
+	// (#2482); a magic-link session for the same account does not.
+	AuthProvider string
 	// PolicyReminderDismissed records that this session clicked "Remind me later" on the
 	// policy re-consent gate (#1707).
 	//

@@ -237,9 +237,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	var claims struct {
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
-		Name          string `json:"name"`
-		GivenName     string `json:"given_name"`
-		FamilyName    string `json:"family_name"`
+		// AMR is how the provider authenticated the user (RFC 8176), e.g. ["pwd","mfa"]. Logged,
+		// not enforced: it is the evidence for a provider configured with satisfies_mfa (#2482).
+		AMR        []string `json:"amr"`
+		Name       string   `json:"name"`
+		GivenName  string   `json:"given_name"`
+		FamilyName string   `json:"family_name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		slog.Warn(fmt.Sprintf("[SSO] %s: unreadable ID token claims: %v", providerID, err))
@@ -248,6 +251,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := config.NormalizeEmail(claims.Email)
+	slog.Info(fmt.Sprintf("[SSO] %s: sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
 	if email == "" {
 		http.Error(w, "Email required from provider", http.StatusBadRequest)
 		return
@@ -344,6 +348,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
+		AuthProvider:          providerID, // force_mfa is met per session by a satisfies_mfa provider (#2482)
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              s.clientIP(r),
 		KilledPreviousSession: killedPreviousSession,
@@ -502,4 +507,26 @@ func (s *Server) alertSSOAccountCreated(user *db.User, p *config.SSOProviderConf
 		"<p>SSO accounts are approved automatically; the identity provider is the access decision. No action is needed.</p>",
 		html.EscapeString(p.Name), html.EscapeString(p.ID), html.EscapeString(name), html.EscapeString(user.Email))
 	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration (SSO)", body)
+}
+
+// sessionSatisfiesMFA reports whether this request's portal session was created by an SSO
+// provider configured with satisfies_mfa, which then meets force_mfa for it (#2482). Decided by
+// the session, not the account: the same user signing in by magic link is still held to the
+// gateway's own TOTP. A provider since removed from the config, or one without the setting,
+// satisfies nothing.
+func (s *Server) sessionSatisfiesMFA(r *http.Request) bool {
+	cookie, err := r.Cookie("lfr_session")
+	if err != nil {
+		return false
+	}
+	data, ok := s.sessionStore().loadPortalSession(cookie.Value)
+	if !ok || data.AuthProvider == "" {
+		return false
+	}
+	for _, p := range s.cfg.SSOProviders {
+		if p.ID == data.AuthProvider {
+			return p.SatisfiesMFA
+		}
+	}
+	return false
 }

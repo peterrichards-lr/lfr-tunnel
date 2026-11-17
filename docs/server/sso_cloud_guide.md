@@ -207,6 +207,26 @@ With this set, no emailed link can sign anyone in or create an account (#2449):
 
 **Recovery if the identity provider is unavailable:** set `disable_email_login: false` in `server-config.yaml` on the gateway over SSH and restart `lfr-tunneld`. Email sign-in is back as soon as the service is. This is the only route back in, so keep SSH access to the gateway working before switching to SSO-only.
 
+## 6. Per-provider trust settings
+
+Two settings on an `sso_providers` entry relax a check the gateway otherwise makes. Each applies to that provider only; every other provider stays strict.
+
+```yaml
+sso_providers:
+  - id: "liferay"
+    name: "Liferay SSO"
+    client_id: "…"
+    client_secret: "…"
+    issuer_url: "https://login.liferay.com"
+    skip_email_verified_check: true   # accept the address without email_verified: true
+    satisfies_mfa: true               # a sign-in here meets force_mfa
+```
+
+- **`skip_email_verified_check`** accepts an ID token without `email_verified: true`. Some providers never send it (Microsoft Entra ID), and some send it as `false` for directory-managed accounts (Okta, for staff whose address came from the corporate directory). Set it only when the provider's directory owns every address it asserts. `allowed_email_domains` is still enforced.
+- **`satisfies_mfa`** makes a sign-in through this provider meet `force_mfa`, because the provider performs MFA itself; users are not also made to enrol the gateway's own TOTP. It is decided **per session**: the same person signing in by magic link is still held to `force_mfa`. Set it only when the provider's sign-on policy requires MFA. Each SSO sign-in logs the ID token's `amr` claim (`[SSO] <provider>: sign-in for … amr=[…]`), so you can confirm the provider reports `mfa`.
+
+On a first sign-in, the account takes its first and last name from `given_name` and `family_name`, and its preferred name defaults to `given_name`. Administrators get one "New User Registration (SSO)" alert under the same switch as email registrations; later sign-ins send nothing.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*
+*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import GeoAttribution from '../components/GeoAttribution';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { cliLoginQuery } from '../cliLogin';
 import { useI18n } from '../contexts/I18nContext';
 
 export default function Login() {
@@ -113,7 +114,10 @@ export default function Login() {
 
     if (mode === 'login') {
       try {
-        await axios.post(`/api/auth/magic-link?lang=${language}`, { email });
+        await axios.post(
+          `/api/auth/magic-link?lang=${language}${cliLoginQuery()}`,
+          { email },
+        );
 
         setStatusMsg({
           text: t('magic_link_sent', 'Magic link sent! Check your email.'),
@@ -287,7 +291,7 @@ export default function Login() {
                   // portal=v2 so the callback returns here rather than to V1.
                   <a
                     key={p.id}
-                    href={`/api/auth/login?provider=${encodeURIComponent(p.id)}&portal=v2`}
+                    href={`/api/auth/login?provider=${encodeURIComponent(p.id)}&portal=v2${cliLoginQuery()}`}
                     className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm"
                   >
                     {t('btn_continue_with', 'Continue with {0}').replace(

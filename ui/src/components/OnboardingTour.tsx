@@ -3,6 +3,7 @@ import axios from 'axios';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useI18n } from '../contexts/I18nContext';
+import { arrivedFromCLILogin } from '../cliLogin';
 
 export default function OnboardingTour({ user }: { user: any }) {
   const hasAutoStarted = useRef(false);
@@ -132,6 +133,12 @@ export default function OnboardingTour({ user }: { user: any }) {
     if (
       user &&
       user.onboarding_status === 'pending' &&
+      // A visit from `lfr-tunnel login` opens the token dialog, which the tour would cover; it is
+      // still pending, so it starts on the next visit instead -- as in V1 (#2459). Read from the
+      // module, not from Dashboard state: this effect runs before Dashboard's own mount effect.
+      // (Untested end to end: /api/me does not currently send onboarding_status, so the tour never
+      // auto-starts in either arm.)
+      !arrivedFromCLILogin() &&
       !hasAutoStarted.current
     ) {
       hasAutoStarted.current = true;

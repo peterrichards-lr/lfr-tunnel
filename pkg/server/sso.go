@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -135,6 +136,15 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 	providerID := r.URL.Query().Get("provider")
 	if providerID == "" {
 		http.Error(w, `{"error":"provider required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// One host for the whole flow (#2470). The redirect URI is built from the request's host and
+	// the provider registers exactly one, while the portal answers on tunnel., portal. and the
+	// apex -- and `lfr-tunnel login` opens portal. The flow cookies and the session are host-only,
+	// so the sign-in moves to the canonical host before anything is started, not halfway through.
+	if canonical, err := url.Parse(s.getPortalBaseURL(r)); err == nil && canonical.Host != "" && !strings.EqualFold(canonical.Host, r.Host) {
+		http.Redirect(w, r, canonical.Scheme+"://"+canonical.Host+r.URL.RequestURI(), http.StatusFound)
 		return
 	}
 

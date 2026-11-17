@@ -150,7 +150,7 @@ func ssoTestServer(t *testing.T, st *oidcStub) *Server {
 func startSignIn(t *testing.T, srv *Server, st *oidcStub) ([]*http.Cookie, string) {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	srv.handleSSOLogin(rec, httptest.NewRequest(http.MethodGet, "/api/auth/login?provider=stub", nil))
+	srv.handleSSOLogin(rec, httptest.NewRequest(http.MethodGet, "http://tunnel.example.com/api/auth/login?provider=stub", nil))
 	if rec.Code != http.StatusFound {
 		t.Fatalf("login: want 302, got %d (%s)", rec.Code, rec.Body.String())
 	}
@@ -168,7 +168,7 @@ func startSignIn(t *testing.T, srv *Server, st *oidcStub) ([]*http.Cookie, strin
 }
 
 func finishSignIn(srv *Server, cookies []*http.Cookie, state string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?provider=stub&code=the-code&state="+url.QueryEscape(state), nil)
+	req := httptest.NewRequest(http.MethodGet, "http://tunnel.example.com/api/auth/callback?provider=stub&code=the-code&state="+url.QueryEscape(state), nil)
 	for _, c := range cookies {
 		req.AddCookie(c)
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -202,7 +203,8 @@ func TestHandoffUnavailableMessage(t *testing.T) {
 	}
 
 	unknown := handoffUnavailableMessage(inUse, "")
-	if !strings.Contains(unknown, "Usually another") || strings.Contains(unknown, "PID") {
+	// A PID *number*: the Windows hint itself says `tasklist /FI "PID eq <pid>"`.
+	if !strings.Contains(unknown, "Usually another") || regexp.MustCompile(`PID \d`).MatchString(unknown) {
 		t.Errorf("message for an unidentified holder should say what usually holds it, naming no PID:\n%s", unknown)
 	}
 

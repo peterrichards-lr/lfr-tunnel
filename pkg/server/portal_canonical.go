@@ -18,7 +18,9 @@ import (
 //   - page loads only (GET/HEAD of a portal document path). /api/* -- clients, edges, the portal's
 //     own calls -- keeps working on every host, and a redirected POST would lose its body.
 //   - not the downloads or install scripts (/static/downloads/..., /install.sh), which curl and
-//     PowerShell fetch from the apex; nor assets, which only a page already on some host requests.
+//     PowerShell fetch from the apex; nor /static assets. (V2's /portalv2/assets/* fall under the
+//     /portalv2/ prefix and are redirected too -- harmless: only a page already on some host asks
+//     for them, and the canonical host serves identical files.)
 //   - only the four control names of a configured domain: a tunnel under the same domain
 //     (<name>.lfr-demo.online), an edge's own name, localhost and an IP are never redirected.
 //   - 302, not 301: browsers keep a 301 indefinitely, so a wrong canonical setting -- or deciding

@@ -53,11 +53,16 @@ func TestPortalPageOnANonCanonicalControlHostGoesToTheCanonicalOne(t *testing.T)
 
 func TestTheCanonicalPortalHostIsServed(t *testing.T) {
 	srv := canonicalTestServer(t)
-	for _, url := range []string{"https://tunnel.lfr-demo.se/", "https://tunnel.lfr-demo.se:443/portal", "http://tunnel.lfr-demo.se:80/portalv2/"} {
+	for _, url := range []string{"https://tunnel.lfr-demo.se/", "https://tunnel.lfr-demo.se:443/portal", "http://tunnel.lfr-demo.se:80/admin"} {
 		rec := serve(srv, http.MethodGet, url, map[string]string{"X-Forwarded-Proto": "https"})
-		if rec.Code == http.StatusFound || rec.Code == http.StatusMovedPermanently {
-			t.Errorf("GET %s redirected to %q: the canonical host must serve the portal, not loop", url, rec.Header().Get("Location"))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d (Location %q): the canonical host must serve the portal", url, rec.Code, rec.Header().Get("Location"))
 		}
+	}
+	// V2 too -- not redirected. (Not asserted 200: unit tests do not embed the built V2 bundle, so
+	// the gateway answers "UI not built" here, which is not this change's concern.)
+	if rec := serve(srv, http.MethodGet, "https://tunnel.lfr-demo.se/portalv2/", map[string]string{"X-Forwarded-Proto": "https"}); rec.Header().Get("Location") != "" {
+		t.Errorf("V2 on the canonical host redirected to %q", rec.Header().Get("Location"))
 	}
 }
 
@@ -79,11 +84,14 @@ func TestWhatIsNeverRedirected(t *testing.T) {
 	}
 }
 
-// On an edge the canonical host is control_plane_url -- the same rule SSO uses.
+// On an edge the canonical host is control_plane_url -- the same rule SSO uses. An edge answers on
+// its own regional name, which its config lists as a domain (as tests/e2e/server-config-edge.yaml
+// does), so that name is one of the four control names there.
 func TestAnEdgeSendsPortalPagesToTheControlPlane(t *testing.T) {
 	srv := canonicalTestServer(t)
+	srv.cfg.Domains = []string{"us.lfr-demo.se", "lfr-demo.se"}
 	srv.cfg.ControlPlaneURL = "https://tunnel.lfr-demo.se"
-	rec := serve(srv, http.MethodGet, "https://portal.lfr-demo.online/portal", nil)
+	rec := serve(srv, http.MethodGet, "https://us.lfr-demo.se/portal", nil)
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://tunnel.lfr-demo.se/portal" {
 		t.Errorf("edge GET = %d %q, want 302 to the control plane", rec.Code, rec.Header().Get("Location"))
 	}

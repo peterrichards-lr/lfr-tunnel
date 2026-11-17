@@ -1160,3 +1160,84 @@ func TestNormalizeDiscoveredHost(t *testing.T) {
 		})
 	}
 }
+
+// TestResolvePortsAndMappings_RefusesAnAmbiguousDiscovery -- two candidate containers (#2462).
+// The refusal must reach the user; falling through to the 8080 default would publish what is very
+// likely one of the two anyway.
+func TestResolvePortsAndMappings_RefusesAnAmbiguousDiscovery(t *testing.T) {
+	stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { return false }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) { return nil, nil }
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		return nil, &client.AmbiguousDiscoveryError{Candidates: []client.DiscoveredContainer{
+			{Name: "acme-portal", Ports: []int{8080}}, {Name: "other-project", Ports: []int{3000}},
+		}}
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings, err := resolvePortsAndMappings(&config.ClientConfig{})
+	if err == nil {
+		t.Fatalf("expected the ambiguity to be refused, got mappings %+v", mappings)
+	}
+	if mappings != nil {
+		t.Errorf("a refusal must publish nothing, got %+v", mappings)
+	}
+	if !strings.Contains(err.Error(), "other-project") || !strings.Contains(err.Error(), "-ports") {
+		t.Errorf("the refusal %q does not name the candidates and the way out", err.Error())
+	}
+}
+
+// TestResolvePortsAndMappings_NamesTheDiscoveredContainer -- the publish used to name a type and a
+// host, never the container, so a user could not tell whose environment was being shared (#2462).
+func TestResolvePortsAndMappings_NamesTheDiscoveredContainer(t *testing.T) {
+	stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { return false }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) { return nil, nil }
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		return &client.AutoDiscoverResult{Host: "localhost", Ports: []int{8080}, Type: "Docker (LDM)", Container: "acme-portal"}, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mustResolvePorts(t, &config.ClientConfig{})
+	if !strings.Contains(facts.portSource, `"acme-portal"`) {
+		t.Errorf("the reported port source %q does not name the container", facts.portSource)
+	}
+}
+
+// TestRecordBackgroundRefusal_ReachesTheLogATrayUserOpens -- the tray and the Windows startup
+// script launch -background with no terminal, so a refusal printed before the hand-off went
+// nowhere and the log still showed the previous run (#2462 review). It must be in the current
+// log, with the previous run rotated aside rather than mistaken for this one.
+func TestRecordBackgroundRefusal_ReachesTheLogATrayUserOpens(t *testing.T) {
+	client.SetLogDir(t.TempDir())
+	t.Cleanup(func() { client.SetLogDir("") })
+	logPath, err := client.ClientLogPath("refused")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, []byte("the previous run\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recordBackgroundRefusal("refused", &client.AmbiguousDiscoveryError{Candidates: []client.DiscoveredContainer{
+		{Name: "acme", Ports: []int{8080}}, {Name: "other-project", Ports: []int{8081}},
+	}})
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, "Not started") || !strings.Contains(got, "other-project on 8081") {
+		t.Errorf("the log does not record the refusal:\n%s", got)
+	}
+	if strings.Contains(got, "the previous run") {
+		t.Errorf("the previous run was not rotated aside, so it reads as this one:\n%s", got)
+	}
+}

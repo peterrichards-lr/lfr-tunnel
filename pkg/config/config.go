@@ -17,6 +17,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DomainRefusalConfig is the page an SSO sign-in from outside allowed_email_domains is shown
+// (#2471). A gateway run for one organisation can say so, and point the person at running their
+// own -- the project is MIT-licensed -- rather than answering a bare 403.
+type DomainRefusalConfig struct {
+	// Enabled shows the page. Unset means on; false restores the short plain-text refusal.
+	Enabled *bool `yaml:"enabled"`
+	// Message replaces the built-in text. Plain text: it is escaped, and line breaks are kept.
+	Message string `yaml:"message"`
+}
+
+// Shown reports whether the refusal page is shown rather than the short refusal.
+func (c DomainRefusalConfig) Shown() bool {
+	return c.Enabled == nil || *c.Enabled
+}
+
 type OwnerConfig struct {
 	UserID string `yaml:"user_id"`
 	Name   string `yaml:"name"`
@@ -151,10 +166,12 @@ type ServerConfig struct {
 	InsecureSkipVerify     bool              `yaml:"insecure_skip_verify"`
 	Owner                  OwnerConfig       `yaml:"owner"`
 	AllowedEmailDomains    []string          `yaml:"allowed_email_domains"`
-	IPBlacklist            []string          `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int               `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool              `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration     `yaml:"portal_session_duration"`
+	// DomainRefusal is what an SSO sign-in from outside AllowedEmailDomains is shown (#2471).
+	DomainRefusal         DomainRefusalConfig `yaml:"domain_refusal"`
+	IPBlacklist           []string            `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit    int                 `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal      bool                `yaml:"enable_user_portal"`
+	PortalSessionDuration time.Duration       `yaml:"portal_session_duration"`
 	// PortalSessionMaxLifetime bounds the TOTAL life of a session, however active it is
 	// (#1679). PortalSessionDuration above is an idle timeout and slides on use, which means a
 	// continuously-used session renews forever -- and since #1676 that sliding is suppressed by

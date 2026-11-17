@@ -268,7 +268,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowed && len(s.cfg.AllowedEmailDomains) > 0 {
-		http.Error(w, "Your email domain is not authorized to access this gateway.", http.StatusForbidden)
+		s.respondDomainRefused(w, r)
 		return
 	}
 

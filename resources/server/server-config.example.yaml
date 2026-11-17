@@ -57,6 +57,12 @@ force_ip_whitelist: false
 force_mfa: false
 allowed_email_domains:
   - "example.com"
+# What an SSO sign-in from outside allowed_email_domains is shown. enabled: false gives the
+# short plain-text refusal instead. message is plain text (escaped; line breaks kept); empty
+# means the built-in message, which also points at the MIT-licensed source.
+domain_refusal:
+  enabled: true
+  message: ""
 disable_email_login: false
 disable_new_registrations: false
 enforce_policy_consent: false

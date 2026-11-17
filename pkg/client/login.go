@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 
 	"lfr-tunnel/pkg/config"
 )
@@ -36,7 +38,7 @@ func RunLogin(serverURL string) error {
 		}
 		if r.Method == http.MethodPost {
 			body, _ := io.ReadAll(r.Body)
-			token := strings.TrimSpace(string(body))
+			token := normaliseToken(string(body))
 			// Anything that is not a token is refused and the login keeps waiting (#2457), so a
 			// stray POST can no longer end the login with junk. This is a shape check only: the
 			// listener still answers any local process or web page, and one that POSTs a real
@@ -99,10 +101,18 @@ func RunLogin(serverURL string) error {
 	in := stdinReader
 	failChan := make(chan error, 1)
 	go func() {
+		// A whole line at a time, not fmt.Fscan's word at a time (#2479): `Bearer <token>` was
+		// refused for "Bearer" and then accepted as the next word, and a token pasted with a
+		// space inside its quotes was split. An empty line (Enter on its own) keeps waiting.
+		lines := bufio.NewReader(in)
 		for {
-			var manualToken string
-			if _, err := fmt.Fscan(in, &manualToken); err != nil || manualToken == "" {
-				break
+			line, readErr := lines.ReadString('\n')
+			manualToken := normaliseToken(line)
+			if manualToken == "" {
+				if readErr != nil {
+					break
+				}
+				continue
 			}
 			if looksLikeAccessToken(manualToken) {
 				tokenChan <- manualToken
@@ -118,6 +128,9 @@ func RunLogin(serverURL string) error {
 				return
 			}
 			fmt.Printf("\n⚠️  %v\n   Still waiting for the browser, or paste a token here: ", refusal)
+			if readErr != nil {
+				break
+			}
 		}
 		if listenErr != nil {
 			// Neither route can deliver a token now: the handoff listener never started,
@@ -258,6 +271,33 @@ const claimedTokenPrefix = "lfr_pat_"
 // from the registration-claim path. The gateway itself accepts any string whose hash it has
 // stored, so this is the client's only way to tell a token from a stray paste before saving.
 var accessTokenPattern = regexp.MustCompile(`^(` + claimedTokenPrefix + `)?[0-9a-f]{32}$`)
+
+// normaliseToken undoes what copying a token from chat, a document or an HTTP header adds to it
+// (#2479): surrounding whitespace and CRLF, a matching pair of surrounding quotes (", ', a
+// backtick, or the curly quotes macOS and document editors substitute), and an Authorization
+// scheme ("Bearer <token>"), with quotes allowed outside the scheme, inside it, or both. Applied
+// on both routes -- the paste prompt and the handoff -- before looksLikeAccessToken, which still
+// decides; nothing here can turn a non-token into one.
+func normaliseToken(s string) string {
+	s = unquoteOnce(strings.TrimSpace(s))
+	if i := strings.IndexFunc(s, unicode.IsSpace); i > 0 && strings.EqualFold(s[:i], "bearer") {
+		s = unquoteOnce(strings.TrimSpace(s[i:]))
+	}
+	return s
+}
+
+// tokenQuotes are the pairs unquoteOnce removes: opening and closing mark.
+var tokenQuotes = [][2]string{{`"`, `"`}, {"'", "'"}, {"`", "`"}, {"\u201c", "\u201d"}, {"\u2018", "\u2019"}}
+
+// unquoteOnce removes one matching pair of surrounding quotes, and the whitespace inside them.
+func unquoteOnce(s string) string {
+	for _, q := range tokenQuotes {
+		if len(s) >= len(q[0])+len(q[1]) && strings.HasPrefix(s, q[0]) && strings.HasSuffix(s, q[1]) {
+			return strings.TrimSpace(s[len(q[0]) : len(s)-len(q[1])])
+		}
+	}
+	return s
+}
 
 func looksLikeAccessToken(s string) bool {
 	return accessTokenPattern.MatchString(s)

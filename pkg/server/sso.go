@@ -364,12 +364,14 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: time.Now().UTC(),
 		})))
 
-	// Inject an audit log
+	// Inject an audit log. Details name the provider (#2474): with several configured, "signed in
+	// through SSO" without saying which is half the answer.
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "user.login.sso",
 		TargetType: "user",
 		TargetID:   user.Email,
+		Details:    fmt.Sprintf("Signed in via %s (provider %s)", p.Name, providerID),
 		IPAddress:  s.clientIP(r),
 	})
 

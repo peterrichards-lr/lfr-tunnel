@@ -196,7 +196,7 @@ export default function AdminUsers() {
     const fetchUserDetails = async () => {
       try {
         const res = await axios.get(
-          `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
+          `/api/admin/users/${encodeURIComponent(selectedUser.id)}`,
         );
         setSelectedUserPATs(res.data.pats || []);
         // Collected diagnostic logs (#1894). A separate call, and a tolerated failure: a
@@ -224,7 +224,7 @@ export default function AdminUsers() {
       }
     };
     fetchUserDetails();
-  }, [selectedUser?.email]);
+  }, [selectedUser?.id, selectedUser?.email]);
 
   // Wait for a queued collection to turn into a bundle (#1944).
   //
@@ -317,7 +317,7 @@ export default function AdminUsers() {
       await axios.post(`/api/admin/tokens/${tokenId}/extend`, { days });
       showToast('Token updated successfully', 'success');
       const res = await axios.get(
-        `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
+        `/api/admin/users/${encodeURIComponent(selectedUser.id)}`,
       );
       setSelectedUserPATs(res.data.pats || []);
     } catch {
@@ -338,7 +338,7 @@ export default function AdminUsers() {
       await axios.delete(`/api/admin/tokens/${tokenId}`);
       showToast('Token revoked successfully', 'success');
       const res = await axios.get(
-        `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
+        `/api/admin/users/${encodeURIComponent(selectedUser.id)}`,
       );
       setSelectedUserPATs(res.data.pats || []);
     } catch {
@@ -414,7 +414,7 @@ export default function AdminUsers() {
     try {
       setUpdatingLimits(true);
       await axios.patch(
-        `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
+        `/api/admin/users/${encodeURIComponent(selectedUser.id)}`,
         {
           rate_limit: Number(modalRateLimit),
           max_reservations: Number(modalMaxReservations),
@@ -478,7 +478,7 @@ export default function AdminUsers() {
       return;
     try {
       await axios.patch(
-        `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
+        `/api/admin/users/${encodeURIComponent(selectedUser.id)}`,
         {
           reset_mfa: true,
         },
@@ -556,7 +556,7 @@ export default function AdminUsers() {
       .catch(() => setOwnerEmail(''));
   }, []);
 
-  const changeStatus = async (email: string, newStatus: string) => {
+  const changeStatus = async (id: string, email: string, newStatus: string) => {
     if (
       !(await showConfirm(
         'Change Status',
@@ -565,7 +565,7 @@ export default function AdminUsers() {
     )
       return;
     try {
-      await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, {
+      await axios.patch(`/api/admin/users/${encodeURIComponent(id)}`, {
         status: newStatus,
       });
       fetchUsers();
@@ -575,7 +575,7 @@ export default function AdminUsers() {
     }
   };
 
-  const changeRole = async (email: string, newRole: string) => {
+  const changeRole = async (id: string, email: string, newRole: string) => {
     if (
       !(await showConfirm(
         'Change Role',
@@ -584,7 +584,7 @@ export default function AdminUsers() {
     )
       return;
     try {
-      await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, {
+      await axios.patch(`/api/admin/users/${encodeURIComponent(id)}`, {
         role: newRole,
       });
       fetchUsers();
@@ -594,7 +594,7 @@ export default function AdminUsers() {
     }
   };
 
-  const deleteUser = async (email: string) => {
+  const deleteUser = async (id: string, email: string) => {
     const confirmation = await showPrompt(
       'Delete User',
       `Type "DELETE" to permanently remove ${email}`,
@@ -608,7 +608,7 @@ export default function AdminUsers() {
       return;
     }
     try {
-      await axios.delete(`/api/admin/users/${encodeURIComponent(email)}`);
+      await axios.delete(`/api/admin/users/${encodeURIComponent(id)}`);
       fetchUsers();
       showToast('User deleted successfully', 'success');
     } catch {
@@ -1154,7 +1154,7 @@ export default function AdminUsers() {
                                   <button
                                     className="btn btn-primary py-xs px-sm text-xs"
                                     onClick={() =>
-                                      changeStatus(u.email, 'approved')
+                                      changeStatus(u.id, u.email, 'approved')
                                     }
                                   >
                                     Approve
@@ -1162,7 +1162,7 @@ export default function AdminUsers() {
                                   <button
                                     className="btn btn-danger py-xs px-sm text-xs"
                                     onClick={() =>
-                                      changeStatus(u.email, 'revoked')
+                                      changeStatus(u.id, u.email, 'revoked')
                                     }
                                   >
                                     {t('reject_request', 'Reject')}
@@ -1174,7 +1174,7 @@ export default function AdminUsers() {
                                     <button
                                       className="btn py-xs px-sm text-xs"
                                       onClick={() =>
-                                        changeStatus(u.email, 'revoked')
+                                        changeStatus(u.id, u.email, 'revoked')
                                       }
                                     >
                                       Suspend
@@ -1183,7 +1183,7 @@ export default function AdminUsers() {
                                     <button
                                       className="btn py-xs px-sm text-xs"
                                       onClick={() =>
-                                        changeStatus(u.email, 'approved')
+                                        changeStatus(u.id, u.email, 'approved')
                                       }
                                     >
                                       Unsuspend
@@ -1198,7 +1198,7 @@ export default function AdminUsers() {
                                         <button
                                           className="btn py-xs px-sm text-xs"
                                           onClick={() =>
-                                            changeRole(u.email, 'user')
+                                            changeRole(u.id, u.email, 'user')
                                           }
                                         >
                                           Demote
@@ -1207,7 +1207,7 @@ export default function AdminUsers() {
                                         <button
                                           className="btn py-xs px-sm text-xs"
                                           onClick={() =>
-                                            changeRole(u.email, 'admin')
+                                            changeRole(u.id, u.email, 'admin')
                                           }
                                         >
                                           Promote
@@ -1218,7 +1218,9 @@ export default function AdminUsers() {
                                         ownerEmail.toLowerCase() && (
                                         <button
                                           className="btn btn-danger py-xs px-sm text-xs"
-                                          onClick={() => deleteUser(u.email)}
+                                          onClick={() =>
+                                            deleteUser(u.id, u.email)
+                                          }
                                         >
                                           Delete
                                         </button>

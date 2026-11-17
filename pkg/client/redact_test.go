@@ -15,8 +15,10 @@ import (
 // out the other side -- not that a redactor was called.
 
 const (
-	seededPAT    = "lfr_pat_s3cr3tv4lu3thatmustnotsurvive"
-	seededSecret = "hunter2correcthorsebattery"
+	seededPAT = "lfr_pat_s3cr3tv4lu3thatmustnotsurvive"
+	// The shape every portal-created token has: 32 lowercase hex, no prefix (#2460).
+	seededBareHexPAT = "9f2c4e6a8b0d1f3a5c7e9b1d3f5a7c9e"
+	seededSecret     = "hunter2correcthorsebattery"
 )
 
 // writeLogs plants the three logs with a secret in every field that could carry one.
@@ -52,6 +54,7 @@ func writeLogs(t *testing.T, sub string) string {
 			"token":    seededPAT,
 			"password": seededSecret,
 			"note":     "retried with " + seededPAT,
+			"detail":   "fell back to " + seededBareHexPAT,
 			"port":     8080,
 			"nested":   map[string]any{"api_key": seededSecret},
 		}},
@@ -69,6 +72,8 @@ func writeLogs(t *testing.T, sub string) string {
 	console := strings.Join([]string{
 		"2026-09-11 starting client",
 		"2026-09-11 using token " + seededPAT,
+		// Free text with nothing naming it a token: only its shape can give it away (#2460).
+		"2026-09-11 saved " + seededBareHexPAT + " to the config directory",
 		"2026-09-11 GET https://user:" + seededSecret + "@example.com/thing",
 		"2026-09-11 Authorization: Bearer " + seededPAT,
 		"2026-09-11 connected",
@@ -105,6 +110,9 @@ func TestNoSeededSecretSurvivesCollection(t *testing.T) {
 		if strings.Contains(content, seededSecret) {
 			t.Errorf("the seeded password survived redaction in the %s log:\n%s", l.Kind, content)
 		}
+		if strings.Contains(content, seededBareHexPAT) {
+			t.Errorf("the seeded portal (bare hex) PAT survived redaction in the %s log:\n%s", l.Kind, content)
+		}
 	}
 }
 
@@ -136,6 +144,14 @@ func TestControlUnredactedContentStillContainsTheSecrets(t *testing.T) {
 	}
 	if redacted := redactText(string(raw)); strings.Contains(redacted, seededPAT) {
 		t.Fatal("redactText did not remove the PAT")
+	}
+	// Two tokens one character apart: the second must not be lost to the first's match.
+	two := seededBareHexPAT + " " + strings.Repeat("a", 32)
+	if got := redactText(two); got != redactedPlaceholder+" "+redactedPlaceholder {
+		t.Errorf("redactText(%q) = %q, want both tokens redacted", two, got)
+	}
+	if !strings.Contains(string(raw), seededBareHexPAT) {
+		t.Fatal("the unredacted console log does not contain the bare hex PAT, so its redaction test is vacuous")
 	}
 }
 
@@ -253,6 +269,15 @@ func TestRedactTextCases(t *testing.T) {
 		name, in, mustNotContain string
 	}{
 		{"a PAT", "using " + seededPAT + " now", seededPAT},
+		{"a portal PAT, bare 32 hex, with nothing naming it", "using " + seededBareHexPAT + " now", seededBareHexPAT},
+		{"a portal PAT at the end of a line", "saved " + seededBareHexPAT, seededBareHexPAT},
+		// RE2's \b counts `_`, letters and digits as word characters, so these had no boundary
+		// (#2460 review): a joined underscore, and a percent-encoded token whose escape ends in an
+		// uppercase letter (%3D) or a hex digit (%20 makes a 34-character hex run).
+		{"a portal PAT after an underscore", "token_" + seededBareHexPAT, seededBareHexPAT},
+		{"a portal PAT before an underscore", seededBareHexPAT + "_x", seededBareHexPAT},
+		{"a percent-encoded portal PAT after %3D", "/login?next=%2Fcb%3Ftoken%3D" + seededBareHexPAT, seededBareHexPAT},
+		{"a percent-encoded portal PAT after %20", "note=using%20" + seededBareHexPAT, seededBareHexPAT},
 		{"a bearer token", "Authorization: Bearer abc123def456ghi", "abc123def456ghi"},
 		{"URL credentials", "https://alice:" + seededSecret + "@example.com/x", seededSecret},
 		{"a query token", "/cb?access_token=" + seededPAT + "&next=/home", seededPAT},
@@ -272,8 +297,17 @@ func TestRedactTextCases(t *testing.T) {
 
 	// NARROWNESS CONTROL. A redactor that removed everything would satisfy every case above
 	// and destroy the diagnosis.
-	ordinary := "GET /api/users/42 200 in 13ms"
-	if got := redactText(ordinary); got != ordinary {
-		t.Errorf("redactText rewrote an ordinary line: %q -> %q", ordinary, got)
+	for _, ordinary := range []string{
+		"GET /api/users/42 200 in 13ms",
+		// A SHA-256 (64 hex) is a checksum, not a token: a 32-hex match inside it would be wrong.
+		"checksum 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b ok",
+		// A UUID's hex groups are all shorter than a token.
+		"request 123e4567-e89b-12d3-a456-426614174000",
+		// 31 and 33 hex characters are not the token shape.
+		"id 9f2c4e6a8b0d1f3a5c7e9b1d3f5a7c9 and 9f2c4e6a8b0d1f3a5c7e9b1d3f5a7c9e0",
+	} {
+		if got := redactText(ordinary); got != ordinary {
+			t.Errorf("redactText rewrote an ordinary line: %q -> %q", ordinary, got)
+		}
 	}
 }

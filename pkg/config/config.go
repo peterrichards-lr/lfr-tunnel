@@ -510,6 +510,12 @@ type SSOProviderConfig struct {
 	// a provider that never sends the claim (Microsoft Entra ID) and whose directory owns every
 	// address it asserts; otherwise an unverified address could sign in as whoever owns it here.
 	SkipEmailVerifiedCheck bool `yaml:"skip_email_verified_check"`
+	// SatisfiesMFA makes a sign-in through this provider meet force_mfa (#2482): the provider
+	// performs MFA itself, so the gateway does not also require its own TOTP. Per session, not
+	// per account -- a magic-link session for the same user is still held to force_mfa. Only for
+	// a provider whose sign-on policy really requires MFA; each sign-in logs the token's amr claim
+	// so that can be checked.
+	SatisfiesMFA bool `yaml:"satisfies_mfa"`
 }
 
 // AutoBanConfig governs the automatic bans the API rate limiter issues (#1353).

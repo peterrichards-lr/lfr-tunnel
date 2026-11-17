@@ -1085,7 +1085,13 @@ async function showDashboard() {
       // the extra round trip the first version added, and with it the window in which a modal
       // opened before the policy arrived and stayed wrong until it was reopened.
       setNeverExpiresPolicies(vData);
-      if (vData.force_mfa && !currentUser.totp_enabled) {
+      // An SSO session whose provider performs MFA has already met force_mfa (#2482); V2
+      // reacts only to the server's 403, so V1 must ask the same question to agree with it.
+      if (
+        vData.force_mfa &&
+        !currentUser.totp_enabled &&
+        !currentUser.mfa_satisfied_by_provider
+      ) {
         showIntercept('mfa_setup');
         return;
       }

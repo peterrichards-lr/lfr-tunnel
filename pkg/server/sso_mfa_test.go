@@ -50,8 +50,10 @@ func TestForceMFAIsMetByASatisfiesMFAProviderSession(t *testing.T) {
 
 	// Across a restart: the in-memory copy is gone and the session is reloaded from the table.
 	srv.portalMap.Delete(portalSessionKeyPrefix + session)
-	if code, mfa := gatedStatus(t, srv, session); mfa {
-		t.Errorf("after reloading the session from the database it was refused: %d", code)
+	// 200, not merely "not the MFA refusal": a session that failed to reload would resolve no
+	// user, slip past the gate, and be refused 401 by the handler -- which "not mfa" would accept.
+	if code, mfa := gatedStatus(t, srv, session); mfa || code != http.StatusOK {
+		t.Errorf("after reloading the session from the database: %d (mfa_required %v), want 200", code, mfa)
 	}
 }
 
@@ -81,5 +83,34 @@ func TestForceMFAAppliesWhenTheSessionsProviderIsGone(t *testing.T) {
 	srv.cfg.SSOProviders[0].ID = "renamed"
 	if code, mfa := gatedStatus(t, srv, session); code != http.StatusForbidden || !mfa {
 		t.Errorf("a session whose provider is no longer configured: %d (mfa_required %v), want 403 mfa_required", code, mfa)
+	}
+}
+
+// /api/me tells the portal whether this session already met force_mfa, so V1's client-side TOTP
+// intercept agrees with the server (review of #2483). V2 reacts only to the server's 403.
+func TestApiMeReportsWhetherTheSessionMetMFAThroughItsProvider(t *testing.T) {
+	me := func(srv *Server, session string) (bool, bool) {
+		req := httptest.NewRequest(http.MethodGet, "http://tunnel.example.com/api/me", nil)
+		req.AddCookie(&http.Cookie{Name: "lfr_session", Value: session})
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		var body map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("/api/me: %d %s", w.Code, w.Body.String())
+		}
+		v, present := body["mfa_satisfied_by_provider"]
+		return v == true, present
+	}
+
+	srv, session := ssoSessionCookie(t, true)
+	if got, present := me(srv, session); !present || !got {
+		t.Errorf("SSO session from a satisfies_mfa provider: mfa_satisfied_by_provider=%v (present %v), want true", got, present)
+	}
+	token := "magic-link-session-me-2482"
+	srv.sessionStore().storePortalSession(token, PortalSessionData{
+		Email: "sso.person@example.com", ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now().UTC(),
+	})
+	if got, present := me(srv, token); !present || got {
+		t.Errorf("magic-link session: mfa_satisfied_by_provider=%v (present %v), want false", got, present)
 	}
 }

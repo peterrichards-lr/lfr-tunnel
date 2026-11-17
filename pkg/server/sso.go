@@ -251,7 +251,6 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := config.NormalizeEmail(claims.Email)
-	slog.Info(fmt.Sprintf("[SSO] %s: sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
 	if email == "" {
 		http.Error(w, "Email required from provider", http.StatusBadRequest)
 		return
@@ -278,6 +277,10 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		s.respondDomainRefused(w, r)
 		return
 	}
+
+	// Logged once the address has passed the verified and domain checks, so it records sign-ins,
+	// not refusals (#2482). amr is the evidence that the IdP really performed MFA.
+	slog.Info(fmt.Sprintf("[SSO] %s: accepted sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
 
 	// Create or load the user
 	user, err := s.db.GetUserByEmail(email)

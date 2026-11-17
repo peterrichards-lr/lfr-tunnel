@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -34,9 +36,16 @@ func RunLogin(serverURL string) error {
 		if r.Method == http.MethodPost {
 			body, _ := io.ReadAll(r.Body)
 			token := strings.TrimSpace(string(body))
-			if token != "" {
+			// Anything that is not a token is refused and the login keeps waiting (#2457), so a
+			// stray POST can no longer end the login with junk. This is a shape check only: the
+			// listener still answers any local process or web page, and one that POSTs a real
+			// token -- its own -- is accepted, as it was before.
+			if looksLikeAccessToken(token) {
 				w.WriteHeader(http.StatusOK)
-				tokenChan <- token
+				select {
+				case tokenChan <- token:
+				default: // a token was already delivered; this login is finishing
+				}
 				return
 			}
 		}
@@ -87,10 +96,25 @@ func RunLogin(serverURL string) error {
 	in := stdinReader
 	failChan := make(chan error, 1)
 	go func() {
-		var manualToken string
-		if _, err := fmt.Fscan(in, &manualToken); err == nil && manualToken != "" {
-			tokenChan <- manualToken
-			return
+		for {
+			var manualToken string
+			if _, err := fmt.Fscan(in, &manualToken); err != nil || manualToken == "" {
+				break
+			}
+			if looksLikeAccessToken(manualToken) {
+				tokenChan <- manualToken
+				return
+			}
+			// Not a token (#2457). It used to be saved over a working token and reported as
+			// success. With the handoff listener up, refuse it and keep waiting: the browser
+			// may still deliver, and ending the login here would throw that away. With no
+			// listener, nothing else can deliver, so fail now and say why.
+			refusal := refusedTokenError(manualToken)
+			if listenErr != nil {
+				failChan <- refusal
+				return
+			}
+			fmt.Printf("\n⚠️  %v\n   Still waiting for the browser, or paste a token here: ", refusal)
 		}
 		if listenErr != nil {
 			// Neither route can deliver a token now: the handoff listener never started,
@@ -117,7 +141,7 @@ func RunLogin(serverURL string) error {
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 	}
 
-	// Save the token
+	// Save the token. Both routes above deliver only values looksLikeAccessToken accepts.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not get home dir: %w", err)
@@ -127,13 +151,82 @@ func RunLogin(serverURL string) error {
 		return fmt.Errorf("could not create config dir: %w", err)
 	}
 
-	tokenPath := filepath.Join(dir, "token")
-	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
+	if err := writeTokenFile(dir, token); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 
 	fmt.Println("\n✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token")
 	return nil
+}
+
+// claimedTokenPrefix marks the tokens minted by the registration-claim path.
+const claimedTokenPrefix = "lfr_pat_"
+
+// accessTokenPattern is every shape a gateway has issued (#2457): 32 lowercase hex from the
+// portal (generateSecureToken in pkg/server/server.go), and the same with claimedTokenPrefix
+// from the registration-claim path. The gateway itself accepts any string whose hash it has
+// stored, so this is the client's only way to tell a token from a stray paste before saving.
+var accessTokenPattern = regexp.MustCompile(`^(` + claimedTokenPrefix + `)?[0-9a-f]{32}$`)
+
+func looksLikeAccessToken(s string) bool {
+	return accessTokenPattern.MatchString(s)
+}
+
+// refusedTokenError explains why a pasted value was not saved.
+func refusedTokenError(s string) error {
+	return fmt.Errorf("the value entered is not an access token (%s); nothing was saved. "+
+		"Paste a token from the token list in the portal: 32 hex characters, "+
+		"optionally starting with %q", describeRejectedValue(s), claimedTokenPrefix)
+}
+
+// describeRejectedValue says enough about a refused value for the user to recognise what they
+// pasted -- a URL, a secrets-file line -- without printing a secret they pasted by mistake.
+// Counted in characters, not bytes, so a pasted quote or BOM is never shown as half a rune.
+func describeRejectedValue(s string) string {
+	const shown = 4
+	r := []rune(s)
+	if len(r) <= shown {
+		return fmt.Sprintf("%d characters", len(r))
+	}
+	return fmt.Sprintf("%d characters, starting %q", len(r), string(r[:shown]))
+}
+
+// writeTokenFile replaces the token file atomically, so a failed write cannot leave the user
+// with a truncated token in place of a working one. A token file that is a symlink is written
+// through to its target, as os.WriteFile did, rather than replaced by a regular file.
+func writeTokenFile(dir, token string) error {
+	path := filepath.Join(dir, "token")
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "token-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.WriteString(token); err != nil {
+		if closeErr := tmp.Close(); closeErr != nil {
+			slog.Debug(fmt.Sprintf("[Client] Closing the temp token file after a failed write: %v", closeErr))
+		}
+		removeTempToken(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		removeTempToken(tmpPath)
+		return err
+	}
+	// os.CreateTemp already creates the file 0600, the mode the token file has always had.
+	if err := os.Rename(tmpPath, path); err != nil {
+		removeTempToken(tmpPath)
+		return err
+	}
+	return nil
+}
+
+func removeTempToken(path string) {
+	if err := os.Remove(path); err != nil {
+		slog.Debug(fmt.Sprintf("[Client] Removing the temp token file %s: %v", path, err))
+	}
 }
 
 var openBrowserFunc = openBrowser

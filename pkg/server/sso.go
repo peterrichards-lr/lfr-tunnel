@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -138,6 +140,16 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One host for the whole flow (#2470). The redirect URI is built from the request's host and
+	// the provider registers exactly one, while the portal answers on tunnel., portal. and the
+	// apex of every configured domain -- and `lfr-tunnel login` opens portal. The flow cookies and
+	// the session are host-only, so the sign-in moves to the canonical host before anything is
+	// started, not halfway through.
+	if canonical := s.ssoCanonicalBase(r); canonical != nil && !sameHost(canonical.Host, r.Host) {
+		http.Redirect(w, r, canonical.Scheme+"://"+canonical.Host+r.URL.RequestURI(), http.StatusFound)
+		return
+	}
+
 	_, oauth2Config, _, err := getOIDCConfig(s.cfg, providerID, r)
 	if err != nil {
 		slog.Info(fmt.Sprintf("[SSO] Config error: %v", err))
@@ -258,7 +270,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowed && len(s.cfg.AllowedEmailDomains) > 0 {
-		http.Error(w, "Your email domain is not authorized to access this gateway.", http.StatusForbidden)
+		s.respondDomainRefused(w, r)
 		return
 	}
 
@@ -416,4 +428,57 @@ func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Re
 		fmt.Sprintf("Auto-approved on SSO sign-in via %s (was %q); the identity provider is the access decision",
 			providerID, previousStatus), r)
 	return nil
+}
+
+// ssoCanonicalBase is the one host every SSO sign-in runs on: control_plane_url when set (an
+// edge), else tunnel. of the FIRST configured domain -- not of whichever domain the request came
+// in on, since the provider registers one redirect URI and a gateway may answer on several
+// domains (review of #2473). The scheme is the request's, as nginx reports it. Nil when there is
+// nothing to canonicalise to.
+func (s *Server) ssoCanonicalBase(r *http.Request) *url.URL {
+	if cp := strings.TrimSpace(s.cfg.ControlPlaneURL); cp != "" {
+		if u, err := url.Parse(cp); err == nil && u.Host != "" {
+			return u
+		}
+		return nil
+	}
+	if len(s.cfg.Domains) == 0 || strings.TrimSpace(s.cfg.Domains[0]) == "" {
+		return nil
+	}
+	// Only the gateway's own names are moved: a host outside every configured domain --
+	// localhost, an IP, as in the Keycloak e2e stack -- signs in where it is, as it always did.
+	// Sending it to a tunnel. host that does not exist there broke that suite.
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+	own := false
+	for _, d := range s.cfg.Domains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d != "" && (host == d || strings.HasSuffix(host, "."+d)) {
+			own = true
+			break
+		}
+	}
+	if !own {
+		return nil
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return &url.URL{Scheme: scheme, Host: "tunnel." + strings.ToLower(strings.TrimSpace(s.cfg.Domains[0]))}
+}
+
+// sameHost compares two Host values ignoring case and a default port, so a configured
+// "https://tunnel.example.com:443" cannot redirect a browser that sends "tunnel.example.com"
+// to itself forever.
+func sameHost(a, b string) bool {
+	strip := func(h string) string {
+		h = strings.ToLower(h)
+		h = strings.TrimSuffix(h, ":443")
+		return strings.TrimSuffix(h, ":80")
+	}
+	return strip(a) == strip(b)
 }

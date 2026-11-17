@@ -42,7 +42,7 @@ func ssoLoginCookie(t *testing.T, query string) (*http.Cookie, *httptest.Respons
 		ID: "liferay", Name: "Liferay", ClientID: "c", ClientSecret: "s", IssuerURL: stubIssuer(t).URL,
 	}}
 	rec := httptest.NewRecorder()
-	srv.handleSSOLogin(rec, httptest.NewRequest(http.MethodGet, "/api/auth/login?"+query, nil))
+	srv.handleSSOLogin(rec, httptest.NewRequest(http.MethodGet, "http://tunnel.example.com/api/auth/login?"+query, nil))
 	if rec.Code != http.StatusFound {
 		t.Fatalf("login: want 302 to the provider, got %d (%s)", rec.Code, rec.Body.String())
 	}

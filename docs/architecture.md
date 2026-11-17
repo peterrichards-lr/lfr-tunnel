@@ -380,7 +380,7 @@ sequenceDiagram
     Browser->>CLI: "POST /handoff (blind, no-cors)"
     Note over CLI: Refuses anything not shaped like a token
     CLI->>GW: "GET /api/client/token-check (X-Auth-Token)"
-    GW-->>CLI: "204 valid / 401 refused / 421, 404, 503: cannot say"
+    GW-->>CLI: "204 valid / JSON 401 refused / anything else: cannot say"
     Note over CLI: Saves unless refused
     CLI-->>Dev: "Authenticated, or saved but not verified, or refused"
 ```

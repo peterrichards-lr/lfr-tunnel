@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -188,7 +189,14 @@ const (
 // verifyLoginToken is a variable so tests can answer for the gateway without a network.
 var verifyLoginToken = checkLoginToken
 
-var loginTokenCheckClient = &http.Client{Timeout: 10 * time.Second}
+// loginTokenCheckClient never follows a redirect. Go copies a custom header like X-Auth-Token to a
+// redirect's new host -- it strips only Authorization, Cookie and WWW-Authenticate -- so following
+// one would hand the token to whoever the gateway pointed at, and that host's answer would say
+// nothing about this gateway's view of the token (review of #2467).
+var loginTokenCheckClient = &http.Client{
+	Timeout:       10 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 // checkLoginToken asks the gateway at serverURL whether token is usable (#2458). The token travels
 // in X-Auth-Token only, never the URL. Only the endpoint's own answer is a refusal: a 401 that is
@@ -198,7 +206,16 @@ func checkLoginToken(serverURL, token string) (loginTokenCheck, string) {
 	if strings.TrimSpace(serverURL) == "" {
 		return loginTokenUnknown, "no gateway is configured to check it against"
 	}
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(serverURL, "/")+"/api/client/token-check", nil)
+	// Addressed as RegisterTunnel addresses the gateway: a scheme added when missing, and only
+	// scheme://host kept, so any server_url registration accepts works here too.
+	if !strings.HasPrefix(serverURL, "http") {
+		serverURL = "http://" + serverURL
+	}
+	parsed, err := url.Parse(serverURL)
+	if err != nil || parsed.Host == "" {
+		return loginTokenUnknown, fmt.Sprintf("the gateway address %q is not usable", serverURL)
+	}
+	req, err := http.NewRequest(http.MethodGet, parsed.Scheme+"://"+parsed.Host+"/api/client/token-check", nil)
 	if err != nil {
 		return loginTokenUnknown, fmt.Sprintf("the gateway address %q is not usable: %v", serverURL, err)
 	}
@@ -221,7 +238,11 @@ func checkLoginToken(serverURL, token string) (loginTokenCheck, string) {
 	case resp.StatusCode == http.StatusMisdirectedRequest:
 		return loginTokenUnknown, serverURL + " is a regional edge, which cannot check tokens"
 	case resp.StatusCode == http.StatusNotFound:
-		return loginTokenUnknown, serverURL + " is older than this client and cannot check tokens"
+		// An older gateway, or an address that reaches the gateway without being one of its own
+		// names (an alias), and so is served as a tunnel host. Either way it cannot say.
+		return loginTokenUnknown, serverURL + " has no token check (an older gateway, or not the gateway's own address)"
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		return loginTokenUnknown, fmt.Sprintf("%s answered with a redirect to %q, which was not followed", serverURL, resp.Header.Get("Location"))
 	default:
 		return loginTokenUnknown, fmt.Sprintf("%s answered %s", serverURL, resp.Status)
 	}

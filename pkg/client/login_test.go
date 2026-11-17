@@ -303,7 +303,7 @@ func TestCheckLoginTokenReadsEachAnswer(t *testing.T) {
 		{"refused", answer{http.StatusUnauthorized, "application/json"}, loginTokenRefused, ""},
 		{"a proxy's 401, not the gateway's", answer{http.StatusUnauthorized, "text/html"}, loginTokenUnknown, "401"},
 		{"an edge", answer{http.StatusMisdirectedRequest, "application/json"}, loginTokenUnknown, "regional edge"},
-		{"an older gateway", answer{http.StatusNotFound, "text/html"}, loginTokenUnknown, "older than this client"},
+		{"an older gateway", answer{http.StatusNotFound, "text/html"}, loginTokenUnknown, "has no token check"},
 		{"token store down", answer{http.StatusServiceUnavailable, "application/json"}, loginTokenUnknown, "503"},
 	}
 	for _, tc := range cases {
@@ -344,6 +344,86 @@ func TestCheckLoginTokenReadsEachAnswer(t *testing.T) {
 			t.Errorf("no gateway: %v", got)
 		}
 	})
+}
+
+// Review of #2467. A redirect must not carry the token anywhere: Go copies a custom header like
+// X-Auth-Token to a redirect's new host, unlike Authorization. Whatever answers there says
+// nothing about this gateway's view of the token.
+func TestCheckLoginTokenDoesNotFollowRedirects(t *testing.T) {
+	var leaked string
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = r.Header.Get("X-Auth-Token")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer elsewhere.Close()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusMovedPermanently)
+	}))
+	defer gateway.Close()
+
+	got, reason := checkLoginToken(gateway.URL, portalPAT)
+	if leaked != "" {
+		t.Errorf("the token was sent to the redirect's host")
+	}
+	if got != loginTokenUnknown || !strings.Contains(reason, "redirect") {
+		t.Errorf("a redirect: %v %q, want unknown naming the redirect", got, reason)
+	}
+}
+
+// Built the way registration builds it: a scheme is added when missing, and only scheme://host
+// is kept, so a server_url that registration accepts is one the check can use too.
+func TestCheckLoginTokenAddressesTheGatewayAsRegistrationDoes(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+
+	for _, configured := range []string{host, srv.URL + "/portal", srv.URL + "/"} {
+		gotPath = ""
+		if got, reason := checkLoginToken(configured, portalPAT); got != loginTokenVerified || gotPath != "/api/client/token-check" {
+			t.Errorf("server_url %q: %v %q, path %q", configured, got, reason, gotPath)
+		}
+	}
+}
+
+// Only the endpoint's 204 is a verification. A 200 is something else answering -- a portal page,
+// a captive portal -- and must not print "Successfully authenticated".
+func TestCheckLoginTokenTreatsA200AsUnverified(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	if got, _ := checkLoginToken(srv.URL, portalPAT); got != loginTokenUnknown {
+		t.Errorf("a 200: %v, want unknown", got)
+	}
+}
+
+// RunLogin must ask the gateway it was given, about the token it received. Every other login test
+// answers the check with a stub that ignores its arguments, so without this the wiring is untested.
+func TestRunLogin_ChecksTheTokenWithItsOwnGateway(t *testing.T) {
+	stubLoginBrowser(t)
+	var gotURL, gotToken string
+	old := verifyLoginToken
+	verifyLoginToken = func(serverURL, token string) (loginTokenCheck, string) {
+		gotURL, gotToken = serverURL, token
+		return loginTokenVerified, ""
+	}
+	t.Cleanup(func() { verifyLoginToken = old })
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	fakeHome(t)
+
+	if err := RunLogin("https://tunnel.example.com"); err != nil {
+		t.Fatalf("RunLogin: %v", err)
+	}
+	if gotURL != "https://tunnel.example.com" || gotToken != portalPAT {
+		t.Errorf("checked token %q against %q", gotToken, gotURL)
+	}
 }
 
 // captureLoginOutput returns what fn printed to stdout.

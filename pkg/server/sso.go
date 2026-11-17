@@ -141,9 +141,10 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 
 	// One host for the whole flow (#2470). The redirect URI is built from the request's host and
 	// the provider registers exactly one, while the portal answers on tunnel., portal. and the
-	// apex -- and `lfr-tunnel login` opens portal. The flow cookies and the session are host-only,
-	// so the sign-in moves to the canonical host before anything is started, not halfway through.
-	if canonical, err := url.Parse(s.getPortalBaseURL(r)); err == nil && canonical.Host != "" && !strings.EqualFold(canonical.Host, r.Host) {
+	// apex of every configured domain -- and `lfr-tunnel login` opens portal. The flow cookies and
+	// the session are host-only, so the sign-in moves to the canonical host before anything is
+	// started, not halfway through.
+	if canonical := s.ssoCanonicalBase(r); canonical != nil && !sameHost(canonical.Host, r.Host) {
 		http.Redirect(w, r, canonical.Scheme+"://"+canonical.Host+r.URL.RequestURI(), http.StatusFound)
 		return
 	}
@@ -426,4 +427,38 @@ func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Re
 		fmt.Sprintf("Auto-approved on SSO sign-in via %s (was %q); the identity provider is the access decision",
 			providerID, previousStatus), r)
 	return nil
+}
+
+// ssoCanonicalBase is the one host every SSO sign-in runs on: control_plane_url when set (an
+// edge), else tunnel. of the FIRST configured domain -- not of whichever domain the request came
+// in on, since the provider registers one redirect URI and a gateway may answer on several
+// domains (review of #2473). The scheme is the request's, as nginx reports it. Nil when there is
+// nothing to canonicalise to.
+func (s *Server) ssoCanonicalBase(r *http.Request) *url.URL {
+	if cp := strings.TrimSpace(s.cfg.ControlPlaneURL); cp != "" {
+		if u, err := url.Parse(cp); err == nil && u.Host != "" {
+			return u
+		}
+		return nil
+	}
+	if len(s.cfg.Domains) == 0 || strings.TrimSpace(s.cfg.Domains[0]) == "" {
+		return nil
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return &url.URL{Scheme: scheme, Host: "tunnel." + strings.ToLower(strings.TrimSpace(s.cfg.Domains[0]))}
+}
+
+// sameHost compares two Host values ignoring case and a default port, so a configured
+// "https://tunnel.example.com:443" cannot redirect a browser that sends "tunnel.example.com"
+// to itself forever.
+func sameHost(a, b string) bool {
+	strip := func(h string) string {
+		h = strings.ToLower(h)
+		h = strings.TrimSuffix(h, ":443")
+		return strings.TrimSuffix(h, ":80")
+	}
+	return strip(a) == strip(b)
 }

@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 
 	"lfr-tunnel/pkg/config"
 )
@@ -25,7 +28,21 @@ func RunLogin(serverURL string) error {
 
 	// 1. Start local listener for magic handoff
 	mux := http.NewServeMux()
+	started := time.Now()
 	mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
+		// Says who is listening, so a second login that finds the port taken can name this one
+		// (#2480). Answered before the CORS headers are set, so an ordinary cross-origin page cannot
+		// read it. (A DNS-rebinding page could, and would learn only a PID and a start time -- the
+		// same page could already POST here.)
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(handoffIdentity{
+				Service: handoffService, PID: os.Getpid(), Started: started.UTC().Format(time.RFC3339),
+			}); err != nil {
+				slog.Debug("answering a handoff identity probe", "error", err)
+			}
+			return
+		}
 		// allow CORS
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -36,7 +53,7 @@ func RunLogin(serverURL string) error {
 		}
 		if r.Method == http.MethodPost {
 			body, _ := io.ReadAll(r.Body)
-			token := strings.TrimSpace(string(body))
+			token := normaliseToken(string(body))
 			// Anything that is not a token is refused and the login keeps waiting (#2457), so a
 			// stray POST can no longer end the login with junk. This is a shape check only: the
 			// listener still answers any local process or web page, and one that POSTs a real
@@ -71,15 +88,27 @@ func RunLogin(serverURL string) error {
 		// 4444 is a popular port (Selenium Grid's default, plus assorted debuggers and
 		// proxies), which makes a collision routine rather than a broken install, and
 		// aborting here threw away a login that would otherwise have worked.
-		fmt.Printf("\n⚠️  Could not listen on %s: %v\n", handoffAddr, listenErr)
-		fmt.Println("   Automatic token handoff is unavailable for this login -- copy the token from the portal instead.")
-		fmt.Printf("   To restore it, find and stop whatever is holding the port:\n     %s\n\n", handoffPortHint())
+		holder := ""
+		if isAddrInUse(listenErr) {
+			holder = probeHandoffHolder()
+		}
+		fmt.Print(handoffUnavailableMessage(listenErr, holder))
 	} else {
 		srv = &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
 		go func() {
 			_ = srv.Serve(listener) //nolint:errcheck
 		}()
 	}
+	// Every return releases the port, the timeout's included: a login that held 4444 after it
+	// gave up would be exactly the stale holder #2480 is about.
+	stopHandoff := func() {
+		if srv != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(ctx) //nolint:errcheck
+		}
+	}
+	defer stopHandoff()
 
 	// Marked so the portal asks for a token: the CLI only receives one when the user creates it, and
 	// without a prompt a signed-in user just saw the Overview and nothing ever arrived (#2459).
@@ -99,10 +128,18 @@ func RunLogin(serverURL string) error {
 	in := stdinReader
 	failChan := make(chan error, 1)
 	go func() {
+		// A whole line at a time, not fmt.Fscan's word at a time (#2479): `Bearer <token>` was
+		// refused for "Bearer" and then accepted as the next word, and a token pasted with a
+		// space inside its quotes was split. An empty line (Enter on its own) keeps waiting.
+		lines := bufio.NewReader(in)
 		for {
-			var manualToken string
-			if _, err := fmt.Fscan(in, &manualToken); err != nil || manualToken == "" {
-				break
+			line, readErr := lines.ReadString('\n')
+			manualToken := normaliseToken(line)
+			if manualToken == "" {
+				if readErr != nil {
+					break
+				}
+				continue
 			}
 			if looksLikeAccessToken(manualToken) {
 				tokenChan <- manualToken
@@ -118,6 +155,9 @@ func RunLogin(serverURL string) error {
 				return
 			}
 			fmt.Printf("\n⚠️  %v\n   Still waiting for the browser, or paste a token here: ", refusal)
+			if readErr != nil {
+				break
+			}
 		}
 		if listenErr != nil {
 			// Neither route can deliver a token now: the handoff listener never started,
@@ -129,20 +169,22 @@ func RunLogin(serverURL string) error {
 		}
 	}()
 
-	// Wait for token
+	// Wait for token -- but not forever (#2480). A login nobody finished held 4444 until its
+	// window was closed, so the next login could not receive the handoff, and a token created in
+	// the portal meanwhile went to the forgotten one.
 	var token string
 	select {
 	case token = <-tokenChan:
 	case err := <-failChan:
 		return err
+	case <-time.After(loginTimeout):
+		// "15m", not Duration's "15m0s".
+		return fmt.Errorf("timed out after %s waiting for a token; run `lfr-tunnel login` again",
+			strings.TrimSuffix(loginTimeout.String(), "0s"))
 	}
 
-	// Shutdown server
-	if srv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx) //nolint:errcheck
-	}
+	// Free the port now rather than after the gateway check below.
+	stopHandoff()
 
 	// Ask the gateway before saving (#2458). A well-formed token can still be revoked, expired or
 	// minted by a different gateway, and "Successfully authenticated" followed by a 401 on first
@@ -259,6 +301,33 @@ const claimedTokenPrefix = "lfr_pat_"
 // stored, so this is the client's only way to tell a token from a stray paste before saving.
 var accessTokenPattern = regexp.MustCompile(`^(` + claimedTokenPrefix + `)?[0-9a-f]{32}$`)
 
+// normaliseToken undoes what copying a token from chat, a document or an HTTP header adds to it
+// (#2479): surrounding whitespace and CRLF, a matching pair of surrounding quotes (", ', a
+// backtick, or the curly quotes macOS and document editors substitute), and an Authorization
+// scheme ("Bearer <token>"), with quotes allowed outside the scheme, inside it, or both. Applied
+// on both routes -- the paste prompt and the handoff -- before looksLikeAccessToken, which still
+// decides; nothing here can turn a non-token into one.
+func normaliseToken(s string) string {
+	s = unquoteOnce(strings.TrimSpace(s))
+	if i := strings.IndexFunc(s, unicode.IsSpace); i > 0 && strings.EqualFold(s[:i], "bearer") {
+		s = unquoteOnce(strings.TrimSpace(s[i:]))
+	}
+	return s
+}
+
+// tokenQuotes are the pairs unquoteOnce removes: opening and closing mark.
+var tokenQuotes = [][2]string{{`"`, `"`}, {"'", "'"}, {"`", "`"}, {"\u201c", "\u201d"}, {"\u2018", "\u2019"}}
+
+// unquoteOnce removes one matching pair of surrounding quotes, and the whitespace inside them.
+func unquoteOnce(s string) string {
+	for _, q := range tokenQuotes {
+		if len(s) >= len(q[0])+len(q[1]) && strings.HasPrefix(s, q[0]) && strings.HasSuffix(s, q[1]) {
+			return strings.TrimSpace(s[len(q[0]) : len(s)-len(q[1])])
+		}
+	}
+	return s
+}
+
 func looksLikeAccessToken(s string) bool {
 	return accessTokenPattern.MatchString(s)
 }
@@ -358,12 +427,109 @@ var stdinReader io.Reader = os.Stdin
 
 // handoffPortHint returns the platform's command for identifying whatever holds the
 // handoff port. Naming the port is not actionable on its own -- the next thing anyone
-// needs is the process behind it.
+// needs is the process behind it. On Windows only LISTENING lines, and the port followed by a
+// space (#2480): a bare `findstr :4444` also matched established connections to the port --
+// the browser's own, after a handoff -- which named the browser's PID. Not filtered on
+// 127.0.0.1, which would miss a holder bound to every interface, as Selenium Grid is.
 func handoffPortHint() string {
 	if runtime.GOOS == "windows" {
-		return "netstat -ano | findstr :" + handoffPort
+		return `netstat -ano -p tcp | findstr LISTENING | findstr ":` + handoffPort + ` "` + `, then tasklist /FI "PID eq <pid>"`
 	}
 	return "lsof -nP -iTCP:" + handoffPort + " -sTCP:LISTEN"
+}
+
+// loginTimeout bounds how long a login waits for a token (#2480). Long enough to sign in, MFA
+// included, and create a token; short enough that a forgotten login frees the handoff port by
+// itself. A variable so tests can shorten it.
+var loginTimeout = 15 * time.Minute
+
+// handoffService identifies the handoff listener in its GET /handoff answer.
+const handoffService = "lfr-tunnel-login"
+
+// handoffIdentity is what GET /handoff answers: enough for a second login to name this one.
+type handoffIdentity struct {
+	Service string `json:"service"`
+	PID     int    `json:"pid"`
+	Started string `json:"started"`
+}
+
+// handoffProbeAddr is where probeHandoffHolder looks; a variable so tests can point it at their
+// own listener rather than at whatever holds the real port on the machine running them.
+var handoffProbeAddr = handoffAddr
+
+// probeHandoffHolder says what holds the handoff port, when it can tell (#2480): a login from
+// this version names its PID and start time; an older login is recognised by how its handoff
+// answers (GET refused, OPTIONS answered with its CORS headers). Anything else returns "".
+func probeHandoffHolder() string {
+	// Whatever holds the port is untrusted: no redirects, and nothing it sends reaches the terminal
+	// except an int and a time that parsed.
+	probe := &http.Client{
+		Timeout:       time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := probe.Get("http://" + handoffProbeAddr + "/handoff")
+	if err != nil {
+		return ""
+	}
+	var id handoffIdentity
+	decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&id)
+	getStatus := resp.StatusCode
+	if cerr := resp.Body.Close(); cerr != nil {
+		slog.Debug("closing the handoff probe", "error", cerr)
+	}
+	if decodeErr == nil && id.Service == handoffService {
+		if t, perr := time.Parse(time.RFC3339, id.Started); perr == nil {
+			return fmt.Sprintf("another `lfr-tunnel login` (PID %d, waiting since %s)", id.PID, t.Local().Format("15:04"))
+		}
+		return fmt.Sprintf("another `lfr-tunnel login` (PID %d)", id.PID)
+	}
+	if getStatus != http.StatusBadRequest {
+		return ""
+	}
+	req, err := http.NewRequest(http.MethodOptions, "http://"+handoffProbeAddr+"/handoff", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err = probe.Do(req)
+	if err != nil {
+		return ""
+	}
+	if cerr := resp.Body.Close(); cerr != nil {
+		slog.Debug("closing the handoff probe", "error", cerr)
+	}
+	if resp.StatusCode == http.StatusOK && resp.Header.Get("Access-Control-Allow-Methods") == "POST, OPTIONS" {
+		return "another `lfr-tunnel login` (an older version, which cannot report its PID)"
+	}
+	return ""
+}
+
+// handoffUnavailableMessage explains a handoff listener that could not start (#2480). The usual
+// cause is an earlier login still waiting in another window, so that comes first, named when the
+// probe could identify it; a port taken by anything else gets the command that finds the process.
+// Either way the login can still finish by pasting.
+func handoffUnavailableMessage(listenErr error, holder string) string {
+	var b strings.Builder
+	if !isAddrInUse(listenErr) {
+		fmt.Fprintf(&b, "\n⚠️  Could not listen on %s (%v), so the portal can't send the token to this terminal.\n", handoffAddr, listenErr)
+		fmt.Fprintf(&b, "   If something holds the port, this finds it: %s\n", handoffPortHint())
+		if runtime.GOOS == "windows" {
+			// Hyper-V and WSL reserve port ranges; a reserved port refuses the bind with nothing
+			// listening on it, so netstat finds nothing.
+			b.WriteString("   If nothing does, Windows may have reserved it: netsh interface ipv4 show excludedportrange protocol=tcp\n")
+		}
+	} else {
+		fmt.Fprintf(&b, "\n⚠️  %s is in use, so the portal can't send the token to this terminal.\n", handoffAddr)
+		if holder != "" {
+			fmt.Fprintf(&b, "   It is held by %s: finish that login there, or press Ctrl+C in it\n"+
+				"   (closing that window also works) and run `lfr-tunnel login` again.\n", holder)
+		} else {
+			b.WriteString("   Usually another `lfr-tunnel login` is still waiting in a different window: finish it there,\n" +
+				"   or press Ctrl+C in it (closing that window also works) and run `lfr-tunnel login` again.\n")
+		}
+		fmt.Fprintf(&b, "   Otherwise find what holds the port: %s\n", handoffPortHint())
+	}
+	b.WriteString("   You can still finish here: create a token on the portal's Tokens page and paste it below.\n\n")
+	return b.String()
 }
 
 // resolvePortalURL works out which portal to open a browser at for a given gateway.

@@ -100,7 +100,8 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	copy(history, engine.History)
 	subdomainReq := engine.SubdomainReq
 	subdomainAss := engine.SubdomainAss
-	destPort := engine.DestPort
+	localTargets := engine.localTargetsLocked()
+	portOrigin := engine.portOrigin
 	// Snapshot the endpoint here too. Failover rewrites region and server URL together,
 	// and reading them unlocked further down raced with that write and could show the
 	// new region label beside the old edge host.
@@ -194,7 +195,18 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	if targetHost == "" {
 		targetHost = "127.0.0.1"
 	}
-	fmt.Printf("  Local:      \033[90m%s:%d (Primary)\033[0m%s\n", targetHost, destPort, eol)
+	// One line per published port, as resolved -- not the engine's 8080 default, which every
+	// frame showed whatever -ports said (#2478). Where the ports came from goes on the primary.
+	for i, lt := range localTargets {
+		label := "Primary"
+		if lt.NameSuffix != "" {
+			label = "Suffix: -" + lt.NameSuffix
+		}
+		if i == 0 && portOrigin != "" {
+			label += ", " + portOrigin
+		}
+		fmt.Printf("  Local:      \033[90m%s:%d (%s)\033[0m%s\n", targetHost, lt.LocalPort, label, eol)
+	}
 	if inspectorPort > 0 {
 		fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", inspectorPort, eol)
 	} else {

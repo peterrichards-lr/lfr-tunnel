@@ -109,16 +109,13 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		isAuthValid := engine.AuthValid
 		isLeased := engine.SubdomainLeased
 		targetHost := engine.TargetHost
-		targetPort := engine.DestPort
+		targets := engine.localTargetsLocked()
 		engine.mu.RUnlock()
 
-		// Perform real-time TCP dial check to local downstream target
-		var destResponsive bool
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
-		if err == nil {
-			destResponsive = true
-			_ = conn.Close() //nolint:errcheck
-		}
+		// Real-time TCP dial of every port the tunnel publishes -- the resolved ports, not
+		// the engine's 8080 default, which reported a 502 tunnel healthy whenever something
+		// unrelated answered on 8080 (#2478).
+		destResponsive := localPortsResponsive(targetHost, targets, 500*time.Millisecond)
 
 		w.Header().Set("Content-Type", "application/json")
 		if isWSConnected && isAuthValid && isLeased && destResponsive {
@@ -156,12 +153,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			avgLatency = engine.LatencyLast
 		}
 
-		// Dial test target responsiveness
-		var destResponsive bool
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
-		if err == nil {
-			destResponsive = true
-			_ = conn.Close() //nolint:errcheck
+		// Dial every published port, as /api/healthz does (#2478).
+		targets := engine.localTargetsLocked()
+		destResponsive := localPortsResponsive(engine.TargetHost, targets, 500*time.Millisecond)
+		destPorts := make([]map[string]interface{}, 0, len(targets))
+		for _, t := range targets {
+			destPorts = append(destPorts, map[string]interface{}{
+				"port":        t.LocalPort,
+				"name_suffix": t.NameSuffix,
+			})
 		}
 
 		status := "healthy"
@@ -214,7 +214,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			},
 			"destination": map[string]interface{}{
 				"host":       engine.TargetHost,
-				"port":       engine.DestPort,
+				"port":       engine.DestPort, // the primary; every published port is in "ports"
+				"ports":      destPorts,
+				"source":     engine.portOrigin,
 				"responsive": destResponsive,
 			},
 			"traffic": map[string]interface{}{

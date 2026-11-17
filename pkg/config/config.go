@@ -1439,18 +1439,14 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.Subdomain = cleanSubdomainPrefix(val)
 	}
 
-	if val := os.Getenv("LFT_CLIENT_PORTS"); val != "" {
-		parts := strings.Split(val, ",")
-		var ports []int
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if p, err := strconv.Atoi(part); err == nil {
-				ports = append(ports, p)
-			}
+	// Malformed is an error, never ignored (#2477): ignoring it left the file's ports, or
+	// discovery's, in force while the user believed they had chosen.
+	if val := os.Getenv("LFT_CLIENT_PORTS"); strings.TrimSpace(val) != "" {
+		ports, err := ParsePortList("LFT_CLIENT_PORTS", val)
+		if err != nil {
+			return nil, err
 		}
-		if len(ports) > 0 {
-			cfg.Ports = ports
-		}
+		cfg.Ports = ports
 	}
 
 	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
@@ -1524,6 +1520,44 @@ func cleanSubdomainPrefix(val string) string {
 
 // cleanTargetHost extracts the hostname/IP from a URL (e.g. http://liferay:8080 -> liferay)
 // or returns the original string if it is already a plain hostname/IP.
+// PortListForm is the accepted form of a local port list, for error messages.
+const PortListForm = "each port must be a whole number 1-65535, separated by commas (e.g. 8080,3000)"
+
+// ParsePortList parses a comma-separated list of local ports, as given to -ports or
+// LFT_CLIENT_PORTS. source names where the value came from, for the error message.
+//
+// Strict on purpose (#2477). It used to keep whatever strconv.Atoi accepted and drop the
+// rest, so `-ports 9999:80` parsed to an empty list, the caller fell through to discovery and
+// finally to 8080, and the tunnel published whatever happened to be listening there. Any part
+// that is not a port is now an error naming that part: one typo must stop the client, never
+// publish a different app. Whitespace around a part is tolerated, as it always was.
+func ParsePortList(source, value string) ([]int, error) {
+	var ports []int
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		p, err := strconv.Atoi(part)
+		if !isPortNumber(part) || err != nil || p < 1 || p > 65535 {
+			return nil, fmt.Errorf("invalid port %q in %s %q: %s", part, source, value, PortListForm)
+		}
+		ports = append(ports, p)
+	}
+	return ports, nil
+}
+
+// isPortNumber reports whether s is a non-empty run of ASCII digits. strconv.Atoi alone would
+// also take a sign ("+8080", "-1").
+func isPortNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func cleanTargetHost(target string) string {
 	if target == "" {
 		return ""

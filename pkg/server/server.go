@@ -867,6 +867,18 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				_ = srv.db.UpdateUser(ownerUser) //nolint:errcheck
 			}
 		}
+
+		// Accounts split by case before email lookups ignored it (#2466). Sign-ins now resolve to
+		// the oldest of each; the rest are named so the operator can merge or remove them -- not
+		// done automatically, because tokens, reservations and audit history hang off the id.
+		if dups, err := srv.db.EmailCaseDuplicates(); err != nil {
+			slog.Warn(fmt.Sprintf("[Users] Could not check for accounts that differ only by email case: %v", err))
+		} else if len(dups) > 0 {
+			slog.Warn(fmt.Sprintf("[Users] %d email address(es) belong to more than one account, differing only in case: %s. "+
+				"Sign-ins use the oldest account for each. Merge or remove the others in SQL, BY ID -- not through the admin UI, "+
+				"which addresses users by email and so now acts on the oldest account (#2466).",
+				len(dups), strings.Join(dups, ", ")))
+		}
 	}
 
 	if srv.db != nil && !srv.cfg.DisableBackupScheduler {
@@ -2888,7 +2900,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"}) //nolint:errcheck
@@ -2918,7 +2930,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	if existingUser, err := s.db.GetUser(req.Email); err == nil {
+	if existingUser, err := s.db.GetUserByEmail(req.Email); err == nil { // any case (#2466): GetUser matched the id exactly, so a mixed-case row was missed and duplicated
 		// Log the attempt to the audit log to keep visibility for admins.
 		//
 		// A rejected row gets its own action and detail. This is the cost of blocking rather than
@@ -4197,9 +4209,9 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 
-	isOwner := s.cfg.Owner.UserID != "" && req.Email == s.cfg.Owner.UserID
+	isOwner := s.cfg.Owner.UserID != "" && strings.EqualFold(req.Email, s.cfg.Owner.UserID)
 
 	// Enforce domain whitelist if configured (bypass for owner)
 	if len(s.cfg.AllowedEmailDomains) > 0 && !isOwner {
@@ -4467,6 +4479,11 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.UpdateUser(user) //nolint:errcheck
 	}
 
+	// The account's own address, as SSO and MFA store it, not the link's normalised one: sessions are
+	// killed and matched by exact email, so the two forms would not see each other (#2466).
+	if user != nil {
+		email = user.Email
+	}
 	killedPreviousSession := s.sessionStore().killPortalSessionsFor(email)
 
 	s.sessionStore().storePortalSession(sessionToken, PortalSessionData{
@@ -4640,7 +4657,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		http.Error(w, `{"error":"Invalid email address"}`, http.StatusBadRequest)

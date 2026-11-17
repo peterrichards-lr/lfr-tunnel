@@ -40,6 +40,15 @@ type oidcStub struct {
 	// What the next ID token asserts.
 	emailVerified *bool // nil omits the claim, as Microsoft Entra ID does
 	nonceOverride string
+	email         string // empty means sso.person@example.com
+}
+
+// idTokenEmail is the email claim the next ID token carries.
+func (st *oidcStub) idTokenEmail() string {
+	if st.email == "" {
+		return "sso.person@example.com"
+	}
+	return st.email
 }
 
 func newOIDCStub(t *testing.T) *oidcStub {
@@ -113,7 +122,7 @@ func (st *oidcStub) serve(w http.ResponseWriter, r *http.Request) {
 		claims := map[string]interface{}{
 			"iss": st.srv.URL, "aud": "c", "sub": "subject-1",
 			"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(),
-			"nonce": nonce, "email": "sso.person@example.com",
+			"nonce": nonce, "email": st.idTokenEmail(),
 			"given_name": "Sso", "family_name": "Person",
 		}
 		if st.emailVerified != nil {

@@ -138,10 +138,13 @@ The client includes an interactive **Magic Handoff** flow that automatically com
 2. Your default web browser will open to the gateway's **User Portal**.
 3. Authenticate on the portal (using your approved email and magic link).
 4. Upon logging in, the portal will securely hand off a newly generated token back to your local client terminal session.
-5. The CLI saves the token automatically:
+5. The CLI checks the token with the gateway, then saves it:
    ```
    ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token
    ```
+   If the gateway refuses the token (revoked, expired, or created on a different gateway's portal), nothing is saved and your existing token is kept. If the gateway cannot answer (it is unreachable, a regional edge, or older than your client), the token is saved and the CLI says it is **not verified**; it is checked again when you next connect.
+
+   Pasting something that is not a token (32 hex characters, sometimes starting `lfr_pat_`) at the prompt is refused rather than saved.
 
 ---
 
@@ -576,4 +579,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-06* | *Last Reviewed: 2026-10-06*
+*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*

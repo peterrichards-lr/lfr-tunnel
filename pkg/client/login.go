@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -141,6 +142,16 @@ func RunLogin(serverURL string) error {
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 	}
 
+	// Ask the gateway before saving (#2458). A well-formed token can still be revoked, expired or
+	// minted by a different gateway, and "Successfully authenticated" followed by a 401 on first
+	// use is the report #2457 started from. Only a definite refusal stops the save: a gateway
+	// that cannot answer has said nothing about the token, so it is saved and reported as unverified.
+	check, reason := verifyLoginToken(serverURL, token)
+	if check == loginTokenRefused {
+		return fmt.Errorf("the gateway at %s refused this token -- it may be revoked or expired, "+
+			"or have come from a different gateway's portal; nothing was saved", serverURL)
+	}
+
 	// Save the token. Both routes above deliver only values looksLikeAccessToken accepts.
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -155,8 +166,86 @@ func RunLogin(serverURL string) error {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 
+	if check != loginTokenVerified {
+		fmt.Printf("\n⚠️  Token saved to ~/.lfr-tunnel/token, but not verified: %s.\n"+
+			"   It will be checked when you next connect.\n", reason)
+		return nil
+	}
 	fmt.Println("\n✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token")
 	return nil
+}
+
+// loginTokenCheck is what the gateway said about a token login is about to save.
+type loginTokenCheck int
+
+const (
+	loginTokenVerified loginTokenCheck = iota
+	loginTokenRefused
+	// loginTokenUnknown: the gateway could not say -- unreachable, an edge, a gateway older than
+	// the check, a failing token store. Never treated as a refusal.
+	loginTokenUnknown
+)
+
+// verifyLoginToken is a variable so tests can answer for the gateway without a network.
+var verifyLoginToken = checkLoginToken
+
+// loginTokenCheckClient never follows a redirect. Go copies a custom header like X-Auth-Token to a
+// redirect's new host -- it strips only Authorization, Cookie and WWW-Authenticate -- so following
+// one would hand the token to whoever the gateway pointed at, and that host's answer would say
+// nothing about this gateway's view of the token (review of #2467).
+var loginTokenCheckClient = &http.Client{
+	Timeout:       10 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+// checkLoginToken asks the gateway at serverURL whether token is usable (#2458). The token travels
+// in X-Auth-Token only, never the URL. Only the endpoint's own answer is a refusal: a 401 that is
+// not JSON came from something in front of the gateway (a proxy's login page), and says nothing
+// about the token.
+func checkLoginToken(serverURL, token string) (loginTokenCheck, string) {
+	if strings.TrimSpace(serverURL) == "" {
+		return loginTokenUnknown, "no gateway is configured to check it against"
+	}
+	// Addressed as RegisterTunnel addresses the gateway: a scheme added when missing, and only
+	// scheme://host kept, so any server_url registration accepts works here too.
+	if !strings.HasPrefix(serverURL, "http") {
+		serverURL = "http://" + serverURL
+	}
+	parsed, err := url.Parse(serverURL)
+	if err != nil || parsed.Host == "" {
+		return loginTokenUnknown, fmt.Sprintf("the gateway address %q is not usable", serverURL)
+	}
+	req, err := http.NewRequest(http.MethodGet, parsed.Scheme+"://"+parsed.Host+"/api/client/token-check", nil)
+	if err != nil {
+		return loginTokenUnknown, fmt.Sprintf("the gateway address %q is not usable: %v", serverURL, err)
+	}
+	req.Header.Set("X-Auth-Token", token)
+	resp, err := loginTokenCheckClient.Do(req)
+	if err != nil {
+		return loginTokenUnknown, fmt.Sprintf("could not reach %s (%v)", serverURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Debug(fmt.Sprintf("[Client] Closing the token-check response: %v", err))
+		}
+	}()
+
+	switch {
+	case resp.StatusCode == http.StatusNoContent:
+		return loginTokenVerified, ""
+	case resp.StatusCode == http.StatusUnauthorized && strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json"):
+		return loginTokenRefused, ""
+	case resp.StatusCode == http.StatusMisdirectedRequest:
+		return loginTokenUnknown, serverURL + " is a regional edge, which cannot check tokens"
+	case resp.StatusCode == http.StatusNotFound:
+		// An older gateway, or an address that reaches the gateway without being one of its own
+		// names (an alias), and so is served as a tunnel host. Either way it cannot say.
+		return loginTokenUnknown, serverURL + " has no token check (an older gateway, or not the gateway's own address)"
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		return loginTokenUnknown, fmt.Sprintf("%s answered with a redirect to %q, which was not followed", serverURL, resp.Header.Get("Location"))
+	default:
+		return loginTokenUnknown, fmt.Sprintf("%s answered %s", serverURL, resp.Status)
+	}
 }
 
 // claimedTokenPrefix marks the tokens minted by the registration-claim path.

@@ -351,7 +351,7 @@ callback answers 403. An admin reverses a rejection deliberately, by changing th
 from the admin portal.
 
 ### 10.2. OAuth2/OIDC SSO Integration
-When OpenID Connect (OIDC) is enabled, the CLI login flow retrieves authorization codes and exchanges them with Keycloak, Google, or Liferay SSO, automatically provisioning the local `~/.lfr-tunnel/token` credentials.
+When OpenID Connect (OIDC) is enabled, signing in to the portal goes through the identity provider (Keycloak, Google, Liferay SSO). SSO signs the user in to the **portal**; it does not mint the CLI's credential. `lfr-tunnel login` still receives a personal access token the user creates in the portal, which the portal hands to the waiting CLI, and the CLI checks it with the gateway before saving it (#2457, #2458).
 
 ```mermaid
 sequenceDiagram
@@ -363,19 +363,26 @@ sequenceDiagram
     participant SSO as "SSO Provider"
 
     Dev->>CLI: "lfr-tunnel login"
-    Note over CLI: CLI starts local server on port 4444<br/>Generates PKCE verifier
-    CLI->>Browser: "Open browser to Gateway SSO Portal"
-    Browser->>GW: "GET /auth/login"
-    GW->>SSO: "Redirect to Identity Provider Auth"
-    Browser->>SSO: "User logs in"
-    SSO-->>Browser: "Redirect back to Gateway callback"
-    GW->>SSO: "POST token exchange request"
-    SSO-->>GW: "ID/Access Token payload"
-    Note over GW: Sync user and generate PAT
-    GW-->>Browser: "Redirect back to http://localhost:4444/callback?token=xxx"
-    Browser->>CLI: "Delivers PAT to local HTTP Listener"
-    Note over CLI: CLI saves token and shuts down listener
-    CLI-->>Dev: "Print Login Successful"
+    Note over CLI: Listens on 127.0.0.1:4444/handoff<br/>and on stdin for a pasted token
+    CLI->>Browser: "Open the portal"
+    Browser->>GW: "GET /api/auth/login?provider=id"
+    Note over GW: Generates state, nonce and PKCE verifier
+    GW-->>Browser: "Redirect to the identity provider"
+    Browser->>SSO: "User signs in"
+    SSO-->>Browser: "Redirect to /api/auth/callback"
+    Browser->>GW: "Callback with authorization code"
+    GW->>SSO: "Exchange code (with PKCE verifier)"
+    SSO-->>GW: "ID token"
+    Note over GW: Verify ID token, nonce, email_verified<br/>Start portal session
+    Dev->>Browser: "Create a token in the portal"
+    Browser->>GW: "POST /api/tokens"
+    GW-->>Browser: "raw_token (shown once)"
+    Browser->>CLI: "POST /handoff (blind, no-cors)"
+    Note over CLI: Refuses anything not shaped like a token
+    CLI->>GW: "GET /api/client/token-check (X-Auth-Token)"
+    GW-->>CLI: "204 valid / JSON 401 refused / anything else: cannot say"
+    Note over CLI: Saves unless refused
+    CLI-->>Dev: "Authenticated, or saved but not verified, or refused"
 ```
 
 ### 10.3. Passwordless Magic Link Authentication
@@ -518,4 +525,4 @@ Properties worth knowing when reading these figures:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-29* | *Last Reviewed: 2026-09-29*
+*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*

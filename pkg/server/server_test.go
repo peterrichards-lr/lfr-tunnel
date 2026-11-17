@@ -114,8 +114,8 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
 	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
-	req := httptest.NewRequest("GET", "http://example.com/", nil)
-	req.Host = "example.com"
+	req := httptest.NewRequest("GET", "http://tunnel.example.com/", nil)
+	req.Host = "tunnel.example.com"
 	rec := httptest.NewRecorder()
 
 	srv.ServeHTTP(rec, req)
@@ -3340,17 +3340,17 @@ func TestServer_TrailingSlashRedirect(t *testing.T) {
 		url      string
 		expected string
 	}{
-		{"http://example.com/portal/", "/portal"},
-		{"http://example.com/admin/", "/admin"},
-		{"http://example.com/setup/", "/setup"},
-		{"http://example.com/privacy/", "/privacy"},
-		{"http://example.com/cookies/", "/cookies"},
-		{"http://example.com/portal/?token=123", "/portal?token=123"},
+		{"http://tunnel.example.com/portal/", "/portal"},
+		{"http://tunnel.example.com/admin/", "/admin"},
+		{"http://tunnel.example.com/setup/", "/setup"},
+		{"http://tunnel.example.com/privacy/", "/privacy"},
+		{"http://tunnel.example.com/cookies/", "/cookies"},
+		{"http://tunnel.example.com/portal/?token=123", "/portal?token=123"},
 	}
 
 	for _, tc := range tests {
 		req := httptest.NewRequest("GET", tc.url, nil)
-		req.Host = "example.com"
+		req.Host = "tunnel.example.com"
 		rec := httptest.NewRecorder()
 
 		srv.ServeHTTP(rec, req)

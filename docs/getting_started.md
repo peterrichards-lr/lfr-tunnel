@@ -146,6 +146,8 @@ The client includes an interactive **Magic Handoff** flow that automatically com
 
    Pasting something that is not a token (32 hex characters, sometimes starting `lfr_pat_`) at the prompt is refused rather than saved.
 
+   A login waits **15 minutes** for a token, then stops and frees port `4444`. Only one login at a time can receive the portal's handoff: if another is still waiting in a different window, the new one says so (naming its process ID when it can) and you can still finish by pasting a token.
+
 ---
 
 ### Option B: Manual Clipboard Configuration

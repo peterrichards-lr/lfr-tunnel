@@ -4307,6 +4307,12 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		} else {
 			link = fmt.Sprintf("%s://%s/portal?token=%s&lang=%s", scheme, host, magicToken, lang)
 		}
+		// A sign-in started by `lfr-tunnel login` keeps its marker through the email, so the portal
+		// can still ask for a token once the link signs the user in (#2459). A fixed value, never
+		// anything the request supplied.
+		if r.URL.Query().Get("cli_login") == "1" {
+			link += "&cli_login=1"
+		}
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
 
 		// Render localized dynamic HTML template from properties / external folder

@@ -51,12 +51,21 @@ const ssoPortalCookie = "oidc_portal"
 // ssoPortalV2 is the only value ssoPortalCookie can usefully hold.
 const ssoPortalV2 = "v2"
 
+// ssoCLICookie remembers that `lfr-tunnel login` started this sign-in (#2459), so the portal the
+// callback returns to can ask the user to create a token for the waiting CLI. Like
+// ssoPortalCookie it holds a fixed value, never anything that becomes a URL by itself.
+const ssoCLICookie = "oidc_cli"
+
 // ssoReturnPath is where the callback sends someone who has just signed in.
 func ssoReturnPath(r *http.Request) string {
+	path := "/"
 	if c, err := r.Cookie(ssoPortalCookie); err == nil && c.Value == ssoPortalV2 {
-		return "/portalv2/dashboard"
+		path = "/portalv2/dashboard"
 	}
-	return "/"
+	if c, err := r.Cookie(ssoCLICookie); err == nil && c.Value == "1" {
+		path += "?cli_login=1"
+	}
+	return path
 }
 
 // The PKCE verifier and the nonce live beside oidc_state, in the browser that started the sign-in
@@ -172,6 +181,12 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 		portal = ssoPortalV2
 	}
 	setSSOFlowCookie(w, ssoPortalCookie, portal, secure)
+	// Always written too, so an abandoned CLI sign-in does not mark a later ordinary one.
+	cli := ""
+	if r.URL.Query().Get("cli_login") == "1" {
+		cli = "1"
+	}
+	setSSOFlowCookie(w, ssoCLICookie, cli, secure)
 
 	url := oauth2Config.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce))
 	http.Redirect(w, r, url, http.StatusFound)

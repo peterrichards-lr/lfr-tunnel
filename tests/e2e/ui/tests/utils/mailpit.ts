@@ -36,6 +36,33 @@ export async function getMagicLinkToken(email: string): Promise<string> {
   throw new Error(`Magic link email not found for ${email} after 10 seconds`);
 }
 
+/**
+ * The magic link's path and query exactly as emailed -- e.g. `/portal?token=…&lang=en&cli_login=1`
+ * -- for a test that needs more of the link than its token (#2459).
+ */
+export async function getMagicLinkPath(email: string): Promise<string> {
+  const context = await request.newContext();
+  for (let i = 0; i < 20; i++) {
+    const res = await context.get('http://localhost:8025/api/v1/messages');
+    const data = await res.json();
+    const targetMsg = (data.messages || []).find(
+      (m: any) => m.To && m.To[0].Address === email,
+    );
+    if (targetMsg) {
+      const msgRes = await context.get(
+        `http://localhost:8025/api/v1/message/${targetMsg.ID}`,
+      );
+      const body = (await msgRes.json()).Text || '';
+      const match = body.match(/\/portal(?:v2\/login)?\?token=[^\s"<>)]+/);
+      if (match) {
+        return match[0];
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Magic link email not found for ${email} after 10 seconds`);
+}
+
 export async function clearMailpit() {
   const context = await request.newContext();
   await context.delete('http://localhost:8025/api/v1/messages');

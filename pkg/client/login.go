@@ -81,7 +81,9 @@ func RunLogin(serverURL string) error {
 		}()
 	}
 
-	portalURL := resolvePortalURL(serverURL)
+	// Marked so the portal asks for a token: the CLI only receives one when the user creates it, and
+	// without a prompt a signed-in user just saw the Overview and nothing ever arrived (#2459).
+	portalURL := withCLILoginMarker(resolvePortalURL(serverURL))
 
 	fmt.Println("Opening your browser to authenticate...")
 	_ = openBrowserFunc(portalURL) //nolint:errcheck
@@ -392,8 +394,11 @@ func openBrowser(url string) error {
 
 	switch runtime.GOOS {
 	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start"}
+		// Not `cmd /c start`: cmd treats "=" and "&" in the URL as separators, which would cut
+		// the portal URL at ?cli_login=1 (#2459). FileProtocolHandler hands the URL to the default
+		// browser verbatim.
+		cmd = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler"}
 	case "darwin":
 		cmd = "open"
 	default: // "linux", "freebsd", "openbsd", "netbsd"
@@ -401,4 +406,17 @@ func openBrowser(url string) error {
 	}
 	args = append(args, url)
 	return exec.Command(cmd, args...).Start()
+}
+
+// withCLILoginMarker adds cli_login=1 to the portal URL `login` opens (#2459), so the portal opens
+// its create-token dialog -- immediately for a signed-in user, after sign-in otherwise.
+func withCLILoginMarker(portalURL string) string {
+	u, err := url.Parse(portalURL)
+	if err != nil {
+		return portalURL
+	}
+	q := u.Query()
+	q.Set("cli_login", "1")
+	u.RawQuery = q.Encode()
+	return u.String()
 }

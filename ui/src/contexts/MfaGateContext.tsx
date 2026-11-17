@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useI18n } from './I18nContext';
 import { useUI } from './UIContext';
+import { reloadKeepingCLILogin } from '../cliLogin';
 
 // #1055: force_mfa (server-side) blocks any authenticated request with
 // 403 {"error": "MFA setup required", "mfa_required": true} until the user sets up
@@ -82,7 +83,8 @@ function MfaSetupGate() {
       // data-fetching effects and failed with 403 -- those never auto-retry. A full
       // reload is the simplest way to guarantee everything re-fetches fresh, rather
       // than tracking/retrying every possible failed request across the app (#1071).
-      setTimeout(() => window.location.reload(), 600);
+      // A visit from `lfr-tunnel login` keeps its marker across the reload (#2459).
+      setTimeout(reloadKeepingCLILogin, 600);
     } catch {
       setVerifyError(
         t('error_mfa_invalid', 'Invalid passcode, please try again.'),

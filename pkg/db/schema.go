@@ -546,4 +546,8 @@ var migrations = []migration{
 	{42, `INSERT OR IGNORE INTO client_region_source (user_id, day, source, recorded_at)
 		SELECT user_id, day, source, recorded_at FROM client_region_source_pre2372`},
 	{43, "DROP TABLE IF EXISTS client_region_source_pre2372"},
+	// Which SSO provider created a portal session, "" for any other sign-in (#2482). force_mfa
+	// is satisfied per session by a provider configured with satisfies_mfa, so the session --
+	// not the account -- has to remember how it signed in, across a restart as well.
+	{44, "ALTER TABLE portal_sessions ADD COLUMN auth_provider TEXT NOT NULL DEFAULT ''"},
 }

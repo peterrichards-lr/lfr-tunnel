@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net"
 	"net/http"
@@ -236,9 +237,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	var claims struct {
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
-		Name          string `json:"name"`
-		GivenName     string `json:"given_name"`
-		FamilyName    string `json:"family_name"`
+		// AMR is how the provider authenticated the user (RFC 8176), e.g. ["pwd","mfa"]. Logged,
+		// not enforced: it is the evidence for a provider configured with satisfies_mfa (#2482).
+		AMR        []string `json:"amr"`
+		Name       string   `json:"name"`
+		GivenName  string   `json:"given_name"`
+		FamilyName string   `json:"family_name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		slog.Warn(fmt.Sprintf("[SSO] %s: unreadable ID token claims: %v", providerID, err))
@@ -274,6 +278,10 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Logged once the address has passed the verified and domain checks, so it records sign-ins,
+	// not refusals (#2482). amr is the evidence that the IdP really performed MFA.
+	slog.Info(fmt.Sprintf("[SSO] %s: accepted sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
+
 	// Create or load the user
 	user, err := s.db.GetUserByEmail(email)
 	if err != nil && err != db.ErrNotFound {
@@ -292,15 +300,18 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		user = &db.User{
-			ID:         email,
-			Email:      email,
-			FirstName:  claims.GivenName,
-			LastName:   claims.FamilyName,
-			Role:       "user",
-			Status:     db.UserStatusApproved,
-			AuthMethod: "sso - " + providerID,
-			CreatedAt:  time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
-			UpdatedAt:  time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
+			ID:        email,
+			Email:     email,
+			FirstName: claims.GivenName,
+			LastName:  claims.FamilyName,
+			// As /setup does for email signup: the preferred name starts as the first name, and
+			// the user can change it in Account Settings (#2481).
+			PreferredName: claims.GivenName,
+			Role:          "user",
+			Status:        db.UserStatusApproved,
+			AuthMethod:    "sso - " + providerID,
+			CreatedAt:     time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
+			UpdatedAt:     time.Now().UTC(), // UTC like every other path: "oldest account wins" compares these as text (#2466)
 		}
 		// If they match the owner config, grant owner
 		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
@@ -311,6 +322,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
+		s.alertSSOAccountCreated(user, p)
 	} else if user.Status != db.UserStatusApproved {
 		// A rejected registration is the one status SSO must not promote, so the outcome is
 		// checked rather than assumed: approveOnSSOSignIn refuses it, and refusing to approve
@@ -339,6 +351,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
+		AuthProvider:          providerID, // force_mfa is met per session by a satisfies_mfa provider (#2482)
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              s.clientIP(r),
 		KilledPreviousSession: killedPreviousSession,
@@ -483,4 +496,42 @@ func sameHost(a, b string) bool {
 		return strings.TrimSuffix(h, ":80")
 	}
 	return strip(a) == strip(b)
+}
+
+// alertSSOAccountCreated tells admins an SSO sign-in created an account (#2481). Email signup
+// alerts them because they must approve it; SSO accounts are approved automatically, so this is
+// notice rather than a request -- and only on creation, never on later sign-ins, which would be
+// noise. It shares the registration alert's switch: both mean "someone new joined".
+func (s *Server) alertSSOAccountCreated(user *db.User, p *config.SSOProviderConfig) {
+	name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	if name == "" {
+		name = "(no name from the provider)"
+	}
+	body := fmt.Sprintf("<p>A new account was created by a first sign-in through <strong>%s</strong> (provider <code>%s</code>).</p>"+
+		"<p><strong>%s</strong> &lt;%s&gt;</p>"+
+		"<p>SSO accounts are approved automatically; the identity provider is the access decision. No action is needed.</p>",
+		html.EscapeString(p.Name), html.EscapeString(p.ID), html.EscapeString(name), html.EscapeString(user.Email))
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration (SSO)", body)
+}
+
+// sessionSatisfiesMFA reports whether this request's portal session was created by an SSO
+// provider configured with satisfies_mfa, which then meets force_mfa for it (#2482). Decided by
+// the session, not the account: the same user signing in by magic link is still held to the
+// gateway's own TOTP. A provider since removed from the config, or one without the setting,
+// satisfies nothing.
+func (s *Server) sessionSatisfiesMFA(r *http.Request) bool {
+	cookie, err := r.Cookie("lfr_session")
+	if err != nil {
+		return false
+	}
+	data, ok := s.sessionStore().loadPortalSession(cookie.Value)
+	if !ok || data.AuthProvider == "" {
+		return false
+	}
+	for _, p := range s.cfg.SSOProviders {
+		if p.ID == data.AuthProvider {
+			return p.SatisfiesMFA
+		}
+	}
+	return false
 }

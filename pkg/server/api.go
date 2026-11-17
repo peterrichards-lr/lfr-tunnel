@@ -147,6 +147,11 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	if realUser, rerr := s.getCurrentUserRaw(r); rerr == nil && realUser != nil {
 		resp["can_view_as"] = strings.EqualFold(realUser.Role, "owner")
 	}
+	// Whether this session's sign-in already met force_mfa through its SSO provider (#2482). The
+	// server enforces that itself; V1 also decides client-side whether to show the TOTP setup
+	// intercept, so it needs the same answer -- otherwise V1 forced enrolment the server no longer
+	// required, while V2 (which reacts only to the server's 403) did not.
+	resp["mfa_satisfied_by_provider"] = s.sessionSatisfiesMFA(r)
 
 	// When this session expires, so the portal can warn before it does (#1656).
 	//

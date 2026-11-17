@@ -79,7 +79,16 @@ type InterceptorEngine struct {
 	ClientSubdomain   string
 	SubdomainLeased   bool
 	SubdomainConflict bool
-	DestPort          int
+	// DestPort is the primary local port: the first of localTargets once SetLocalTargets has
+	// run, and the 8080 default only before anything was resolved.
+	DestPort int
+
+	// localTargets are the local ports this tunnel publishes, as resolved -- before
+	// InterceptPort rewrites the mappings to point at the interceptor's own listeners
+	// (#2478). Empty until SetLocalTargets runs; readers then fall back to DestPort.
+	localTargets []PortMapping
+	// portOrigin says in a few words where localTargets came from ("from -ports").
+	portOrigin string
 
 	// Traffic stats
 	RequestsTotal     int64
@@ -267,6 +276,69 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 		DestPort:           8080, // Default Liferay port
 		LatencyHistory:     make([]int64, 0),
 	}
+}
+
+// SetLocalTargets records the local ports the tunnel publishes, and where they came from.
+// It must be given the mappings as resolved, before InterceptPort rewrites them.
+func (e *InterceptorEngine) SetLocalTargets(mappings []PortMapping, origin string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	// A copy: main rewrites its own slice in place to the interceptor's listeners next.
+	e.localTargets = append([]PortMapping(nil), mappings...)
+	e.portOrigin = origin
+	if len(e.localTargets) > 0 {
+		e.DestPort = e.localTargets[0].LocalPort
+	}
+}
+
+// LocalTargets returns a copy of the published local ports, primary first, and where they
+// came from.
+func (e *InterceptorEngine) LocalTargets() ([]PortMapping, string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.localTargetsLocked(), e.portOrigin
+}
+
+// localTargetsLocked returns the published local ports, primary first. The caller holds
+// e.mu. Before SetLocalTargets has run it is the single DestPort.
+func (e *InterceptorEngine) localTargetsLocked() []PortMapping {
+	if len(e.localTargets) == 0 {
+		return []PortMapping{{LocalPort: e.DestPort}}
+	}
+	return append([]PortMapping(nil), e.localTargets...)
+}
+
+// localPortsResponsive dials every published port on host and reports whether all of them
+// answered -- the same aggregate localTargetStatus reports to the gateway, so the local
+// health check cannot call healthy a tunnel whose heartbeat says down.
+// localPortsUp dials each published port and reports, per port, whether it answered -- so a
+// caller can say WHICH port is down rather than only that one is (review of #2484).
+func localPortsUp(host string, targets []PortMapping, timeout time.Duration) []bool {
+	up := make([]bool, len(targets))
+	for i, t := range targets {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, t.LocalPort), timeout)
+		if err != nil {
+			continue
+		}
+		up[i] = true
+		if cerr := conn.Close(); cerr != nil {
+			slog.Debug("closing a local health-check dial", "port", t.LocalPort, "error", cerr)
+		}
+	}
+	return up
+}
+
+func localPortsResponsive(host string, targets []PortMapping, timeout time.Duration) bool {
+	for _, t := range targets {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, t.LocalPort), timeout)
+		if err != nil {
+			return false
+		}
+		if cerr := conn.Close(); cerr != nil {
+			slog.Debug("closing a local health-check dial", "port", t.LocalPort, "error", cerr)
+		}
+	}
+	return true
 }
 
 // sameGatewayHost reports whether two gateway URLs address the same host. Compared on

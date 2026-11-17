@@ -239,7 +239,9 @@ you are not in one, by looking for a running Liferay or LDM instance. Port `8080
 get when neither turns anything up.
 
 Naming ports yourself — `-ports`, `ports:` in your config file, or `LFT_CLIENT_PORTS` —
-switches all of that off and publishes exactly what you asked for.
+switches all of that off and publishes exactly what you asked for. Give whole port numbers
+separated by commas (`-ports 8080,3000`); anything else, such as `-ports 9999:80`, stops the
+client with an error naming the value rather than publishing a different port.
 
 ### Zero-Config Workspace Mode (LDM/Workspaces)
 Navigate to your Liferay Workspace root directory and run:

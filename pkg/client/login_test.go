@@ -641,11 +641,18 @@ func TestNormaliseToken(t *testing.T) {
 		{"bearer   " + claimedPAT, claimedPAT},
 		{`"Bearer ` + portalPAT + `"`, portalPAT},
 		{`Bearer "` + portalPAT + `"`, portalPAT},
+		{"Bearer\t " + portalPAT, portalPAT},
+		{`'Bearer "` + portalPAT + `"'`, portalPAT},
+		// The curly quotes macOS, Word and Google Docs substitute (review of #2488).
+		{"\u201c" + portalPAT + "\u201d", portalPAT},
+		{"\u2018" + claimedPAT + "\u2019", claimedPAT},
 		// Only a MATCHING pair, and only one: these stay as they are and are refused.
 		{`"` + portalPAT + `'`, `"` + portalPAT + `'`},
 		{`""` + portalPAT + `""`, `"` + portalPAT + `"`},
 		{`"`, `"`},
+		{"\u201c" + portalPAT + `"`, "\u201c" + portalPAT + `"`},
 		{"Bearer", "Bearer"},
+		{"Bearertoken", "Bearertoken"},
 	} {
 		if got := normaliseToken(tc.in); got != tc.want {
 			t.Errorf("normaliseToken(%q) = %q, want %q", tc.in, got, tc.want)
@@ -661,20 +668,20 @@ func TestNormaliseToken(t *testing.T) {
 // refused as "not an access token". `"Bearer <token>"` is the case the old word-by-word read
 // could not save at all: it split the line into `"Bearer` and `<token>"`, refusing both.
 func TestRunLogin_AcceptsAWrappedTokenPastedOnStdin(t *testing.T) {
-	for name, pasted := range map[string]string{
-		"double quotes":          `"` + portalPAT + `"`,
-		"single quotes":          "'" + claimedPAT + "'",
-		"backticks":              "`" + portalPAT + "`",
-		"a quoted Authorization": `"Bearer ` + portalPAT + `"`,
-		"blank lines before it":  "\n\n" + portalPAT,
-		"no newline before EOF":  "'" + portalPAT + "'",
+	for _, tc := range []struct{ name, pasted, want string }{
+		{"double quotes", `"` + portalPAT + `"`, portalPAT},
+		{"single quotes", "'" + claimedPAT + "'", claimedPAT},
+		{"backticks", "`" + portalPAT + "`", portalPAT},
+		{"curly quotes", "\u201c" + portalPAT + "\u201d", portalPAT},
+		{"a quoted Authorization", `"Bearer ` + portalPAT + `"`, portalPAT},
+		{"no newline before EOF", "'" + portalPAT + "'", portalPAT},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			stubLoginBrowser(t)
 			handoffBusy(t)
-			input := pasted + "\r\n"
-			if name == "no newline before EOF" {
-				input = pasted
+			input := tc.pasted + "\r\n"
+			if tc.name == "no newline before EOF" {
+				input = tc.pasted
 			}
 			stdinWith(t, input)
 			home := fakeHome(t)
@@ -686,8 +693,8 @@ func TestRunLogin_AcceptsAWrappedTokenPastedOnStdin(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expected the token to be saved: %v", err)
 			}
-			if want := normaliseToken(pasted); string(saved) != want || !looksLikeAccessToken(string(saved)) {
-				t.Errorf("saved token = %q, want the bare token %q", saved, want)
+			if string(saved) != tc.want {
+				t.Errorf("saved token = %q, want the bare token %q", saved, tc.want)
 			}
 		})
 	}

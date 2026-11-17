@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 
 	"lfr-tunnel/pkg/config"
 )
@@ -272,25 +273,27 @@ const claimedTokenPrefix = "lfr_pat_"
 var accessTokenPattern = regexp.MustCompile(`^(` + claimedTokenPrefix + `)?[0-9a-f]{32}$`)
 
 // normaliseToken undoes what copying a token from chat, a document or an HTTP header adds to it
-// (#2479): surrounding whitespace and CRLF, one matching pair of surrounding quotes (", ' or a
-// backtick), and an Authorization scheme ("Bearer <token>"). Applied on both routes -- the paste
-// prompt and the handoff -- before looksLikeAccessToken, which still decides; nothing here can
-// turn a non-token into one.
+// (#2479): surrounding whitespace and CRLF, a matching pair of surrounding quotes (", ', a
+// backtick, or the curly quotes macOS and document editors substitute), and an Authorization
+// scheme ("Bearer <token>"), with quotes allowed outside the scheme, inside it, or both. Applied
+// on both routes -- the paste prompt and the handoff -- before looksLikeAccessToken, which still
+// decides; nothing here can turn a non-token into one.
 func normaliseToken(s string) string {
-	// Quotes on either side of the scheme: "Bearer <token>" and Bearer "<token>".
 	s = unquoteOnce(strings.TrimSpace(s))
-	const scheme = "bearer "
-	if len(s) > len(scheme) && strings.EqualFold(s[:len(scheme)], scheme) {
-		s = unquoteOnce(strings.TrimSpace(s[len(scheme):]))
+	if i := strings.IndexFunc(s, unicode.IsSpace); i > 0 && strings.EqualFold(s[:i], "bearer") {
+		s = unquoteOnce(strings.TrimSpace(s[i:]))
 	}
 	return s
 }
 
+// tokenQuotes are the pairs unquoteOnce removes: opening and closing mark.
+var tokenQuotes = [][2]string{{`"`, `"`}, {"'", "'"}, {"`", "`"}, {"\u201c", "\u201d"}, {"\u2018", "\u2019"}}
+
 // unquoteOnce removes one matching pair of surrounding quotes, and the whitespace inside them.
 func unquoteOnce(s string) string {
-	if len(s) >= 2 {
-		if q := s[0]; q == s[len(s)-1] && (q == '"' || q == '\'' || q == '`') {
-			return strings.TrimSpace(s[1 : len(s)-1])
+	for _, q := range tokenQuotes {
+		if len(s) >= len(q[0])+len(q[1]) && strings.HasPrefix(s, q[0]) && strings.HasSuffix(s, q[1]) {
+			return strings.TrimSpace(s[len(q[0]) : len(s)-len(q[1])])
 		}
 	}
 	return s

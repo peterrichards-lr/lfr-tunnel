@@ -144,7 +144,7 @@ The client includes an interactive **Magic Handoff** flow that automatically com
    ```
    If the gateway refuses the token (revoked, expired, or created on a different gateway's portal), nothing is saved and your existing token is kept. If the gateway cannot answer (it is unreachable, a regional edge, or older than your client), the token is saved and the CLI says it is **not verified**; it is checked again when you next connect.
 
-   Pasting something that is not a token (32 hex characters, sometimes starting `lfr_pat_`) at the prompt is refused rather than saved. A token wrapped in one pair of quotes (`"…"`, `'…'` or backticks) or pasted as `Bearer <token>` is unwrapped first.
+   Pasting something that is not a token (32 hex characters, sometimes starting `lfr_pat_`) at the prompt is refused rather than saved. A token wrapped in quotes (`"…"`, `'…'`, backticks or curly quotes) or pasted as `Bearer <token>` is unwrapped first. The token must be the only thing on the line: `token: <token>` is refused.
 
 ---
 

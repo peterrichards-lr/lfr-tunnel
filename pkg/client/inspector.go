@@ -765,7 +765,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		if err == nil {
 			break
 		}
-		if strings.Contains(err.Error(), "address already in use") {
+		// By the error code, not its text: Windows words it differently, so matching
+		// "address already in use" never walked there (found by the windows-latest CI job).
+		if isAddrInUse(err) {
 			actualPort++
 			continue
 		}

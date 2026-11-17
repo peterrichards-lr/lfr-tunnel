@@ -63,7 +63,11 @@ export default function AdminAuditLog() {
         const page: AuditEvent[] = Array.isArray(res.data)
           ? res.data
           : res.data.events || [];
-        all.push(...page);
+        // An entry written while these pages load shifts the later pages by one, so the last row
+        // of one page comes back as the first of the next. Dropped, as the export drops it, so
+        // positions agree (review of #2465).
+        const seen = new Set(all.map((e) => e.id));
+        all.push(...page.filter((e) => !seen.has(e.id)));
         if (page.length < AUDIT_PAGE) break;
         if (all.length >= AUDIT_MAX) {
           hitCeiling = true;
@@ -151,6 +155,11 @@ export default function AdminAuditLog() {
     if (sortConfig) {
       params.set('sort', String(sortConfig.key));
       params.set('dir', sortConfig.direction);
+    }
+    // The newest entry this view loaded. The server ignores anything newer, so entries written
+    // since the page loaded cannot shift the rows the admin numbered (review of #2465).
+    if (events.length) {
+      params.set('as_of', String(Math.max(...events.map((e) => e.id))));
     }
     try {
       const res = await axios.get(`/api/admin/audit/export/preview?${params}`);

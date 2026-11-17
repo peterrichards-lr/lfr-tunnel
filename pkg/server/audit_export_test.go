@@ -260,7 +260,7 @@ func anonFixture() []*db.AuditEntry {
 			TargetID: "shop-alpha.tunnels.test", IPAddress: "203.0.113.77",
 			Details: "Reserved shop-alpha for jane.doe@acme-corp.test from 203.0.113.77; see https://SHOP-ALPHA.tunnels.test/web/guest."},
 		{ID: 2, ActorID: "jane.doe@acme-corp.test", Action: "reservation.access_control_updated", TargetType: "subdomain",
-			TargetID: "shop-alpha.eu.tunnels-edge.test", IPAddress: "198.51.100.23, 10.20.30.40",
+			TargetID: "shop-alpha.eu.tunnels.test", IPAddress: "198.51.100.23, 10.20.30.40",
 			Details: "Access controls updated: IPs=10.20.30.40,2001:0db8:85a3::8a2e:0370:7334 host shop-alpha.tunnels.test:443"},
 		{ID: 3, ActorID: "max-power@other-co.test", Action: "user.updated", TargetType: "user",
 			TargetID: "max-power@other-co.test", IPAddress: "2a02:c7f:1234::99",
@@ -329,8 +329,8 @@ func TestAnonymiseIsConsistentWithinAnExport(t *testing.T) {
 			t.Errorf("details lack %q: %q", want, out[0].Details)
 		}
 	}
-	if out[1].TargetID != sub+".eu.tunnels-edge.test" {
-		t.Errorf("regional host: got %q, want %q", out[1].TargetID, sub+".eu.tunnels-edge.test")
+	if out[1].TargetID != sub+".eu.tunnels.test" {
+		t.Errorf("regional host: got %q, want %q", out[1].TargetID, sub+".eu.tunnels.test")
 	}
 	if !strings.Contains(out[1].Details, "host "+sub+".tunnels.test:443") {
 		t.Errorf("host:port not replaced consistently: %q", out[1].Details)
@@ -396,7 +396,7 @@ func TestAnonymisedExportCarriesNoOriginals(t *testing.T) {
 	rows := anonFixture()
 	// writeAuditCSV with no config learns the base domains from structured targets only, so this
 	// also covers a gateway whose config lists none of them.
-	if err := srv.writeAuditCSV(&b, rows, true); err != nil {
+	if err := srv.writeAuditCSV(&b, rows, nil, true); err != nil {
 		t.Fatalf("writeAuditCSV: %v", err)
 	}
 	out := strings.ToLower(b.String())

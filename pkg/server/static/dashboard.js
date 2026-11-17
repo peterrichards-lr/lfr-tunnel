@@ -4793,6 +4793,11 @@ function auditExportParams() {
     }
   }
   params.set('rows', document.getElementById('audit-export-rows').value);
+  // The newest entry this view loaded. The server ignores anything newer, so entries written since
+  // the page loaded cannot shift the rows the admin numbered (review of #2465).
+  if (inst && inst.data.length) {
+    params.set('as_of', String(Math.max(...inst.data.map((l) => l.id))));
+  }
   return params;
 }
 
@@ -4942,7 +4947,11 @@ async function loadAudit() {
       break;
     }
     const page = (await pageRes.json()) || [];
-    logs = logs.concat(page);
+    // An entry written while these pages load shifts the later pages by one, so the last row of
+    // one page comes back as the first of the next. Dropped, as the export drops it, so positions
+    // agree (review of #2465).
+    const seen = new Set(logs.map((l) => l.id));
+    logs = logs.concat(page.filter((l) => !seen.has(l.id)));
     if (page.length < AUDIT_PAGE_SIZE) break;
     if (logs.length >= AUDIT_MAX_ROWS) {
       hitCeiling = true;

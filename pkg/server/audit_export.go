@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -206,9 +205,8 @@ const (
 	auditTargetTunnel = "tunnel"
 )
 
-// What classify found a value to be.
+// What classify found a value to be. Emails are not among them: forEachAuditEmail finds those.
 const (
-	valueKindEmail = "email"
 	valueKindHost  = "host"  // a hostname under a tunnel base domain
 	valueKindLabel = "label" // a bare subdomain label already known to this export
 	valueKindIP    = "ip"
@@ -225,15 +223,67 @@ type auditExportError struct {
 	Total int    `json:"total,omitempty"`
 }
 
-// emailPattern is a whole email address; tokens are matched against it entire.
-var emailPattern = regexp.MustCompile(`^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$`)
-
-// isAuditTokenChar is what a value can be made of: an email, a hostname, an IPv4 or IPv6 address.
-// Everything else -- spaces, parentheses, commas, '=', '/', quotes -- separates values, so a value
-// is only ever replaced whole and never as a substring of a longer word.
+// isAuditTokenChar is what a hostname or an IPv4 or IPv6 address can be made of ('%' for an IPv6
+// zone). Everything else -- spaces, parentheses, commas, '=', '/', '_', quotes -- separates
+// values, so a value is only ever replaced whole and never as a substring of a longer word.
+// Emails are found separately (forEachAuditEmail), because what an address may contain is far
+// wider than this.
 func isAuditTokenChar(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-		c == '.' || c == '-' || c == '_' || c == '%' || c == '+' || c == '@' || c == ':'
+		c == '.' || c == '-' || c == '%' || c == '@' || c == ':'
+}
+
+// isAuditEmailDelimiter ends an email address. Everything else around an '@' -- including
+// apostrophes and any non-ASCII letter -- is taken as part of it, because the cost of the two
+// mistakes is not symmetric: replacing a little too much loses a character of context, while
+// stopping short leaves "jürgen.mü" of "jürgen.müller@..." in an anonymised file (review of #2465).
+func isAuditEmailDelimiter(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '<', '>', '(', ')', '[', ']', '{', '}', '"', ',', ';', '=', ':', '/', '\\', '`', '|':
+		return true
+	}
+	return false
+}
+
+// forEachAuditEmail calls fn on every "local@domain" in s and splices in what fn returns. Any
+// non-empty local part and domain qualify -- admin@localhost, an IDN, ubuntu@10.1.2.3 -- since a
+// value with an '@' in an audit row is far likelier to identify someone than not.
+func forEachAuditEmail(s string, fn func(string) string) string {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] != '@' {
+			continue
+		}
+		start := i
+		for start > last && !isAuditEmailDelimiter(s[start-1]) {
+			start--
+		}
+		end := i + 1
+		for end < len(s) && !isAuditEmailDelimiter(s[end]) && s[end] != '@' {
+			end++
+		}
+		// A JSON-escaped '<' ("<jane@...") leaves "u003c" glued to the local part.
+		if start > 0 && s[start-1] == '\\' && end-start > 5 && strings.HasPrefix(strings.ToLower(s[start:]), "u00") {
+			start += 5
+		}
+		// Quotes and sentence punctuation around an address are not part of it.
+		for start < i && strings.IndexByte(`'.`, s[start]) >= 0 {
+			start++
+		}
+		for end > i+1 && strings.IndexByte(`'.`, s[end-1]) >= 0 {
+			end--
+		}
+		if start == i || end == i+1 {
+			continue
+		}
+		b.WriteString(s[last:start])
+		b.WriteString(fn(s[start:end]))
+		last = end
+		i = end - 1
+	}
+	b.WriteString(s[last:])
+	return b.String()
 }
 
 // auditAnonymiser replaces emails, tunnel subdomains and IP addresses in one export.
@@ -293,31 +343,53 @@ func anonymisedColumns(e *db.AuditEntry) []*string {
 	return []*string{&e.ActorID, &e.TargetID, &e.Details, &e.IPAddress}
 }
 
-// prepare learns every original in rows before anything is replaced, so a bare subdomain label
-// in free text is recognised even when its structured row comes later, and so no replacement can
-// collide with an original that has not been reached yet.
+// prepare learns every original before anything is replaced, so a bare subdomain label in free
+// text is recognised even when its structured row comes later, and so no replacement can collide
+// with an original that has not been reached yet.
+//
+// rows should be the whole log the export was drawn from, not only the rows being exported: a
+// label mentioned in an exported row's details but structured only in a row outside the selection
+// would otherwise survive (review of #2465).
 func (a *auditAnonymiser) prepare(rows []*db.AuditEntry) {
-	// Structured tunnel targets teach both the bare labels and any base domain the config does
-	// not list (a regional edge's domain, on central).
+	// Structured tunnel targets teach the bare labels. They teach a base domain only when it lies
+	// under a configured one (a regional edge's us.<domain>, on central): a vanity or custom domain
+	// recorded under the same target type would otherwise teach "com", and every *.com host in the
+	// export would be rewritten. With no configured domains at all, any base of two or more labels
+	// is learned instead, so a bare test server is still covered.
+	configured := append([]string(nil), a.bases...)
+	underConfigured := func(base string) bool {
+		if len(configured) == 0 {
+			return strings.Contains(base, ".")
+		}
+		for _, c := range configured {
+			if base == c || strings.HasSuffix(base, "."+c) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, e := range rows {
 		if !auditSubjectTargetTypes[e.TargetType] || e.TargetID == "" {
 			continue
 		}
-		target := strings.ToLower(e.TargetID)
-		if label, _, ok := a.splitHost(target); ok {
-			a.subdomains[label] = ""
+		target := strings.Trim(strings.ToLower(e.TargetID), ".")
+		i := strings.Index(target, ".")
+		if i < 0 {
+			a.subdomains[target] = ""
 			continue
 		}
-		if i := strings.Index(target, "."); i > 0 {
+		if base := target[i+1:]; underConfigured(base) {
 			a.subdomains[target[:i]] = ""
-			a.bases = append(a.bases, target[i+1:])
+			a.bases = append(a.bases, base)
 			a.sortBases()
-		} else {
-			a.subdomains[target] = ""
 		}
 	}
 	for _, e := range rows {
 		for _, col := range anonymisedColumns(e) {
+			forEachAuditEmail(*col, func(email string) string {
+				a.emails[strings.ToLower(email)] = ""
+				return email
+			})
 			forEachAuditToken(*col, func(tok string) string {
 				return a.eachValue(tok, func(v string) string {
 					a.learn(v)
@@ -339,8 +411,6 @@ func (a *auditAnonymiser) prepare(rows []*db.AuditEntry) {
 
 func (a *auditAnonymiser) learn(tok string) {
 	switch kind, key, _ := a.classify(tok); kind {
-	case valueKindEmail:
-		a.emails[key] = ""
 	case valueKindHost, valueKindLabel:
 		a.subdomains[key] = ""
 	case valueKindIP:
@@ -351,14 +421,19 @@ func (a *auditAnonymiser) learn(tok string) {
 // classify says what a token is and the key its replacement is stored under. For a hostname,
 // rest is the base domain to keep; for an address with a port, rest is the port suffix.
 func (a *auditAnonymiser) classify(tok string) (kind, key, rest string) {
+	// Anything with an '@' has been through forEachAuditEmail already: it is a replacement now.
 	if strings.Contains(tok, "@") {
-		if emailPattern.MatchString(tok) {
-			return valueKindEmail, strings.ToLower(tok), ""
-		}
 		return "", "", ""
 	}
 	if ip := parseAuditIP(tok); ip != nil {
 		return valueKindIP, ip.String(), ""
+	}
+	// An IPv6 zone ("fe80::1%eth0") names an interface, not a person: the address is replaced and
+	// the zone kept. net.ParseIP refuses the zoned form whole.
+	if i := strings.IndexByte(tok, '%'); i > 0 {
+		if ip := parseAuditIP(tok[:i]); ip != nil && ip.To4() == nil {
+			return valueKindIP, ip.String(), tok[i:]
+		}
 	}
 	if host, port, err := net.SplitHostPort(tok); err == nil {
 		if ip := parseAuditIP(host); ip != nil && ip.To4() != nil {
@@ -410,9 +485,22 @@ func (a *auditAnonymiser) eachValue(tok string, fn func(string) string) string {
 	return strings.Join(parts, ":")
 }
 
-// rewrite returns s with every email, tunnel subdomain and IP address replaced.
+// rewrite returns s with every email, tunnel subdomain and IP address replaced. Emails go first,
+// whole, so a hostname or address inside one ("ubuntu@10.1.2.3") is never left behind by a
+// replacement of only its other half.
 func (a *auditAnonymiser) rewrite(s string) (string, error) {
 	var failed error
+	s = forEachAuditEmail(s, func(email string) string {
+		if failed != nil {
+			return email
+		}
+		r, err := a.replacement(a.emails, strings.ToLower(email), a.newEmail)
+		if err != nil {
+			failed = err
+			return email
+		}
+		return r
+	})
 	out := forEachAuditToken(s, func(tok string) string {
 		return a.eachValue(tok, func(v string) string { return a.rewriteValue(v, &failed) })
 	})
@@ -429,8 +517,6 @@ func (a *auditAnonymiser) rewriteValue(tok string, failed *error) string {
 	var repl string
 	var err error
 	switch kind {
-	case valueKindEmail:
-		repl, err = a.replacement(a.emails, key, a.newEmail)
 	case valueKindHost:
 		repl, err = a.replacement(a.subdomains, key, a.newSubdomain)
 		repl += "." + rest
@@ -598,29 +684,57 @@ func (s *Server) allAuditEntries() ([]*db.AuditEntry, error) {
 	}
 }
 
-// auditExportRows applies the view and the selection, and reports how many rows matched.
-func (s *Server) auditExportRows(q url.Values) (rows []*db.AuditEntry, total int, status int, err error) {
+// auditExport is what one export request resolves to.
+type auditExport struct {
+	rows  []*db.AuditEntry // the rows to export, in view order
+	total int              // how many rows the view matched
+	log   []*db.AuditEntry // the whole log as of the view, for the anonymiser to learn from
+}
+
+// auditExportRows applies as_of, the view and the selection.
+//
+// as_of is the newest entry id the admin's view had loaded. Without it the export re-read the live
+// log, so every entry written since the page loaded -- a tunnel starting, someone signing in --
+// shifted every newest-first position, and "4-9" exported rows the admin had never seen. With
+// anonymisation on, nothing in the file would show it (review of #2465). Preview and export send
+// the same as_of, so their counts agree as well.
+func (s *Server) auditExportRows(q url.Values) (auditExport, int, error) {
 	view, err := auditViewFromQuery(q)
 	if err != nil {
-		return nil, 0, http.StatusBadRequest, err
+		return auditExport{}, http.StatusBadRequest, err
+	}
+	var asOf int64
+	if v := q.Get("as_of"); v != "" {
+		if asOf, err = strconv.ParseInt(v, 10, 64); err != nil || asOf < 0 {
+			return auditExport{}, http.StatusBadRequest, fmt.Errorf("as_of %q is not an entry id", v)
+		}
 	}
 	entries, err := s.allAuditEntries()
 	if err != nil {
-		return nil, 0, http.StatusInternalServerError, errors.New("failed to list audit entries")
+		return auditExport{}, http.StatusInternalServerError, errors.New("failed to list audit entries")
+	}
+	if asOf > 0 {
+		kept := entries[:0:0]
+		for _, e := range entries {
+			if e.ID <= asOf {
+				kept = append(kept, e)
+			}
+		}
+		entries = kept
 	}
 	matched := view.apply(entries)
+	out := auditExport{rows: matched, total: len(matched), log: entries}
 	sel, err := parseRowSelection(q.Get("rows"), len(matched))
 	if err != nil {
-		return nil, len(matched), http.StatusBadRequest, err
+		return out, http.StatusBadRequest, err
 	}
-	if sel == nil {
-		return matched, len(matched), http.StatusOK, nil
+	if sel != nil {
+		out.rows = make([]*db.AuditEntry, 0, len(sel))
+		for _, i := range sel {
+			out.rows = append(out.rows, matched[i])
+		}
 	}
-	rows = make([]*db.AuditEntry, 0, len(sel))
-	for _, i := range sel {
-		rows = append(rows, matched[i])
-	}
-	return rows, len(matched), http.StatusOK, nil
+	return out, http.StatusOK, nil
 }
 
 // handleAdminAuditExportPreview says how many rows an export would contain, or why the selection
@@ -631,12 +745,12 @@ func (s *Server) handleAdminAuditExportPreview(w http.ResponseWriter, r *http.Re
 		respondJSON(w, http.StatusNotImplemented, auditExportError{Error: "Database not configured"})
 		return
 	}
-	rows, total, status, err := s.auditExportRows(r.URL.Query())
+	exp, status, err := s.auditExportRows(r.URL.Query())
 	if err != nil {
-		respondJSON(w, status, auditExportError{Error: err.Error(), Total: total})
+		respondJSON(w, status, auditExportError{Error: err.Error(), Total: exp.total})
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]int{"selected": len(rows), "total": total})
+	respondJSON(w, http.StatusOK, map[string]int{"selected": len(exp.rows), "total": exp.total})
 }
 
 // auditExportFilename is audit-log-YYYY-MM-DD.csv, by the server's UTC date.
@@ -649,8 +763,9 @@ func auditExportFilename(now time.Time, anonymised bool) string {
 }
 
 // writeAuditCSV writes rows as the export's CSV. With anonymise, every row is rewritten before
-// any byte is written, so a failure cannot leave a half-anonymised file behind.
-func (s *Server) writeAuditCSV(w io.Writer, rows []*db.AuditEntry, anonymise bool) error {
+// any byte is written, so a failure cannot leave a half-anonymised file behind; the anonymiser
+// learns from log (nil means rows), so values structured only outside the selection are known.
+func (s *Server) writeAuditCSV(w io.Writer, rows, log []*db.AuditEntry, anonymise bool) error {
 	if anonymise {
 		var bases []string
 		if s.cfg != nil {
@@ -662,7 +777,10 @@ func (s *Server) writeAuditCSV(w io.Writer, rows []*db.AuditEntry, anonymise boo
 			c := *e
 			copies[i] = &c
 		}
-		anon.prepare(copies)
+		if log == nil {
+			log = rows
+		}
+		anon.prepare(log)
 		for _, e := range copies {
 			for _, col := range anonymisedColumns(e) {
 				out, err := anon.rewrite(*col)
@@ -682,12 +800,12 @@ func (s *Server) writeAuditCSV(w io.Writer, rows []*db.AuditEntry, anonymise boo
 	for _, e := range rows {
 		if err := writer.Write([]string{
 			strconv.FormatInt(e.ID, 10),
-			e.ActorID,
-			e.Action,
-			e.TargetType,
-			e.TargetID,
-			e.Details,
-			e.IPAddress,
+			csvSafeCell(e.ActorID),
+			csvSafeCell(e.Action),
+			csvSafeCell(e.TargetType),
+			csvSafeCell(e.TargetID),
+			csvSafeCell(e.Details),
+			csvSafeCell(e.IPAddress),
 			e.CreatedAt.Format(time.RFC3339),
 		}); err != nil {
 			return err
@@ -695,4 +813,15 @@ func (s *Server) writeAuditCSV(w io.Writer, rows []*db.AuditEntry, anonymise boo
 	}
 	writer.Flush()
 	return writer.Error()
+}
+
+// csvSafeCell stops a spreadsheet evaluating a cell as a formula. Audit rows carry text a
+// stranger typed -- a refused registration records the address as given -- so "=HYPERLINK(...)"
+// could otherwise run in the admin's spreadsheet. The leading apostrophe is OWASP's mitigation:
+// spreadsheets show the text as typed and do not evaluate it.
+func csvSafeCell(s string) string {
+	if s != "" && strings.IndexByte("=+-@\t\r", s[0]) >= 0 {
+		return "'" + s
+	}
+	return s
 }

@@ -5730,9 +5730,9 @@ func (s *Server) handleAdminAuditExport(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	rows, _, status, err := s.auditExportRows(r.URL.Query())
+	exp, status, err := s.auditExportRows(r.URL.Query())
 	if err != nil {
-		respondJSON(w, status, auditExportError{Error: err.Error()})
+		respondJSON(w, status, auditExportError{Error: err.Error(), Total: exp.total})
 		return
 	}
 	anonymise := r.URL.Query().Get("anonymise") == "1" || r.URL.Query().Get("anonymise") == "true"
@@ -5740,7 +5740,7 @@ func (s *Server) handleAdminAuditExport(w http.ResponseWriter, r *http.Request, 
 	// Built in memory first: a failure to anonymise must produce an error, never a partly
 	// anonymised file the browser has already started saving.
 	var buf bytes.Buffer
-	if err := s.writeAuditCSV(&buf, rows, anonymise); err != nil {
+	if err := s.writeAuditCSV(&buf, exp.rows, exp.log, anonymise); err != nil {
 		slog.Error(fmt.Sprintf("[Server] Audit export failed: %v", err))
 		http.Error(w, `{"error":"Failed to build the export"}`, http.StatusInternalServerError)
 		return

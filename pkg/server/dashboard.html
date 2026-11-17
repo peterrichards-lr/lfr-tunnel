@@ -1085,8 +1085,19 @@
             <div id="tab-audit" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2 data-i18n="sidebar_audit">Audit Logs</h2>
+                </div>
+                <!-- Export follows the search and sort applied below, and is built on the server so an
+                     anonymised file never brings raw personal data to the browser (#2464). -->
+                <div class="print-hide" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <input type="text" id="audit-export-rows" class="input-field" style="max-width: 220px; margin: 0;" data-i18n-placeholder="audit_export_rows_placeholder" placeholder="Rows, e.g. 4-9,12,18" aria-label="Rows to export (optional)" data-i18n-aria-label="aria_audit_export_rows" aria-describedby="audit-export-error">
+                    <label for="audit-export-anonymise" style="display: flex; align-items: center; gap: 6px; margin: 0;">
+                        <input type="checkbox" id="audit-export-anonymise" checked>
+                        <span data-i18n="audit_export_anonymise">Anonymise emails, subdomains and IPs</span>
+                    </label>
                     <button class="btn btn-secondary" onclick="exportAuditLog()" data-i18n="btn_export_csv">Export CSV</button>
                 </div>
+                <p id="audit-export-error" class="alert alert-error" role="alert" hidden></p>
+                <p id="audit-export-status" class="section-desc" role="status" hidden></p>
                 <p id="audit-truncated-notice" class="section-desc" hidden></p>
                 <div class="glass table-container">
                     <table>

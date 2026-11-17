@@ -4099,6 +4099,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/audit/export/preview" {
+		s.handleAdminAuditExportPreview(w, r, actor)
+		return
+	}
+
 	if r.URL.Path == "/api/admin/backups" {
 		if r.Method == http.MethodGet {
 			s.handleAdminListBackups(w, r, actor)
@@ -5716,38 +5721,36 @@ func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Req
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
-// handleAdminAuditExport streams audit log as CSV.
+// handleAdminAuditExport sends the Audit Log as CSV: the rows matching the admin's search and
+// sort (q, sort, dir), optionally a selection of them by position (rows), optionally anonymised
+// (anonymise=1). With no parameters it is every row, as the URL always promised (#2464).
 func (s *Server) handleAdminAuditExport(w http.ResponseWriter, r *http.Request, actor string) {
 	if s.db == nil {
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
 		return
 	}
 
-	entries, err := s.db.ListAuditEntries(db.AuditFilter{})
+	rows, _, status, err := s.auditExportRows(r.URL.Query())
 	if err != nil {
-		http.Error(w, `{"error":"Failed to list audit entries"}`, http.StatusInternalServerError)
+		respondJSON(w, status, auditExportError{Error: err.Error()})
+		return
+	}
+	anonymise := r.URL.Query().Get("anonymise") == "1" || r.URL.Query().Get("anonymise") == "true"
+
+	// Built in memory first: a failure to anonymise must produce an error, never a partly
+	// anonymised file the browser has already started saving.
+	var buf bytes.Buffer
+	if err := s.writeAuditCSV(&buf, rows, anonymise); err != nil {
+		slog.Error(fmt.Sprintf("[Server] Audit export failed: %v", err))
+		http.Error(w, `{"error":"Failed to build the export"}`, http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", "attachment;filename=audit_log.csv")
-
-	writer := csv.NewWriter(w)
-	_ = writer.Write([]string{"ID", "Actor", "Action", "TargetType", "TargetID", "Details", "IP", "Timestamp"}) //nolint:errcheck
-
-	for _, e := range entries {
-		_ = writer.Write([]string{ //nolint:errcheck
-			strconv.FormatInt(e.ID, 10),
-			e.ActorID,
-			e.Action,
-			e.TargetType,
-			e.TargetID,
-			e.Details,
-			e.IPAddress,
-			e.CreatedAt.Format(time.RFC3339),
-		})
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", auditExportFilename(time.Now(), anonymise)))
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		slog.Debug(fmt.Sprintf("[Server] Writing the audit export: %v", err))
 	}
-	writer.Flush()
 }
 
 func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request, actor string) {

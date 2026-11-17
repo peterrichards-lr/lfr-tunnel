@@ -444,7 +444,7 @@ function pageLabelFor(tbodyId) {
   return `${t('page', 'Page')}, ${subject}`;
 }
 
-function renderTable(tbodyId, data, renderRowFn) {
+function renderTable(tbodyId, data, renderRowFn, options) {
   if (!tableInstances[tbodyId]) {
     const tbody = document.getElementById(tbodyId);
     const container = tbody.closest('.table-container');
@@ -497,6 +497,10 @@ function renderTable(tbodyId, data, renderRowFn) {
       renderRowFn: renderRowFn,
       sortCol: null,
       sortAsc: true,
+      // Optional: the fields the search matches. Unset, it matches every field, as it always has.
+      // The audit table sets it so its search means what the server's export search means
+      // (pkg/server/audit_export.go, #2464), and what V2's does.
+      searchKeys: (options && options.searchKeys) || null,
     };
 
     // Sorting Headers
@@ -571,6 +575,14 @@ function updateTableView(tbodyId) {
 
   // Filter
   inst.filteredData = inst.data.filter((item) => {
+    if (inst.searchKeys) {
+      // V2's rule, which the export shares: whitespace alone is no search.
+      if (!term.trim()) return true;
+      return inst.searchKeys.some(
+        (key) =>
+          item[key] != null && String(item[key]).toLowerCase().includes(term),
+      );
+    }
     if (!term) return true;
     return Object.values(item).some((val) =>
       String(val).toLowerCase().includes(term),
@@ -4767,8 +4779,61 @@ async function deleteBlacklist(ip) {
   loadBlacklist();
 }
 
-function exportAuditLog() {
-  window.location.href = '/api/admin/audit/export';
+// The search and sort the Audit Log table is showing, as the export endpoints take them. The
+// server applies the same definition of both (pkg/server/audit_export.go), so a row number typed
+// into the selection means the row the admin can see (#2464).
+function auditExportParams() {
+  const inst = tableInstances['audit-table-body'];
+  const params = new URLSearchParams();
+  if (inst) {
+    params.set('q', inst.filterInput.value);
+    if (inst.sortCol) {
+      params.set('sort', inst.sortCol);
+      params.set('dir', inst.sortAsc ? 'asc' : 'desc');
+    }
+  }
+  params.set('rows', document.getElementById('audit-export-rows').value);
+  return params;
+}
+
+async function exportAuditLog() {
+  const errorEl = document.getElementById('audit-export-error');
+  const statusEl = document.getElementById('audit-export-status');
+  errorEl.hidden = true;
+  statusEl.hidden = true;
+
+  const params = auditExportParams();
+  // Asked first, so a selection that cannot be applied is explained under the field instead of
+  // downloading an error, and so the count is known before the file arrives.
+  let preview;
+  try {
+    const res = await fetch(`/api/admin/audit/export/preview?${params}`);
+    preview = await res.json();
+    if (!res.ok) {
+      errorEl.innerText =
+        preview.error ||
+        t('audit_export_failed', 'The export could not be prepared.');
+      errorEl.hidden = false;
+      return;
+    }
+  } catch (e) {
+    errorEl.innerText = t(
+      'audit_export_failed',
+      'The export could not be prepared.',
+    );
+    errorEl.hidden = false;
+    return;
+  }
+
+  statusEl.innerText = t('audit_export_status', 'Exporting {0} of {1} rows')
+    .replace('{0}', String(preview.selected))
+    .replace('{1}', String(preview.total));
+  statusEl.hidden = false;
+
+  if (document.getElementById('audit-export-anonymise').checked) {
+    params.set('anonymise', '1');
+  }
+  window.location.href = `/api/admin/audit/export?${params}`;
 }
 
 function exportAnalyticsPDF() {
@@ -4849,6 +4914,16 @@ function copyDockerCmd() {
 // an ever-growing log being pulled into the browser wholesale; the export covers the rest.
 const AUDIT_PAGE_SIZE = 200;
 const AUDIT_MAX_ROWS = 2000;
+// The fields the audit search matches -- auditSearchFields in pkg/server/audit_export.go, and the
+// searchKeys V2 passes -- so a row number means the same row in the table and the export (#2464).
+const AUDIT_SEARCH_KEYS = [
+  'actor_id',
+  'action',
+  'target_type',
+  'target_id',
+  'ip_address',
+  'details',
+];
 
 async function loadAudit() {
   // Paged, because one request cannot return everything (#1618). This asked for 100 and showed
@@ -4898,6 +4973,7 @@ async function loadAudit() {
                         <td>${escapeHTML(l.details)}</td>
                     </tr>
                 `,
+      { searchKeys: AUDIT_SEARCH_KEYS },
     );
   }
 }

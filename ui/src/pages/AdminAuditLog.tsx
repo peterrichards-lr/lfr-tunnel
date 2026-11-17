@@ -23,11 +23,25 @@ interface AuditEvent {
   details: string;
 }
 
+// The sort the export reproduces on the server (pkg/server/audit_export.go) and V1 already used:
+// lowercased values, compared by code unit. localeCompare -- the table default -- depends on the
+// browser's collation, which no server can match, so a row number would not mean the same row
+// in the table and the export (#2464).
+const compareLowercase = (a: string, b: string) => {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+
 export default function AdminAuditLog() {
   const [loadError, setLoadError] = useState('');
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [exportRows, setExportRows] = useState('');
+  const [exportAnonymise, setExportAnonymise] = useState(true);
+  const [exportError, setExportError] = useState('');
+  const [exportStatus, setExportStatus] = useState('');
   const { formatDate } = useSettings();
   const { t } = useI18n();
 
@@ -112,14 +126,49 @@ export default function AdminAuditLog() {
     requestSort,
     getSortIndicator,
     getAriaSort,
+    sortConfig,
   } = useDataTable<AuditEvent>(
     'admin_audit',
     events,
+    // The same fields the server's export search matches (auditSearchFields).
     ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details'],
     columns,
     10,
     ['ip_address'],
+    undefined,
+    undefined,
+    'all',
+    compareLowercase,
   );
+
+  // Asks the server how many rows the export holds first, so a selection it cannot apply is
+  // explained under the field rather than downloaded as an error, then lets the browser fetch the
+  // file itself -- with anonymise on, the raw values never pass through this page (#2464).
+  const handleExport = async () => {
+    setExportError('');
+    setExportStatus('');
+    const params = new URLSearchParams({ q: searchQuery, rows: exportRows });
+    if (sortConfig) {
+      params.set('sort', String(sortConfig.key));
+      params.set('dir', sortConfig.direction);
+    }
+    try {
+      const res = await axios.get(`/api/admin/audit/export/preview?${params}`);
+      setExportStatus(
+        t('audit_export_status', 'Exporting {0} of {1} rows')
+          .replace('{0}', String(res.data.selected))
+          .replace('{1}', String(res.data.total)),
+      );
+    } catch (e: any) {
+      setExportError(
+        e.response?.data?.error ||
+          t('audit_export_failed', 'The export could not be prepared.'),
+      );
+      return;
+    }
+    if (exportAnonymise) params.set('anonymise', '1');
+    window.location.href = `/api/admin/audit/export?${params}`;
+  };
 
   if (loading) {
     return (
@@ -224,13 +273,56 @@ export default function AdminAuditLog() {
               ).replace('{0}', String(AUDIT_MAX))}
             </p>
           )}
+          <p
+            id="audit-export-error"
+            className="text-danger text-sm mt-sm mb-0"
+            role="alert"
+            hidden={!exportError}
+          >
+            {exportError}
+          </p>
+          {exportStatus && (
+            <p className="text-sm mt-sm" role="status">
+              {exportStatus}
+            </p>
+          )}
         </div>
-        <a
-          href="/api/admin/audit/export"
-          className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
-        >
-          📥 {t('export_csv', 'Export CSV')}
-        </a>
+        <div className="flex gap-md items-center print-hide">
+          <input
+            type="text"
+            className="form-control w-auto"
+            value={exportRows}
+            onChange={(e) => setExportRows(e.target.value)}
+            placeholder={t(
+              'audit_export_rows_placeholder',
+              'Rows, e.g. 4-9,12,18',
+            )}
+            aria-label={t(
+              'aria_audit_export_rows',
+              'Rows to export (optional)',
+            )}
+            aria-invalid={exportError ? true : undefined}
+            aria-describedby="audit-export-error"
+          />
+          <label className="form-label m-0 inline-flex items-center gap-sm whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={exportAnonymise}
+              onChange={(e) => setExportAnonymise(e.target.checked)}
+            />
+            {t(
+              'audit_export_anonymise',
+              'Anonymise emails, subdomains and IPs',
+            )}
+          </label>
+          <button
+            type="button"
+            onClick={handleExport}
+            className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
+          >
+            📥 {t('export_csv', 'Export CSV')}
+          </button>
+        </div>
       </div>
 
       <div className="card p-0">

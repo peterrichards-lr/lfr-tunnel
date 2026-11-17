@@ -24,13 +24,30 @@ import (
 //   - 302, not 301: browsers keep a 301 indefinitely, so a wrong canonical setting -- or deciding
 //     to undo this -- would stay stuck in every browser that saw it (the reason #1477 chose 302).
 
+// portalDocumentPaths load a portal page in either arm; portalDocumentPrefixes do too, beneath them.
+// Written as one list each so these paths are not yet another copy of literals the router repeats.
+var (
+	portalDocumentPaths = func() map[string]bool {
+		m := map[string]bool{}
+		for _, p := range strings.Fields("/ /portal /admin /portalv2 /setup /privacy /cookies") {
+			m[p] = true
+		}
+		return m
+	}()
+	portalDocumentPrefixes = strings.Fields("/portal/ /admin/ /portalv2/")
+)
+
 // isPortalDocumentPath reports whether p loads a portal page in either arm.
 func isPortalDocumentPath(p string) bool {
-	switch p {
-	case "/", "/portal", "/admin", "/portalv2", "/setup", "/privacy", "/cookies":
+	if portalDocumentPaths[p] {
 		return true
 	}
-	return strings.HasPrefix(p, "/portal/") || strings.HasPrefix(p, "/admin/") || strings.HasPrefix(p, "/portalv2/")
+	for _, prefix := range portalDocumentPrefixes {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // isConfiguredControlName reports whether host (lower-case, no port) is the apex, tunnel., portal.

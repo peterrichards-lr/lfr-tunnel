@@ -132,6 +132,16 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	})
 
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, r *http.Request) {
+		// Dial before taking the lock for the rest (review of #2484). Proxied requests take
+		// engine.mu for writing, and a writer waiting behind a reader blocks new readers too, so
+		// dialling N slow ports under the lock stalled live traffic -- /api/healthz already
+		// copies what it needs first.
+		engine.mu.RLock()
+		targets := engine.localTargetsLocked()
+		targetHost := engine.TargetHost
+		engine.mu.RUnlock()
+		portUp := localPortsUp(targetHost, targets, 500*time.Millisecond)
+
 		engine.mu.RLock()
 		defer engine.mu.RUnlock()
 
@@ -153,14 +163,16 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			avgLatency = engine.LatencyLast
 		}
 
-		// Dial every published port, as /api/healthz does (#2478).
-		targets := engine.localTargetsLocked()
-		destResponsive := localPortsResponsive(engine.TargetHost, targets, 500*time.Millisecond)
+		// Every published port is dialled, as /api/healthz does (#2478), and each reports its
+		// own answer so a caller can name the port that is down (review of #2484).
+		destResponsive := true
 		destPorts := make([]map[string]interface{}, 0, len(targets))
-		for _, t := range targets {
+		for i, t := range targets {
+			destResponsive = destResponsive && portUp[i]
 			destPorts = append(destPorts, map[string]interface{}{
 				"port":        t.LocalPort,
 				"name_suffix": t.NameSuffix,
+				"responsive":  portUp[i],
 			})
 		}
 

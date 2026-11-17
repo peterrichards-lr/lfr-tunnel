@@ -611,6 +611,12 @@ type ClientHooksConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
+	// PortsEnvErr is a malformed LFT_CLIENT_PORTS, kept rather than returned (review of #2484).
+	// Returning it made every command fail -- -stop, -status, -version -- so a stale variable left
+	// a running tunnel impossible to stop. It is reported when a tunnel is about to start, and an
+	// explicit -ports, which outranks the variable, makes it moot. Never saved.
+	PortsEnvErr error `yaml:"-" json:"-"`
+
 	ServerURL string `yaml:"server_url"`
 	AuthToken string `yaml:"auth_token"`
 	// TokenFile names a file holding the Personal Access Token, so the token itself need not
@@ -1444,9 +1450,10 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	if val := os.Getenv("LFT_CLIENT_PORTS"); strings.TrimSpace(val) != "" {
 		ports, err := ParsePortList("LFT_CLIENT_PORTS", val)
 		if err != nil {
-			return nil, err
+			cfg.PortsEnvErr = err
+		} else {
+			cfg.Ports = ports
 		}
-		cfg.Ports = ports
 	}
 
 	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
@@ -1518,8 +1525,6 @@ func cleanSubdomainPrefix(val string) string {
 	return val
 }
 
-// cleanTargetHost extracts the hostname/IP from a URL (e.g. http://liferay:8080 -> liferay)
-// or returns the original string if it is already a plain hostname/IP.
 // PortListForm is the accepted form of a local port list, for error messages.
 const PortListForm = "each port must be a whole number 1-65535, separated by commas (e.g. 8080,3000)"
 
@@ -1558,6 +1563,8 @@ func isPortNumber(s string) bool {
 	return true
 }
 
+// cleanTargetHost extracts the hostname/IP from a URL (e.g. http://liferay:8080 -> liferay)
+// or returns the original string if it is already a plain hostname/IP.
 func cleanTargetHost(target string) string {
 	if target == "" {
 		return ""

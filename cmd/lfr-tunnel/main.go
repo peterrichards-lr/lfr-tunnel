@@ -1251,6 +1251,9 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	}
 
 	if *background {
+		if err := validateRequestedPorts(cfg); err != nil {
+			log.Fatalf("[Error] %v", err)
+		}
 		handleBackground(sub)
 		return true
 	}
@@ -1305,13 +1308,45 @@ func normalizeDiscoveredHost(host string) string {
 // An empty resolved list means "nobody said" -- not "no ports" -- and is what makes the
 // workspace scan and host auto-discovery reachable. An explicit -ports flag, ports: in the
 // config file, or LFT_CLIENT_PORTS always wins and skips discovery entirely.
+// portsFlagGiven reports whether -ports appeared on the command line at all -- including as an
+// empty value, which is an error, not "not given" (review of #2484): a wrapper running
+// `-ports "$PORTS"` with PORTS unset must not fall through to discovery.
+//
+// A variable so a test can stand in for flag.Visit: the flag package cannot forget that a flag
+// was set, so setting it for real in one test would leak into every later one.
+var portsFlagGiven = func() bool {
+	given := *portsStr != ""
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "ports" {
+			given = true
+		}
+	})
+	return given
+}
+
+// validateRequestedPorts refuses a malformed port request before anything acts on it (#2477).
+// Called before -background hands off as well as before a foreground start (review of #2484):
+// otherwise the intermediate exited 0 and the error went only to the background log, so LDM saw a
+// timeout and MCP reported "pending" for a tunnel that would never exist. An explicit -ports
+// outranks LFT_CLIENT_PORTS, so a malformed variable only matters when -ports is absent.
+func validateRequestedPorts(cfg *config.ClientConfig) error {
+	if portsFlagGiven() {
+		_, err := config.ParsePortList("-ports", *portsStr)
+		return err
+	}
+	return cfg.PortsEnvErr
+}
+
 func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, error) {
 	var ports []int
 	var err error
 	// A malformed list is an error, never a fall-through to discovery (#2477). The parser
 	// used to drop what strconv.Atoi refused, so `-ports 9999:80` became an empty list and the
 	// client published whatever answered on 8080.
-	if *portsStr != "" {
+	if err := validateRequestedPorts(cfg); err != nil {
+		return nil, err
+	}
+	if portsFlagGiven() {
 		ports, err = config.ParsePortList("-ports", *portsStr)
 		if err != nil {
 			return nil, err

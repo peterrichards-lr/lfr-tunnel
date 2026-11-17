@@ -204,3 +204,36 @@ func renderToString(t *testing.T, engine *InterceptorEngine) string {
 	}
 	return <-done
 }
+
+// Review of #2484: /api/info reports each published port's own answer, so a caller -- LDM's
+// share diagnosis, the MCP tool -- can name the port that is down rather than the primary.
+func TestInfoReportsEachPortsResponsiveness(t *testing.T) {
+	open := listenLocal(t)
+	closed := closedLocalPort(t)
+	engine := healthyEngine(t, []PortMapping{{LocalPort: open}, {LocalPort: closed, NameSuffix: "ext"}})
+	inspector := startInspectorForTest(t, engine, 47300)
+
+	_, body := getInspector(t, inspector, "/api/info")
+	var info struct {
+		Status      string `json:"status"`
+		Destination struct {
+			Ports []struct {
+				Port       int  `json:"port"`
+				Responsive bool `json:"responsive"`
+			} `json:"ports"`
+		} `json:"destination"`
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
+		t.Fatalf("decoding /api/info: %v\n%s", err, body)
+	}
+	got := map[int]bool{}
+	for _, p := range info.Destination.Ports {
+		got[p.Port] = p.Responsive
+	}
+	if len(got) != 2 || !got[open] || got[closed] {
+		t.Errorf("per-port responsiveness %v; want %d:true and %d:false", got, open, closed)
+	}
+	if info.Status != "unhealthy" {
+		t.Errorf("status %q with one port down; want unhealthy", info.Status)
+	}
+}

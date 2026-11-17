@@ -91,6 +91,10 @@ func TestParsePortListAcceptsValidValues(t *testing.T) {
 // to be parsed with the same drop-what-does-not-parse loop and, when nothing survived, left
 // cfg.Ports as the file had it -- so a typo in the environment silently published whatever
 // the file or discovery chose.
+//
+// The error is carried on PortsEnvErr rather than failing the load (review of #2484): failing
+// the load broke -stop and -status too, so a stale variable left a running tunnel unstoppable.
+// The client reports it when a tunnel is about to start.
 func TestLoadClientConfigRefusesMalformedPortsEnv(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("ports:\n  - 3000\n"), 0o600); err != nil {
@@ -103,9 +107,13 @@ func TestLoadClientConfigRefusesMalformedPortsEnv(t *testing.T) {
 		}
 		t.Run(tc.value, func(t *testing.T) {
 			t.Setenv("LFT_CLIENT_PORTS", tc.value)
-			cfg, err := LoadClientConfig(path)
+			cfg, loadErr := LoadClientConfig(path)
+			if loadErr != nil {
+				t.Fatalf("a malformed LFT_CLIENT_PORTS failed the whole load (%v); -stop and -status must still work", loadErr)
+			}
+			err := cfg.PortsEnvErr
 			if err == nil {
-				t.Fatalf("LFT_CLIENT_PORTS=%q loaded with ports %v; want an error naming %q",
+				t.Fatalf("LFT_CLIENT_PORTS=%q loaded with ports %v and no error; want one naming %q",
 					tc.value, cfg.Ports, tc.badPart)
 			}
 			if !strings.Contains(err.Error(), `"`+tc.badPart+`"`) || !strings.Contains(err.Error(), "LFT_CLIENT_PORTS") {

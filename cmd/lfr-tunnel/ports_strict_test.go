@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -207,4 +208,35 @@ func mustResolvePorts(t *testing.T, cfg *config.ClientConfig) []client.PortMappi
 		t.Fatalf("resolvePortsAndMappings: %v", err)
 	}
 	return mappings
+}
+
+// Review of #2484: `-ports ""` is given-but-empty, an error -- not "not given", which fell through
+// to discovery for a wrapper running `-ports "$PORTS"` with PORTS unset.
+func TestValidateRequestedPorts_ExplicitlyEmptyFlagIsRefused(t *testing.T) {
+	withPortsFlag(t, "")
+	old := portsFlagGiven
+	portsFlagGiven = func() bool { return true }
+	t.Cleanup(func() { portsFlagGiven = old })
+
+	if err := validateRequestedPorts(&config.ClientConfig{}); err == nil {
+		t.Fatal(`-ports "" was accepted; want an error, not a fall-through to discovery`)
+	}
+}
+
+// Review of #2484: a malformed LFT_CLIENT_PORTS is reported when a tunnel starts -- including
+// before -background hands off -- but an explicit -ports outranks it, and it no longer fails the
+// whole config load (so -stop and -status keep working).
+func TestValidateRequestedPorts_EnvErrorSurfacesOnlyWithoutAFlag(t *testing.T) {
+	envErr := errors.New(`invalid port "9999:80" in LFT_CLIENT_PORTS`)
+	cfg := &config.ClientConfig{PortsEnvErr: envErr}
+
+	withPortsFlag(t, "")
+	if err := validateRequestedPorts(cfg); err == nil || !strings.Contains(err.Error(), "LFT_CLIENT_PORTS") {
+		t.Errorf("no -ports, malformed LFT_CLIENT_PORTS: got %v, want the env error", err)
+	}
+
+	withPortsFlag(t, "9999")
+	if err := validateRequestedPorts(cfg); err != nil {
+		t.Errorf("a valid -ports must outrank a malformed LFT_CLIENT_PORTS, got %v", err)
+	}
 }

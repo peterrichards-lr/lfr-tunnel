@@ -311,6 +311,23 @@ func (e *InterceptorEngine) localTargetsLocked() []PortMapping {
 // localPortsResponsive dials every published port on host and reports whether all of them
 // answered -- the same aggregate localTargetStatus reports to the gateway, so the local
 // health check cannot call healthy a tunnel whose heartbeat says down.
+// localPortsUp dials each published port and reports, per port, whether it answered -- so a
+// caller can say WHICH port is down rather than only that one is (review of #2484).
+func localPortsUp(host string, targets []PortMapping, timeout time.Duration) []bool {
+	up := make([]bool, len(targets))
+	for i, t := range targets {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, t.LocalPort), timeout)
+		if err != nil {
+			continue
+		}
+		up[i] = true
+		if cerr := conn.Close(); cerr != nil {
+			slog.Debug("closing a local health-check dial", "port", t.LocalPort, "error", cerr)
+		}
+	}
+	return up
+}
+
 func localPortsResponsive(host string, targets []PortMapping, timeout time.Duration) bool {
 	for _, t := range targets {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, t.LocalPort), timeout)

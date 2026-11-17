@@ -1049,6 +1049,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isControl {
+		// One portal host (#2476): a page load on another control name goes to the canonical one.
+		if target := s.canonicalPortalRedirect(r, host); target != "" {
+			http.Redirect(w, r, target, http.StatusFound)
+			return
+		}
+
 		// Respond to capability-discovery OPTIONS requests on the root routing
 		// chain directly, rather than letting them fall through to the data-plane
 		// ProxyHandler (which has no lease for a control-domain host and would

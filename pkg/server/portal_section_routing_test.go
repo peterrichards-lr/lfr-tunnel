@@ -61,8 +61,8 @@ func TestServer_PortalSectionPathIsServed(t *testing.T) {
 	}
 
 	for _, path := range paths {
-		req := httptest.NewRequest("GET", "http://example.com"+path, nil)
-		req.Host = "example.com"
+		req := httptest.NewRequest("GET", "http://tunnel.example.com"+path, nil)
+		req.Host = "tunnel.example.com"
 		rec := httptest.NewRecorder()
 
 		srv.ServeHTTP(rec, req)
@@ -90,8 +90,8 @@ func TestServer_PortalSectionPathIsServed(t *testing.T) {
 func TestServer_PortalDocumentUsesAbsoluteAssetPaths(t *testing.T) {
 	srv := newSectionRedirectServer(t)
 
-	req := httptest.NewRequest("GET", "http://example.com/portal/users", nil)
-	req.Host = "example.com"
+	req := httptest.NewRequest("GET", "http://tunnel.example.com/portal/users", nil)
+	req.Host = "tunnel.example.com"
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 
@@ -119,8 +119,8 @@ func TestServer_PortalSectionRoutingLeavesOtherRoutesAlone(t *testing.T) {
 		// is "v", not "/" -- but it is one edit away from doing so, and swallowing the V2
 		// SPA would be a far worse bug than the one being fixed here.
 		for _, path := range []string{"/portalv2", "/portalv2/", "/portalv2/admin/users"} {
-			req := httptest.NewRequest("GET", "http://example.com"+path, nil)
-			req.Host = "example.com"
+			req := httptest.NewRequest("GET", "http://tunnel.example.com"+path, nil)
+			req.Host = "tunnel.example.com"
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, req)
 			// The V1 document would be a 200 too, so the status cannot tell them apart --
@@ -134,8 +134,8 @@ func TestServer_PortalSectionRoutingLeavesOtherRoutesAlone(t *testing.T) {
 
 	t.Run("the exact pages still render", func(t *testing.T) {
 		for _, path := range []string{"/portal", "/admin", "/"} {
-			req := httptest.NewRequest("GET", "http://example.com"+path, nil)
-			req.Host = "example.com"
+			req := httptest.NewRequest("GET", "http://tunnel.example.com"+path, nil)
+			req.Host = "tunnel.example.com"
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {
@@ -148,8 +148,8 @@ func TestServer_PortalSectionRoutingLeavesOtherRoutesAlone(t *testing.T) {
 		// The two rules overlap on "/portal/", and this one has to win. "/portal/" names no
 		// section, so serving the document there would leave a URL with a dangling slash
 		// that /portal already canonicalises away.
-		req := httptest.NewRequest("GET", "http://example.com/portal/", nil)
-		req.Host = "example.com"
+		req := httptest.NewRequest("GET", "http://tunnel.example.com/portal/", nil)
+		req.Host = "tunnel.example.com"
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 		if rec.Code != http.StatusMovedPermanently {

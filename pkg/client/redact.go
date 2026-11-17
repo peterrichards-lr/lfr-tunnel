@@ -33,18 +33,55 @@ import (
 // token here", because those two say different things about what they are looking at.
 const redactedPlaceholder = "[REDACTED]"
 
-// patPattern and bareHexPATPattern match this product's personal access tokens, in both shapes a
+// patPattern and redactBareHexPATs match this product's personal access tokens, in both shapes a
 // gateway issues (the same two looksLikeAccessToken accepts, #2457). Listed first because they are
 // the one secret this repo issues and therefore the one it is responsible for.
 //
 // patPattern: the registration-claim path's tokens, which carry claimedTokenPrefix.
 var patPattern = regexp.MustCompile(`\b` + claimedTokenPrefix + `[A-Za-z0-9_\-]+`)
 
-// bareHexPATPattern: every token created in the portal -- 32 lowercase hex characters with no
-// prefix (generateSecureToken, pkg/server/server.go), which only context used to give away
-// (#2460). Whole words only, so a 64-hex SHA-256 is left alone; another 128-bit hex value in a
-// log is redacted with it, which is the safe direction to be wrong in.
-var bareHexPATPattern = regexp.MustCompile(`\b[0-9a-f]{32}\b`)
+// redactBareHexPATs removes every token created in the portal -- 32 lowercase hex characters with
+// no prefix (generateSecureToken, pkg/server/server.go), which only context used to give away
+// (#2460).
+//
+// A scan rather than `\b[0-9a-f]{32}\b`: RE2's \b counts letters, digits and `_` as word
+// characters, so `token_<hex>` and a percent-encoded `%3D<hex>` had no boundary and escaped. Here
+// only a lowercase hex character extends a run, and the two digits of a `%XX` escape are not part
+// of the run that follows them. A run of exactly 32 is redacted; a longer one (a 64-hex SHA-256) is
+// left alone. Another 128-bit hex value in a log is redacted with the tokens, which is the safe
+// direction to be wrong in.
+func redactBareHexPATs(s string) string {
+	const tokenLen = 32
+	isHex := func(c byte) bool { return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' }
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(s); {
+		if !isHex(s[i]) {
+			i++
+			continue
+		}
+		start := i
+		// The two digits after '%' are the escape's, not the start of a token: %3D<hex>, %20<hex>.
+		if start > 0 && s[start-1] == '%' && start+2 <= len(s) && isHex(s[start+1]) {
+			start += 2
+		}
+		end := i
+		for end < len(s) && isHex(s[end]) {
+			end++
+		}
+		if end-start == tokenLen {
+			b.WriteString(s[last:start])
+			b.WriteString(redactedPlaceholder)
+			last = end
+		}
+		i = end
+	}
+	if last == 0 {
+		return s
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
 
 // bearerPattern catches an Authorization value that reached free text.
 var bearerPattern = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._\-+/=]{8,}`)
@@ -71,7 +108,7 @@ func redactText(s string) string {
 		return s
 	}
 	s = patPattern.ReplaceAllString(s, redactedPlaceholder)
-	s = bareHexPATPattern.ReplaceAllString(s, redactedPlaceholder)
+	s = redactBareHexPATs(s)
 	s = urlCredentialPattern.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
 	s = bearerPattern.ReplaceAllString(s, "${1} "+redactedPlaceholder)
 	s = queryCredentialPattern.ReplaceAllString(s, "${1}="+redactedPlaceholder)

@@ -145,6 +145,11 @@ func TestControlUnredactedContentStillContainsTheSecrets(t *testing.T) {
 	if redacted := redactText(string(raw)); strings.Contains(redacted, seededPAT) {
 		t.Fatal("redactText did not remove the PAT")
 	}
+	// Two tokens one character apart: the second must not be lost to the first's match.
+	two := seededBareHexPAT + " " + strings.Repeat("a", 32)
+	if got := redactText(two); got != redactedPlaceholder+" "+redactedPlaceholder {
+		t.Errorf("redactText(%q) = %q, want both tokens redacted", two, got)
+	}
 	if !strings.Contains(string(raw), seededBareHexPAT) {
 		t.Fatal("the unredacted console log does not contain the bare hex PAT, so its redaction test is vacuous")
 	}
@@ -266,6 +271,13 @@ func TestRedactTextCases(t *testing.T) {
 		{"a PAT", "using " + seededPAT + " now", seededPAT},
 		{"a portal PAT, bare 32 hex, with nothing naming it", "using " + seededBareHexPAT + " now", seededBareHexPAT},
 		{"a portal PAT at the end of a line", "saved " + seededBareHexPAT, seededBareHexPAT},
+		// RE2's \b counts `_`, letters and digits as word characters, so these had no boundary
+		// (#2460 review): a joined underscore, and a percent-encoded token whose escape ends in an
+		// uppercase letter (%3D) or a hex digit (%20 makes a 34-character hex run).
+		{"a portal PAT after an underscore", "token_" + seededBareHexPAT, seededBareHexPAT},
+		{"a portal PAT before an underscore", seededBareHexPAT + "_x", seededBareHexPAT},
+		{"a percent-encoded portal PAT after %3D", "/login?next=%2Fcb%3Ftoken%3D" + seededBareHexPAT, seededBareHexPAT},
+		{"a percent-encoded portal PAT after %20", "note=using%20" + seededBareHexPAT, seededBareHexPAT},
 		{"a bearer token", "Authorization: Bearer abc123def456ghi", "abc123def456ghi"},
 		{"URL credentials", "https://alice:" + seededSecret + "@example.com/x", seededSecret},
 		{"a query token", "/cb?access_token=" + seededPAT + "&next=/home", seededPAT},

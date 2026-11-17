@@ -36,9 +36,10 @@ func RunLogin(serverURL string) error {
 		if r.Method == http.MethodPost {
 			body, _ := io.ReadAll(r.Body)
 			token := strings.TrimSpace(string(body))
-			// Anything that is not a token is refused and the login keeps waiting (#2457).
-			// This listener answers any local process and any page open in the browser, so
-			// accepting the first body to arrive let a stray POST end the login with junk.
+			// Anything that is not a token is refused and the login keeps waiting (#2457), so a
+			// stray POST can no longer end the login with junk. This is a shape check only: the
+			// listener still answers any local process or web page, and one that POSTs a real
+			// token -- its own -- is accepted, as it was before.
 			if looksLikeAccessToken(token) {
 				w.WriteHeader(http.StatusOK)
 				select {
@@ -95,10 +96,25 @@ func RunLogin(serverURL string) error {
 	in := stdinReader
 	failChan := make(chan error, 1)
 	go func() {
-		var manualToken string
-		if _, err := fmt.Fscan(in, &manualToken); err == nil && manualToken != "" {
-			tokenChan <- manualToken
-			return
+		for {
+			var manualToken string
+			if _, err := fmt.Fscan(in, &manualToken); err != nil || manualToken == "" {
+				break
+			}
+			if looksLikeAccessToken(manualToken) {
+				tokenChan <- manualToken
+				return
+			}
+			// Not a token (#2457). It used to be saved over a working token and reported as
+			// success. With the handoff listener up, refuse it and keep waiting: the browser
+			// may still deliver, and ending the login here would throw that away. With no
+			// listener, nothing else can deliver, so fail now and say why.
+			refusal := refusedTokenError(manualToken)
+			if listenErr != nil {
+				failChan <- refusal
+				return
+			}
+			fmt.Printf("\n⚠️  %v\n   Still waiting for the browser, or paste a token here: ", refusal)
 		}
 		if listenErr != nil {
 			// Neither route can deliver a token now: the handoff listener never started,
@@ -125,15 +141,7 @@ func RunLogin(serverURL string) error {
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 	}
 
-	// Only the paste can still be wrong here -- the handoff refuses non-tokens itself. It used to
-	// be saved whatever it was, over a working token, and reported as success (#2457).
-	if !looksLikeAccessToken(token) {
-		return fmt.Errorf("the value entered is not an access token (%s); nothing was saved. "+
-			"Paste a token from the token list in the portal: 32 hex characters, "+
-			"optionally starting with %q", describeRejectedValue(token), claimedTokenPrefix)
-	}
-
-	// Save the token
+	// Save the token. Both routes above deliver only values looksLikeAccessToken accepts.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("could not get home dir: %w", err)
@@ -164,20 +172,34 @@ func looksLikeAccessToken(s string) bool {
 	return accessTokenPattern.MatchString(s)
 }
 
+// refusedTokenError explains why a pasted value was not saved.
+func refusedTokenError(s string) error {
+	return fmt.Errorf("the value entered is not an access token (%s); nothing was saved. "+
+		"Paste a token from the token list in the portal: 32 hex characters, "+
+		"optionally starting with %q", describeRejectedValue(s), claimedTokenPrefix)
+}
+
 // describeRejectedValue says enough about a refused value for the user to recognise what they
 // pasted -- a URL, a secrets-file line -- without printing a secret they pasted by mistake.
+// Counted in characters, not bytes, so a pasted quote or BOM is never shown as half a rune.
 func describeRejectedValue(s string) string {
 	const shown = 4
-	if len(s) <= shown {
-		return fmt.Sprintf("%d characters", len(s))
+	r := []rune(s)
+	if len(r) <= shown {
+		return fmt.Sprintf("%d characters", len(r))
 	}
-	return fmt.Sprintf("%d characters, starting %q", len(s), s[:shown])
+	return fmt.Sprintf("%d characters, starting %q", len(r), string(r[:shown]))
 }
 
 // writeTokenFile replaces the token file atomically, so a failed write cannot leave the user
-// with a truncated token in place of a working one.
+// with a truncated token in place of a working one. A token file that is a symlink is written
+// through to its target, as os.WriteFile did, rather than replaced by a regular file.
 func writeTokenFile(dir, token string) error {
-	tmp, err := os.CreateTemp(dir, "token-*.tmp")
+	path := filepath.Join(dir, "token")
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "token-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -194,7 +216,7 @@ func writeTokenFile(dir, token string) error {
 		return err
 	}
 	// os.CreateTemp already creates the file 0600, the mode the token file has always had.
-	if err := os.Rename(tmpPath, filepath.Join(dir, "token")); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		removeTempToken(tmpPath)
 		return err
 	}

@@ -225,8 +225,18 @@ func TestRunLogin(t *testing.T) {
 
 	home := fakeHome(t)
 
-	if err := RunLogin("https://tunnel.lfr-demo.se"); err != nil {
-		t.Fatalf("RunLogin failed: %v", err)
+	// Bounded: a handoff that is never accepted must fail this test, not hang it. make test runs
+	// the test binary directly, which has no default timeout, and a hung run holds the shared
+	// test lock for every other session (review of #2461).
+	errChan := make(chan error, 1)
+	go func() { errChan <- RunLogin("https://tunnel.lfr-demo.se") }()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("RunLogin failed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunLogin did not finish after the token was handed off")
 	}
 
 	saved, err := os.ReadFile(filepath.Join(home, ".lfr-tunnel", "token"))

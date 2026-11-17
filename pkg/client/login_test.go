@@ -212,6 +212,64 @@ func TestDescribeRejectedValue(t *testing.T) {
 	}
 }
 
+// A junk paste while the handoff listener is alive is refused and the login keeps going, so the
+// next paste (or the browser) can still finish it. Ending the login there threw away a handoff
+// that might have been seconds away, and opened a window in which a real handed-off token was
+// acknowledged and then dropped (review of #2461).
+func TestRunLogin_RePromptsAfterAJunkPasteWhileTheHandoffIsAlive(t *testing.T) {
+	stubLoginBrowser(t)
+	handoffEphemeral(t)
+	stdinWith(t, notAToken+"\n"+portalPAT+"\n")
+	home := fakeHome(t)
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- RunLogin("https://tunnel.example.com") }()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("a junk paste ended the login while the handoff could still arrive: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunLogin did not finish after a valid paste followed the junk one")
+	}
+	saved, err := os.ReadFile(filepath.Join(home, ".lfr-tunnel", "token"))
+	if err != nil || string(saved) != portalPAT {
+		t.Errorf("saved token = %q (%v), want %q", saved, err, portalPAT)
+	}
+}
+
+// A token file that is a symlink -- into a dotfiles repository or a mounted secret store -- is
+// written through, as os.WriteFile always did, not replaced by a regular file that leaves the
+// real one holding the old token (review of #2461).
+func TestRunLogin_WritesThroughASymlinkedTokenFile(t *testing.T) {
+	stubLoginBrowser(t)
+	handoffBusy(t)
+	stdinWith(t, portalPAT+"\n")
+	home := fakeHome(t)
+
+	target := filepath.Join(t.TempDir(), "real-token")
+	if err := os.WriteFile(target, []byte(claimedPAT), 0600); err != nil {
+		t.Fatalf("seeding target: %v", err)
+	}
+	link := filepath.Join(home, ".lfr-tunnel", "token")
+	if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable here (Windows without the privilege): %v", err)
+	}
+
+	if err := RunLogin("https://tunnel.example.com"); err != nil {
+		t.Fatalf("RunLogin: %v", err)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the token file is no longer a symlink (mode %v, err %v)", fi.Mode(), err)
+	}
+	if got, _ := os.ReadFile(target); string(got) != portalPAT {
+		t.Errorf("symlink target holds %q, want the new token %q", got, portalPAT)
+	}
+}
+
 // BOUNDING, not FIRING: passes before and after #2457. It pins that both shapes a gateway
 // issues still log in, so a shape check that is too strict turns this red.
 func TestRunLogin_AcceptsEveryIssuedTokenShape(t *testing.T) {

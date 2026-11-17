@@ -558,7 +558,7 @@ func TestResolvePortsAndMappings(t *testing.T) {
 		Ports: []int{8080},
 	}
 
-	mappings := resolvePortsAndMappings(cfg)
+	mappings := mustResolvePorts(t, cfg)
 	if len(mappings) != 1 {
 		t.Errorf("Expected 1 mapping")
 	}
@@ -748,7 +748,7 @@ func TestResolvePortsAndMappings_ExplicitConfigPortsSkipDiscovery(t *testing.T) 
 	*portsStr = ""
 	defer func() { *portsStr = oldPortsStr }()
 
-	mappings := resolvePortsAndMappings(&config.ClientConfig{Ports: []int{9090, 7070}})
+	mappings := mustResolvePorts(t, &config.ClientConfig{Ports: []int{9090, 7070}})
 
 	if spies.workspaceChecked != 0 || spies.workspaceScanned != 0 || spies.autoDiscovered != 0 {
 		t.Fatalf("explicit ports must skip discovery entirely, got %+v", *spies)
@@ -782,7 +782,7 @@ func TestResolvePortsAndMappings_ExplicitFlagSkipsDiscovery(t *testing.T) {
 	*portsStr = "3000"
 	defer func() { *portsStr = oldPortsStr }()
 
-	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+	mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 	if spies.workspaceChecked != 0 || spies.workspaceScanned != 0 || spies.autoDiscovered != 0 {
 		t.Fatalf("-ports must skip discovery entirely, got %+v", *spies)
@@ -813,7 +813,7 @@ func TestResolvePortsAndMappings_UnsetReachesWorkspaceScan(t *testing.T) {
 	*portsStr = ""
 	defer func() { *portsStr = oldPortsStr }()
 
-	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+	mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 	if spies.workspaceScanned != 1 {
 		t.Fatalf("workspace scan unreachable: DetectWorkspacePorts called %d times", spies.workspaceScanned)
@@ -860,7 +860,7 @@ func TestResolvePortsAndMappings_ScansARealWorkspaceOnDisk(t *testing.T) {
 	defer func() { *portsStr = oldPortsStr }()
 
 	// An unset Ports list, exactly as DefaultClientConfig now produces it.
-	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+	mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 	if len(mappings) != 2 {
 		t.Fatalf("expected 8080 plus the client extension's port, got %+v", mappings)
@@ -891,7 +891,7 @@ func TestResolvePortsAndMappings_UnsetReachesAutoDiscovery(t *testing.T) {
 	*portsStr = ""
 	defer func() { *portsStr = oldPortsStr }()
 
-	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+	mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 	if spies.autoDiscovered != 1 {
 		t.Fatalf("auto-discovery unreachable: AutoDiscoverTarget called %d times", spies.autoDiscovered)
@@ -931,7 +931,7 @@ func TestResolvePortsAndMappings_DefaultsTo8080WhenNothingIsDiscovered(t *testin
 			*portsStr = ""
 			defer func() { *portsStr = oldPortsStr }()
 
-			mappings := resolvePortsAndMappings(&config.ClientConfig{})
+			mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 			if len(mappings) != 1 || mappings[0].LocalPort != 8080 || mappings[0].NameSuffix != "" {
 				t.Fatalf("expected the unchanged 8080 default, got %+v", mappings)
@@ -952,7 +952,7 @@ func TestResolvePortsAndMappings_DefaultsTo8080WhenTheWorkspaceScanFails(t *test
 	*portsStr = ""
 	defer func() { *portsStr = oldPortsStr }()
 
-	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+	mappings := mustResolvePorts(t, &config.ClientConfig{})
 
 	if len(mappings) != 1 || mappings[0].LocalPort != 8080 {
 		t.Fatalf("expected the 8080 fallback after a failed scan, got %+v", mappings)
@@ -1084,7 +1084,7 @@ func TestResolvePortsAndMappings_TargetHostPrecedence(t *testing.T) {
 			cfg := &config.ClientConfig{TargetHost: tc.fromConfigFile}
 			overrideConfigWithFlags(cfg)
 
-			resolvePortsAndMappings(cfg)
+			mustResolvePorts(t, cfg)
 
 			if cfg.TargetHost != tc.want {
 				t.Errorf("TargetHost = %q, want %q -- %s", cfg.TargetHost, tc.want, tc.why)
@@ -1103,7 +1103,7 @@ func TestResolvePortsAndMappings_TargetHostUntouchedWithoutDiscovery(t *testing.
 		withTargetHostFlag(t, "")
 
 		cfg := &config.ClientConfig{Ports: []int{9090}}
-		resolvePortsAndMappings(cfg)
+		mustResolvePorts(t, cfg)
 
 		if cfg.TargetHost != "" {
 			t.Errorf("TargetHost = %q, want empty -- explicit ports skip discovery, so nothing may set a host", cfg.TargetHost)
@@ -1127,7 +1127,7 @@ func TestResolvePortsAndMappings_TargetHostUntouchedWithoutDiscovery(t *testing.
 		withTargetHostFlag(t, "")
 
 		cfg := &config.ClientConfig{}
-		resolvePortsAndMappings(cfg)
+		mustResolvePorts(t, cfg)
 
 		if cfg.TargetHost != "" {
 			t.Errorf("TargetHost = %q, want empty -- the workspace scan reports ports, not hosts", cfg.TargetHost)

@@ -109,16 +109,13 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		isAuthValid := engine.AuthValid
 		isLeased := engine.SubdomainLeased
 		targetHost := engine.TargetHost
-		targetPort := engine.DestPort
+		targets := engine.localTargetsLocked()
 		engine.mu.RUnlock()
 
-		// Perform real-time TCP dial check to local downstream target
-		var destResponsive bool
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
-		if err == nil {
-			destResponsive = true
-			_ = conn.Close() //nolint:errcheck
-		}
+		// Real-time TCP dial of every port the tunnel publishes -- the resolved ports, not
+		// the engine's 8080 default, which reported a 502 tunnel healthy whenever something
+		// unrelated answered on 8080 (#2478).
+		destResponsive := localPortsResponsive(targetHost, targets, 500*time.Millisecond)
 
 		w.Header().Set("Content-Type", "application/json")
 		if isWSConnected && isAuthValid && isLeased && destResponsive {
@@ -135,6 +132,16 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	})
 
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, r *http.Request) {
+		// Dial before taking the lock for the rest (review of #2484). Proxied requests take
+		// engine.mu for writing, and a writer waiting behind a reader blocks new readers too, so
+		// dialling N slow ports under the lock stalled live traffic -- /api/healthz already
+		// copies what it needs first.
+		engine.mu.RLock()
+		targets := engine.localTargetsLocked()
+		targetHost := engine.TargetHost
+		engine.mu.RUnlock()
+		portUp := localPortsUp(targetHost, targets, 500*time.Millisecond)
+
 		engine.mu.RLock()
 		defer engine.mu.RUnlock()
 
@@ -156,12 +163,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			avgLatency = engine.LatencyLast
 		}
 
-		// Dial test target responsiveness
-		var destResponsive bool
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
-		if err == nil {
-			destResponsive = true
-			_ = conn.Close() //nolint:errcheck
+		// Every published port is dialled, as /api/healthz does (#2478), and each reports its
+		// own answer so a caller can name the port that is down (review of #2484).
+		destResponsive := true
+		destPorts := make([]map[string]interface{}, 0, len(targets))
+		for i, t := range targets {
+			destResponsive = destResponsive && portUp[i]
+			destPorts = append(destPorts, map[string]interface{}{
+				"port":        t.LocalPort,
+				"name_suffix": t.NameSuffix,
+				"responsive":  portUp[i],
+			})
 		}
 
 		status := "healthy"
@@ -214,7 +226,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			},
 			"destination": map[string]interface{}{
 				"host":       engine.TargetHost,
-				"port":       engine.DestPort,
+				"port":       engine.DestPort, // the primary; every published port is in "ports"
+				"ports":      destPorts,
+				"source":     engine.portOrigin,
 				"responsive": destResponsive,
 			},
 			"traffic": map[string]interface{}{
@@ -751,7 +765,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		if err == nil {
 			break
 		}
-		if strings.Contains(err.Error(), "address already in use") {
+		// By the error code, not its text: Windows words it differently, so matching
+		// "address already in use" never walked there (found by the windows-latest CI job).
+		if isAddrInUse(err) {
 			actualPort++
 			continue
 		}

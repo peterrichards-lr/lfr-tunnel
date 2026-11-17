@@ -385,7 +385,10 @@ func main() {
 	}
 
 	// 3. Resolve port mappings
-	portMappings := resolvePortsAndMappings(cfg)
+	portMappings, err := resolvePortsAndMappings(cfg)
+	if err != nil {
+		log.Fatalf("[Error] %v", err)
+	}
 
 	logStartupConfiguration(cfg, portMappings)
 
@@ -396,7 +399,7 @@ func main() {
 	}
 
 	// Start Interceptor Engine
-	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	engine := newClientEngine(cfg, portMappings)
 	// Computed here, while flag.Visit can still tell a flag that was GIVEN from one sitting at
 	// its default, and handed to the engine so the Settings panel can render the fields that
 	// are spoken for as read-only rather than as editable boxes that never take (#2088).
@@ -1248,6 +1251,9 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	}
 
 	if *background {
+		if err := validateRequestedPorts(cfg); err != nil {
+			log.Fatalf("[Error] %v", err)
+		}
 		handleBackground(sub)
 		return true
 	}
@@ -1302,19 +1308,65 @@ func normalizeDiscoveredHost(host string) string {
 // An empty resolved list means "nobody said" -- not "no ports" -- and is what makes the
 // workspace scan and host auto-discovery reachable. An explicit -ports flag, ports: in the
 // config file, or LFT_CLIENT_PORTS always wins and skips discovery entirely.
-func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
+// portsFlagGiven reports whether -ports appeared on the command line at all -- including as an
+// empty value, which is an error, not "not given" (review of #2484): a wrapper running
+// `-ports "$PORTS"` with PORTS unset must not fall through to discovery.
+//
+// A variable so a test can stand in for flag.Visit: the flag package cannot forget that a flag
+// was set, so setting it for real in one test would leak into every later one.
+var portsFlagGiven = func() bool {
+	given := *portsStr != ""
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "ports" {
+			given = true
+		}
+	})
+	return given
+}
+
+// validateRequestedPorts refuses a malformed port request before anything acts on it (#2477).
+// Called before -background hands off as well as before a foreground start (review of #2484):
+// otherwise the intermediate exited 0 and the error went only to the background log, so LDM saw a
+// timeout and MCP reported "pending" for a tunnel that would never exist. An explicit -ports
+// outranks LFT_CLIENT_PORTS, so a malformed variable only matters when -ports is absent.
+func validateRequestedPorts(cfg *config.ClientConfig) error {
+	if portsFlagGiven() {
+		_, err := config.ParsePortList("-ports", *portsStr)
+		return err
+	}
+	return cfg.PortsEnvErr
+}
+
+func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, error) {
 	var ports []int
 	var err error
-	if *portsStr != "" {
-		parts := strings.Split(*portsStr, ",")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if p, err := strconv.Atoi(part); err == nil {
-				ports = append(ports, p)
-			}
+	// A malformed list is an error, never a fall-through to discovery (#2477). The parser
+	// used to drop what strconv.Atoi refused, so `-ports 9999:80` became an empty list and the
+	// client published whatever answered on 8080.
+	if err := validateRequestedPorts(cfg); err != nil {
+		return nil, err
+	}
+	if portsFlagGiven() {
+		ports, err = config.ParsePortList("-ports", *portsStr)
+		if err != nil {
+			return nil, err
 		}
+		facts.portOrigin = "from -ports"
 	} else {
 		ports = cfg.Ports
+		// LoadClientConfig already applied LFT_CLIENT_PORTS over the file, so a non-empty
+		// variable is where this list came from.
+		facts.portOrigin = "from config file"
+		if strings.TrimSpace(os.Getenv("LFT_CLIENT_PORTS")) != "" {
+			facts.portOrigin = "from LFT_CLIENT_PORTS"
+		}
+		// The file's list arrives as YAML integers, so only the range is left to check.
+		for _, p := range ports {
+			if p < 1 || p > 65535 {
+				return nil, fmt.Errorf("invalid port %q in ports: (%s): %s",
+					strconv.Itoa(p), strings.TrimPrefix(facts.portOrigin, "from "), config.PortListForm)
+			}
+		}
 	}
 
 	var portMappings []client.PortMapping
@@ -1337,10 +1389,12 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 	} else {
 		if isLiferayWorkspace(".") {
 			facts.portSource = " (from the Liferay workspace)"
+			facts.portOrigin = "from Liferay workspace"
 			slog.Info("[Client] Liferay workspace detected. Scanning for Client Extensions...")
 			portMappings, err = detectWorkspacePorts(".")
 			if err != nil {
 				slog.Info(fmt.Sprintf("[Warning] Failed to scan workspace: %v. Using defaults.", err))
+				facts.portOrigin = "default, workspace scan failed"
 				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
 		} else {
@@ -1351,6 +1405,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 			// client would publish nothing at all.
 			if err == nil && discoveryResult != nil && len(discoveryResult.Ports) > 0 {
 				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", discoveryResult.Type, discoveryResult.Host)
+				facts.portOrigin = "auto-discovered"
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
 
 				// Discovery is the lowest-priority source of the target host: it fills the
@@ -1387,12 +1442,23 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				}
 			} else {
 				facts.portSource = " (fallback -- nothing discovered)"
+				facts.portOrigin = "default, nothing discovered"
 				slog.Info(fmt.Sprintf("[Client] No active LDM/Liferay instances discovered. Defaulting to port %d.", defaultLocalPort))
 				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
 		}
 	}
-	return portMappings
+	return portMappings, nil
+}
+
+// newClientEngine creates the interceptor engine and hands it the resolved local ports, so
+// the TUI, /api/healthz, /api/info and the Settings view report the ports actually published
+// rather than the engine's 8080 default (#2478). Must run before InterceptPort rewrites the
+// mappings to the interceptor's own listeners.
+func newClientEngine(cfg *config.ClientConfig, portMappings []client.PortMapping) *client.InterceptorEngine {
+	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	engine.SetLocalTargets(portMappings, facts.portOrigin)
+	return engine
 }
 
 // maxFailoverAttempts bounds how many regions a single failover will try before
@@ -2662,6 +2728,8 @@ type startupFacts struct {
 	advertised   int    // regions the gateway offered
 	unavailable  []string
 	portSource   string
+	// portOrigin is portSource in the few words the TUI has room for ("from -ports").
+	portOrigin string
 }
 
 var facts startupFacts

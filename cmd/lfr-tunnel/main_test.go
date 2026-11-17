@@ -1209,3 +1209,35 @@ func TestResolvePortsAndMappings_NamesTheDiscoveredContainer(t *testing.T) {
 		t.Errorf("the reported port source %q does not name the container", facts.portSource)
 	}
 }
+
+// TestRecordBackgroundRefusal_ReachesTheLogATrayUserOpens -- the tray and the Windows startup
+// script launch -background with no terminal, so a refusal printed before the hand-off went
+// nowhere and the log still showed the previous run (#2462 review). It must be in the current
+// log, with the previous run rotated aside rather than mistaken for this one.
+func TestRecordBackgroundRefusal_ReachesTheLogATrayUserOpens(t *testing.T) {
+	client.SetLogDir(t.TempDir())
+	t.Cleanup(func() { client.SetLogDir("") })
+	logPath, err := client.ClientLogPath("refused")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, []byte("the previous run\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recordBackgroundRefusal("refused", &client.AmbiguousDiscoveryError{Candidates: []client.DiscoveredContainer{
+		{Name: "acme", Ports: []int{8080}}, {Name: "other-project", Ports: []int{8081}},
+	}})
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, "Not started") || !strings.Contains(got, "other-project on 8081") {
+		t.Errorf("the log does not record the refusal:\n%s", got)
+	}
+	if strings.Contains(got, "the previous run") {
+		t.Errorf("the previous run was not rotated aside, so it reads as this one:\n%s", got)
+	}
+}

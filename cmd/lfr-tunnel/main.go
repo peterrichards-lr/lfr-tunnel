@@ -1251,10 +1251,18 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	}
 
 	if *background {
-		// Resolved, not just validated, before the hand-off: a discovery refusal (#2462) must
-		// reach this terminal, not only the background log.
-		if _, err := resolvePortsAndMappings(cfg); err != nil {
+		if err := validateRequestedPorts(cfg); err != nil {
 			log.Fatalf("[Error] %v", err)
+		}
+		// A tunnel, not the tray: resolved before the hand-off, so a discovery refusal (#2462)
+		// reaches this terminal. The tray and the Windows startup script launch -background with
+		// no terminal at all, so the refusal is written to the client log as well -- otherwise
+		// Connect silently did nothing and the log still showed the previous run.
+		if !*guiFlag {
+			if _, err := resolvePortsAndMappings(cfg); err != nil {
+				recordBackgroundRefusal(sub, err)
+				log.Fatalf("[Error] %v", err)
+			}
 		}
 		handleBackground(sub)
 		return true
@@ -2116,6 +2124,30 @@ func getActiveSubdomains() ([]string, error) {
 		}
 	}
 	return subs, nil
+}
+
+// recordBackgroundRefusal writes why a -background start was refused to the log the tunnel would
+// have written, rotating the previous run's log aside first as handleBackground does, so the
+// file a tray user opens says what happened rather than what happened last time. Best effort: the
+// refusal is also printed, and a log that cannot be written must not mask it.
+func recordBackgroundRefusal(sub string, cause error) {
+	logPath, err := client.ClientLogPath(sub)
+	if err != nil {
+		return
+	}
+	if rerr := client.RotateFile(logPath, client.DefaultLogGenerations); rerr != nil {
+		slog.Debug("could not rotate the previous log", "error", rerr)
+	}
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return
+	}
+	if _, werr := fmt.Fprintf(f, "%s [Error] Not started: %v\n", time.Now().Format("2006/01/02 15:04:05"), cause); werr != nil {
+		slog.Debug("could not record the refusal in the log", "error", werr)
+	}
+	if cerr := f.Close(); cerr != nil {
+		slog.Debug("could not close the log", "error", cerr)
+	}
 }
 
 func handleBackground(sub string) {

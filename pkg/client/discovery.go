@@ -38,8 +38,10 @@ func (e *AmbiguousDiscoveryError) Error() string {
 	for _, c := range e.Candidates {
 		parts = append(parts, fmt.Sprintf("%s on %s", c.Name, joinPorts(c.Ports)))
 	}
+	// No example port: suggesting the first candidate's would be the very guess this refuses
+	// to make, and for a container listing 443 first it would suggest a TLS port.
 	return fmt.Sprintf("auto-discovery found %d Liferay containers (%s) and will not choose between them; "+
-		"name the port to publish with -ports, e.g. -ports %d", len(e.Candidates), strings.Join(parts, "; "), e.Candidates[0].Ports[0])
+		"name the port of the one to share with -ports", len(e.Candidates), strings.Join(parts, "; "))
 }
 
 func joinPorts(ports []int) string {
@@ -49,6 +51,17 @@ func joinPorts(ports []int) string {
 	}
 	return strings.Join(s, ", ")
 }
+
+// ldmProjectLabel is the label LDM puts on every container of a project, naming the project.
+const ldmProjectLabel = "com.liferay.ldm.project"
+
+// publishedPortRegex extracts the host port from a `docker ps` mapping reachable on this machine:
+// all interfaces ("0.0.0.0:8080->8080/tcp", ":::8080->", "[::]:8080->") or loopback
+// ("127.0.0.1:8080->", "[::1]:8080->"). Loopback matters most: LDM binds a project's portal to
+// 127.0.0.1, so before #2462 the instance itself was invisible to discovery. Anchored at the
+// start of an entry, so a host address such as 10.0.0.0 is not read as 0.0.0.0. Ranges
+// ("0.0.0.0:8080-8081->") are not matched. Captures the host port and the container port.
+var publishedPortRegex = regexp.MustCompile(`(?:^|, )(?:0\.0\.0\.0:|127\.0\.0\.1:|:::|\[::\]:|\[::1\]:)(\d+)->(\d+)/`)
 
 // ldmInfrastructure are the containers LDM runs for every project on the machine: its global
 // Traefik proxy (80/443), search, and the Docker socket proxy. They match "liferay" by name but
@@ -102,7 +115,7 @@ func AutoDiscoverTarget() (*AutoDiscoverResult, error) {
 
 // discoverDocker executes `docker ps` to find containers that look like Liferay/LDM.
 func discoverDocker() (*AutoDiscoverResult, error) {
-	out, err := cmdExecutor.Output("docker", "ps", "--format", "{{.Names}}||{{.Image}}||{{.Ports}}")
+	out, err := cmdExecutor.Output("docker", "ps", "--format", `{{.Names}}||{{.Image}}||{{.Ports}}||{{.Label "`+ldmProjectLabel+`"}}`)
 	if err != nil {
 		return nil, err // Docker not installed or daemon not running
 	}
@@ -111,25 +124,27 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 	var candidates []DiscoveredContainer
 	var types []string
 
-	// Regex to extract local published port from docker port mappings like:
-	// "0.0.0.0:8080->8080/tcp", ":::8080->8080/tcp" or "[::]:8080->8080/tcp". The IPv6 forms
-	// were never matched before (the pattern wanted four colons); now they are, so a port
-	// Docker lists for both families is de-duplicated below.
-	portRegex := regexp.MustCompile(`(?:0\.0\.0\.0:|:::|\[::\]:)(\d+)->`)
-
 	for _, line := range lines {
 		parts := strings.Split(line, "||")
-		if len(parts) != 3 {
+		if len(parts) != 4 {
 			continue
 		}
-		name, image, portMap := parts[0], parts[1], parts[2]
+		name, image, portMap, project := parts[0], parts[1], parts[2], parts[3]
 		if ldmInfrastructure[name] {
+			continue
+		}
+		// An LDM project is one instance however many containers it runs: its database, its
+		// tunnel sidecar and one container per client extension all carry the project label
+		// too. Only the container named after the project is the Liferay instance, so the
+		// others are never candidates -- a project is not ambiguous with itself, and an
+		// extension on 8080 is not mistaken for the portal.
+		if project != "" && name != project {
 			continue
 		}
 
 		containerType := ""
 		nameImage := strings.ToLower(name + " " + image)
-		if strings.Contains(nameImage, "ldm") {
+		if project != "" || strings.Contains(nameImage, "ldm") {
 			containerType = "Docker (LDM)"
 		} else if strings.Contains(nameImage, "liferay") || strings.Contains(nameImage, "dxp") {
 			containerType = "Docker (Liferay)"
@@ -138,16 +153,18 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 			continue
 		}
 
-		// Only the typical HTTP(S) ports, not a container's database or JMX ports. Once each:
-		// Docker lists a port for IPv4 and IPv6 alike.
+		// Only HTTP(S) ports, not a container's database or JMX ports: a typical host port, or
+		// any host port in front of Liferay's own 8080 -- LDM gives a second project 8081, and
+		// filtering on the host port alone hid it, so two projects looked like one (#2462).
+		// Once each: Docker lists a port for IPv4 and IPv6 alike.
 		var ports []int
 		seen := map[int]bool{}
-		for _, match := range portRegex.FindAllStringSubmatch(portMap, -1) {
+		for _, match := range publishedPortRegex.FindAllStringSubmatch(portMap, -1) {
 			p, err := strconv.Atoi(match[1])
 			if err != nil || seen[p] {
 				continue
 			}
-			if p == 8080 || p == 443 || p == 80 || p == 3000 {
+			if p == 8080 || p == 443 || p == 80 || p == 3000 || match[2] == "8080" {
 				seen[p] = true
 				ports = append(ports, p)
 			}

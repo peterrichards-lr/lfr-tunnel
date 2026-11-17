@@ -256,16 +256,24 @@ Leave it out and the client works the ports out for itself, in this order:
    files and reads each one's `port`. Port `8080` is always published first, on your plain
    subdomain; each extension is published alongside it on a subdomain suffixed with the
    extension's key.
-2. **Otherwise** it looks for a running instance: `docker ps` for a container whose name or
-   image mentions `liferay`, `dxp` or `ldm` and publishes `80`, `443`, `8080` or `3000`, then a
-   probe of `8080`, `13000` and `3000` on `127.0.0.1`. This step reports a **host** as well as
-   ports — see [Leaving `target_host` unset](#leaving-target_host-unset).
-   - LDM's shared containers (`liferay-proxy-global`, `liferay-search-global`,
-     `liferay-docker-proxy`) are never candidates: they serve every project on the machine.
+2. **Otherwise** it looks for a running instance: `docker ps`, then a probe of `8080`, `13000`
+   and `3000` on `127.0.0.1`. This step reports a **host** as well as ports — see
+   [Leaving `target_host` unset](#leaving-target_host-unset).
+   - A container is a candidate when it is an LDM project's portal (the container named after
+     its `com.liferay.ldm.project` label), or when its name or image mentions `liferay`, `dxp`
+     or `ldm`.
+   - Its ports count when they are published on this machine (all interfaces or loopback, as
+     LDM binds a portal to `127.0.0.1`) and are `80`, `443`, `8080` or `3000`, or front
+     Liferay's own `8080` (LDM gives a second project `8081`).
+   - Never candidates: an LDM project's database, tunnel sidecar and client-extension
+     containers, and LDM's shared `liferay-proxy-global`, `liferay-search-global` and
+     `liferay-docker-proxy`, which serve every project on the machine.
    - The startup log names the container whose ports are published.
-   - **More than one candidate container stops the client** with an error naming each one and
-     its ports. Name the port you mean with `-ports`. Until #2462 discovery published every
-     candidate's ports at once, which on a machine running two LDM projects shared both.
+   - **More than one candidate stops the client** with an error naming each one and its ports;
+     name the port you mean with `-ports`. With `-background` the error is printed before the
+     client detaches and written to its log, which is where the tray's Connect shows it. Until
+     #2462 discovery published every candidate's ports at once, and on an LDM machine published
+     the shared proxy's `80` and `443` rather than the project.
 3. **If neither finds anything**, port `8080`.
 
 Worth knowing:

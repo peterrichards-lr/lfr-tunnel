@@ -407,8 +407,20 @@ func TestAnonymisedExportCarriesNoOriginals(t *testing.T) {
 		"203.0.113.77", "198.51.100.23", "10.20.30.40",
 		"2001:0db8:85a3::8a2e:0370:7334", "2001:db8:85a3::8a2e:370:7334", "2a02:c7f:1234::99",
 	}
+	// IPs are matched as whole addresses, not substrings: replacements are drawn at random from the
+	// documentation ranges, so 198.51.100.232 can be drawn and contains the original 198.51.100.23
+	// as text without being it -- which made this test fail at random on unrelated PRs. Emails and
+	// hosts stay substring matches, so an original label inside a longer host is still caught.
 	for _, o := range originals {
-		if strings.Contains(out, o) {
+		found := strings.Contains(out, o)
+		if ip := net.ParseIP(o); ip != nil {
+			edge := `[^0-9]`
+			if ip.To4() == nil {
+				edge = `[^0-9a-f:]`
+			}
+			found = regexp.MustCompile(`(^|` + edge + `)` + regexp.QuoteMeta(o) + `($|` + edge + `)`).MatchString(out)
+		}
+		if found {
 			t.Errorf("original %q survived anonymisation:\n%s", o, b.String())
 		}
 	}

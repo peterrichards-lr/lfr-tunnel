@@ -867,6 +867,17 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				_ = srv.db.UpdateUser(ownerUser) //nolint:errcheck
 			}
 		}
+
+		// Accounts split by case before email lookups ignored it (#2466). Sign-ins now resolve to
+		// the oldest of each; the rest are named so the operator can merge or remove them -- not
+		// done automatically, because tokens, reservations and audit history hang off the id.
+		if dups, err := srv.db.EmailCaseDuplicates(); err != nil {
+			slog.Warn(fmt.Sprintf("[Users] Could not check for accounts that differ only by email case: %v", err))
+		} else if len(dups) > 0 {
+			slog.Warn(fmt.Sprintf("[Users] %d email address(es) belong to more than one account, differing only in case: %s. "+
+				"Sign-ins use the oldest account for each; merge or remove the others by hand (#2466).",
+				len(dups), strings.Join(dups, ", ")))
+		}
 	}
 
 	if srv.db != nil && !srv.cfg.DisableBackupScheduler {
@@ -2881,7 +2892,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"}) //nolint:errcheck
@@ -4190,9 +4201,9 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 
-	isOwner := s.cfg.Owner.UserID != "" && req.Email == s.cfg.Owner.UserID
+	isOwner := s.cfg.Owner.UserID != "" && strings.EqualFold(req.Email, s.cfg.Owner.UserID)
 
 	// Enforce domain whitelist if configured (bypass for owner)
 	if len(s.cfg.AllowedEmailDomains) > 0 && !isOwner {
@@ -4633,7 +4644,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		http.Error(w, `{"error":"Invalid email address"}`, http.StatusBadRequest)

@@ -147,9 +147,13 @@ func (repo *SQLiteUserRepo) GetUser(id string) (*User, error) {
 	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, diagnostics_consent_at, language_preference, rate_limit, max_reservations, max_custom_domains, max_active_tunnels, bandwidth_quota_bytes, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE id = ?`, id)
 }
 
-// GetUserByEmail fetches a user by their email address.
+// GetUserByEmail fetches a user by their email address, whatever its case (#2466). An address is
+// one identity in any case, and an exact match let an SSO sign-in miss a row stored in another
+// case and create a second account -- a second owner, when the row was the owner's. Where case
+// duplicates already exist, the oldest row is the original account, so it is the one returned.
+// NOCASE folds ASCII only; every address this gateway issues accounts to is ASCII.
 func (repo *SQLiteUserRepo) GetUserByEmail(email string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, diagnostics_consent_at, language_preference, rate_limit, max_reservations, max_custom_domains, max_active_tunnels, bandwidth_quota_bytes, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE email = ?`, email)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, diagnostics_consent_at, language_preference, rate_limit, max_reservations, max_custom_domains, max_active_tunnels, bandwidth_quota_bytes, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE email = ? COLLATE NOCASE ORDER BY created_at, id LIMIT 1`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.

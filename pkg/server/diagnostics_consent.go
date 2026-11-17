@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
+	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 )
 
@@ -252,7 +252,7 @@ func (s *Server) handleAdminDiagnosticsCollect(w http.ResponseWriter, r *http.Re
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
 		return
 	}
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = config.NormalizeEmail(req.Email)
 	if req.Email == "" {
 		http.Error(w, `{"error":"An email address is required"}`, http.StatusBadRequest)
 		return

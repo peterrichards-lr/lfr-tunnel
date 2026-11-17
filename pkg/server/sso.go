@@ -234,7 +234,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(claims.Email))
+	email := config.NormalizeEmail(claims.Email)
 	if email == "" {
 		http.Error(w, "Email required from provider", http.StatusBadRequest)
 		return

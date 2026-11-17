@@ -477,6 +477,7 @@ smtp_server:
 > The `owner.user_id` and `owner.name` settings in the configuration file act solely as **bootstrap properties**. During the very first startup when the SQLite database is empty, the gateway automatically registers this email and name with the `owner` role.
 > * Once the database is initialized, changes to `owner.user_id` and `owner.name` configuration keys will **not** modify or overwrite existing user records or names in the database.
 > * The gateway code determines owner status by checking both the configured `owner.user_id` string and the user's role column in the database. Anyone assigned the `owner` role in the database gets full visibility privileges.
+> * Email addresses are matched **case-insensitively** everywhere: sign-in by magic link or SSO, `owner.user_id`, and `allowed_email_domains`. `Peter.Richards@liferay.com` and `peter.richards@liferay.com` are one account. Configured values are lowercased on load. If the database already holds accounts that differ only by case (created before this was enforced), the gateway logs `[Users] … belong to more than one account` at startup; sign-ins use the oldest of each, and the others should be merged or removed by hand.
 
 Apply restricted file permissions:
 ```bash
@@ -2045,4 +2046,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*
+*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*

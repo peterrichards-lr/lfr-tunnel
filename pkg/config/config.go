@@ -838,6 +838,18 @@ func DefaultClientConfig() *ClientConfig {
 	}
 }
 
+// NormalizeEmail is the one form an email address is stored, compared and looked up in: trimmed
+// and lowercased (#2466). A user's id IS their address, so this is also the form of a user id.
+//
+// Lowercase because every entry point already chose it -- registration, magic link, invite, the
+// SSO callback and LFT_OWNER_USER_ID all lowercased -- and the gaps between them (owner.user_id
+// from YAML, the owner row seeded from it) let one person become two accounts. The domain part is
+// case-insensitive by definition; the local part is in practice, at every provider this gateway
+// signs people in through.
+func NormalizeEmail(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // LoadServerConfig loads the server configuration from a YAML file and/or environment variables.
 //
 // Nil-on-error, like LoadClientConfig -- see the contract stated there, and
@@ -970,7 +982,7 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		cfg.AdminNotificationEmail = val
 	}
 	if val := os.Getenv("LFT_OWNER_USER_ID"); val != "" {
-		cfg.Owner.UserID = strings.ToLower(strings.TrimSpace(val))
+		cfg.Owner.UserID = NormalizeEmail(val)
 	}
 	if val := os.Getenv("LFT_OWNER_NAME"); val != "" {
 		cfg.Owner.Name = val
@@ -1132,6 +1144,15 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 				cfg.ProxyHeaders = m
 			}
 		}
+	}
+
+	// Identity fields in their one form, whether they came from the YAML or the environment
+	// (#2466). The environment overrides always were; the YAML was used exactly as written, so a
+	// mixed-case owner was not recognised as the owner, an SSO sign-in created them a second
+	// account, and a mixed-case domain admitted nobody.
+	cfg.Owner.UserID = NormalizeEmail(cfg.Owner.UserID)
+	for i, d := range cfg.AllowedEmailDomains {
+		cfg.AllowedEmailDomains[i] = NormalizeEmail(d)
 	}
 
 	// Every admin alert -- new registrations, approval requests, IP bans, tunnel

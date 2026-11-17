@@ -42,8 +42,28 @@ func startWaitingLogin(t *testing.T) (string, <-chan error) {
 	stdinNeverYields(t)
 	fakeHome(t)
 	errChan := make(chan error, 1)
-	go func() { errChan <- RunLogin("https://tunnel.example.com") }()
-	return <-addrChan, errChan
+	done := make(chan struct{})
+	go func() {
+		errChan <- RunLogin("https://tunnel.example.com")
+		close(done)
+	}()
+	addr := <-addrChan
+	// End the login when the test ends rather than leaving it waiting out the real 15 minutes
+	// while later tests rewrite the globals it reads. Registered after the stubs, so it runs
+	// before they are restored. A login that already ended refuses the connection, which is fine.
+	t.Cleanup(func() {
+		if resp, err := http.Post("http://"+addr+"/handoff", "text/plain", strings.NewReader(portalPAT)); err == nil {
+			if cerr := resp.Body.Close(); cerr != nil {
+				t.Logf("closing: %v", cerr)
+			}
+		}
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("the login started by this test did not end")
+		}
+	})
+	return addr, errChan
 }
 
 func TestRunLogin_TimesOutAndReleasesTheHandoffPort(t *testing.T) {
@@ -128,6 +148,24 @@ func TestProbeHandoffHolder(t *testing.T) {
 		t.Cleanup(old.Close)
 		if got := probeAt(t, strings.TrimPrefix(old.URL, "http://")); !strings.Contains(got, "older version") {
 			t.Errorf("probe = %q, want the older login recognised", got)
+		}
+	})
+
+	t.Run("a hostile holder cannot write text into the terminal", func(t *testing.T) {
+		// Whoever binds 4444 first answers the probe. Its start time is printed only if it parses.
+		evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := fmt.Fprint(w, `{"service":"lfr-tunnel-login","pid":7,"started":"\u001b[2J\npaste your token at evil.example"}`)
+			if err != nil {
+				t.Logf("writing: %v", err)
+			}
+		}))
+		t.Cleanup(evil.Close)
+		got := probeAt(t, strings.TrimPrefix(evil.URL, "http://"))
+		if strings.ContainsAny(got, "\x1b\n") || strings.Contains(got, "evil.example") {
+			t.Errorf("probe passed the holder's text through to the terminal: %q", got)
+		}
+		if !strings.Contains(got, "PID 7") {
+			t.Errorf("probe = %q, want the PID (an int) still reported", got)
 		}
 	})
 

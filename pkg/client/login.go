@@ -29,8 +29,9 @@ func RunLogin(serverURL string) error {
 	started := time.Now()
 	mux.HandleFunc("/handoff", func(w http.ResponseWriter, r *http.Request) {
 		// Says who is listening, so a second login that finds the port taken can name this one
-		// (#2480). Answered before the CORS headers are set: a local process can read it, a web
-		// page cannot.
+		// (#2480). Answered before the CORS headers are set, so an ordinary cross-origin page cannot
+		// read it. (A DNS-rebinding page could, and would learn only a PID and a start time -- the
+		// same page could already POST here.)
 		if r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(handoffIdentity{
@@ -164,7 +165,9 @@ func RunLogin(serverURL string) error {
 	case err := <-failChan:
 		return err
 	case <-time.After(loginTimeout):
-		return fmt.Errorf("timed out after %s waiting for a token; run `lfr-tunnel login` again", loginTimeout)
+		// "15m", not Duration's "15m0s".
+		return fmt.Errorf("timed out after %s waiting for a token; run `lfr-tunnel login` again",
+			strings.TrimSuffix(loginTimeout.String(), "0s"))
 	}
 
 	// Free the port now rather than after the gateway check below.
@@ -384,11 +387,13 @@ var stdinReader io.Reader = os.Stdin
 
 // handoffPortHint returns the platform's command for identifying whatever holds the
 // handoff port. Naming the port is not actionable on its own -- the next thing anyone
-// needs is the process behind it. On Windows the filter names the local address: a bare
-// `findstr :4444` also matched connections whose REMOTE port is 4444 (#2480).
+// needs is the process behind it. On Windows only LISTENING lines, and the port followed by a
+// space (#2480): a bare `findstr :4444` also matched established connections to the port --
+// the browser's own, after a handoff -- which named the browser's PID. Not filtered on
+// 127.0.0.1, which would miss a holder bound to every interface, as Selenium Grid is.
 func handoffPortHint() string {
 	if runtime.GOOS == "windows" {
-		return `netstat -ano | findstr "` + handoffAddr + `"` + `, then tasklist /FI "PID eq <pid>"`
+		return `netstat -ano -p tcp | findstr LISTENING | findstr ":` + handoffPort + ` "` + `, then tasklist /FI "PID eq <pid>"`
 	}
 	return "lsof -nP -iTCP:" + handoffPort + " -sTCP:LISTEN"
 }
@@ -416,7 +421,12 @@ var handoffProbeAddr = handoffAddr
 // this version names its PID and start time; an older login is recognised by how its handoff
 // answers (GET refused, OPTIONS answered with its CORS headers). Anything else returns "".
 func probeHandoffHolder() string {
-	probe := &http.Client{Timeout: time.Second}
+	// Whatever holds the port is untrusted: no redirects, and nothing it sends reaches the terminal
+	// except an int and a time that parsed.
+	probe := &http.Client{
+		Timeout:       time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := probe.Get("http://" + handoffProbeAddr + "/handoff")
 	if err != nil {
 		return ""
@@ -428,11 +438,10 @@ func probeHandoffHolder() string {
 		slog.Debug("closing the handoff probe", "error", cerr)
 	}
 	if decodeErr == nil && id.Service == handoffService {
-		since := id.Started
 		if t, perr := time.Parse(time.RFC3339, id.Started); perr == nil {
-			since = t.Local().Format("15:04")
+			return fmt.Sprintf("another `lfr-tunnel login` (PID %d, waiting since %s)", id.PID, t.Local().Format("15:04"))
 		}
-		return fmt.Sprintf("another `lfr-tunnel login` (PID %d, waiting since %s)", id.PID, since)
+		return fmt.Sprintf("another `lfr-tunnel login` (PID %d)", id.PID)
 	}
 	if getStatus != http.StatusBadRequest {
 		return ""
@@ -463,6 +472,11 @@ func handoffUnavailableMessage(listenErr error, holder string) string {
 	if !isAddrInUse(listenErr) {
 		fmt.Fprintf(&b, "\n⚠️  Could not listen on %s (%v), so the portal can't send the token to this terminal.\n", handoffAddr, listenErr)
 		fmt.Fprintf(&b, "   If something holds the port, this finds it: %s\n", handoffPortHint())
+		if runtime.GOOS == "windows" {
+			// Hyper-V and WSL reserve port ranges; a reserved port refuses the bind with nothing
+			// listening on it, so netstat finds nothing.
+			b.WriteString("   If nothing does, Windows may have reserved it: netsh interface ipv4 show excludedportrange protocol=tcp\n")
+		}
 	} else {
 		fmt.Fprintf(&b, "\n⚠️  %s is in use, so the portal can't send the token to this terminal.\n", handoffAddr)
 		if holder != "" {

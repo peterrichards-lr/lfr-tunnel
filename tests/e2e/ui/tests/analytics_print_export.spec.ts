@@ -117,7 +117,37 @@ async function chartSizes(page: any, cardSelector: string) {
   }>;
 }
 
+/**
+ * Waits until the page has stopped laying out: the chart the test measures holds the same width
+ * across two frames and a quarter of a second. (Not networkidle: Portal V1 polls, so the network
+ * never goes quiet.)
+ *
+ * The charts appear before the admin-only sections load, and those reflow the page. Chart.js
+ * hears a reflow through a ResizeObserver and resizes on the next frame -- to the container's
+ * screen width. Printed while one was still queued, the chart was sized for paper and then put
+ * back a frame later: 850px at the 2x print ratio, the failure CI hit whenever its runner was slow
+ * enough for a frame to pass before the measurement. A person clicks Export on a settled page,
+ * so this is what the test waits for too.
+ */
+async function waitForLayoutToSettle(page: any, cardSelector: string) {
+  await expect
+    .poll(async () => {
+      const first = (await chartSizes(page, cardSelector)).portrait?.css;
+      await page.evaluate(
+        () =>
+          new Promise((r) =>
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => setTimeout(r, 250)),
+            ),
+          ),
+      );
+      return first === (await chartSizes(page, cardSelector)).portrait?.css;
+    })
+    .toBe(true);
+}
+
 async function expectChartsResizedForPrint(page: any, cardSelector: string) {
+  await waitForLayoutToSettle(page, cardSelector);
   const before = await chartSizes(page, cardSelector);
   // Anchor: there is a chart to resize. Without one, everything below would hold vacuously.
   expect(before.portrait, 'a chart in a portrait section').not.toBeNull();

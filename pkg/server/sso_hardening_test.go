@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,6 +45,11 @@ type oidcStub struct {
 	// The name claims (#2515): empty means "Sso" / "Person"; omitNames sends neither.
 	givenName, familyName string
 	omitNames             bool
+	// namesInUserinfo serves the names from userinfo instead of the ID token, as Okta does when an
+	// access token is issued too (#2520); userinfoSub overrides the sub userinfo answers for.
+	namesInUserinfo bool
+	userinfoSub     string
+	userinfoCalls   atomic.Int32 // read by the test while the stub's handler writes it
 }
 
 // idTokenEmail is the email claim the next ID token carries.
@@ -94,8 +100,31 @@ func (st *oidcStub) serve(w http.ResponseWriter, r *http.Request) {
 			"authorization_endpoint":                st.srv.URL + "/auth",
 			"token_endpoint":                        st.srv.URL + "/token",
 			"jwks_uri":                              st.srv.URL + "/jwks",
+			"userinfo_endpoint":                     st.srv.URL + "/userinfo",
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 		})
+	case "/userinfo":
+		st.userinfoCalls.Add(1)
+		if r.Header.Get("Authorization") != "Bearer at" {
+			http.Error(w, "missing access token", http.StatusUnauthorized)
+			return
+		}
+		sub := "subject-1"
+		if st.userinfoSub != "" {
+			sub = st.userinfoSub
+		}
+		given, family := "Sso", "Person"
+		if st.givenName != "" {
+			given = st.givenName
+		}
+		if st.familyName != "" {
+			family = st.familyName
+		}
+		info := map[string]interface{}{"sub": sub, "email": st.idTokenEmail()}
+		if !st.omitNames {
+			info["given_name"], info["family_name"] = given, family
+		}
+		st.writeJSON(w, info)
 	case "/jwks":
 		st.writeJSON(w, map[string]interface{}{
 			"keys": []map[string]string{{
@@ -127,7 +156,7 @@ func (st *oidcStub) serve(w http.ResponseWriter, r *http.Request) {
 			"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(),
 			"nonce": nonce, "email": st.idTokenEmail(),
 		}
-		if !st.omitNames {
+		if !st.omitNames && !st.namesInUserinfo {
 			claims["given_name"], claims["family_name"] = "Sso", "Person"
 			if st.givenName != "" {
 				claims["given_name"] = st.givenName

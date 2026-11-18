@@ -194,10 +194,20 @@ func TestSelfUpgrade(t *testing.T) {
 
 	targetExecPath = fakeExecPath
 	defer func() { targetExecPath = "" }()
+	written := recordExecutableWrites(t)
 
 	err = SelfUpgrade("v1.0.2", "")
 	if err != nil {
 		t.Fatalf("SelfUpgrade failed: %v", err)
+	}
+
+	// #2505: the new binary is written to the install path itself and nowhere else -- not
+	// /tmp, /private/tmp or %TEMP% -- and the previous one does not stay behind as .old.
+	if len(*written) != 1 || (*written)[0] != fakeExecPath {
+		t.Errorf("the upgrade created executables at %q, want only %q", *written, fakeExecPath)
+	}
+	if _, err := os.Stat(fakeExecPath + upgradeBackupSuffix); err == nil {
+		t.Errorf("the previous binary was left at %s", fakeExecPath+upgradeBackupSuffix)
 	}
 
 	newContent, err := os.ReadFile(fakeExecPath)
@@ -329,6 +339,10 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 
 	if string(content) != "fake-binary-old-content" {
 		t.Errorf("expected binary to retain 'fake-binary-old-content', got %s", string(content))
+	}
+	// #2505: the rollback renamed the previous binary back, rather than leaving it aside.
+	if _, err := os.Stat(fakeExecPath + upgradeBackupSuffix); err == nil {
+		t.Errorf("a failed upgrade left %s behind", fakeExecPath+upgradeBackupSuffix)
 	}
 }
 

@@ -77,10 +77,6 @@ esac
 
 INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"
 
-echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."
-curl -sSfL "$URL" -o /tmp/lfr-tunnel
-chmod +x /tmp/lfr-tunnel
-
 # Ensure the target installation directory exists
 if [ ! -d "$INSTALL_DIR" ]; then
   if mkdir -p "$INSTALL_DIR" 2>/dev/null; then
@@ -91,12 +87,36 @@ if [ ! -d "$INSTALL_DIR" ]; then
   fi
 fi
 
-# Move binary to target path, using sudo if write permissions are missing
-if [ -w "$INSTALL_DIR" ]; then
-  mv /tmp/lfr-tunnel "$INSTALL_PATH"
-else
+# sudo only where the directory is not ours to write.
+SUDO=""
+if [ ! -w "$INSTALL_DIR" ]; then
   echo "Requesting sudo permissions to install to ${INSTALL_DIR}..."
-  sudo mv /tmp/lfr-tunnel "$INSTALL_PATH"
+  SUDO="sudo"
+fi
+
+# Straight to the install path, never through /tmp (#2505). The EDR exclusions cover this path,
+# and a freshly downloaded executable in /tmp is what gets quarantined before any move happens.
+# The current binary is renamed aside first -- renaming a running binary is safe -- and put back
+# if the download fails, so a failed install leaves the previous version exactly as it was.
+OLD_PATH="${INSTALL_PATH}.old"
+$SUDO rm -f "$OLD_PATH"
+if [ -e "$INSTALL_PATH" ]; then
+  $SUDO mv "$INSTALL_PATH" "$OLD_PATH"
+fi
+
+echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."
+if $SUDO curl -sSfL "$URL" -o "$INSTALL_PATH" && [ -s "$INSTALL_PATH" ]; then
+  $SUDO chmod +x "$INSTALL_PATH"
+  $SUDO rm -f "$OLD_PATH"
+else
+  $SUDO rm -f "$INSTALL_PATH"
+  if [ -e "$OLD_PATH" ]; then
+    $SUDO mv "$OLD_PATH" "$INSTALL_PATH"
+    echo "Download failed; the previous lfr-tunnel at ${INSTALL_PATH} is unchanged." >&2
+  else
+    echo "Download failed; nothing was installed." >&2
+  fi
+  exit 1
 fi
 echo "lfr-tunnel installed to ${INSTALL_PATH}"
 

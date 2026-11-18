@@ -59,13 +59,38 @@ If (!(Test-Path $InstallDir)) {
 
 $DestPath = Join-Path $InstallDir "lfr-tunnel.exe"
 
+# The same mechanism as install.sh and --upgrade (#2505): the current binary is renamed aside --
+# Windows allows renaming a running .exe, not overwriting it -- the download goes straight to the
+# install path, and on failure the previous binary is put back. A .old still locked by a running
+# client is removed by lfr-tunnel itself at its next start.
+$OldPath = "$DestPath.old"
+if (Test-Path $OldPath) { Remove-Item -Force $OldPath -ErrorAction SilentlyContinue }
+$HadOld = $false
+if (Test-Path $DestPath) {
+    Try {
+        Move-Item -Force -Path $DestPath -Destination $OldPath -ErrorAction Stop
+        $HadOld = $true
+    } Catch {
+        Write-Error "Could not move the current $DestPath aside. Close lfr-tunnel, or run PowerShell as Administrator, and try again."
+        Exit 1
+    }
+}
+
 Write-Host "Downloading lfr-tunnel from $Url..."
 Try {
     Invoke-WebRequest -Uri $Url -OutFile $DestPath -UseBasicParsing
+    if (!(Test-Path $DestPath) -or (Get-Item $DestPath).Length -eq 0) { Throw "empty download" }
 } Catch {
-    Write-Error "Failed to download or write to $DestPath. If this is a protected or system path, please run PowerShell as Administrator."
+    Remove-Item -Force $DestPath -ErrorAction SilentlyContinue
+    if ($HadOld) {
+        Move-Item -Force -Path $OldPath -Destination $DestPath -ErrorAction SilentlyContinue
+        Write-Error "Failed to download $Url; the previous lfr-tunnel at $DestPath is unchanged."
+    } else {
+        Write-Error "Failed to download or write to $DestPath. If this is a protected or system path, please run PowerShell as Administrator."
+    }
     Exit 1
 }
+if ($HadOld) { Remove-Item -Force $OldPath -ErrorAction SilentlyContinue }
 
 # Add target installation directory to user PATH environment variable if not already present
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")

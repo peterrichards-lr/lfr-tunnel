@@ -246,6 +246,10 @@ func main() {
 		log.Fatalf("[Error] %v", err)
 	}
 
+	// The previous binary an upgrade left beside this one, which Windows would not let it delete
+	// while it was still running (#2505).
+	client.RemoveUpgradeBackup()
+
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
 	if err != nil {

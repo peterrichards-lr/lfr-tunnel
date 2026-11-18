@@ -526,9 +526,10 @@ func TestTheMigrationPathTellsThePlannerWhatItRestarted(t *testing.T) {
 			"so each one has to tell the planner", strings.Count(text, call))
 	}
 
-	// The branch that follows the call is where the starters it created are recorded.
+	// The branch that follows the call is where the starters it created are recorded: the rest of
+	// SelfUpgrade's `if migrating` block, which closes at one tab (#2505 moved it out a level).
 	branch := text[at:]
-	if end := strings.Index(branch, "\n\t\t}\n"); end > 0 {
+	if end := strings.Index(branch, "\n\t}\n"); end > 0 {
 		branch = branch[:end]
 	}
 	for _, want := range []string{"restartSystemd = true", "plistToReload = "} {

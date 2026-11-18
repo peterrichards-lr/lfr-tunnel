@@ -1300,10 +1300,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"macos_arm64": "~/liferay/lfr-tunnel",
 				"macos_amd64": "~/liferay/lfr-tunnel",
 				"linux_amd64": "~/liferay/lfr-tunnel",
-				// Backslashes for Windows. The agreed EDR exclusion is matched literally after the
-				// leading wildcard -- *\liferay\lfr-tunnel\lfr-tunnel.exe -- so handing the
-				// PowerShell installer a POSIX path would make it normalise separators itself,
-				// which is logic that cannot be exercised anywhere but Windows (#1591).
+				// Backslashes for Windows. The EDR exclusion is matched literally after the username
+				// -- C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe -- so handing the PowerShell
+				// installer a POSIX path would make it normalise separators itself, which is logic
+				// that cannot be exercised anywhere but Windows (#1591, #2507).
 				"windows_amd64": `~\liferay\lfr-tunnel`,
 			}
 			for key, fallback := range fallbacks {

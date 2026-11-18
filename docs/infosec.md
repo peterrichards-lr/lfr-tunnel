@@ -66,100 +66,135 @@ Unlike generic reverse proxy utilities, `lfr-tunnel` has been engineered with st
 
 ## 2. Code Signing & Trust Verification Metadata
 
-To support **Exclusion by Digital Subject (Publisher)** in EDR consoles (such as SentinelOne, Microsoft Defender, and CrowdStrike), release binaries are cryptographically signed.
+Release binaries are signed, but **the exclusions this project asks for are path exclusions
+(§3), not signer exclusions.** None of the signing identities below is issued by a public or
+corporate CA, so an "Exclusion by Digital Subject (Publisher)" rule would trust a project-held
+key rather than an organisation. The signatures exist so a binary can be checked against the one
+the project published.
 
 > [!IMPORTANT]
 > **Key Management & Secrets Security:** All private keys, certificates, and passphrases used during the build and codesigning cycles are stored securely inside a corporate **1Password vault**. The release scripts retrieve these secrets dynamically at runtime via the 1Password CLI (`op`), ensuring no credentials or key files are hardcoded in the codebase or stored in plain text on build systems.
 
-### macOS (Apple Developer ID)
+### macOS (self-signed code-signing identity)
 
-* **Publisher Common Name (CN):** `Developer ID Application: <Your Developer Name> (TEAMID)` *(Note: Admin should verify the exact CN generated during local build signing)*
-* **Apple Team ID:** `[Insert Apple Developer Team ID here]`
+* **Signing identity:** `Temp Code Sign`, a self-signed certificate. There is **no Apple
+  Developer ID**, so `codesign` reports `TeamIdentifier=not set` and Gatekeeper treats the
+  binary as unidentified.
 * **Verification Command:**
 
     ```bash
     codesign -dv --verbose=4 "$HOME/liferay/lfr-tunnel/lfr-tunnel"
     ```
 
-### Windows (Authenticode Certificate)
+### Windows (self-signed Authenticode certificate)
 
-* **Publisher Common Name (CN):** `CN=[Insert Organization/Publisher Name here]`
-* **Certificate Thumbprint (SHA-256):** `[Insert Certificate Thumbprint here]`
-* **Windows Publisher CA:** Enterprise CA (if an internal corporate code signing certificate is utilized in the future).
+* **Publisher Common Name (CN):** `CN=Lfr-Tunnel Windows Code Signing`, self-signed.
+* **Verification:** `osslsigncode verify lfr-tunnel-windows-amd64.exe` reports
+  `self-signed certificate` because there is no chain to a trusted root. The signature is good
+  when the *Current* and *Calculated message digest* lines match.
 
 ### Linux (GPG Detached Signatures)
 
-* **GPG Public Key ID:** `[Insert GPG Key ID here]`
+* **GPG key:** `Liferay Tunnel Developer <developer@lfr-demo.se>`, fingerprint
+  `E8E407B5D8F557B3F0749EE676219C6F0B96C87B`.
 * **Signature Verification:** Linux binaries are distributed alongside detached GPG signatures (`.asc` files) generated during the release process:
 
     ```bash
     gpg --verify lfr-tunnel-linux-amd64.asc lfr-tunnel-linux-amd64
     ```
 
-### Supply-Chain Attestation (Sigstore & GitHub OIDC)
+### Release checksums (minisign)
 
-Every release binary is covered by a **GitHub Artifact Attestation**—a tamper-proof record in the Rekor transparency log. This confirms that the binary was built directly in the official GitHub repository (`<your-github-org>/lfr-tunnel`) from audited source commits.
-
-* **Verification Command (requires GitHub CLI):**
-
-    ```bash
-    gh attestation verify "$HOME/liferay/lfr-tunnel/lfr-tunnel" --repo <your-github-org>/lfr-tunnel
-    ```
+Every release publishes `checksums.txt` and a minisign signature over it,
+`checksums.txt.minisig`, produced by the release workflow. `lfr-tunnel --upgrade` refuses a
+release without it, and checks the downloaded binary's SHA-256 against that file before
+installing it. There are **no** GitHub Artifact Attestations: the release workflow does not
+create them. (Decision record: `.agents/decisions/0003-two-tier-release-distribution.md`.)
 
 ---
 
 ## 3. Standard Execution Paths & EDR Exclusions
 
-To simplify EDR administration and avoid wide path exclusions, the project enforces **standardized canonical installation paths** rather than random temp paths or multiple package-manager paths:
+**This section is the single source for install paths and exclusions.** `SECURITY.md`, the SE
+guide and the installers point here rather than restating paths, and
+`tests/hooks/test-install-paths.sh` fails if any of them disagree with it.
 
-**Three rules per platform, not one.** The binary alone was not enough: Liferay InfoSec confirmed
-that the behavioural and machine-learning engines were not satisfied by a binary exclusion, and
-the **symlink and the utility had to be excluded as well**.
+### Where the client is installed
 
-### macOS — the rules as configured
+One executable name, one path and one install mechanism on every OS (#2508):
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Executable | `~/liferay/lfr-tunnel/lfr-tunnel` | `~/liferay/lfr-tunnel/lfr-tunnel` | `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe` |
+| LDM link | `~/.ldm/bin/lfr-tunnel` (symlink) | `~/.ldm/bin/lfr-tunnel` (symlink) | `%USERPROFILE%\.ldm\bin\lfr-tunnel.exe` (hardlink) |
+| Install and upgrade | rename to `.old`, download in place | same | same |
+| Autostart runs | the executable above | the executable above | the executable above |
+
+Install and upgrade write the binary straight to that path: the current binary is renamed to
+`lfr-tunnel.old` (or `lfr-tunnel.exe.old`) and restored if the download fails. Nothing is
+staged in `/tmp`, `/private/tmp` or `%TEMP%` (#2505). Autostart runs the executable itself on
+every OS, never a copy or a renamed link (#2504).
+
+The LDM link exists so LDM finds this client instead of downloading an unexcluded copy of its own
+(#1311).
+
+### EDR exclusion rules (Liferay)
+
+On Liferay's EDR-managed machines the native installer is the only supported install route
+(`.agents/decisions/0006-liferay-installs-natively-homebrew-and-scoop-are-for-everyone-else.md`),
+so these are the only paths to exclude. **Two rules per platform**: InfoSec confirmed that the
+behavioural and machine-learning engines were not satisfied by a binary exclusion alone, and
+the LDM link had to be excluded as well.
+
+**macOS** (requested):
 
 ```
 /Users/*/liferay/lfr-tunnel/lfr-tunnel
 /Users/*/.ldm/bin/lfr-tunnel
-/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel
 ```
 
-### Linux — the same shape
+**Linux** (requested):
 
 ```
 /home/*/liferay/lfr-tunnel/lfr-tunnel
 /home/*/.ldm/bin/lfr-tunnel
-/opt/*/bin/lfr-tunnel
 ```
 
-### Windows
+**Windows** (requested):
 
 ```
-*\liferay\lfr-tunnel\lfr-tunnel.exe
+C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
+C:\Users\*\.ldm\bin\lfr-tunnel.exe
 ```
 
-| What each rule covers | Why it is needed |
-|---|---|
-| `…/liferay/lfr-tunnel/lfr-tunnel` | the installed binary — where `install.sh` / `install.ps1` place it |
-| `…/.ldm/bin/lfr-tunnel` | the **symlink** the installer creates for LDM auto-discovery (`ln -sf "$INSTALL_PATH" "$HOME/.ldm/bin/lfr-tunnel"`, a hardlink on Windows), so LDM does not download an unwhitelisted copy of its own (#1311) |
-| `/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel`, `/opt/*/bin/lfr-tunnel` | a Homebrew or package-manager install, which lands outside `$HOME` |
+Only the username segment is a wildcard (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything after
+it is matched literally, so the last two directory names and the executable name are all
+load-bearing. No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and
+on Windows a leading `*\` would also span the drive and `Users`, not just the username.
 
-The username segment is a wildcard (`/Users/*/`, `/home/*/`); everything after it is matched
-literally.
+**Package-manager rules are not requested.** An earlier version of this section listed
+`/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel` and `/opt/*/bin/lfr-tunnel`. Homebrew and Scoop
+are not supported on EDR-managed machines, so those rules can be withdrawn.
+
+### Homebrew and Scoop (outside Liferay)
+
+The Homebrew tap and Scoop bucket remain a supported delivery route for everyone else, built from
+the same release. They install where the package manager decides, for example
+`$(brew --prefix)/Cellar/lfr-tunnel/<version>/bin/lfr-tunnel` (linked into `$(brew --prefix)/bin`)
+and `%USERPROFILE%\scoop\apps\lfr-tunnel\current\lfr-tunnel.exe`. A machine with an EDR that
+installs this way needs its own exclusions for those paths.
 
 > [!IMPORTANT]
-> **Installing anywhere else defeats all three rules, including the symlink one.** The installers
+> **Installing anywhere else defeats both rules, including the LDM one.** The installers
 > honour `LFT_INSTALL_DIR` (and the per-platform `LFR_TUNNEL_*_INSTALL_DIR` variables), so a
-> developer who sets one installs outside the exclusion — and the `.ldm/bin` symlink then *resolves*
-> to that unexcluded target, so being on a covered path does not help it.
+> developer who sets one installs outside the exclusion — and the `.ldm/bin` link then *resolves*
+> to that unexcluded target, so being on a covered path does not help it. **Do not set these on
+> an EDR-managed machine.**
 >
 > Observed in practice: a workstation with `LFT_INSTALL_DIR="$HOME/runningpoc/bin"` in its shell
 > profile had every install and every `--upgrade` redirected there for months. `--upgrade` replaces
 > the binary in place, so it stayed current *and* stayed unexcluded. If a machine is alerting,
 > check `which lfr-tunnel` before anything else.
-
-> [!NOTE]
-> Standardizing client downloads on the gateway ensures that developers use these specific directories instead of homebrew/scoop paths, making a single wildcard rule sufficient.
 
 > [!NOTE]
 > **Why Local Native Execution is Preferred Over Docker:** While a Docker sandbox fallback is provided for environments with strict local execution policies, running the tunnel natively is the recommended default. Running via Docker introduces substantial containerization overhead (increased CPU/memory footprint on developer laptops) and operational complexity (requiring Docker Desktop, managing container network bindings to map local Tomcat ports, and volume mapping config directories).
@@ -221,12 +256,12 @@ This namespacing guarantees that environment variables exported in shell profile
 
 To authorize the tool with minimal impact on local endpoint alerts, we recommend the following steps:
 
-1. **Verify Binary Authenticity:** Verify the checksum and GitHub OIDC attestation for the downloaded executables using the `gh attestation verify` command.
-2. **Apply Code Signing Exceptions:** Add the Apple Team ID / Developer ID CN and Windows Certificate CN to your EDR's trusted publisher list.
-3. **Apply Wildcard Path Exclusions:** Add **all three** rules per platform from section 3 -- the installed binary, the `.ldm/bin` symlink, and the package-manager path. A binary-only exclusion is not sufficient: the behavioural and ML engines required the symlink and the utility as well.
-4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the audited public image **`your-docker-hub-user/lfr-tunnel`** (or `peterjrichards/lfr-tunnel` as a template) hosted on Docker Hub.
+1. **Verify Binary Authenticity:** Check the downloaded executable against the release's `checksums.txt`, and that file against its minisign signature (section 2).
+2. **Apply Wildcard Path Exclusions:** Add **both** rules per platform from section 3: the installed binary and the `.ldm/bin` link. A binary-only exclusion is not sufficient: the behavioural and ML engines required the link as well. No package-manager rule is needed.
+3. **Do not add signer exclusions.** The signing identities in section 2 are self-signed or project-held keys, not a CA-issued publisher, so trusting them would trust whoever holds the key rather than an organisation.
+4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the public image **`peterjrichards/lfr-tunnel`** hosted on Docker Hub.
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-11* | *Last Reviewed: 2026-11-11*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

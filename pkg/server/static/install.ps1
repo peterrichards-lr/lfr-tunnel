@@ -20,9 +20,10 @@ $Url = "$ServerUrl/static/downloads/$Binary"
 
 $DefaultInstallDir = "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}"
 If ([string]::IsNullOrEmpty($DefaultInstallDir) -or $DefaultInstallDir -like "*{{*") {
-    # The path agreed with the S1 team (#1591). The EDR exclusion is the wildcard
-    # *\liferay\lfr-tunnel\lfr-tunnel.exe, so the last two directory segments and the binary
-    # name are all load-bearing -- installing anywhere else leaves the client unexcluded.
+    # The path agreed with the S1 team (#1591). The EDR exclusion is
+    # C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe (docs/infosec.md section 3), so the last two
+    # directory segments and the binary name are all load-bearing -- installing anywhere else
+    # leaves the client unexcluded.
     $DefaultInstallDir = "$Home\liferay\lfr-tunnel"
 }
 

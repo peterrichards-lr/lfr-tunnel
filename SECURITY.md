@@ -47,39 +47,33 @@ All release binaries are built with:
 
 These flags ensure that release binaries are as clean and reproducible as possible, with no unintended artefacts embedded.
 
-#### GitHub Artifact Attestations (Sigstore)
+#### Signed Release Checksums (minisign)
 
-Every release binary is covered by a **GitHub Artifact Attestation** — a free, keyless, OIDC-backed cryptographic provenance record. This is powered by [Sigstore](https://www.sigstore.dev/) and uses GitHub's own OIDC identity to create a tamper-proof, publicly verifiable record in the [Rekor](https://rekor.sigstore.dev/) transparency log.
-
-The attestation proves:
-- **Which repository** produced the binary (`peterrichards-lr/lfr-tunnel`)
-- **Which commit SHA** was checked out
-- **Which workflow file** ran the build
-- **That the binary has not been modified** since the workflow produced it
+Every release publishes `checksums.txt` (the SHA-256 of each binary) and `checksums.txt.minisig`,
+a [minisign](https://jedisct1.github.io/minisign/) signature over it produced by the release
+workflow. `lfr-tunnel --upgrade` refuses a release without a valid signature, and checks the
+downloaded binary against `checksums.txt` before installing it.
 
 > [!IMPORTANT]
-> This is **supply-chain provenance**, not OS-level signing. The binary will still appear as `Type=Unsigned` in SentinelOne and similar EDR tools. The attestation does not embed a signature inside the binary — it is a separate, verifiable record.
-
-**Verify any downloaded binary using the GitHub CLI:**
-```bash
-gh attestation verify /usr/local/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
-```
+> This proves the binary is the one the project published. It is not OS-level code signing: the
+> public release binaries carry no Apple or Authenticode signature, so EDR tools report them as
+> unsigned. Releases do **not** carry GitHub Artifact Attestations.
 
 #### SHA-256 Checksums
 
-A `checksums.txt` file is generated for every release and is itself covered by the Artifact Attestation. Download it from the [Releases page](https://github.com/peterrichards-lr/lfr-tunnel/releases) and verify manually:
+Download `checksums.txt` from the [Releases page](https://github.com/peterrichards-lr/lfr-tunnel/releases) and verify manually:
 
 ```bash
-# macOS / Linux
-sha256sum -c checksums.txt
+# macOS / Linux, in the directory holding the downloaded binaries
+sha256sum -c --ignore-missing checksums.txt
 
-# Or verify a single binary
-sha256sum /usr/local/bin/lfr-tunnel
+# Or hash an installed binary and compare it with the matching line
+sha256sum "$HOME/liferay/lfr-tunnel/lfr-tunnel"
 ```
 
 #### Package Manager Distribution (Homebrew & Scoop)
 
-`lfr-tunnel` is distributed through the following package managers, which add an independent layer of verification on top of the GitHub Artifact Attestations:
+`lfr-tunnel` is distributed through the following package managers, which add an independent layer of verification on top of the signed checksums:
 
 | Package Manager | Platform | Install Command |
 |---|---|---|
@@ -94,7 +88,7 @@ What package managers add that a direct download does not:
 - **Enterprise policy alignment** — many organisations already have approved policies covering software installed via Homebrew or Scoop, making these routes easier to whitelist than a raw binary download
 
 > [!NOTE]
-> Package managers **do not sign the binary**. The binary remains `Type=Unsigned` from an EDR perspective. However, the consistent, auditable install process and predictable install paths give security teams a stronger basis for applying a policy exclusion.
+> Package managers **do not sign the binary**. The binary remains `Type=Unsigned` from an EDR perspective. On a machine with an EDR, prefer the native installer: its path is the one the exclusion rules cover ([docs/infosec.md §3](docs/infosec.md#3-standard-execution-paths--edr-exclusions)). Liferay supports only the native installer on its EDR-managed machines.
 
 
 
@@ -110,48 +104,15 @@ What package managers add that a direct download does not:
 
 All of these are **false positives** for `lfr-tunnel`. The tool is open-source, auditable, and performs only the tunnelling described in its documentation.
 
-#### Canonical Install Locations
+#### Install Locations and Recommended Exclusions
 
-`lfr-tunnel` is always installed to a predictable location. The exact path depends on the install method:
+Install paths and EDR exclusion rules are kept in one place:
+**[docs/infosec.md §3](docs/infosec.md#3-standard-execution-paths--edr-exclusions)**.
 
-| Method / Integration | Platform | Path |
-|---|---|---|
-| Homebrew | macOS (Apple Silicon) | `/opt/homebrew/bin/lfr-tunnel` |
-| Homebrew | macOS (Intel) | `/usr/local/bin/lfr-tunnel` |
-| Homebrew | Linux | `/home/linuxbrew/.linuxbrew/bin/lfr-tunnel` |
-| Scoop | Windows | `C:\Users\<username>\scoop\shims\lfr-tunnel.exe` |
-| Direct install script | macOS / Linux | `/usr/local/bin/lfr-tunnel` |
-| Direct install script | Windows | `%LOCALAPPDATA%\Programs\lfr-tunnel\lfr-tunnel.exe` |
-| LDM execution loop | macOS / Linux | `~/.ldm/bin/lfr-tunnel` |
-| LDM execution loop | Windows | `C:\Users\<username>\.ldm\bin\lfr-tunnel.exe` |
-
-#### Recommended Exclusion (for Security Admins)
-
-Add **wildcard path exclusions** in your EDR console covering package manager paths, direct install paths, and LDM integration paths:
-
-**macOS:**
-```
-/opt/homebrew/bin/lfr-tunnel
-/usr/local/bin/lfr-tunnel
-/usr/local/bin/lfr-tunnel
-/Users/*/.ldm/bin/lfr-tunnel
-```
-
-**Linux:**
-```
-/home/linuxbrew/.linuxbrew/bin/lfr-tunnel
-/usr/local/bin/lfr-tunnel
-/home/*/.ldm/bin/lfr-tunnel
-```
-
-**Windows:**
-```
-C:\Users\*\scoop\shims\lfr-tunnel.exe
-%LOCALAPPDATA%\Programs\lfr-tunnel\lfr-tunnel.exe
-C:\Users\*\.ldm\bin\lfr-tunnel.exe
-```
-
-Because all install methods produce a binary at a predictable, fixed path, these wildcard rules cover the entire team and survive binary upgrades without needing to be updated per version or per user.
+In short, the native installers put the client at `<home>/liferay/lfr-tunnel/lfr-tunnel` (`.exe`
+on Windows) on every OS, plus an LDM link in `<home>/.ldm/bin/`, and those are the paths to exclude.
+Homebrew and Scoop installs land where the package manager decides; on a machine with an EDR,
+use the native installer, or exclude those paths yourself.
 
 #### False Positive Submission
 
@@ -177,4 +138,4 @@ Always run `lfr-tunnel -upgrade` to ensure you are on the latest version.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

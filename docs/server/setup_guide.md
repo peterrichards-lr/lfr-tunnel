@@ -1022,6 +1022,12 @@ location /static/downloads/ {
 #### Step 2: Override Client Platform Configurations in `server-config.yaml`
 Declare the `client_platforms` block to redirect developers to your self-hosted binaries and specify organization-sanctioned package manager formulae or installation scripts:
 
+> [!IMPORTANT]
+> **If your users' machines run an EDR, make the native install script the `cmd`, not a package
+> manager.** The example below puts Homebrew and Scoop first, which suits machines without one; a
+> package manager installs outside the path the EDR exclusions cover. See
+> [infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions).
+
 ```yaml
 client_platforms:
   macos_arm64:
@@ -1075,6 +1081,12 @@ These subcommands let you build, sign, and update release checksums natively on 
      ```
 
 ##### B. Temporary Self-Signed Certificates (Local EDR Testing)
+
+> [!NOTE]
+> **Signer-identity exclusions were not adopted for Liferay.** The project's signing identities are
+> self-signed or project-held keys, so InfoSec excludes the install **path** instead. The rules
+> are in [infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions). The steps
+> below remain for local testing only.
 
 For isolated testing or when corporate certificates are not yet available, you can sign binaries with a self-signed identity and configure a SentinelOne rule to trust it specifically for your machine:
 
@@ -2046,4 +2058,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

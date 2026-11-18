@@ -36,9 +36,32 @@ This guide walks you through installing the client, registering for access, clai
 
 Before registering, install the `lfr-tunnel` client for your operating system.
 
-### Recommended: Package Managers
+> [!IMPORTANT]
+> **On an EDR-managed machine, including every Liferay machine, use the native installer below,
+> not Homebrew or Scoop.** It installs to the one path the EDR exclusions cover; a package
+> manager installs somewhere they do not, and the endpoint agent can quarantine the client. The
+> paths and rules are in [infosec.md §3](infosec.md#3-standard-execution-paths--edr-exclusions),
+> and Liferay staff should follow the [SE guide](liferay-se-guide.md).
 
-Using a package manager ensures you get automated integrity validation (SHA-256 checks) and clean path management.
+### Native Installer
+
+The install script is served by your gateway, which fills in where to download from. Replace
+`<your-gateway>` with its address (for example `tunnel.lfr-demo.se`).
+
+#### macOS / Linux
+```bash
+curl -fsSL https://<your-gateway>/install.sh | sh
+```
+
+#### Windows (PowerShell)
+```powershell
+irm https://<your-gateway>/install.ps1 | iex
+```
+
+### Package Managers (machines without an EDR)
+
+If your machine has no EDR agent, Homebrew and Scoop are also available. They verify the
+download's SHA-256 and handle updates, but install outside the path an EDR exclusion covers.
 
 #### macOS / Linux (Homebrew)
 ```bash
@@ -51,20 +74,6 @@ brew install lfr-tunnel
 ```powershell
 scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket
 scoop install lfr-tunnel
-```
-
-### Direct Script Fallback
-
-If package managers are not available on your system, use the direct installation scripts.
-
-#### macOS / Linux
-```bash
-curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/pkg/server/static/install.sh | sh
-```
-
-#### Windows (PowerShell)
-```powershell
-iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/pkg/server/static/install.ps1 | iex
 ```
 
 Verify your installation:
@@ -583,4 +592,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

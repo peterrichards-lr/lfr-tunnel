@@ -9,6 +9,7 @@ import (
 )
 
 func TestInstallService(t *testing.T) {
+	stubServiceManagers(t)
 	defer UninstallService()    //nolint:errcheck
 	defer UninstallGUIService() //nolint:errcheck
 
@@ -23,18 +24,18 @@ func TestInstallService(t *testing.T) {
 			t.Errorf("installDarwin failed: %v", err)
 		}
 
-		prettyExe := filepath.Join(tmpDir, "Liferay Tunnel")
-		if _, err := os.Stat(prettyExe); os.IsNotExist(err) {
-			t.Errorf("Expected pretty executable link at %s, but it was not created", prettyExe)
+		// The agent runs the client itself, under its own name (#2504).
+		if _, err := os.Lstat(filepath.Join(tmpDir, legacyDarwinExeName)); err == nil {
+			t.Errorf("installDarwin created %q beside the client", legacyDarwinExeName)
 		}
 
 		homeDir, _ := os.UserHomeDir()
-		plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
+		plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", daemonPlistName)
 		content, err := os.ReadFile(plistPath)
 		if err != nil {
 			t.Errorf("Failed to read created plist: %v", err)
-		} else if !strings.Contains(string(content), "Liferay Tunnel") {
-			t.Errorf("Expected plist to reference 'Liferay Tunnel', got:\n%s", string(content))
+		} else if !strings.Contains(string(content), "<string>"+binPath+"</string>") {
+			t.Errorf("Expected plist to run %s, got:\n%s", binPath, string(content))
 		}
 	}
 

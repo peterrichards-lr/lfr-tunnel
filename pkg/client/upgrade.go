@@ -497,6 +497,15 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		}
 	}
 
+	// The agents are unloaded at this point, so an install from before #2504 is converged now:
+	// each plist repointed at the client itself, and the legacy "Liferay Tunnel" file -- a copy
+	// of the OLD binary, when the symlink had failed -- removed before anything reloads.
+	if runtime.GOOS == "darwin" && swapErr == nil {
+		if home, err := os.UserHomeDir(); err == nil {
+			convergeDarwinAutostart(home, execPath)
+		}
+	}
+
 	// Post-upgrade: restart previously active processes and services
 	restartActiveProcessesAndServices(plistToReload, restartSystemd, relaunch)
 

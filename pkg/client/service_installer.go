@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // clientBinaryName is the client's basename, which is also the directory the installers put it
@@ -31,6 +32,70 @@ func canonicalExeName() string {
 		return clientBinaryName + ".exe"
 	}
 	return clientBinaryName
+}
+
+// legacyDarwinExeName is the second name macOS autostart used to run the client under (#799), so
+// that Login Items showed a friendly name. It was a symlink to the client or, when that failed, a
+// full copy of it -- either way an executable no EDR exclusion names, run at every login (#2504).
+// Autostart now runs canonicalExeName() itself; this name survives only so convergeDarwinAutostart
+// can find and remove what earlier versions left behind.
+const legacyDarwinExeName = "Liferay Tunnel"
+
+// launchctl and systemctlUser run the service managers. Variables so tests do not load agents
+// into the real launchd or enable units in the real systemd user instance.
+var launchctl = func(args ...string) error {
+	return exec.Command("launchctl", args...).Run()
+}
+
+var systemctlUser = func(args ...string) error {
+	return exec.Command("systemctl", append([]string{"--user"}, args...)...).Run()
+}
+
+func darwinPlistPaths(home string) []string {
+	dir := filepath.Join(home, "Library", "LaunchAgents")
+	return []string{filepath.Join(dir, daemonPlistName), filepath.Join(dir, guiPlistName)}
+}
+
+// convergeDarwinAutostart brings an install made by an earlier version into line (#2504): every
+// LaunchAgent still running legacyDarwinExeName is repointed at exePath, and only then is the
+// legacy file removed -- removing it first would leave an agent that fails at the next login. A
+// plist that cannot be rewritten keeps the legacy file in place for the same reason. The plist is
+// rewritten, not reloaded: a running agent keeps running, and the next load runs exePath.
+func convergeDarwinAutostart(home, exePath string) {
+	legacy := filepath.Join(filepath.Dir(exePath), legacyDarwinExeName)
+	if legacy == exePath {
+		return
+	}
+	oldArg := "<string>" + legacy + "</string>"
+	for _, plist := range darwinPlistPaths(home) {
+		data, err := os.ReadFile(plist)
+		if err != nil || !strings.Contains(string(data), oldArg) {
+			continue
+		}
+		updated := strings.ReplaceAll(string(data), oldArg, "<string>"+exePath+"</string>")
+		if err := os.WriteFile(plist, []byte(updated), 0o644); err != nil { //nolint:gosec // see installDarwin
+			slog.Warn(fmt.Sprintf("[Warning] Could not repoint %s at %s, so %q is kept: %v", plist, exePath, legacy, err))
+			return
+		}
+		fmt.Printf("[Success] %s now runs %s\n", plist, exePath)
+	}
+	if _, err := os.Lstat(legacy); err != nil {
+		return
+	}
+	if err := os.Remove(legacy); err != nil {
+		slog.Warn(fmt.Sprintf("[Warning] Could not remove %q, left by an earlier version: %v", legacy, err))
+		return
+	}
+	fmt.Printf("[Success] Removed %q, left by an earlier version; autostart runs %s\n", legacy, exePath)
+}
+
+// installedExeOrCanonical is the binary an uninstall should converge on: the resolved install
+// when there is one, otherwise the canonical path.
+func installedExeOrCanonical(home string) string {
+	if exe, err := resolveInstallExe(); err == nil {
+		return exe
+	}
+	return filepath.Join(canonicalInstallDir(home), canonicalExeName())
 }
 
 // canonicalInstallDir is where the installers put the client, and the only location the EDR
@@ -134,25 +199,26 @@ func UninstallService() error {
 	}
 }
 
+// uninstallDarwin removes both LaunchAgents, the service and the tray, and any legacy
+// "Liferay Tunnel" file (#2504). It used to remove only the service plist, so an uninstall left
+// the tray starting at every login and the extra executable beside the client.
 func uninstallDarwin() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
-	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
-		return nil
+	for _, plistPath := range darwinPlistPaths(homeDir) {
+		if _, err := os.Stat(plistPath); os.IsNotExist(err) {
+			continue
+		}
+		_ = launchctl("unload", plistPath) //nolint:errcheck // not loaded is fine; the file still goes
+		if err := os.Remove(plistPath); err != nil {
+			return err
+		}
+		fmt.Printf("[Success] Uninstalled macOS LaunchAgent: %s\n", plistPath)
 	}
-
-	cmd := exec.Command("launchctl", "unload", plistPath)
-	_ = cmd.Run() //nolint:errcheck
-
-	if err := os.Remove(plistPath); err != nil {
-		return err
-	}
-
-	fmt.Printf("[Success] Uninstalled macOS LaunchAgent: %s\n", plistPath)
+	convergeDarwinAutostart(homeDir, installedExeOrCanonical(homeDir))
 	return nil
 }
 
@@ -167,14 +233,14 @@ func uninstallLinux() error {
 		return nil
 	}
 
-	_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()    //nolint:errcheck
-	_ = exec.Command("systemctl", "--user", "disable", "lfr-tunnel.service").Run() //nolint:errcheck
+	_ = systemctlUser("stop", "lfr-tunnel.service")    //nolint:errcheck
+	_ = systemctlUser("disable", "lfr-tunnel.service") //nolint:errcheck
 
 	if err := os.Remove(servicePath); err != nil {
 		return err
 	}
 
-	_ = exec.Command("systemctl", "--user", "daemon-reload").Run() //nolint:errcheck
+	_ = systemctlUser("daemon-reload") //nolint:errcheck
 	fmt.Printf("[Success] Uninstalled Linux systemd user service: %s\n", servicePath)
 	return nil
 }
@@ -232,24 +298,7 @@ func installDarwin(exePath string) error {
 		return err
 	}
 
-	prettyExe := filepath.Join(filepath.Dir(exePath), "Liferay Tunnel")
-	if prettyExe != exePath {
-		_ = os.Remove(prettyExe)
-		if err := os.Symlink(exePath, prettyExe); err != nil {
-			if input, err := os.ReadFile(exePath); err == nil {
-				// 0755 required (#1408): this is a copy of the client binary under a friendly
-				// name, and it has to be executable to be the thing the service launches.
-				if werr := os.WriteFile(prettyExe, input, 0o755); werr != nil { //nolint:gosec
-					// Cosmetic only: the friendly name is what the OS shows for the running
-					// process. Without it the service still starts, under the real binary
-					// name, so this is worth reporting rather than failing on.
-					slog.Info(fmt.Sprintf("[Warning] Could not create %q: %v", prettyExe, werr))
-				}
-			}
-		}
-	}
-
-	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", daemonPlistName)
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -274,7 +323,7 @@ func installDarwin(exePath string) error {
     <key>StandardErrorPath</key>
     <string>%s/.lfr-tunnel/service.err</string>
 </dict>
-</plist>`, prettyExe, homeDir, homeDir)
+</plist>`, exePath, homeDir, homeDir)
 
 	// 0750 (#1408): these live under the user's own home and every reader -- launchd,
 	// systemd --user, Explorer -- runs as that same user. MkdirAll leaves an existing
@@ -293,9 +342,14 @@ func installDarwin(exePath string) error {
 		return err
 	}
 
+	// The agent runs the client under its own name, as on every other OS (#2504): the EDR
+	// exclusions are agreed per executable name. Login Items therefore shows lfr-tunnel; a custom
+	// label needs an app bundle tied to a Developer ID team. Anything an earlier version left is
+	// converged before the load, so neither agent can be left pointing at a removed file.
+	convergeDarwinAutostart(homeDir, exePath)
+
 	// Load the service
-	cmd := exec.Command("launchctl", "load", "-w", plistPath)
-	if err := cmd.Run(); err != nil {
+	if err := launchctl("load", "-w", plistPath); err != nil {
 		slog.Info(fmt.Sprintf("[Warning] Failed to load launchctl, you may need to run: launchctl load -w %s\n", plistPath))
 	}
 
@@ -341,9 +395,9 @@ WantedBy=default.target
 	}
 
 	// Enable and start
-	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()                //nolint:errcheck
-	_ = exec.Command("systemctl", "--user", "enable", "lfr-tunnel.service").Run() //nolint:errcheck
-	_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()  //nolint:errcheck
+	_ = systemctlUser("daemon-reload")                //nolint:errcheck
+	_ = systemctlUser("enable", "lfr-tunnel.service") //nolint:errcheck
+	_ = systemctlUser("start", "lfr-tunnel.service")  //nolint:errcheck
 
 	fmt.Printf("[Success] Installed Linux systemd user service to %s\n", servicePath)
 	fmt.Printf("[Success] lfr-tunnel will now start automatically in the background on login.\n")
@@ -451,23 +505,6 @@ func installDarwinGUI(exePath string) error {
 		return err
 	}
 
-	prettyExe := filepath.Join(filepath.Dir(exePath), "Liferay Tunnel")
-	if prettyExe != exePath {
-		_ = os.Remove(prettyExe)
-		if err := os.Symlink(exePath, prettyExe); err != nil {
-			if input, err := os.ReadFile(exePath); err == nil {
-				// 0755 required (#1408): this is a copy of the client binary under a friendly
-				// name, and it has to be executable to be the thing the service launches.
-				if werr := os.WriteFile(prettyExe, input, 0o755); werr != nil { //nolint:gosec
-					// Cosmetic only: the friendly name is what the OS shows for the running
-					// process. Without it the service still starts, under the real binary
-					// name, so this is worth reporting rather than failing on.
-					slog.Info(fmt.Sprintf("[Warning] Could not create %q: %v", prettyExe, werr))
-				}
-			}
-		}
-	}
-
 	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -491,7 +528,7 @@ func installDarwinGUI(exePath string) error {
     <key>StandardErrorPath</key>
     <string>%s/.lfr-tunnel/gui_service.err</string>
 </dict>
-</plist>`, prettyExe, homeDir, homeDir)
+</plist>`, exePath, homeDir, homeDir)
 
 	// 0750 (#1408): these live under the user's own home and every reader -- launchd,
 	// systemd --user, Explorer -- runs as that same user. MkdirAll leaves an existing
@@ -510,9 +547,11 @@ func installDarwinGUI(exePath string) error {
 		return err
 	}
 
+	// As installDarwin: the client's own name, and earlier installs converged first (#2504).
+	convergeDarwinAutostart(homeDir, exePath)
+
 	// Load the service
-	cmd := exec.Command("launchctl", "load", "-w", plistPath)
-	if err := cmd.Run(); err != nil {
+	if err := launchctl("load", "-w", plistPath); err != nil {
 		slog.Info(fmt.Sprintf("[Warning] Failed to load launchctl, you may need to run: launchctl load -w %s\n", plistPath))
 	}
 
@@ -533,14 +572,15 @@ func uninstallDarwinGUI() error {
 	}
 
 	// Unload the service
-	cmd := exec.Command("launchctl", "unload", plistPath)
-	_ = cmd.Run() //nolint:errcheck
+	_ = launchctl("unload", plistPath) //nolint:errcheck
 
 	if err := os.Remove(plistPath); err != nil {
 		return err
 	}
 
 	fmt.Printf("[Success] Uninstalled macOS LaunchAgent: %s\n", plistPath)
+	// The service agent may still run the legacy name; repoint it before the file goes (#2504).
+	convergeDarwinAutostart(homeDir, installedExeOrCanonical(homeDir))
 	return nil
 }
 

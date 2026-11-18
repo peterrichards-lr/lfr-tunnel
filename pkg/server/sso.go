@@ -58,11 +58,34 @@ const ssoCLICookie = "oidc_cli"
 
 // ssoReturnPath is where the callback sends someone who has just signed in.
 func ssoReturnPath(r *http.Request) string {
-	path := "/"
+	return ssoReturnFromCookies(r).path()
+}
+
+// ssoReturn is where a finished sign-in lands. It is carried in the flow cookies, and in a pending
+// sign-in when the gateway confirms the address itself (#2472) -- the link may be opened in a
+// browser that never saw those cookies.
+type ssoReturn struct {
+	v2  bool
+	cli bool
+}
+
+func ssoReturnFromCookies(r *http.Request) ssoReturn {
+	var rt ssoReturn
 	if c, err := r.Cookie(ssoPortalCookie); err == nil && c.Value == ssoPortalV2 {
-		path = "/portalv2/dashboard"
+		rt.v2 = true
 	}
 	if c, err := r.Cookie(ssoCLICookie); err == nil && c.Value == "1" {
+		rt.cli = true
+	}
+	return rt
+}
+
+func (rt ssoReturn) path() string {
+	path := "/"
+	if rt.v2 {
+		path = "/portalv2/dashboard"
+	}
+	if rt.cli {
 		path += "?cli_login=1"
 	}
 	return path
@@ -272,8 +295,10 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The email is what an account is found by, so an address the provider has not verified
-	// could sign in as whoever owns it here (#2451).
-	if !claims.EmailVerified && !p.SkipEmailVerifiedCheck {
+	// could sign in as whoever owns it here (#2451). email_verification: gateway checks it itself
+	// below, once the domain is known to be allowed (#2472).
+	mode := p.EmailVerificationMode()
+	if !claims.EmailVerified && mode == config.EmailVerificationProvider {
 		s.writeAudit(email, ActionSSODeniedUnverified, "user", email,
 			fmt.Sprintf("Sign-in through %s refused: the identity provider has not verified this email address", providerID), r)
 		http.Error(w, "Your identity provider has not verified your email address. Verify it there, then sign in again.", http.StatusForbidden)
@@ -293,9 +318,39 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	id := ssoIdentity{Email: email, GivenName: claims.GivenName, FamilyName: claims.FamilyName}
+	if !claims.EmailVerified && mode == config.EmailVerificationGateway {
+		user, err := s.db.GetUserByEmail(email)
+		if err != nil && err != db.ErrNotFound {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if !s.mailboxProven(user) {
+			s.startSSOEmailConfirmation(w, r, p, id, ssoReturnFromCookies(r), user == nil)
+			return
+		}
+	}
+
 	// Logged once the address has passed the verified and domain checks, so it records sign-ins,
 	// not refusals (#2482). amr is the evidence that the IdP really performed MFA.
 	slog.Info(fmt.Sprintf("[SSO] %s: accepted sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
+
+	s.finishSSOSignIn(w, r, p, id, ssoReturnFromCookies(r), false)
+}
+
+// ssoIdentity is what a sign-in carries from the ID token to the account.
+type ssoIdentity struct {
+	Email      string
+	GivenName  string
+	FamilyName string
+}
+
+// finishSSOSignIn creates or loads the account for an accepted SSO identity and issues the
+// session. It runs from the callback, or from the confirmation link when the gateway confirmed
+// the address itself (#2472); confirmed records that, so later sign-ins do not ask again.
+func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *config.SSOProviderConfig, id ssoIdentity, rt ssoReturn, confirmed bool) {
+	providerID := p.ID
+	email := id.Email
 
 	// Create or load the user
 	user, err := s.db.GetUserByEmail(email)
@@ -323,11 +378,11 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		user = &db.User{
 			ID:        email,
 			Email:     email,
-			FirstName: claims.GivenName,
-			LastName:  claims.FamilyName,
+			FirstName: id.GivenName,
+			LastName:  id.FamilyName,
 			// As /setup does for email signup: the preferred name starts as the first name, and
 			// the user can change it in Account Settings (#2481).
-			PreferredName: claims.GivenName,
+			PreferredName: id.GivenName,
 			Role:          "user",
 			Status:        db.UserStatusApproved,
 			AuthMethod:    "sso - " + providerID,
@@ -367,6 +422,13 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	// returning SSO user showed "Last Seen: Never". The session carries the previous sign-in for
 	// the portal's "last login" notice, as the magic-link session does.
 	s.recordSSOLogin(user, r)
+	if confirmed {
+		if err := s.db.RecordEmailConfirmed(user.ID, emailConfirmedBySSOLink); err != nil {
+			// The person proved the mailbox; failing to remember it only means the next sign-in
+			// asks again.
+			slog.Error(fmt.Sprintf("[SSO] %s: could not record the confirmed address for %s: %v", providerID, email, err))
+		}
+	}
 
 	// Issue the admin session cookie
 	sessionID, err := generateSecureToken()
@@ -407,7 +469,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Back to the portal the sign-in started from (#2447).
-	http.Redirect(w, r, ssoReturnPath(r), http.StatusFound)
+	http.Redirect(w, r, rt.path(), http.StatusFound)
 }
 
 // recordSSOLogin stamps last_login_at and last_login_ip for an SSO sign-in, as the magic-link

@@ -209,7 +209,7 @@ With this set, no emailed link can sign anyone in or create an account (#2449):
 
 ## 6. Per-provider trust settings
 
-Two settings on an `sso_providers` entry relax a check the gateway otherwise makes. Each applies to that provider only; every other provider stays strict.
+These settings on an `sso_providers` entry change how far the gateway trusts that provider. Each applies to that provider only; every other provider stays strict.
 
 ```yaml
 sso_providers:
@@ -218,15 +218,20 @@ sso_providers:
     client_id: "…"
     client_secret: "…"
     issuer_url: "https://login.liferay.com"
-    skip_email_verified_check: true   # accept the address without email_verified: true
+    email_verification: gateway       # confirm the address by email when the provider has not
     satisfies_mfa: true               # a sign-in here meets force_mfa
 ```
 
-- **`skip_email_verified_check`** accepts an ID token without `email_verified: true`. Some providers never send it (Microsoft Entra ID), and some send it as `false` for directory-managed accounts (Okta, for staff whose address came from the corporate directory). Set it only when the provider's directory owns every address it asserts. `allowed_email_domains` is still enforced.
+- **`email_verification`** says who vouches for the email address in the ID token:
+  - `provider` (the default) requires `email_verified: true` and refuses the sign-in otherwise.
+  - `gateway` accepts `email_verified: true`. When the claim is `false` or missing, the gateway emails the address a one-time link and finishes the sign-in only when it is used. The link opens a page with a **Confirm and sign in** button, works once, expires after 15 minutes, and signs in whichever browser opens it. The confirmation is stored on the account, so later sign-ins go straight through. Accounts that have already proven their address count as confirmed: an approved email registration, or a magic-link sign-in. `allowed_email_domains` and closed registrations are checked before any email is sent. This mode needs working SMTP, and it still works with `disable_email_login: true`, because the link only completes an SSO sign-in.
+  - `trust` accepts the address as the provider asserts it.
+
+- **`skip_email_verified_check`** is the older form of `email_verification: trust`, and is what an unset `email_verification` falls back to. It accepts an ID token without `email_verified: true`. Some providers never send it (Microsoft Entra ID), and some send it as `false` for directory-managed accounts (Okta, for staff whose address came from the corporate directory). Set it only when the provider's directory owns every address it asserts. `allowed_email_domains` is still enforced.
 - **`satisfies_mfa`** makes a sign-in through this provider meet `force_mfa`, because the provider performs MFA itself; users are not also made to enrol the gateway's own TOTP. It is decided **per session**: the same person signing in by magic link is still held to `force_mfa`. Set it only when the provider's sign-on policy requires MFA. Each SSO sign-in logs the ID token's `amr` claim (`[SSO] <provider>: sign-in for … amr=[…]`), so you can confirm the provider reports `mfa`.
 
 On a first sign-in, the account takes its first and last name from `given_name` and `family_name`, and its preferred name defaults to `given_name`. Administrators get one "New User Registration (SSO)" alert under the same switch as email registrations; later sign-ins send nothing.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

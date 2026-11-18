@@ -550,4 +550,12 @@ var migrations = []migration{
 	// is satisfied per session by a provider configured with satisfies_mfa, so the session --
 	// not the account -- has to remember how it signed in, across a restart as well.
 	{44, "ALTER TABLE portal_sessions ADD COLUMN auth_provider TEXT NOT NULL DEFAULT ''"},
+	// An account whose mailbox the gateway has confirmed itself, for an SSO provider configured
+	// with email_verification: gateway (#2472). Cascades with the user, as a GDPR erasure must.
+	{45, `CREATE TABLE IF NOT EXISTS user_email_confirmations (
+		user_id TEXT PRIMARY KEY,
+		confirmed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		method TEXT NOT NULL,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`},
 }

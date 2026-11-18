@@ -203,8 +203,14 @@ func TestSelfUpgrade(t *testing.T) {
 
 	// #2505: the new binary is written to the install path itself and nowhere else -- not
 	// /tmp, /private/tmp or %TEMP% -- and the previous one does not stay behind as .old.
-	if len(*written) != 1 || (*written)[0] != fakeExecPath {
-		t.Errorf("the upgrade created executables at %q, want only %q", *written, fakeExecPath)
+	// Compared as SelfUpgrade sees it, symlinks resolved: macOS's /var is /private/var, and a
+	// Windows runner's profile appears as both RUNNER~1 and runneradmin.
+	wantPath, err := filepath.EvalSymlinks(fakeExecPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*written) != 1 || (*written)[0] != wantPath {
+		t.Errorf("the upgrade created executables at %q, want only %q", *written, wantPath)
 	}
 	if _, err := os.Stat(fakeExecPath + upgradeBackupSuffix); err == nil {
 		t.Errorf("the previous binary was left at %s", fakeExecPath+upgradeBackupSuffix)

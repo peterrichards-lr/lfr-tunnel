@@ -69,6 +69,17 @@ export default function Login() {
     const magicToken = searchParams.get('token');
     const langParam = searchParams.get('lang') || 'en';
 
+    // An SSO sign-in through a provider that does not perform MFA itself comes back here to enter
+    // the account's TOTP code (#2517). Its token is in an HttpOnly cookie the server reads, so the
+    // prompt carries none.
+    if (searchParams.get('sso_mfa') === '1') {
+      searchParams.delete('sso_mfa');
+      setSearchParams(searchParams);
+      setMfaToken('');
+      setMfaRequired(true);
+      return;
+    }
+
     if (magicToken) {
       // Clear token from URL
       searchParams.delete('token');

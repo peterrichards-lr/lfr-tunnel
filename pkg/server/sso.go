@@ -421,7 +421,6 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 	// account that was not yet approved -- so a new SSO account (created approved) and every
 	// returning SSO user showed "Last Seen: Never". The session carries the previous sign-in for
 	// the portal's "last login" notice, as the magic-link session does.
-	s.recordSSOLogin(user, r)
 	if confirmed {
 		if err := s.db.RecordEmailConfirmed(user.ID, emailConfirmedBySSOLink); err != nil {
 			// The person proved the mailbox; failing to remember it only means the next sign-in
@@ -429,6 +428,16 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 			slog.Error(fmt.Sprintf("[SSO] %s: could not record the confirmed address for %s: %v", providerID, email, err))
 		}
 	}
+
+	// A provider that does not perform MFA itself leaves the gateway's own TOTP as the second
+	// factor, so an account that enrolled it is asked for the code before it gets a session, as a
+	// magic-link sign-in is (#2517). A satisfies_mfa provider has already done this (#2482).
+	if !p.SatisfiesMFA && user.TOTPEnabled {
+		s.startSSOMFAChallenge(w, r, user, p, rt)
+		return
+	}
+
+	s.recordSSOLogin(user, r)
 
 	// Issue the admin session cookie
 	sessionID, err := generateSecureToken()
@@ -470,6 +479,56 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 
 	// Back to the portal the sign-in started from (#2447).
 	http.Redirect(w, r, rt.path(), http.StatusFound)
+}
+
+// ssoMFACookie carries the pre-auth token of an SSO sign-in waiting for its TOTP code (#2517).
+// HttpOnly and scoped to the one endpoint that redeems it, so neither the page nor any other
+// request sees it -- and it never appears in a URL, a history entry or a log line.
+const (
+	ssoMFACookie     = "lfr_mfa_pending"
+	ssoMFACookiePath = "/api/auth/mfa-verify"
+	ssoMFAWindow     = 5 * time.Minute
+)
+
+// startSSOMFAChallenge holds an SSO sign-in until the account's TOTP code is entered, through the
+// same pre_auth_ token and /api/auth/mfa-verify the magic-link path uses. The browser goes back
+// to the portal the sign-in started from, with ?sso_mfa=1 telling it to show the code prompt.
+func (s *Server) startSSOMFAChallenge(w http.ResponseWriter, r *http.Request, user *db.User, p *config.SSOProviderConfig, rt ssoReturn) {
+	tempToken, err := generateSecureToken()
+	if err != nil {
+		http.Error(w, "Failed to start verification", http.StatusInternalServerError)
+		return
+	}
+	s.portalMap.Store("pre_auth_"+tempToken, PortalSessionData{
+		Email:        user.Email,
+		AuthProvider: p.ID,
+		ClientIP:     s.clientIP(r),
+		ExpiresAt:    time.Now().Add(ssoMFAWindow),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     ssoMFACookie,
+		Value:    tempToken,
+		Path:     ssoMFACookiePath,
+		MaxAge:   int(ssoMFAWindow / time.Second),
+		HttpOnly: true,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteLaxMode,
+	})
+	slog.Info(fmt.Sprintf("[SSO] %s: %s signed in; waiting for the gateway's TOTP code", p.ID, user.Email))
+	http.Redirect(w, r, rt.mfaPromptPath(), http.StatusFound)
+}
+
+// mfaPromptPath is the sign-in page of the portal the sign-in started from, told to ask for the
+// TOTP code; the CLI marker rides along so the portal can still offer the CLI a token (#2459).
+func (rt ssoReturn) mfaPromptPath() string {
+	path := "/admin?sso_mfa=1"
+	if rt.v2 {
+		path = "/portalv2/login?sso_mfa=1"
+	}
+	if rt.cli {
+		path += "&cli_login=1"
+	}
+	return path
 }
 
 // recordSSOLogin stamps last_login_at and last_login_ip for an SSO sign-in, as the magic-link

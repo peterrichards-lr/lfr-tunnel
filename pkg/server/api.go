@@ -848,6 +848,14 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An SSO sign-in's token travels in an HttpOnly cookie rather than through the page (#2517).
+	fromCookie := false
+	if req.TempToken == "" {
+		if c, cerr := r.Cookie(ssoMFACookie); cerr == nil {
+			req.TempToken, fromCookie = c.Value, true
+		}
+	}
+
 	user, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, s.clientIP(r))
 	if err != nil {
 		if err == ErrUnauthorized {
@@ -858,6 +866,9 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.invalidateUserCache(user.Email)
+	if fromCookie {
+		http.SetCookie(w, &http.Cookie{Name: ssoMFACookie, Value: "", Path: ssoMFACookiePath, MaxAge: -1, HttpOnly: true})
+	}
 
 	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode,
 		s.sessionDeadline(PortalSessionData{

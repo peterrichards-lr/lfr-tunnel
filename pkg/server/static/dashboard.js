@@ -875,6 +875,15 @@ async function init() {
     console.error('Failed to auto-detect and translate portal language', e);
   }
 
+  // An SSO sign-in through a provider that does not perform MFA itself comes back here to enter
+  // the account's TOTP code (#2517). Its token is in an HttpOnly cookie the server reads, so the
+  // prompt carries none.
+  if (urlParams.get('sso_mfa') === '1') {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    await showMFAPrompt('');
+    return;
+  }
+
   if (magicToken) {
     window.history.replaceState({}, document.title, window.location.pathname);
     const vRes = await fetch('/api/auth/verify', {
@@ -885,19 +894,7 @@ async function init() {
     if (vRes.ok) {
       const data = await vRes.json();
       if (data.status === 'mfa_required') {
-        showLogin();
-        document.getElementById('email-form').classList.add('hidden');
-        document.getElementById('register-form').classList.add('hidden');
-        document.getElementById('btn-show-email').classList.add('hidden');
-        document.getElementById('btn-show-register').classList.add('hidden');
-        if (document.getElementById('sso-container'))
-          document.getElementById('sso-container').style.display = 'none';
-        if (document.getElementById('sso-divider'))
-          document.getElementById('sso-divider').style.display = 'none';
-
-        document.getElementById('mfa-temp-token').value = data.temp_token;
-        document.getElementById('mfa-form').classList.remove('hidden');
-        document.getElementById('mfa-code-input').focus();
+        await showMFAPrompt(data.temp_token);
         return;
       }
     } else {
@@ -5978,6 +5975,28 @@ async function disableMFA() {
       'danger',
     );
   }
+}
+
+// Shows the sign-in screen's TOTP prompt in place of the other sign-in options. tempToken is the
+// magic-link path's pre-auth token, or "" for an SSO sign-in whose token is in a cookie (#2517).
+//
+// Awaits showLogin: it loads the SSO providers asynchronously and then re-shows the email and
+// register buttons, so hiding them before it finished left the ordinary sign-in options showing
+// beneath the prompt (#2517; the magic-link path had the same race).
+async function showMFAPrompt(tempToken) {
+  await showLogin();
+  document.getElementById('email-form').classList.add('hidden');
+  document.getElementById('register-form').classList.add('hidden');
+  document.getElementById('btn-show-email').classList.add('hidden');
+  document.getElementById('btn-show-register').classList.add('hidden');
+  if (document.getElementById('sso-container'))
+    document.getElementById('sso-container').style.display = 'none';
+  if (document.getElementById('sso-divider'))
+    document.getElementById('sso-divider').style.display = 'none';
+
+  document.getElementById('mfa-temp-token').value = tempToken;
+  document.getElementById('mfa-form').classList.remove('hidden');
+  document.getElementById('mfa-code-input').focus();
 }
 
 // Handle MFA login form submission

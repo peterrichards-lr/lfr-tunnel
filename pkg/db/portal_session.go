@@ -29,6 +29,9 @@ type PortalSession struct {
 	// AuthProvider is the SSO provider id that created the session, or "" for any other
 	// sign-in (#2482).
 	AuthProvider string
+	// NamesFromProvider is true when the sign-in carried the account's names from the identity
+	// provider (#2515).
+	NamesFromProvider bool
 }
 
 type SQLitePortalSessionRepo struct {
@@ -48,8 +51,8 @@ func (repo *SQLitePortalSessionRepo) UpsertPortalSession(sess *PortalSession) er
 	}
 	_, err := repo.conn.Exec(`
 		INSERT INTO portal_sessions
-			(token_hash, email, client_ip, view_as_role, previous_login_at, killed_previous_session, created_at, expires_at, same_site, auth_provider)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(token_hash, email, client_ip, view_as_role, previous_login_at, killed_previous_session, created_at, expires_at, same_site, auth_provider, names_from_provider)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(token_hash) DO UPDATE SET
 			email = excluded.email,
 			client_ip = excluded.client_ip,
@@ -62,10 +65,13 @@ func (repo *SQLitePortalSessionRepo) UpsertPortalSession(sess *PortalSession) er
 			-- un-refreshable (#1655).
 			same_site = CASE WHEN excluded.same_site = '' THEN portal_sessions.same_site ELSE excluded.same_site END,
 			-- Same rule: how a session signed in never changes, so a write without it keeps it.
-			auth_provider = CASE WHEN excluded.auth_provider = '' THEN portal_sessions.auth_provider ELSE excluded.auth_provider END
+			auth_provider = CASE WHEN excluded.auth_provider = '' THEN portal_sessions.auth_provider ELSE excluded.auth_provider END,
+			-- And again: a slide that did not carry it through must not clear it (#2515).
+			names_from_provider = MAX(portal_sessions.names_from_provider, excluded.names_from_provider)
 	`, sess.TokenHash, sess.Email, sess.ClientIP, sess.ViewAsRole,
 		sess.PreviousLoginAt, boolToInt(sess.KilledPreviousSession),
-		sess.CreatedAt.UTC(), sess.ExpiresAt.UTC(), sess.SameSite, sess.AuthProvider)
+		sess.CreatedAt.UTC(), sess.ExpiresAt.UTC(), sess.SameSite, sess.AuthProvider,
+		boolToInt(sess.NamesFromProvider))
 	return err
 }
 
@@ -76,16 +82,18 @@ func (repo *SQLitePortalSessionRepo) GetPortalSession(tokenHash string) (*Portal
 	row := repo.conn.QueryRow(`
 		SELECT token_hash, email, COALESCE(client_ip, ''), COALESCE(view_as_role, ''),
 		       previous_login_at, killed_previous_session, created_at, expires_at,
-		       COALESCE(same_site, ''), COALESCE(auth_provider, '')
+		       COALESCE(same_site, ''), COALESCE(auth_provider, ''), names_from_provider
 		FROM portal_sessions
 		WHERE token_hash = ? AND expires_at > datetime('now')
 	`, tokenHash)
 
 	var sess PortalSession
-	var killed int
+	var killed, namesFromProvider int
 	var previousLogin sql.NullTime
 	err := row.Scan(&sess.TokenHash, &sess.Email, &sess.ClientIP, &sess.ViewAsRole,
-		&previousLogin, &killed, &sess.CreatedAt, &sess.ExpiresAt, &sess.SameSite, &sess.AuthProvider)
+		&previousLogin, &killed, &sess.CreatedAt, &sess.ExpiresAt, &sess.SameSite, &sess.AuthProvider,
+		&namesFromProvider)
+	sess.NamesFromProvider = namesFromProvider != 0
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

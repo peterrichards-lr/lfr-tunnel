@@ -1472,6 +1472,29 @@ async function showDashboard() {
   document.getElementById('acc-last-name').value = currentUser.last_name || '';
   document.getElementById('acc-preferred-name').value =
     currentUser.preferred_name || '';
+  // This session's sign-in took the first and last name from the identity provider, which
+  // refreshes them every time, so they are read-only here (#2515). Preferred Name stays the
+  // user's own. Decided by the server; V2 reads the same field.
+  const namesFromProvider = currentUser.names_from_provider === true;
+  ['acc-first-name', 'acc-last-name'].forEach((id) => {
+    const input = document.getElementById(id);
+    input.readOnly = namesFromProvider;
+    input.style.opacity = namesFromProvider ? '0.7' : '';
+  });
+  const namesNote = document.getElementById('acc-names-note');
+  if (namesNote) {
+    namesNote.textContent = namesFromProvider
+      ? t(
+          'names_from_provider_note',
+          'Your first and last name come from {0} and are updated each time you sign in.',
+        ).replace(
+          '{0}',
+          currentUser.names_provider_name ||
+            t('your_identity_provider', 'your identity provider'),
+        )
+      : '';
+    namesNote.classList.toggle('hidden', !namesFromProvider);
+  }
   // theme_preference is stored as free text with no whitelist, so a value neither portal
   // knows can still land here -- kept for that, not for `liferay`, which V1 now renders
   // itself (#1522).

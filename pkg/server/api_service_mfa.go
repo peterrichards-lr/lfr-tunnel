@@ -124,6 +124,7 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 	s.sessions.storePortalSession(sessionToken, PortalSessionData{
 		Email:                 user.Email,
 		AuthProvider:          preAuth.AuthProvider, // "" for a magic link; the provider for SSO (#2517)
+		NamesFromProvider:     preAuth.NamesFromProvider,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              ip,
 		PreviousLoginAt:       previousLoginAt,

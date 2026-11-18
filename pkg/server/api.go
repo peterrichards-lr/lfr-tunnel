@@ -847,14 +847,13 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 // performGDPRDeletionAndAnonymization executes a complete, compliant account deletion & anonymization.
-func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Request) error {
+//
+// It takes the user already resolved by the caller, not an email to look up again: an email lookup
+// returns the oldest of any case duplicates, so an admin erasing the newer one erased the
+// original account instead (#2469).
+func (s *Server) performGDPRDeletionAndAnonymization(user *db.User, r *http.Request) error {
 	if s.db == nil {
 		return errors.New("database not configured")
-	}
-
-	user, err := s.db.GetUserByEmail(email)
-	if err != nil {
-		return err
 	}
 
 	// 1. Kick any active tunnels matching this user
@@ -958,7 +957,7 @@ func (s *Server) handleSelfDeleteAccount(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = s.performGDPRDeletionAndAnonymization(user.Email, r)
+	err = s.performGDPRDeletionAndAnonymization(user, r)
 	if err != nil {
 		http.Error(w, `{"error":"Failed to delete and anonymise account"}`, http.StatusInternalServerError)
 		return
@@ -971,13 +970,13 @@ func (s *Server) handleSelfDeleteAccount(w http.ResponseWriter, r *http.Request)
 
 // handleAdminDeleteUser processes an admin-initiated user account deletion (GDPR).
 func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, actor string) {
-	email, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
+	key, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
 	if err != nil {
-		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"Invalid user"}`, http.StatusBadRequest)
 		return
 	}
 
-	user, err := s.db.GetUserByEmail(email)
+	user, err := adminTargetUser(s.db, key)
 	if err != nil {
 		if err == db.ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
@@ -993,7 +992,7 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	err = s.performGDPRDeletionAndAnonymization(user.Email, r)
+	err = s.performGDPRDeletionAndAnonymization(user, r)
 	if err != nil {
 		http.Error(w, `{"error":"Failed to delete and anonymise user"}`, http.StatusInternalServerError)
 		return
@@ -2193,7 +2192,7 @@ func (s *Server) handleAdminOverridePreferredDomain(w http.ResponseWriter, r *ht
 		return
 	}
 
-	s.writeAudit(actor, "user.updated", "user", email, "Preferred domain updated to "+req.PreferredDomain, r)
+	s.writeAudit(actor, "user.updated", "user", user.Email, "Preferred domain updated to "+req.PreferredDomain, r)
 
 	respondJSON(w, http.StatusOK, user)
 }

@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.52.9",
+    "release_date": "2026-11-18",
+    "features": [
+      "Install and upgrade now write the client straight into its install folder (~/liferay/lfr-tunnel) on every OS, instead of downloading it to a temporary folder first. If a download fails, the version you had is kept.",
+      "macOS: start at login now runs lfr-tunnel itself, not a copy named \"Liferay Tunnel\", and removes that copy if an earlier version left one. Uninstalling the service also removes the tray's start-at-login entry.",
+      "On an EDR-managed machine, including every Liferay machine, install with the native installer rather than Homebrew or Scoop. The InfoSec guide now has one table of install paths and exclusion rules."
+    ]
+  },
+  {
     "version": "v1.52.8",
     "release_date": "2026-11-18",
     "features": [
@@ -39,13 +48,6 @@
     "release_date": "2026-10-19",
     "features": [
       "Security update: the web portal now uses the latest version of its HTTP library, closing published security advisories, and the gateway and client pick up routine library updates. Nothing changes in how you use the tunnel."
-    ]
-  },
-  {
-    "version": "v1.52.4",
-    "release_date": "2026-10-13",
-    "features": [
-      "More complete gateway reports: when your client moves between gateways during the day, for example while one is restarted and when it moves back, each route is now recorded rather than only the last one. Nothing changes in how you use the tunnel."
     ]
   }
 ]

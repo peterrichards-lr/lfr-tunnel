@@ -1524,6 +1524,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.handleSSOCallback(w, r)
 			return
 		}
+		if (r.Method == http.MethodGet || r.Method == http.MethodPost) && r.URL.Path == ssoConfirmPath {
+			s.handleSSOConfirm(w, r)
+			return
+		}
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/integrations/slack/callback" {
 			s.handleSlackOAuthCallback(w, r)
@@ -4442,6 +4446,11 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 				// Capture a copy of the previous login time
 				prev := *u.LastLoginAt
 				previousLoginAt = &prev
+			}
+			// The link reached this mailbox, so an SSO provider that does not verify addresses
+			// need not have the gateway confirm it again (#2472).
+			if err := s.db.RecordEmailConfirmed(u.ID, emailConfirmedByMagicLink); err != nil {
+				slog.Warn(fmt.Sprintf("[Auth] Could not record the confirmed address for %s: %v", u.Email, err))
 			}
 		}
 	}

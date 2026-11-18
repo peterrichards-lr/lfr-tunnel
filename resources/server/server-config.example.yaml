@@ -200,7 +200,24 @@ role_settings:
     bandwidth_quota_bytes: null
     subdomain_expiry_days: null
     custom_domain_expiry_days: null
-sso_providers: []
+sso_providers:
+  # OpenID Connect providers; see docs/server/sso_cloud_guide.md. Credentials are injected at
+  # deploy time, never committed.
+  # - id: "liferay"
+  #   name: "Liferay SSO"
+  #   client_id: "<injected>"
+  #   client_secret: "<injected>"
+  #   issuer_url: "https://login.example.com"
+  #   icon: ""
+  #   skip_issuer_check: false
+  #   # Who vouches for the address the ID token asserts (#2472): provider (require
+  #   # email_verified: true), gateway (accept it when true, otherwise email the address a
+  #   # one-time link and finish the sign-in when it is used) or trust. Unset means trust when
+  #   # skip_email_verified_check is true, provider otherwise.
+  #   email_verification: "provider"
+  #   skip_email_verified_check: false
+  #   satisfies_mfa: false
+  []
 
 # --- Edge tier. urls are DERIVED from the DNS spec -- see `lfr-tunnel-ops render-edge-nodes` (#1468) ---
 central_url: "https://example.com"

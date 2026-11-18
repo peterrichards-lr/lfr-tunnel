@@ -598,7 +598,8 @@ func TestEveryUserStatusWriteIsAccountedFor(t *testing.T) {
 			"an authenticated admin session. This is the intended way to reverse a rejection",
 		"approveOnSSOSignIn": "refuses statusRejected outright and returns " +
 			"errSSORegistrationRejected; see TestRejectedUserCannotBeApprovedBySSO",
-		"handleSSOCallback": "creates an approved user only on db.ErrNotFound. This is precisely " +
+		"finishSSOSignIn": "creates an approved user only on db.ErrNotFound (from the SSO callback, " +
+			"or from the #2472 confirmation link, which re-reads the account). This is precisely " +
 			"why rejection KEEPS the row: deleting it would make a rejected person unknown here, " +
 			"and SSO would create them approved on their next sign-in",
 	}

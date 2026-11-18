@@ -510,12 +510,51 @@ type SSOProviderConfig struct {
 	// a provider that never sends the claim (Microsoft Entra ID) and whose directory owns every
 	// address it asserts; otherwise an unverified address could sign in as whoever owns it here.
 	SkipEmailVerifiedCheck bool `yaml:"skip_email_verified_check"`
+	// EmailVerification says who vouches for the address an ID token asserts (#2472): "provider"
+	// requires email_verified: true; "gateway" accepts that claim when it is true and otherwise
+	// emails the address a one-time link and completes the sign-in only when it is used; "trust"
+	// accepts the address as asserted. Unset means "trust" when skip_email_verified_check is true
+	// and "provider" otherwise, so existing configs keep their meaning.
+	EmailVerification string `yaml:"email_verification"`
 	// SatisfiesMFA makes a sign-in through this provider meet force_mfa (#2482): the provider
 	// performs MFA itself, so the gateway does not also require its own TOTP. Per session, not
 	// per account -- a magic-link session for the same user is still held to force_mfa. Only for
 	// a provider whose sign-on policy really requires MFA; each sign-in logs the token's amr claim
 	// so that can be checked.
 	SatisfiesMFA bool `yaml:"satisfies_mfa"`
+}
+
+// The email_verification modes (#2472).
+const (
+	EmailVerificationProvider = "provider"
+	EmailVerificationGateway  = "gateway"
+	EmailVerificationTrust    = "trust"
+)
+
+// EmailVerificationMode resolves email_verification, falling back to what
+// skip_email_verified_check has always meant.
+func (p SSOProviderConfig) EmailVerificationMode() string {
+	if p.EmailVerification != "" {
+		return p.EmailVerification
+	}
+	if p.SkipEmailVerifiedCheck {
+		return EmailVerificationTrust
+	}
+	return EmailVerificationProvider
+}
+
+// validateSSOProviders refuses an email_verification this gateway does not have. Falling back to
+// a default would silently pick a trust level the operator did not ask for.
+func validateSSOProviders(cfg *ServerConfig) error {
+	for _, p := range cfg.SSOProviders {
+		switch p.EmailVerification {
+		case "", EmailVerificationProvider, EmailVerificationGateway, EmailVerificationTrust:
+		default:
+			return fmt.Errorf("sso_providers %q: email_verification %q is not one of %s, %s or %s",
+				p.ID, p.EmailVerification, EmailVerificationProvider, EmailVerificationGateway, EmailVerificationTrust)
+		}
+	}
+	return nil
 }
 
 // AutoBanConfig governs the automatic bans the API rate limiter issues (#1353).
@@ -1205,6 +1244,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		return nil, err
 	}
 	if err := validateAdminAlerts(cfg); err != nil {
+		return nil, err
+	}
+	if err := validateSSOProviders(cfg); err != nil {
 		return nil, err
 	}
 

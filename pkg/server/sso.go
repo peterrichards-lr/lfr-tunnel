@@ -287,6 +287,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, ssoSignInFailed, http.StatusBadGateway)
 		return
 	}
+	// Okta returns profile claims from userinfo, not in the ID token, whenever an access token is
+	// issued too -- as it is here -- so names read only from the token were always empty and
+	// #2481/#2515 never took effect for it (#2520). Asked only when the token has no names.
+	if claims.GivenName == "" && claims.FamilyName == "" {
+		claims.GivenName, claims.FamilyName = userInfoNames(ctx, provider, oauth2Config, oauth2Token, idToken.Subject, providerID)
+	}
 
 	email := config.NormalizeEmail(claims.Email)
 	if email == "" {
@@ -336,6 +342,31 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	slog.Info(fmt.Sprintf("[SSO] %s: accepted sign-in for %s, amr=%v, satisfies_mfa=%v", providerID, email, claims.AMR, p.SatisfiesMFA))
 
 	s.finishSSOSignIn(w, r, p, id, ssoReturnFromCookies(r), false)
+}
+
+// userInfoNames asks the provider's userinfo endpoint for the given and family name (#2520). The
+// response is used only when its sub is the ID token's (OIDC Core 5.3.2): userinfo describes
+// whoever the access token belongs to, and a mismatch means it is not the person signing in. Any
+// failure is logged and the sign-in proceeds without names, as it did before.
+func userInfoNames(ctx context.Context, provider *oidc.Provider, conf *oauth2.Config, token *oauth2.Token, subject, providerID string) (string, string) {
+	info, err := provider.UserInfo(ctx, conf.TokenSource(ctx, token))
+	if err != nil {
+		slog.Info(fmt.Sprintf("[SSO] %s: no names from userinfo: %v", providerID, err))
+		return "", ""
+	}
+	if info.Subject != subject {
+		slog.Warn(fmt.Sprintf("[SSO] %s: userinfo answered for a different subject than the ID token; its names are not used", providerID))
+		return "", ""
+	}
+	var names struct {
+		GivenName  string `json:"given_name"`
+		FamilyName string `json:"family_name"`
+	}
+	if err := info.Claims(&names); err != nil {
+		slog.Info(fmt.Sprintf("[SSO] %s: unreadable userinfo claims: %v", providerID, err))
+		return "", ""
+	}
+	return names.GivenName, names.FamilyName
 }
 
 // ssoIdentity is what a sign-in carries from the ID token to the account.

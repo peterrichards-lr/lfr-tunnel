@@ -1076,6 +1076,12 @@ These subcommands let you build, sign, and update release checksums natively on 
 
 ##### B. Temporary Self-Signed Certificates (Local EDR Testing)
 
+> [!NOTE]
+> **Signer-identity exclusions were not adopted for Liferay.** The project's signing identities are
+> self-signed or project-held keys, so InfoSec excludes the install **path** instead. The rules
+> are in [infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions). The steps
+> below remain for local testing only.
+
 For isolated testing or when corporate certificates are not yet available, you can sign binaries with a self-signed identity and configure a SentinelOne rule to trust it specifically for your machine:
 
 1. **Windows Self-Signed Key Generation (on macOS)**:
@@ -2046,4 +2052,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

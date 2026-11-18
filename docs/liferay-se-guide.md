@@ -32,12 +32,12 @@ Your tunnel will be reachable at:
 
 ### Method A: Native Installer Script (Recommended Native)
 
-This script downloads the officially signed client binary with Apple Developer hardened runtime signatures directly into the EDR-whitelisted canonical installation directory (`$HOME/liferay/lfr-tunnel/lfr-tunnel` or `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe`):
+This script downloads the signed client binary straight into the install directory the EDR exclusions cover (`$HOME/liferay/lfr-tunnel/lfr-tunnel`, or `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe` on Windows). The paths and exclusion rules are listed in [infosec.md §3](infosec.md#3-standard-execution-paths--edr-exclusions).
 
 * **macOS / Linux:** `curl -fsSL https://tunnel.lfr-demo.se/install.sh | sh`
 * **Windows (PowerShell):** `irm https://tunnel.lfr-demo.se/install.ps1 | iex`
 
-If custom installation directories are required by your local InfoSec policy, export `LFT_INSTALL_DIR` or `LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR` in your `~/.zshrc` or `~/.bashrc`.
+**Do not set `LFT_INSTALL_DIR` or the `LFR_TUNNEL_*_INSTALL_DIR` variables.** They move the client out of the excluded directory, and `--upgrade` keeps it there. If one is in your shell profile, remove it and reinstall.
 
 To verify your installation, open a new terminal window and run: `lfr-tunnel -version`
 
@@ -401,4 +401,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-19* | *Last Reviewed: 2026-09-19*
+*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*

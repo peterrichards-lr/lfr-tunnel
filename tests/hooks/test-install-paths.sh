@@ -167,6 +167,65 @@ else
   fail "docs/infosec.md still documents an exclusion that cannot match the installed binary"
 fi
 
+# 9. One table (#2507). docs/infosec.md section 3 is the single source; the installers must create
+#    what it lists, and SECURITY.md and the SE guide must point at it rather than restate paths.
+#    Each source disagreeing with the others is the failure this file exists for.
+for row in '`~/liferay/lfr-tunnel/lfr-tunnel`' '`%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe`' \
+           '`~/.ldm/bin/lfr-tunnel`' '`%USERPROFILE%\.ldm\bin\lfr-tunnel.exe`'; do
+  if grep -qF "$row" "$INFOSEC"; then
+    pass "docs/infosec.md's install table lists ${row}"
+  else
+    fail "docs/infosec.md's install table does not list ${row}"
+  fi
+done
+for rule in '/Users/*/.ldm/bin/lfr-tunnel' '/home/*/.ldm/bin/lfr-tunnel' '*\.ldm\bin\lfr-tunnel.exe'; do
+  if grep -qxF "$rule" "$INFOSEC"; then
+    pass "docs/infosec.md excludes the LDM link: ${rule}"
+  else
+    fail "docs/infosec.md has no exclusion rule for the LDM link ${rule} -- the engines need it as well as the binary"
+  fi
+done
+# Decision 0006: no package-manager exclusion is requested for Liferay.
+if grep -qE '^/opt/' "$INFOSEC"; then
+  fail "docs/infosec.md still lists a package-manager exclusion rule (decision 0006 drops them)"
+else
+  pass "docs/infosec.md lists no package-manager exclusion rule"
+fi
+# What the installers create must be what the table lists.
+if grep -qF 'ln -sf "$INSTALL_PATH" "${HOME}/.ldm/bin/lfr-tunnel"' "${REPO_ROOT}/pkg/server/static/install.sh"; then
+  pass "install.sh creates the LDM link the table lists"
+else
+  fail "install.sh no longer creates ~/.ldm/bin/lfr-tunnel, which the table and the exclusions name"
+fi
+if grep -qF '$LdmBinDir = "$Home\.ldm\bin"' "${REPO_ROOT}/pkg/server/static/install.ps1" &&
+   grep -qF '$LdmTarget = "$LdmBinDir\lfr-tunnel.exe"' "${REPO_ROOT}/pkg/server/static/install.ps1"; then
+  pass "install.ps1 creates the LDM link the table lists"
+else
+  fail "install.ps1 no longer creates %USERPROFILE%\\.ldm\\bin\\lfr-tunnel.exe, which the table and the exclusions name"
+fi
+SECURITY_MD="${REPO_ROOT}/SECURITY.md"
+if grep -qE '/usr/local/bin/lfr-tunnel|LOCALAPPDATA|gh attestation verify' "$SECURITY_MD"; then
+  fail "SECURITY.md still states an install path or a verification step that does not exist"
+else
+  pass "SECURITY.md states no install path the installers never use"
+fi
+if grep -qF 'docs/infosec.md#3-standard-execution-paths--edr-exclusions' "$SECURITY_MD"; then
+  pass "SECURITY.md points at the single table"
+else
+  fail "SECURITY.md does not link to docs/infosec.md section 3"
+fi
+SE_GUIDE="${REPO_ROOT}/docs/liferay-se-guide.md"
+if grep -qE 'export `?LFT_INSTALL_DIR' "$SE_GUIDE"; then
+  fail "the SE guide tells SEs to set LFT_INSTALL_DIR, which moves the client out of the exclusion"
+else
+  pass "the SE guide does not advertise LFT_INSTALL_DIR"
+fi
+if grep -qF 'infosec.md#3-standard-execution-paths--edr-exclusions' "$SE_GUIDE"; then
+  pass "the SE guide points at the single table"
+else
+  fail "the SE guide does not link to docs/infosec.md section 3"
+fi
+
 echo
 if [ "$FAIL" -gt 0 ]; then
   printf '\033[31m%d failed\033[0m, %d passed\n' "$FAIL" "$PASS"

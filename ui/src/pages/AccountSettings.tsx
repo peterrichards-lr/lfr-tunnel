@@ -36,6 +36,13 @@ export default function AccountSettings() {
   );
   const [diagnosticsError, setDiagnosticsError] = useState('');
   const [mfaEnabled, setMfaEnabled] = useState(user?.totp_enabled || false);
+  // This session's sign-in took the first and last name from the identity provider, which
+  // refreshes them every time, so they are read-only here (#2515). Preferred Name stays the
+  // user's own. Decided by the server; V1 reads the same field.
+  const namesFromProvider = user?.names_from_provider === true;
+  const namesProvider: string =
+    user?.names_provider_name ||
+    t('your_identity_provider', 'your identity provider');
   // The identity provider performs MFA on every way into this account, so the gateway's own
   // TOTP would never be asked for (#2514). Decided by the server; V1 reads the same field.
   const mfaManaged = user?.mfa_managed_by_provider === true;
@@ -227,8 +234,9 @@ export default function AccountSettings() {
                 <input
                   id="first-name"
                   type="text"
-                  className="input-field"
+                  className={`input-field${namesFromProvider ? ' opacity-70' : ''}`}
                   value={firstName}
+                  readOnly={namesFromProvider}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder={t('label_first_name', 'First Name')}
                 />
@@ -240,12 +248,24 @@ export default function AccountSettings() {
                 <input
                   id="last-name"
                   type="text"
-                  className="input-field"
+                  className={`input-field${namesFromProvider ? ' opacity-70' : ''}`}
                   value={lastName}
+                  readOnly={namesFromProvider}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder={t('label_last_name', 'Last Name')}
                 />
               </div>
+              {namesFromProvider && (
+                <p
+                  className="text-xs text-muted mt-0 mb-lg"
+                  data-testid="names-from-provider-note"
+                >
+                  {t(
+                    'names_from_provider_note',
+                    'Your first and last name come from {0} and are updated each time you sign in.',
+                  ).replace('{0}', namesProvider)}
+                </p>
+              )}
             </div>
 
             <div className="form-group mb-xl">

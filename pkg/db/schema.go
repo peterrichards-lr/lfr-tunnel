@@ -558,4 +558,7 @@ var migrations = []migration{
 		method TEXT NOT NULL,
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	)`},
+	// Whether the session's sign-in carried the account's names from its identity provider, so
+	// they are shown read-only for it (#2515). Session-scoped like auth_provider (migration 44).
+	{46, "ALTER TABLE portal_sessions ADD COLUMN names_from_provider INTEGER NOT NULL DEFAULT 0"},
 }

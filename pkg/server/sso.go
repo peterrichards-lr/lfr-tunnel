@@ -429,11 +429,21 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 		}
 	}
 
+	// The names come from the identity provider on every sign-in, not only the first (#2515), so
+	// the admin Users list matches the directory. A claim the token does not carry leaves the
+	// stored value alone; the preferred name is the user's own and is never touched here.
+	namesFromProvider := refreshNamesFromProvider(user, id)
+
 	// A provider that does not perform MFA itself leaves the gateway's own TOTP as the second
 	// factor, so an account that enrolled it is asked for the code before it gets a session, as a
 	// magic-link sign-in is (#2517). A satisfies_mfa provider has already done this (#2482).
 	if !p.SatisfiesMFA && user.TOTPEnabled {
-		s.startSSOMFAChallenge(w, r, user, p, rt)
+		if namesFromProvider {
+			if err := s.db.UpdateUser(user); err != nil {
+				slog.Warn(fmt.Sprintf("[SSO] %s: could not save the names for %s: %v", providerID, email, err))
+			}
+		}
+		s.startSSOMFAChallenge(w, r, user, p, rt, namesFromProvider)
 		return
 	}
 
@@ -450,6 +460,7 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
 		AuthProvider:          providerID, // force_mfa is met per session by a satisfies_mfa provider (#2482)
+		NamesFromProvider:     namesFromProvider,
 		PreviousLoginAt:       previousLoginAt,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              s.clientIP(r),
@@ -481,6 +492,20 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 	http.Redirect(w, r, rt.path(), http.StatusFound)
 }
 
+// refreshNamesFromProvider copies the ID token's given_name and family_name onto the account
+// (#2515), each only when the token carries it. It reports whether the token carried either, which
+// is what makes the names the provider's for this session; the account is saved by the caller.
+func refreshNamesFromProvider(user *db.User, id ssoIdentity) bool {
+	given, family := strings.TrimSpace(id.GivenName), strings.TrimSpace(id.FamilyName)
+	if given != "" {
+		user.FirstName = given
+	}
+	if family != "" {
+		user.LastName = family
+	}
+	return given != "" || family != ""
+}
+
 // ssoMFACookie carries the pre-auth token of an SSO sign-in waiting for its TOTP code (#2517).
 // HttpOnly and scoped to the one endpoint that redeems it, so neither the page nor any other
 // request sees it -- and it never appears in a URL, a history entry or a log line.
@@ -493,17 +518,18 @@ const (
 // startSSOMFAChallenge holds an SSO sign-in until the account's TOTP code is entered, through the
 // same pre_auth_ token and /api/auth/mfa-verify the magic-link path uses. The browser goes back
 // to the portal the sign-in started from, with ?sso_mfa=1 telling it to show the code prompt.
-func (s *Server) startSSOMFAChallenge(w http.ResponseWriter, r *http.Request, user *db.User, p *config.SSOProviderConfig, rt ssoReturn) {
+func (s *Server) startSSOMFAChallenge(w http.ResponseWriter, r *http.Request, user *db.User, p *config.SSOProviderConfig, rt ssoReturn, namesFromProvider bool) {
 	tempToken, err := generateSecureToken()
 	if err != nil {
 		http.Error(w, "Failed to start verification", http.StatusInternalServerError)
 		return
 	}
 	s.portalMap.Store("pre_auth_"+tempToken, PortalSessionData{
-		Email:        user.Email,
-		AuthProvider: p.ID,
-		ClientIP:     s.clientIP(r),
-		ExpiresAt:    time.Now().Add(ssoMFAWindow),
+		Email:             user.Email,
+		AuthProvider:      p.ID,
+		NamesFromProvider: namesFromProvider,
+		ClientIP:          s.clientIP(r),
+		ExpiresAt:         time.Now().Add(ssoMFAWindow),
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     ssoMFACookie,

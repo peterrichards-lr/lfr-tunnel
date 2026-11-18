@@ -157,6 +157,11 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	managed, providerName := s.mfaManagedByProvider(r)
 	resp["mfa_managed_by_provider"] = managed
 	resp["mfa_provider_name"] = providerName
+	// Whether this session's first and last name came from its identity provider, so the
+	// portals show them read-only (#2515); with the provider's name for the note.
+	namesFromProvider, namesProvider := s.sessionNamesFromProvider(r)
+	resp["names_from_provider"] = namesFromProvider
+	resp["names_provider_name"] = namesProvider
 
 	// When this session expires, so the portal can warn before it does (#1656).
 	//
@@ -205,6 +210,28 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, resp)
 }
 
+// namesFromProviderError is what a change to a provider-owned name is told (#2515).
+const namesFromProviderError = "Your first and last name come from your identity provider and are updated each time you sign in. Change them there."
+
+// sessionNamesFromProvider reports whether this request's session took the account's names from
+// its identity provider at sign-in (#2515), and that provider's display name.
+func (s *Server) sessionNamesFromProvider(r *http.Request) (bool, string) {
+	cookie, err := r.Cookie("lfr_session")
+	if err != nil {
+		return false, ""
+	}
+	data, ok := s.sessionStore().loadPortalSession(cookie.Value)
+	if !ok || !data.NamesFromProvider {
+		return false, ""
+	}
+	for _, p := range s.cfg.SSOProviders {
+		if p.ID == data.AuthProvider {
+			return true, p.Name
+		}
+	}
+	return true, ""
+}
+
 // handleUpdateMe updates the currently authenticated user's profile.
 func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
@@ -229,6 +256,16 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The identity provider owns the first and last name of a session that signed in through it
+	// (#2515). The portals send every field on save, so an unchanged value is fine; a change is
+	// refused rather than silently dropped, so the caller knows it did not take.
+	if fromProvider, _ := s.sessionNamesFromProvider(r); fromProvider {
+		if (req.FirstName != nil && strings.TrimSpace(*req.FirstName) != user.FirstName) ||
+			(req.LastName != nil && strings.TrimSpace(*req.LastName) != user.LastName) {
+			respondJSON(w, http.StatusConflict, map[string]string{"error": namesFromProviderError})
+			return
+		}
+	}
 	if req.FirstName != nil {
 		user.FirstName = strings.TrimSpace(*req.FirstName)
 	}

@@ -6200,6 +6200,11 @@ type PortalSessionData struct {
 	// sign-in. A provider configured with satisfies_mfa meets force_mfa for its sessions
 	// (#2482); a magic-link session for the same account does not.
 	AuthProvider string
+	// NamesFromProvider records that this session's sign-in refreshed the account's first and
+	// last name from the identity provider, so the portals show them read-only and PUT /api/me
+	// refuses to change them (#2515). Per session: a magic-link session of the same account can
+	// still edit them, and a provider that sends no names leaves them editable.
+	NamesFromProvider bool
 	// PolicyReminderDismissed records that this session clicked "Remind me later" on the
 	// policy re-consent gate (#1707).
 	//

@@ -41,6 +41,9 @@ type oidcStub struct {
 	emailVerified *bool // nil omits the claim, as Microsoft Entra ID does
 	nonceOverride string
 	email         string // empty means sso.person@example.com
+	// The name claims (#2515): empty means "Sso" / "Person"; omitNames sends neither.
+	givenName, familyName string
+	omitNames             bool
 }
 
 // idTokenEmail is the email claim the next ID token carries.
@@ -123,7 +126,15 @@ func (st *oidcStub) serve(w http.ResponseWriter, r *http.Request) {
 			"iss": st.srv.URL, "aud": "c", "sub": "subject-1",
 			"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(),
 			"nonce": nonce, "email": st.idTokenEmail(),
-			"given_name": "Sso", "family_name": "Person",
+		}
+		if !st.omitNames {
+			claims["given_name"], claims["family_name"] = "Sso", "Person"
+			if st.givenName != "" {
+				claims["given_name"] = st.givenName
+			}
+			if st.familyName != "" {
+				claims["family_name"] = st.familyName
+			}
 		}
 		if st.emailVerified != nil {
 			claims["email_verified"] = *st.emailVerified

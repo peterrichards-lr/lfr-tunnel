@@ -2,10 +2,11 @@
 # test-install-paths.sh — the install path must match the EDR exclusion agreed with S1 (#1591)
 #
 #   install dir:  <home>/liferay/lfr-tunnel/
-#   exclusions:   */liferay/lfr-tunnel/lfr-tunnel        (macOS, Linux)
-#                 *\liferay\lfr-tunnel\lfr-tunnel.exe    (Windows)
+#   exclusions:   /Users/*/liferay/lfr-tunnel/lfr-tunnel           (macOS)
+#                 /home/*/liferay/lfr-tunnel/lfr-tunnel            (Linux)
+#                 C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe    (Windows)
 #
-# The exclusions are path wildcards: only the leading portion is wild, so the final two directory
+# The exclusions are path wildcards: only the username is wild, so the final two directory
 # segments and the binary name are matched literally. A client installed anywhere else is not
 # excluded, and SentinelOne quarantines it.
 #
@@ -154,11 +155,24 @@ fi
 # 8. The document InfoSec is handed. This is the one that was wrong before, and being wrong here
 #    means the exclusion someone applies does not match the binary anyone installs.
 INFOSEC="${REPO_ROOT}/docs/infosec.md"
-if grep -q '\*/liferay/lfr-tunnel/lfr-tunnel' "$INFOSEC" &&
-   grep -q '\*\\liferay\\lfr-tunnel\\lfr-tunnel.exe' "$INFOSEC"; then
-  pass "docs/infosec.md states both agreed exclusions"
+# Whole lines, so a rule cannot pass by containing the right tail behind the wrong head.
+missing_rules=""
+for rule in '/Users/*/liferay/lfr-tunnel/lfr-tunnel' '/home/*/liferay/lfr-tunnel/lfr-tunnel' \
+            'C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe'; do
+  grep -qxF "$rule" "$INFOSEC" || missing_rules="${missing_rules} ${rule}"
+done
+if [ -z "$missing_rules" ]; then
+  pass "docs/infosec.md states the exclusion for the binary on every OS"
 else
-  fail "docs/infosec.md does not state the agreed exclusions"
+  fail "docs/infosec.md does not state the exclusion rule(s):${missing_rules}"
+fi
+# The EDR console rejects an exclusion path that starts with a wildcard, and on Windows a leading
+# `*\` spans the drive and Users as well as the username (#2507 review). Every rule names its root.
+leading_wild="$(grep -nE '^\*[\\/]' "$INFOSEC")"
+if [ -z "$leading_wild" ]; then
+  pass "no exclusion rule in docs/infosec.md starts with a wildcard"
+else
+  fail "docs/infosec.md has an exclusion rule starting with a wildcard, which the console rejects: ${leading_wild}"
 fi
 
 if ! grep -qE '/usr/local/bin/lfr-tunnel|LOCALAPPDATA' "$INFOSEC"; then
@@ -178,7 +192,7 @@ for row in '`~/liferay/lfr-tunnel/lfr-tunnel`' '`%USERPROFILE%\liferay\lfr-tunne
     fail "docs/infosec.md's install table does not list ${row}"
   fi
 done
-for rule in '/Users/*/.ldm/bin/lfr-tunnel' '/home/*/.ldm/bin/lfr-tunnel' '*\.ldm\bin\lfr-tunnel.exe'; do
+for rule in '/Users/*/.ldm/bin/lfr-tunnel' '/home/*/.ldm/bin/lfr-tunnel' 'C:\Users\*\.ldm\bin\lfr-tunnel.exe'; do
   if grep -qxF "$rule" "$INFOSEC"; then
     pass "docs/infosec.md excludes the LDM link: ${rule}"
   else
@@ -224,6 +238,32 @@ if grep -qF 'infosec.md#3-standard-execution-paths--edr-exclusions' "$SE_GUIDE";
   pass "the SE guide points at the single table"
 else
   fail "the SE guide does not link to docs/infosec.md section 3"
+fi
+
+# 10. No doc recommends a package manager without the EDR caveat (decision 0006, #2507 review).
+#     Homebrew and Scoop stay a supported route outside Liferay, so mentioning them is fine. What
+#     is not: a doc that shows a `brew install` or `scoop install` of the client without sending
+#     EDR-managed machines to the native installer (a link to infosec.md section 3), or that
+#     calls package managers "Recommended". The path checks above cannot see either.
+CAVEAT='infosec.md#3-standard-execution-paths--edr-exclusions'
+pm_docs="$(grep -rlE --include='*.md' '(brew|scoop) install lfr-tunnel' "${REPO_ROOT}/docs" "${REPO_ROOT}/README.md" "${REPO_ROOT}/SECURITY.md" 2>/dev/null)"
+if [ -z "$pm_docs" ]; then
+  fail "no doc shows a Homebrew or Scoop install -- this check found nothing to check, so its search is broken"
+fi
+while IFS= read -r doc; do
+  [ -n "$doc" ] || continue
+  rel="${doc#"${REPO_ROOT}"/}"
+  if grep -qF "$CAVEAT" "$doc"; then
+    pass "${rel} shows a package-manager install and links the EDR caveat"
+  else
+    fail "${rel} shows a Homebrew/Scoop install without sending EDR-managed machines to the native installer (link ${CAVEAT})"
+  fi
+done <<< "$pm_docs"
+recommended="$(grep -rniE --include='*.md' 'recommended[^.]*(package manager|homebrew|scoop)|(package manager|homebrew|scoop)[^.]*recommended' "${REPO_ROOT}/docs" "${REPO_ROOT}/README.md" 2>/dev/null)"
+if [ -z "$recommended" ]; then
+  pass "no doc calls a package manager the recommended install route"
+else
+  fail "a doc calls a package manager the recommended install route, which decision 0006 rules out on EDR-managed machines: ${recommended}"
 fi
 
 echo

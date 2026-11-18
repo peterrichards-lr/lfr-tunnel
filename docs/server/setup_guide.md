@@ -1022,6 +1022,12 @@ location /static/downloads/ {
 #### Step 2: Override Client Platform Configurations in `server-config.yaml`
 Declare the `client_platforms` block to redirect developers to your self-hosted binaries and specify organization-sanctioned package manager formulae or installation scripts:
 
+> [!IMPORTANT]
+> **If your users' machines run an EDR, make the native install script the `cmd`, not a package
+> manager.** The example below puts Homebrew and Scoop first, which suits machines without one; a
+> package manager installs outside the path the EDR exclusions cover. See
+> [infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions).
+
 ```yaml
 client_platforms:
   macos_arm64:

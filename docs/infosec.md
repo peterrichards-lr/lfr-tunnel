@@ -146,29 +146,31 @@ so these are the only paths to exclude. **Two rules per platform**: InfoSec conf
 behavioural and machine-learning engines were not satisfied by a binary exclusion alone, and
 the LDM link had to be excluded as well.
 
-**macOS** (configured):
+**macOS** (requested):
 
 ```
 /Users/*/liferay/lfr-tunnel/lfr-tunnel
 /Users/*/.ldm/bin/lfr-tunnel
 ```
 
-**Linux:**
+**Linux** (requested):
 
 ```
 /home/*/liferay/lfr-tunnel/lfr-tunnel
 /home/*/.ldm/bin/lfr-tunnel
 ```
 
-**Windows:**
+**Windows** (requested):
 
 ```
-*\liferay\lfr-tunnel\lfr-tunnel.exe
-*\.ldm\bin\lfr-tunnel.exe
+C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
+C:\Users\*\.ldm\bin\lfr-tunnel.exe
 ```
 
-The username segment is a wildcard (`/Users/*/`, `/home/*/`, `*\`); everything after it is
-matched literally, so the last two directory names and the executable name are all load-bearing.
+Only the username segment is a wildcard (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything after
+it is matched literally, so the last two directory names and the executable name are all
+load-bearing. No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and
+on Windows a leading `*\` would also span the drive and `Users`, not just the username.
 
 **Package-manager rules are not requested.** An earlier version of this section listed
 `/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel` and `/opt/*/bin/lfr-tunnel`. Homebrew and Scoop

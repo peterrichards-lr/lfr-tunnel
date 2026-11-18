@@ -1,5 +1,18 @@
 [
   {
+    "version": "v1.52.8",
+    "release_date": "2026-11-18",
+    "features": [
+      "Single sign-on: sign in with your organisation's identity provider (Liferay SSO on Liferay's gateway). Your account is matched by email address in any letter case, so an existing account stays yours, and SSO sign-ins now show under Last Seen.",
+      "Single sign-on: when the identity provider does not confirm your email address, the gateway can confirm it itself by emailing you a one-time link. After that, sign-ins go straight through.",
+      "Portal: every portal address now opens on one canonical host, so you are not asked to sign in again because you arrived on a different name.",
+      "CLI: `lfr-tunnel login` checks the token with the gateway before reporting success. It accepts a token pasted with quotes or a \"Bearer \" prefix, and gives up after 15 minutes instead of holding its port. If another login is already waiting, it says which process. The portal opens the create-token dialog for you.",
+      "CLI: a malformed -ports value is now refused instead of silently ignored, and the terminal and health check show the ports actually shared. Auto-discovery shares only the project's portal container, never Liferay Docker Manager's shared containers. If you share an LDM project that has an LCP.json, use LDM v2.26.11 or later.",
+      "Privacy: access tokens are removed from client logs before they are uploaded.",
+      "Admins: Audit Log export follows the active filter and sort, can export only the rows you select, and can anonymise the addresses in it. Actions on a user now always apply to that exact account."
+    ]
+  },
+  {
     "version": "v1.52.7",
     "release_date": "2026-11-11",
     "features": [
@@ -33,13 +46,6 @@
     "release_date": "2026-10-13",
     "features": [
       "More complete gateway reports: when your client moves between gateways during the day, for example while one is restarted and when it moves back, each route is now recorded rather than only the last one. Nothing changes in how you use the tunnel."
-    ]
-  },
-  {
-    "version": "v1.52.3",
-    "release_date": "2026-10-13",
-    "features": [
-      "Better gateway reports: when your tunnel connects through a regional gateway, the service now records which region you chose and how quickly each one responded, as it already did for direct connections. This feeds the reports used to decide where gateways should run. Nothing changes in how you use the tunnel."
     ]
   }
 ]

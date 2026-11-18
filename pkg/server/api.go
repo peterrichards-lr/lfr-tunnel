@@ -152,6 +152,11 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	// intercept, so it needs the same answer -- otherwise V1 forced enrolment the server no longer
 	// required, while V2 (which reacts only to the server's 403) did not.
 	resp["mfa_satisfied_by_provider"] = s.sessionSatisfiesMFA(r)
+	// Whether the identity provider handles MFA for every way into this account, so the portals
+	// show that rather than offer the gateway's own TOTP, which nothing would ask for (#2514).
+	managed, providerName := s.mfaManagedByProvider(r)
+	resp["mfa_managed_by_provider"] = managed
+	resp["mfa_provider_name"] = providerName
 
 	// When this session expires, so the portal can warn before it does (#1656).
 	//
@@ -735,10 +740,21 @@ func padNodeTotals(existing []db.NodeBandwidth, knownNodes []string) []db.NodeBa
 }
 
 // handleMFASetup generates a new TOTP secret and returns setup details.
+// mfaManagedByProviderError is what an enrolment attempt is told when the identity provider
+// handles MFA (#2514).
+const mfaManagedByProviderError = "Multi-factor authentication is handled by your identity provider when you sign in, so this gateway does not use its own authenticator codes."
+
 func (s *Server) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 	u, err := s.getCurrentUser(r)
 	if err != nil {
 		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Nothing would ever ask for the code (#2514): refuse to enrol it rather than let the user
+	// believe it protects the account. Removing one enrolled earlier stays allowed.
+	if managed, _ := s.mfaManagedByProvider(r); managed {
+		respondJSON(w, http.StatusConflict, map[string]string{"error": mfaManagedByProviderError})
 		return
 	}
 
@@ -759,6 +775,12 @@ func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
 	u, err := s.getCurrentUser(r)
 	if err != nil {
 		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// As handleMFASetup (#2514).
+	if managed, _ := s.mfaManagedByProvider(r); managed {
+		respondJSON(w, http.StatusConflict, map[string]string{"error": mfaManagedByProviderError})
 		return
 	}
 

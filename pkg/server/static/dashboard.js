@@ -5814,6 +5814,35 @@ function renderMFAPanel() {
   const container = document.getElementById('mfa-status-container');
   if (!container) return;
 
+  // The identity provider performs MFA on every way into this account, so the gateway's own TOTP
+  // would never be asked for (#2514). Decided by the server; V2 reads the same field.
+  if (currentUser.mfa_managed_by_provider) {
+    const provider =
+      currentUser.mfa_provider_name ||
+      t('your_identity_provider', 'your identity provider');
+    const notice = escapeHTML(
+      t(
+        'mfa_managed_by_provider',
+        'Multi-factor authentication is handled by {0} when you sign in, so this gateway does not ask for a separate code.',
+      ).replace('{0}', provider),
+    );
+    let removal = '';
+    if (currentUser.totp_enabled) {
+      removal = `
+                    <div style="margin-top: 16px;">
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${t('mfa_managed_remove_hint', 'The authenticator code you set up here earlier is no longer used. You can remove it.')}</p>
+                        <div style="display: flex; gap: 12px; max-width: 320px; align-items: center;">
+                            <input type="text" id="mfa-disable-code" class="input-field" placeholder="123456" maxlength="6" style="text-align: center; letter-spacing: 2px; font-weight: bold; width: 140px; margin: 0;">
+                            <button class="btn" style="color: var(--danger); border-color: var(--danger); margin: 0; padding: 8px 16px; width: auto;" onclick="disableMFA()">${t('btn_disable_mfa', 'Disable MFA')}</button>
+                        </div>
+                    </div>`;
+    }
+    container.innerHTML = `
+                    <div data-testid="mfa-managed-notice" style="padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: var(--text-muted);">${notice}</div>${removal}
+                `;
+    return;
+  }
+
   if (currentUser.totp_enabled) {
     container.innerHTML = `
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(46,160,67,0.1); border: 1px solid rgba(46,160,67,0.25); border-radius: 6px; color: #2ea043; font-weight: 500; margin-bottom: 16px;">

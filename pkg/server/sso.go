@@ -618,6 +618,41 @@ func (s *Server) alertSSOAccountCreated(user *db.User, p *config.SSOProviderConf
 	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration (SSO)", body)
 }
 
+// mfaManagedByProvider reports whether the gateway's own TOTP can no longer be asked for on this
+// account's way in, so Account Settings should say who handles MFA instead of offering to enrol
+// it (#2514). That holds when email sign-in is off -- the magic-link path is the only one that
+// checks TOTP -- every configured SSO provider performs MFA itself (satisfies_mfa), and this
+// session came through one. Per request rather than per gateway: a magic-link session from before
+// the switch is still held to force_mfa, and refusing it enrolment would lock it out until it
+// expired. It also returns the provider's display name, for the notice.
+func (s *Server) mfaManagedByProvider(r *http.Request) (bool, string) {
+	if !s.cfg.DisableEmailLogin || len(s.cfg.SSOProviders) == 0 {
+		return false, ""
+	}
+	for _, p := range s.cfg.SSOProviders {
+		if !p.SatisfiesMFA {
+			return false, ""
+		}
+	}
+	if !s.sessionSatisfiesMFA(r) {
+		return false, ""
+	}
+	cookie, err := r.Cookie("lfr_session")
+	if err != nil {
+		return true, ""
+	}
+	data, ok := s.sessionStore().loadPortalSession(cookie.Value)
+	if !ok {
+		return true, ""
+	}
+	for _, p := range s.cfg.SSOProviders {
+		if p.ID == data.AuthProvider {
+			return true, p.Name
+		}
+	}
+	return true, ""
+}
+
 // sessionSatisfiesMFA reports whether this request's portal session was created by an SSO
 // provider configured with satisfies_mfa, which then meets force_mfa for it (#2482). Decided by
 // the session, not the account: the same user signing in by magic link is still held to the

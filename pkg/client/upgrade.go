@@ -320,17 +320,48 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		return fmt.Errorf("failed to resolve symlinks for executable: %v", err)
 	}
 
-	var tempPath string
-	switch runtime.GOOS {
-	case "windows":
-		tempPath = filepath.Join(os.TempDir(), "lfr-tunnel-update-tmp.exe")
-	case "darwin":
-		// EDR (SentinelOne) whitelist requires specific exact path on macOS
-		tempPath = "/private/tmp/lfr-tunnel"
-	default:
-		tempPath = "/tmp/lfr-tunnel"
+	// The release must name this platform's binary, or there is nothing to verify it against.
+	expectedHash := ""
+	for _, line := range strings.Split(string(checksumsContent), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == expectedAsset {
+			expectedHash = strings.ToLower(parts[0])
+			break
+		}
 	}
-	_ = os.Remove(tempPath) // Clean up any stale file //nolint:errcheck
+	if expectedHash == "" {
+		return fmt.Errorf("binary integrity check failed: asset %q not found in release checksums", expectedAsset)
+	}
+
+	// Where the new binary goes: where this one runs, unless the gateway's policy names another
+	// install directory, in which case the client moves there.
+	target := execPath
+	if targetExecPath == "" {
+		for _, name := range installDirEnvVars {
+			if v := os.Getenv(name); v != "" {
+				configuredInstallDir = v
+				break
+			}
+		}
+	}
+	if configuredInstallDir != "" {
+		configuredInstallDir = os.ExpandEnv(configuredInstallDir)
+		if strings.HasPrefix(configuredInstallDir, "~/") || strings.HasPrefix(configuredInstallDir, "~\\") {
+			if home, err := os.UserHomeDir(); err == nil {
+				configuredInstallDir = filepath.Join(home, configuredInstallDir[2:])
+			}
+		}
+		target = filepath.Join(configuredInstallDir, canonicalExeName())
+	}
+	migrating := target != execPath
+	if migrating {
+		fmt.Printf("[Update] Binary is currently running from %s, but server policy requires %s.\n", execPath, target)
+		// 0750 (#1408): the user's own install directory; they are the only one who needs to
+		// run what lands in it.
+		if err := os.MkdirAll(configuredInstallDir, 0o750); err != nil {
+			return fmt.Errorf("failed to create target directory %s: %v (try running with sudo/Administrator)", configuredInstallDir, err)
+		}
+	}
 
 	fmt.Println("[Update] Downloading latest binary...")
 	downloadResp, err := client.Get(downloadURL)
@@ -343,164 +374,55 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		return fmt.Errorf("failed downloading binary: server returned %d", downloadResp.StatusCode)
 	}
 
-	// Write to temporary file
-	// 0755 required (#1408): this becomes the client binary, so it must be executable.
-	tempFile, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
+	// Straight to the target, never through a temp directory (#2505): the EDR exclusions cover
+	// the install path, and a fresh executable in /tmp or %TEMP% is what gets quarantined before
+	// any move happens. Nothing has been stopped yet, so a failed download costs nothing: the
+	// current binary is put back and every process carries on.
+	backup, err := installInPlace(target, downloadResp.Body, expectedHash)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file (is directory writeable?): %v", err)
+		return err
 	}
-	defer func() {
-		tempFile.Close()        //nolint:errcheck
-		_ = os.Remove(tempPath) // Clean up temp file if not swapped //nolint:errcheck
-	}()
-
-	if _, err := io.Copy(tempFile, downloadResp.Body); err != nil {
-		return fmt.Errorf("failed to write binary content: %v", err)
-	}
-	tempFile.Close() //nolint:errcheck
-
-	// Verify SHA256 integrity of the downloaded binary
-	computedHash, err := computeSHA256(tempPath)
-	if err != nil {
-		return fmt.Errorf("failed to compute downloaded binary checksum: %v", err)
-	}
-
-	expectedHash := ""
-	lines := strings.Split(string(checksumsContent), "\n")
-	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) >= 2 && parts[1] == expectedAsset {
-			expectedHash = strings.ToLower(parts[0])
-			break
-		}
-	}
-
-	if expectedHash == "" {
-		return fmt.Errorf("binary integrity check failed: asset %q not found in release checksums", expectedAsset)
-	}
-
-	if computedHash != expectedHash {
-		return fmt.Errorf("binary integrity check failed: checksum mismatch (expected: %s, got: %s)", expectedHash, computedHash)
-	}
-
 	fmt.Println("[Update] Binary integrity verified successfully.")
 
-	// Pre-upgrade: stop all active processes and services running the binary to release file handles and prevent EDR quarantine
+	// Stop what runs the binary, so it restarts on the new one.
 	plistToReload, restartSystemd, relaunch := stopActiveProcessesAndServices()
 
-	migrated := false
-	// Check for environment variable install directory overrides if targetExecPath was not explicitly specified by caller/test
-	if targetExecPath == "" {
-		envInstallDir := os.Getenv("LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR")
-		if envInstallDir == "" {
-			envInstallDir = os.Getenv("LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR")
-		}
-		if envInstallDir == "" {
-			envInstallDir = os.Getenv("LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR")
-		}
-		if envInstallDir == "" {
-			envInstallDir = os.Getenv("LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR")
-		}
-		if envInstallDir == "" {
-			envInstallDir = os.Getenv("LFR_TUNNEL_INSTALL_DIR")
-		}
-		if envInstallDir == "" {
-			envInstallDir = os.Getenv("LFT_INSTALL_DIR")
-		}
-		if envInstallDir != "" {
-			configuredInstallDir = envInstallDir
-		}
-	}
+	if migrating {
+		fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
+		_ = os.Remove(execPath) //nolint:errcheck
+		execPath = target       // Update execPath for restartActiveProcessesAndServices
 
-	if configuredInstallDir != "" {
-		configuredInstallDir = os.ExpandEnv(configuredInstallDir)
-		if strings.HasPrefix(configuredInstallDir, "~/") || strings.HasPrefix(configuredInstallDir, "~\\") {
-			home, err := os.UserHomeDir()
-			if err == nil {
-				configuredInstallDir = filepath.Join(home, configuredInstallDir[2:])
-			}
+		// We need to re-register services pointing to the new path
+		fmt.Println("[Update] Re-registering background services to point to the new location...")
+		_ = exec.Command(execPath, "install-service").Run() //nolint:errcheck
+
+		// install-service does not merely rewrite the unit file: installLinux enables AND
+		// starts the systemd unit, and installDarwin loads the plist. So by this line a
+		// client is already coming up, whether or not one was running before the upgrade --
+		// and the relaunch planner has to be told, or it starts a second one beside it
+		// (#2194). On macOS the plists below say so; on Linux nothing did, because
+		// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
+		if runtime.GOOS == "linux" {
+			restartSystemd = true
 		}
-		expectedTarget := filepath.Join(configuredInstallDir, "lfr-tunnel")
-		if runtime.GOOS == "windows" {
-			expectedTarget += ".exe"
-		}
-
-		if execPath != expectedTarget {
-			fmt.Printf("[Update] Binary is currently running from %s, but server policy requires %s.\n", execPath, expectedTarget)
-			fmt.Println("[Update] Migrating binary to the new directory...")
-
-			// Ensure target directory exists
-			// 0750 (#1408): the user's own install directory; they are the only one who
-			// needs to run what lands in it.
-			if err := os.MkdirAll(configuredInstallDir, 0o750); err != nil {
-				return fmt.Errorf("failed to create target directory %s: %v (try running with sudo/Administrator)", configuredInstallDir, err)
-			}
-
-			// Move temp binary to new location
-			if err := replaceBinary(tempPath, expectedTarget); err != nil {
-				return fmt.Errorf("failed to move binary to %s: %v (try running with sudo/Administrator)", expectedTarget, err)
-			}
-
-			fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
-			_ = os.Remove(execPath)   //nolint:errcheck
-			execPath = expectedTarget // Update execPath for restartActiveProcessesAndServices
-			migrated = true
-
-			// We need to re-register services pointing to the new path
-			fmt.Println("[Update] Re-registering background services to point to the new location...")
-			_ = exec.Command(execPath, "install-service").Run() //nolint:errcheck
-
-			// install-service does not merely rewrite the unit file: installLinux enables AND
-			// starts the systemd unit, and installDarwin loads the plist. So by this line a
-			// client is already coming up, whether or not one was running before the upgrade --
-			// and the relaunch planner has to be told, or it starts a second one beside it
-			// (#2194). On macOS the plists below say so; on Linux nothing did, because
-			// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
-			if runtime.GOOS == "linux" {
-				restartSystemd = true
-			}
-			if runtime.GOOS == "darwin" {
-				_ = exec.Command(execPath, "install-gui-service").Run() //nolint:errcheck
-				// The install commands above generate new plists, so we must reload those instead of the old ones
-				home, _ := os.UserHomeDir()
-				plistToReload = []string{
-					filepath.Join(home, "Library", "LaunchAgents", daemonPlistName),
-					filepath.Join(home, "Library", "LaunchAgents", guiPlistName),
-				}
+		if runtime.GOOS == "darwin" {
+			_ = exec.Command(execPath, "install-gui-service").Run() //nolint:errcheck
+			// The install commands above generate new plists, so we must reload those instead of the old ones
+			home, _ := os.UserHomeDir()
+			plistToReload = []string{
+				filepath.Join(home, "Library", "LaunchAgents", daemonPlistName),
+				filepath.Join(home, "Library", "LaunchAgents", guiPlistName),
 			}
 		}
 	}
-
-	var swapErr error
-	if !migrated {
-		// Perform replacement swap
-		if runtime.GOOS == "windows" {
-			oldPath := execPath + ".old"
-			_ = os.Remove(oldPath) // Remove any previous leftovers //nolint:errcheck
-			if err := os.Rename(execPath, oldPath); err != nil {
-				swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
-			} else if err := replaceBinary(tempPath, execPath); err != nil {
-				// Try to rollback rename
-				_ = os.Rename(oldPath, execPath) //nolint:errcheck
-				swapErr = fmt.Errorf("failed to replace downloaded binary: %v", err)
-			} else {
-				fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
-				fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
-			}
-		} else {
-			// On Unix we can replace directly
-			if err := replaceBinary(tempPath, execPath); err != nil {
-				swapErr = fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
-			} else {
-				fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
-			}
-		}
-	}
+	removeUpgradeBackup(backup)
+	fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
 
 	// The agents are unloaded at this point, so an install from before #2504 is converged now:
 	// each plist repointed at the client itself, and the legacy "Liferay Tunnel" file -- a copy
-	// of the OLD binary, when the symlink had failed -- removed before anything reloads.
-	if runtime.GOOS == "darwin" && swapErr == nil {
+	// of the OLD binary, when the symlink had failed -- removed before anything reloads. Reached
+	// only once the new binary is in place: a failed install returned above, untouched (#2505).
+	if runtime.GOOS == "darwin" {
 		if home, err := os.UserHomeDir(); err == nil {
 			convergeDarwinAutostart(home, execPath)
 		}
@@ -508,43 +430,90 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 
 	// Post-upgrade: restart previously active processes and services
 	restartActiveProcessesAndServices(plistToReload, restartSystemd, relaunch)
-
-	if swapErr != nil {
-		return swapErr
-	}
-
 	return nil
 }
 
-func replaceBinary(tempPath, execPath string) error {
-	// First attempt simple rename (fastest, atomic if same filesystem)
-	err := os.Rename(tempPath, execPath)
-	if err == nil {
-		return nil
+// createExecutable creates a new client binary at path. A variable so tests can record every path
+// an upgrade writes an executable to (#2505).
+var createExecutable = func(path string) (*os.File, error) {
+	// 0755 required (#1408): this is the client binary, so it must be executable.
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o755) //nolint:gosec
+}
+
+// upgradeBackupSuffix names the previous binary while its replacement is written (#2505).
+const upgradeBackupSuffix = ".old"
+
+// installInPlace writes a downloaded binary straight to target, one mechanism on every OS (#2505):
+// the current binary is renamed to target+".old" -- which works for a running binary on macOS,
+// Linux and Windows -- and the download is written to target itself, hashed as it goes. On any
+// failure, a truncated download or a checksum mismatch included, the partial file is removed and
+// the backup renamed back, so the previous binary is exactly as it was. It returns the backup
+// path, or "" when there was no binary at target.
+func installInPlace(target string, body io.Reader, expectedHash string) (string, error) {
+	backup := target + upgradeBackupSuffix
+	_ = os.Remove(backup) //nolint:errcheck // a leftover from an earlier upgrade
+	hadOld := false
+	if _, err := os.Lstat(target); err == nil {
+		if err := os.Rename(target, backup); err != nil {
+			return "", fmt.Errorf("failed to move the current binary aside to %s: %v (if permission is denied, try running as sudo)", backup, err)
+		}
+		hadOld = true
+	}
+	restore := func() {
+		_ = os.Remove(target) //nolint:errcheck // the partial download
+		if hadOld {
+			_ = os.Rename(backup, target) //nolint:errcheck // nothing better to do if this fails too
+		}
 	}
 
-	// If it fails (e.g. EXDEV cross-device link), fallback to copying
-	// Remove the target first to prevent ETXTBSY if any processes still hold open file handles
-	_ = os.Remove(execPath) //nolint:errcheck
-
-	in, err := os.Open(tempPath)
+	f, err := createExecutable(target)
 	if err != nil {
-		return err
+		restore()
+		return "", fmt.Errorf("failed to create %s (is the directory writeable?): %v", target, err)
 	}
-	defer in.Close() //nolint:errcheck
+	h := sha256.New()
+	_, copyErr := io.Copy(io.MultiWriter(f, h), body)
+	closeErr := f.Close()
+	if copyErr == nil {
+		copyErr = closeErr
+	}
+	if copyErr != nil {
+		restore()
+		return "", fmt.Errorf("failed to write binary content: %v", copyErr)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != expectedHash {
+		restore()
+		return "", fmt.Errorf("binary integrity check failed: checksum mismatch (expected: %s, got: %s)", expectedHash, got)
+	}
+	if !hadOld {
+		return "", nil
+	}
+	return backup, nil
+}
 
-	// 0755 required (#1408): same -- the replacement binary has to be executable.
-	out, err := os.OpenFile(execPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
-	if err != nil {
-		return err
+// removeUpgradeBackup deletes the previous binary once its replacement is in place. On Windows the
+// running image is still locked, so the delete can fail; RemoveUpgradeBackup clears it at the next
+// start instead.
+func removeUpgradeBackup(backup string) {
+	if backup == "" {
+		return
 	}
-	defer out.Close() //nolint:errcheck
+	if err := os.Remove(backup); err != nil {
+		fmt.Printf("[Update] The previous binary at %s will be removed the next time lfr-tunnel starts.\n", backup)
+	}
+}
 
-	_, err = io.Copy(out, in)
+// RemoveUpgradeBackup removes the previous binary an upgrade left beside this one (#2505), which
+// on Windows cannot be deleted while it is still running. Best effort, at startup.
+func RemoveUpgradeBackup() {
+	exe, err := os.Executable()
 	if err != nil {
-		return err
+		return
 	}
-	return out.Sync()
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	_ = os.Remove(exe + upgradeBackupSuffix) //nolint:errcheck // absent, or still locked by an old process
 }
 
 // appendRelaunchTarget records how a process was started, so the upgrade can start it again.
@@ -889,21 +858,6 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 			fmt.Printf("[Update] Failed to restart %s: %v\n", filepath.Base(argv[0]), err)
 		}
 	}
-}
-
-func computeSHA256(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close() //nolint:errcheck
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 type ServerPlatformInfo struct {

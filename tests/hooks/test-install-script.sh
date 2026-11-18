@@ -90,6 +90,26 @@ for f in "$TEMPLATE" "$PS1_TEMPLATE"; do
   fi
 done
 
+# Neither installer stages the binary in a temp directory (#2505). install.sh is exercised in
+# Docker by test-install-in-place.sh; install.ps1 cannot run here, so its code is read instead.
+sh_code="$(grep -vE '^\s*#' "$TEMPLATE")"
+if grep -qE '/tmp/|/private/tmp' <<<"$sh_code"; then
+  fail "install.sh writes to a temp directory -- the EDR exclusions cover only the install path"
+else
+  pass "install.sh does not stage the binary in a temp directory"
+fi
+ps1_code="$(grep -vE '^\s*#' "$PS1_TEMPLATE")"
+if grep -qiE 'env:TEMP|GetTempPath|GetTempFileName' <<<"$ps1_code"; then
+  fail "install.ps1 writes to a temp directory -- the EDR exclusions cover only the install path"
+else
+  pass "install.ps1 does not stage the binary in a temp directory"
+fi
+if grep -q '\.old' "$PS1_TEMPLATE" && grep -q 'HadOld' "$PS1_TEMPLATE"; then
+  pass "install.ps1 moves the current binary aside and can put it back"
+else
+  fail "install.ps1 overwrites the current binary with no way back if the download fails"
+fi
+
 echo
 echo "  ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1

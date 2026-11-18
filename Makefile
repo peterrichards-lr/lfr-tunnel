@@ -356,6 +356,7 @@ test-hooks:
 	@./tests/hooks/test-ci-platform-matrix.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
+	@./tests/hooks/test-install-in-place.sh
 	@./tests/hooks/test-required-contexts-mirror.sh
 	@./tests/hooks/test-required-contexts-concurrency.sh
 	@./tests/hooks/test-setup-go-check-latest.sh

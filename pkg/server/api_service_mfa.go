@@ -123,6 +123,7 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 
 	s.sessions.storePortalSession(sessionToken, PortalSessionData{
 		Email:                 user.Email,
+		AuthProvider:          preAuth.AuthProvider, // "" for a magic link; the provider for SSO (#2517)
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              ip,
 		PreviousLoginAt:       previousLoginAt,
@@ -138,10 +139,18 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 		Action:     "admin.login",
 		TargetType: "system",
 		TargetID:   "admin",
-		Details:    "Admin logged into dashboard via magic link + MFA",
+		Details:    mfaLoginDetails(preAuth.AuthProvider),
 		IPAddress:  ip,
 		CreatedAt:  time.Now(),
 	})
 
 	return user, sessionToken, nil
+}
+
+// mfaLoginDetails says how a sign-in that needed the gateway's TOTP began (#2517).
+func mfaLoginDetails(provider string) string {
+	if provider != "" {
+		return "Signed in via SSO (provider " + provider + ") + MFA"
+	}
+	return "Admin logged into dashboard via magic link + MFA"
 }

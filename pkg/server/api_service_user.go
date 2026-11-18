@@ -196,8 +196,20 @@ func (s *portalService) DeleteAccount(user *db.User, ipAddress string) error {
 	return nil
 }
 
-func (s *portalService) AdminOverrideLimit(actor, email string, maxReservations *int, ip string) (*db.User, error) {
-	user, err := s.db.GetUserByEmail(email)
+// adminTargetUser resolves the user an admin route names (#2469). A user's id is the address it
+// registered with, in that case, so the id names one row even among case duplicates; the portals
+// send it. An email is still accepted for other API callers, and since #2466 it matches the oldest
+// account in any case -- which, where duplicates exist, is not necessarily the one the admin meant.
+func adminTargetUser(d *db.DB, key string) (*db.User, error) {
+	user, err := d.GetUser(key)
+	if errors.Is(err, db.ErrNotFound) {
+		return d.GetUserByEmail(key)
+	}
+	return user, err
+}
+
+func (s *portalService) AdminOverrideLimit(actor, key string, maxReservations *int, ip string) (*db.User, error) {
+	user, err := adminTargetUser(s.db, key)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return nil, ErrNotFound
@@ -223,8 +235,8 @@ func (s *portalService) AdminOverrideLimit(actor, email string, maxReservations 
 	return user, nil
 }
 
-func (s *portalService) AdminOverrideTunnelsLimit(actor, email string, maxTunnels *int, ip string) (*db.User, error) {
-	user, err := s.db.GetUserByEmail(email)
+func (s *portalService) AdminOverrideTunnelsLimit(actor, key string, maxTunnels *int, ip string) (*db.User, error) {
+	user, err := adminTargetUser(s.db, key)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return nil, ErrNotFound
@@ -250,12 +262,12 @@ func (s *portalService) AdminOverrideTunnelsLimit(actor, email string, maxTunnel
 	return user, nil
 }
 
-func (s *portalService) AdminOverridePreferredDomain(actorEmail string, targetEmail string, domain string, clientIP string) (*db.User, error) {
+func (s *portalService) AdminOverridePreferredDomain(actorEmail string, targetKey string, domain string, clientIP string) (*db.User, error) {
 	if s.db == nil {
 		return nil, errors.New("db not initialized")
 	}
 
-	user, err := s.db.GetUserByEmail(targetEmail)
+	user, err := adminTargetUser(s.db, targetKey)
 	if err != nil {
 		return nil, ErrNotFound
 	}

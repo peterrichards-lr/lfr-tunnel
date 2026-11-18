@@ -36,6 +36,12 @@ export default function AccountSettings() {
   );
   const [diagnosticsError, setDiagnosticsError] = useState('');
   const [mfaEnabled, setMfaEnabled] = useState(user?.totp_enabled || false);
+  // The identity provider performs MFA on every way into this account, so the gateway's own
+  // TOTP would never be asked for (#2514). Decided by the server; V1 reads the same field.
+  const mfaManaged = user?.mfa_managed_by_provider === true;
+  const mfaProviderName: string =
+    user?.mfa_provider_name ||
+    t('your_identity_provider', 'your identity provider');
   const [setupData, setSetupData] = useState<{
     secret: string;
     otpauth_url: string;
@@ -510,24 +516,45 @@ export default function AccountSettings() {
                 <h4 className="m-0 mb-2xs">
                   {t('mfa_title', 'Multi-Factor Authentication')}
                 </h4>
-                <p className="m-0 text-xs text-muted">
-                  {mfaEnabled
-                    ? t('mfa_enabled_desc', 'Your account is secured with 2FA.')
-                    : t(
-                        'mfa_disabled_desc',
-                        'Add an extra layer of security to your account.',
-                      )}
-                </p>
-              </div>
-              <div>
-                <span
-                  className={`badge ${mfaEnabled ? 'badge-success' : 'badge-warning'}`}
+                <p
+                  className="m-0 text-xs text-muted"
+                  data-testid={mfaManaged ? 'mfa-managed-notice' : undefined}
                 >
-                  {mfaEnabled
-                    ? t('enabled', 'Enabled')
-                    : t('disabled', 'Disabled')}
-                </span>
+                  {mfaManaged
+                    ? t(
+                        'mfa_managed_by_provider',
+                        'Multi-factor authentication is handled by {0} when you sign in, so this gateway does not ask for a separate code.',
+                      ).replace('{0}', mfaProviderName)
+                    : mfaEnabled
+                      ? t(
+                          'mfa_enabled_desc',
+                          'Your account is secured with 2FA.',
+                        )
+                      : t(
+                          'mfa_disabled_desc',
+                          'Add an extra layer of security to your account.',
+                        )}
+                </p>
+                {mfaManaged && mfaEnabled && (
+                  <p className="m-0 mt-xs text-xs text-muted">
+                    {t(
+                      'mfa_managed_remove_hint',
+                      'The authenticator code you set up here earlier is no longer used. You can remove it.',
+                    )}
+                  </p>
+                )}
               </div>
+              {!mfaManaged && (
+                <div>
+                  <span
+                    className={`badge ${mfaEnabled ? 'badge-success' : 'badge-warning'}`}
+                  >
+                    {mfaEnabled
+                      ? t('enabled', 'Enabled')
+                      : t('disabled', 'Disabled')}
+                  </span>
+                </div>
+              )}
             </div>
 
             {mfaEnabled && (
@@ -605,7 +632,7 @@ export default function AccountSettings() {
               </div>
             )}
 
-            {!mfaEnabled && !setupData && (
+            {!mfaEnabled && !setupData && !mfaManaged && (
               <button
                 type="button"
                 className="btn btn-primary mt-lg"

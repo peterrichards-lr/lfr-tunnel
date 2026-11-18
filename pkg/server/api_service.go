@@ -45,9 +45,9 @@ type PortalService interface {
 	AdminListExtensions() ([]*ExtensionRequestView, error)
 	AdminApproveExtension(actor, idStr string, days int, permanent bool, ip string) (*db.SubdomainReservation, error)
 	AdminDemoteReservation(actor, idStr, ip string) (*db.SubdomainReservation, error)
-	AdminOverrideLimit(actor, email string, maxReservations *int, ip string) (*db.User, error)
-	AdminOverrideTunnelsLimit(actor, email string, maxActiveTunnels *int, ip string) (*db.User, error)
-	AdminOverridePreferredDomain(actor, email, domain, ip string) (*db.User, error)
+	AdminOverrideLimit(actor, key string, maxReservations *int, ip string) (*db.User, error)
+	AdminOverrideTunnelsLimit(actor, key string, maxActiveTunnels *int, ip string) (*db.User, error)
+	AdminOverridePreferredDomain(actor, key, domain, ip string) (*db.User, error)
 
 	// The `approval` state of never_expires.tokens (#2267). Subdomains and custom domains
 	// reach the same place through RequestExtension/AdminApproveExtension above; tokens had

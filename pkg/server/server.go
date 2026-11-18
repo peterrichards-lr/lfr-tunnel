@@ -5172,13 +5172,13 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
 		return
 	}
-	email, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
+	key, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
 	if err != nil {
-		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"Invalid user"}`, http.StatusBadRequest)
 		return
 	}
 
-	user, err := s.db.GetUserByEmail(email)
+	user, err := adminTargetUser(s.db, key)
 	if err != nil {
 		if err == db.ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
@@ -5216,9 +5216,9 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
 		return
 	}
-	email, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
+	key, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
 	if err != nil {
-		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"Invalid user"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -5242,7 +5242,7 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
-	user, err := s.db.GetUserByEmail(email)
+	user, err := adminTargetUser(s.db, key)
 	if err != nil {
 		if err == db.ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)

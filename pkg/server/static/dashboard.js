@@ -4655,30 +4655,30 @@ async function loadUsers() {
                                 <div class="action-menu">
                                     <button class="action-menu-btn" onclick="toggleActionMenu('menu-user-${u.id}', event)">⋮</button>
                                     <div id="menu-user-${u.id}" class="action-menu-dropdown">
-                                        ${u.status !== 'approved' ? `<button class="action-menu-item" onclick="approveUser('${u.id}')">Approve</button>` : ''}
-                                        ${u.status !== 'revoked' ? `<button class="action-menu-item danger" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
+                                        ${u.status !== 'approved' ? `<button class="action-menu-item" onclick="approveUser('${escapeHTML(u.id)}')">Approve</button>` : ''}
+                                        ${u.status !== 'revoked' ? `<button class="action-menu-item danger" onclick="revokeUser('${escapeHTML(u.id)}')">Revoke</button>` : ''}
                                         ${
                                           u.status === 'approved'
                                             ? `
                                             <button class="action-menu-item" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>
-                                            <button class="action-menu-item" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Bandwidth Limit</button>
-                                            <button class="action-menu-item" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Subdomain Limit</button>
-                                            <button class="action-menu-item" onclick="openUserTunnelsLimitModal('${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>
-                                            <button class="action-menu-item" onclick="openUserBandwidthQuotaModal('${escapeHTML(u.email)}', ${u.bandwidth_quota_bytes !== undefined && u.bandwidth_quota_bytes !== null ? u.bandwidth_quota_bytes : ''})">Set Bandwidth Quota</button>
+                                            <button class="action-menu-item" onclick="openUserQuotaModal('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Bandwidth Limit</button>
+                                            <button class="action-menu-item" onclick="openUserResLimitModal('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Subdomain Limit</button>
+                                            <button class="action-menu-item" onclick="openUserTunnelsLimitModal('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>
+                                            <button class="action-menu-item" onclick="openUserBandwidthQuotaModal('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', ${u.bandwidth_quota_bytes !== undefined && u.bandwidth_quota_bytes !== null ? u.bandwidth_quota_bytes : ''})">Set Bandwidth Quota</button>
                                             ${
                                               u.role === 'admin'
                                                 ? `
-                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote to User</button>
+                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', 'user')">Demote to User</button>
                                             `
                                                 : `
-                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote to Admin</button>
+                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.id)}', '${escapeHTML(u.email)}', 'admin')">Promote to Admin</button>
                                             `
                                             }
                                         `
                                             : ''
                                         }
-                                        ${u.totp_enabled ? `<button class="action-menu-item" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
-                                        <button class="action-menu-item danger" onclick="adminDeleteUser('${escapeHTML(u.email)}')">Delete</button>
+                                        ${u.totp_enabled ? `<button class="action-menu-item" onclick="adminResetMFA('${escapeHTML(u.id)}')">Reset MFA</button>` : ''}
+                                        <button class="action-menu-item danger" onclick="adminDeleteUser('${escapeHTML(u.id)}', '${escapeHTML(u.email)}')">Delete</button>
                                     </div>
                                 </div>
                             `
@@ -4707,8 +4707,8 @@ async function loadRegistrations() {
                             <div class="action-menu">
                                 <button class="action-menu-btn" onclick="toggleActionMenu('menu-reg-${u.id}', event)">⋮</button>
                                 <div id="menu-reg-${u.id}" class="action-menu-dropdown">
-                                    <button class="action-menu-item" onclick="approveRegistration('${u.id}')">Approve</button>
-                                    <button class="action-menu-item danger" onclick="denyRegistration('${u.id}')" data-i18n="reject_request">${t('reject_request', 'Reject')}</button>
+                                    <button class="action-menu-item" onclick="approveRegistration('${escapeHTML(u.id)}')">Approve</button>
+                                    <button class="action-menu-item danger" onclick="denyRegistration('${escapeHTML(u.id)}')" data-i18n="reject_request">${t('reject_request', 'Reject')}</button>
                                 </div>
                             </div>
                         </td>
@@ -4719,7 +4719,7 @@ async function loadRegistrations() {
 }
 
 async function denyRegistration(id) {
-  const res = await fetch(`/api/admin/users/${id}`, {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'revoked' }),
@@ -4735,7 +4735,7 @@ async function denyRegistration(id) {
 }
 
 async function approveRegistration(id) {
-  const res = await fetch(`/api/admin/users/${id}`, {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'approved' }),
@@ -4751,7 +4751,7 @@ async function approveRegistration(id) {
 }
 
 async function approveUser(id) {
-  await fetch(`/api/admin/users/${id}`, {
+  await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'approved' }),
@@ -4760,7 +4760,7 @@ async function approveUser(id) {
 }
 
 async function revokeUser(id) {
-  await fetch(`/api/admin/users/${id}`, {
+  await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'revoked' }),
@@ -6023,9 +6023,9 @@ async function adminResetMFA(id) {
   }
 }
 
-async function changeUserRole(id, role) {
+async function changeUserRole(id, email, role) {
   const verb = role === 'admin' ? 'promote' : 'demote';
-  if (!confirm(`Are you sure you want to ${verb} ${id} to ${role}?`)) return;
+  if (!confirm(`Are you sure you want to ${verb} ${email} to ${role}?`)) return;
   const res = await fetch('/api/admin/users/' + encodeURIComponent(id), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -6464,7 +6464,8 @@ async function submitSelfDeleteAccount() {
   }
 }
 
-async function adminDeleteUser(email) {
+// Addressed by id, not email: an email names the oldest of any case-duplicate accounts (#2469).
+async function adminDeleteUser(id, email) {
   const promptMsg = `⚠️ GDPR RIGHT TO BE FORGOTTEN REQUEST\n\nAre you sure you want to PERMANENTLY DELETE and ANONYMISE the account for ${email}?\n\nThis will instantly revoke all their tokens, close active tunnels, completely delete their profile, and permanently anonymise their logs and bandwidth metrics! This action is absolutely irreversible.`;
   if (!confirm(promptMsg)) return;
 
@@ -6478,7 +6479,7 @@ async function adminDeleteUser(email) {
   }
 
   try {
-    const res = await fetch('/api/admin/users/' + encodeURIComponent(email), {
+    const res = await fetch('/api/admin/users/' + encodeURIComponent(id), {
       method: 'DELETE',
     });
 
@@ -6529,9 +6530,9 @@ async function changePortalLanguage(lang, persist = false) {
 }
 
 // USER QUOTA MODAL CONTROLLERS
-let activeQuotaEmail = '';
-function openUserQuotaModal(email, currentLimit) {
-  activeQuotaEmail = email;
+let activeQuotaUserId = '';
+function openUserQuotaModal(id, email, currentLimit) {
+  activeQuotaUserId = id;
   document.getElementById('user-quota-email-hint').innerText = email;
   document.getElementById('user-quota-input').value = currentLimit || '';
   document.getElementById('user-quota-modal').style.display = 'flex';
@@ -6545,7 +6546,7 @@ async function submitUserQuota() {
   const limit =
     parseInt(document.getElementById('user-quota-input').value) || 0;
   const res = await fetch(
-    '/api/admin/users/' + encodeURIComponent(activeQuotaEmail),
+    '/api/admin/users/' + encodeURIComponent(activeQuotaUserId),
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -6611,7 +6612,7 @@ async function updateUserPreferredDomain() {
 
   try {
     const res = await fetch(
-      `/api/admin/users/${_currentModalUserId}/preferred-domain`,
+      `/api/admin/users/${encodeURIComponent(_currentModalUserId)}/preferred-domain`,
       {
         method: 'PUT',
         headers: {
@@ -8100,9 +8101,9 @@ async function demoteReservation(id) {
 }
 
 // ADMINISTRATIVE RESERVATIONS LIMIT OVERRIDES
-let activeResLimitEmail = '';
-function openUserResLimitModal(email, currentLimit) {
-  activeResLimitEmail = email;
+let activeResLimitUserId = '';
+function openUserResLimitModal(id, email, currentLimit) {
+  activeResLimitUserId = id;
   document.getElementById('user-res-limit-email-hint').innerText = email;
   document.getElementById('user-res-limit-input').value = currentLimit || '';
   document.getElementById('user-res-limit-modal').style.display = 'flex';
@@ -8118,7 +8119,7 @@ async function submitUserResLimit() {
 
   try {
     const res = await fetch(
-      `/api/admin/users/${encodeURIComponent(activeResLimitEmail)}/limit`,
+      `/api/admin/users/${encodeURIComponent(activeResLimitUserId)}/limit`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -8143,9 +8144,9 @@ async function submitUserResLimit() {
 }
 
 // ADMINISTRATIVE ACTIVE TUNNELS LIMIT OVERRIDES
-let activeTunnelsLimitEmail = '';
-function openUserTunnelsLimitModal(email, currentLimit) {
-  activeTunnelsLimitEmail = email;
+let activeTunnelsLimitUserId = '';
+function openUserTunnelsLimitModal(id, email, currentLimit) {
+  activeTunnelsLimitUserId = id;
   document.getElementById('user-tunnels-limit-email-hint').innerText = email;
   document.getElementById('user-tunnels-limit-input').value =
     currentLimit || '';
@@ -8164,7 +8165,7 @@ async function submitUserTunnelsLimit() {
 
   try {
     const res = await fetch(
-      `/api/admin/users/${encodeURIComponent(activeTunnelsLimitEmail)}/tunnels-limit`,
+      `/api/admin/users/${encodeURIComponent(activeTunnelsLimitUserId)}/tunnels-limit`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -8234,9 +8235,9 @@ function renderBandwidthQuotaCell(q) {
 }
 window.renderBandwidthQuotaCell = renderBandwidthQuotaCell;
 
-let bandwidthQuotaEmail = '';
-function openUserBandwidthQuotaModal(email, currentBytes) {
-  bandwidthQuotaEmail = email;
+let bandwidthQuotaUserId = '';
+function openUserBandwidthQuotaModal(id, email, currentBytes) {
+  bandwidthQuotaUserId = id;
   document.getElementById('user-bandwidth-quota-email-hint').innerText = email;
   document.getElementById('user-bandwidth-quota-input').value =
     currentBytes !== '' && currentBytes !== null && currentBytes !== undefined
@@ -8263,7 +8264,7 @@ async function submitUserBandwidthQuota() {
   const bytes = Math.round(parseFloat(val) * 1024 * 1024 * 1024);
   try {
     const res = await fetch(
-      `/api/admin/users/${encodeURIComponent(bandwidthQuotaEmail)}`,
+      `/api/admin/users/${encodeURIComponent(bandwidthQuotaUserId)}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

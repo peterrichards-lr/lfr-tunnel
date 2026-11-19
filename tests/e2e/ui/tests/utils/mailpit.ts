@@ -22,8 +22,8 @@ export async function getMagicLinkToken(email: string): Promise<string> {
       const msgData = await msgRes.json();
 
       const body = msgData.Text || '';
-      // Look for magic link: /portal?token=dummy_token_123 or /portalv2/login?token=...
-      const match = body.match(/\/portal(?:v2\/login)?\?token=([a-zA-Z0-9]+)/);
+      // Look for magic link: /portal/login?token=... -- always V2's sign-in page (#2528)
+      const match = body.match(/\/portal\/login\?token=([a-zA-Z0-9]+)/);
       if (match && match[1]) {
         return match[1];
       }
@@ -37,7 +37,7 @@ export async function getMagicLinkToken(email: string): Promise<string> {
 }
 
 /**
- * The magic link's path and query exactly as emailed -- e.g. `/portal?token=…&lang=en&cli_login=1`
+ * The magic link's path and query exactly as emailed -- e.g. `/portal/login?token=…&lang=en&cli_login=1`
  * -- for a test that needs more of the link than its token (#2459).
  */
 export async function getMagicLinkPath(email: string): Promise<string> {
@@ -53,7 +53,7 @@ export async function getMagicLinkPath(email: string): Promise<string> {
         `http://localhost:8025/api/v1/message/${targetMsg.ID}`,
       );
       const body = (await msgRes.json()).Text || '';
-      const match = body.match(/\/portal(?:v2\/login)?\?token=[^\s"<>)]+/);
+      const match = body.match(/\/portal\/login\?token=[^\s"<>)]+/);
       if (match) {
         return match[0];
       }

@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * A non-admin can see their own analytics in Portal V2 (#1512).
@@ -41,22 +42,22 @@ test.describe('Portal V2 analytics for a non-admin', () => {
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', email);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
 
     const token = await getMagicLinkToken(email);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
   });
 
   test('reaches analytics and sees their own usage', async ({ page }) => {
-    await page.goto('/portalv2/analytics');
+    await page.goto(`${V2}/analytics`);
 
     // Not bounced by AdminRoute -- the bug was a redirect away from here.
-    await expect(page).toHaveURL(/\/portalv2\/analytics$/);
+    await expect(page).toHaveURL(/\/portal\/analytics$/);
 
     // The title has to describe what is on screen: "System Analytics" would be naming a page
     // this user is not being shown.
@@ -66,8 +67,8 @@ test.describe('Portal V2 analytics for a non-admin', () => {
   });
 
   test('sees no admin-only analytics', async ({ page }) => {
-    await page.goto('/portalv2/analytics');
-    await expect(page).toHaveURL(/\/portalv2\/analytics$/);
+    await page.goto(`${V2}/analytics`);
+    await expect(page).toHaveURL(/\/portal\/analytics$/);
 
     // Anchor on something that MUST be there first. Mutation testing caught this: with the
     // route removed the page renders nothing, and a test that only asserts absence passes
@@ -94,7 +95,7 @@ test.describe('Portal V2 analytics for a non-admin', () => {
     const link = page.getByRole('link', { name: /^Analytics$/i });
     await expect(link).toHaveCount(1);
     await link.click();
-    await expect(page).toHaveURL(/\/portalv2\/analytics$/);
+    await expect(page).toHaveURL(/\/portal\/analytics$/);
     // Arriving at the URL is not the same as arriving at the page: without a route matching
     // it, the address bar changes and nothing renders. Assert the destination exists.
     await expect(
@@ -105,7 +106,7 @@ test.describe('Portal V2 analytics for a non-admin', () => {
   test('the admin route stays closed to them', async ({ page }) => {
     // Opening analytics up must not have opened the admin path with it: /admin/analytics
     // renders the same component, so it is the ROUTE guard that keeps it admin-only.
-    await page.goto('/portalv2/admin/analytics');
-    await expect(page).not.toHaveURL(/\/portalv2\/admin\/analytics$/);
+    await page.goto(`${V2}/admin/analytics`);
+    await expect(page).not.toHaveURL(/\/portal\/admin\/analytics$/);
   });
 });

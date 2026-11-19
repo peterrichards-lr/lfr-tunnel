@@ -99,7 +99,7 @@ func (s *Server) checkExpiringTokens() {
 // sendTokenExpiringEmail sends one token_expiring email, synchronously, and returns the send
 // error so the sweep can decline to advance the stage on it.
 func (s *Server) sendTokenExpiringEmail(user *db.User, pat *db.PersonalAccessToken) error {
-	portalLink := s.getPortalBaseURL(nil) + "/portal"
+	portalLink := s.getPortalBaseURL(nil) + PortalV2Base
 	expiresStr := pat.ExpiresAt.UTC().Format(expiryEmailTimeFormat)
 
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "token_expiring.html", map[string]interface{}{
@@ -147,7 +147,7 @@ func (s *Server) sendTokenPermanenceDecisionEmail(r *http.Request, pat *db.Perso
 		return
 	}
 
-	portalLink := s.getPortalBaseURL(r) + "/portal"
+	portalLink := s.getPortalBaseURL(r) + PortalV2Base
 	expiresStr := ""
 	// A denial may land on a token that lapsed while it sat in the queue -- the decision path
 	// allows a DENY there so an admin can clear the row (#2280). "It still expires on <a past

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { V2, signInToV1 } from './utils/portal';
 
 /**
  * Windows High Contrast Mode (#1521).
@@ -73,7 +74,7 @@ test.describe('High Contrast Mode', () => {
   test('Portal V2: the primary button and modal keep a visible edge', async ({
     page,
   }) => {
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await assertEmulated(page);
     // Its fill is a gradient, which the browser drops, and the rule sets `border: none`.
     await expectBoundary(page, 'btn btn-primary', 'button', 'V2 .btn-primary');
@@ -84,7 +85,8 @@ test.describe('High Contrast Mode', () => {
   test('Portal V1: the primary button and modal keep a visible edge', async ({
     page,
   }) => {
-    await page.goto('/admin');
+    // V1 is served to an admin session only (#2528).
+    await signInToV1(page);
     await assertEmulated(page);
     await expectBoundary(page, 'btn btn-primary', 'button', 'V1 .btn-primary');
     await expectBoundary(page, 'modal-content', 'div', 'V1 .modal-content');
@@ -93,7 +95,7 @@ test.describe('High Contrast Mode', () => {
   test('Portal V2: the QR frame opts out, so the code still scans', async ({
     page,
   }) => {
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await assertEmulated(page);
 
     // The frame only appears mid-MFA-setup, which needs a session and several steps, so the

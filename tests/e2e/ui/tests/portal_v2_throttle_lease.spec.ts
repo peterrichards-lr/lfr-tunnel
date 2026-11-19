@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * The Throttle action on Registered Subdomains (#1629).
@@ -16,13 +17,13 @@ const adminEmail = 'admin@lfr-demo.local';
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 // A reservation with a matching live lease, so the Throttle button is enabled.
@@ -92,7 +93,7 @@ test.describe('V2 Throttle posts a request the server can actually serve', () =>
     });
 
     await loginV2(page);
-    await page.goto('/portalv2/admin/subdomains');
+    await page.goto(`${V2}/admin/subdomains`);
     await expect(page.getByText('demo.lfr-demo.local')).toBeVisible();
 
     await page
@@ -134,7 +135,7 @@ test.describe('V2 Throttle posts a request the server can actually serve', () =>
     });
 
     await loginV2(page);
-    await page.goto('/portalv2/admin/subdomains');
+    await page.goto(`${V2}/admin/subdomains`);
     await expect(page.getByText('demo.lfr-demo.local')).toBeVisible();
 
     await page

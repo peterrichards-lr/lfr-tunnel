@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 // which is the difference between "the card did not render" and "the card threw".
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Visitor session-key rotation, in BOTH portal arms (#2196, the portal half of #2184).
@@ -51,25 +52,24 @@ const ROTATE_PATH = '/api/admin/session-secrets/rotate';
 
 async function signInV1(page: Page) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
 async function signInV2(page: Page) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 /**
@@ -131,7 +131,7 @@ test.describe('Visitor session keys, Portal V1', () => {
     // loader wired to the wrong branch -- or to none -- leaves its markup permanently blank on
     // the route the user actually takes, and that has happened four times in this file
     // (#522/#525, #1785, #1995).
-    await page.goto('/portal/system');
+    await page.goto(`${V1}/system`);
 
     const generation = page.locator('#session-keys-current-generation');
     await expect(generation).toBeVisible();
@@ -169,7 +169,7 @@ test.describe('Visitor session keys, Portal V1', () => {
     page,
   }) => {
     await mockAbortedStatus(page);
-    await page.goto('/portal/system');
+    await page.goto(`${V1}/system`);
 
     await expect(page.locator('#session-keys-last-outcome')).toHaveText(
       'Aborted',
@@ -206,7 +206,7 @@ test.describe('Visitor session keys, Portal V1', () => {
   test('rotating asks first, and then shows the outcome the API returned', async ({
     page,
   }) => {
-    await page.goto('/portal/system');
+    await page.goto(`${V1}/system`);
     await expect(
       page.locator('#session-keys-current-generation'),
     ).toBeVisible();
@@ -269,7 +269,7 @@ test.describe('Visitor session keys, Portal V2', () => {
   test('the card is on the settings page, and shows what the API reports', async ({
     page,
   }) => {
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
 
     const generation = page.getByTestId('session-keys-current');
     await expect(generation).toBeVisible();
@@ -300,7 +300,7 @@ test.describe('Visitor session keys, Portal V2', () => {
     page,
   }) => {
     await mockAbortedStatus(page);
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
 
     await expect(page.getByTestId('session-keys-last-outcome')).toHaveText(
       'Aborted',
@@ -329,7 +329,7 @@ test.describe('Visitor session keys, Portal V2', () => {
   test('rotating asks first, and then shows the outcome the API returned', async ({
     page,
   }) => {
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
     await expect(page.getByTestId('session-keys-current')).toBeVisible();
 
     let posted = 0;

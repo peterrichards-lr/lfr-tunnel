@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import ModalShell from './ModalShell';
+import { PORTAL_BASE } from '../portalBase';
 
 /**
  * Keyboard shortcuts, and the overlay that documents them (#1611).
@@ -141,11 +142,9 @@ const GO_TO: Shortcut[] = [
 // V1 never had that bug because it asks the nav element whether it is visible instead of
 // re-stating the role rules. This does the same: one source of truth, and a sidebar link added
 // or gated differently cannot leave a stale entry behind here.
-const PORTAL_BASENAME = '/portalv2';
-
 function isReachable(path: string): boolean {
   const link = document.querySelector<HTMLElement>(
-    `.sidebar a[href="${PORTAL_BASENAME}${path}"]`,
+    `.sidebar a[href="${PORTAL_BASE}${path}"]`,
   );
   // offsetParent is null for a link inside a collapsed or hidden section, so this covers "the
   // sidebar chose not to show it" as well as "it is not rendered at all".

@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * A session that signed in through an identity provider shows the first and last name read-only,
@@ -32,25 +33,13 @@ async function stubNames(page: any, fromProvider: boolean) {
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', userEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(userEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
-}
-
-async function loginV1(page: any) {
-  await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
-  await page.fill('#email-input', userEmail);
-  await page.click('button[type="submit"]');
-  const token = await getMagicLinkToken(userEmail);
-  expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
-  await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('Names from the identity provider', () => {
@@ -69,7 +58,7 @@ test.describe('Names from the identity provider', () => {
     await loginV2(page);
 
     await stubNames(page, true);
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/account`);
     const note = page.getByTestId('names-from-provider-note');
     await expect(note).toBeVisible();
     await expect(note).toContainText(PROVIDER);
@@ -81,36 +70,13 @@ test.describe('Names from the identity provider', () => {
     // CONTROL: without the flag the names are editable and there is no note.
     await page.unroute('**/api/me');
     await stubNames(page, false);
-    await page.goto('/portalv2/dashboard');
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/dashboard`);
+    await page.goto(`${V2}/account`);
     await expect(page.locator('#first-name')).toHaveValue('Nora');
     await expect(page.locator('#first-name')).toBeEditable();
     await expect(page.locator('#last-name')).toBeEditable();
     await expect(page.getByTestId('names-from-provider-note')).toHaveCount(0);
   });
 
-  test('V1: first and last name read-only with a note; preferred name editable', async ({
-    page,
-  }) => {
-    await stubNames(page, true);
-    await loginV1(page);
-    await page.locator('#nav-account').click();
-    const note = page.getByTestId('names-from-provider-note');
-    await expect(note).toBeVisible();
-    await expect(note).toContainText(PROVIDER);
-    await expect(page.locator('#acc-first-name')).toHaveValue('Nora');
-    await expect(page.locator('#acc-first-name')).not.toBeEditable();
-    await expect(page.locator('#acc-last-name')).not.toBeEditable();
-    await expect(page.locator('#acc-preferred-name')).toBeEditable();
-
-    // CONTROL: without the flag the names are editable and the note is hidden.
-    await page.unroute('**/api/me');
-    await stubNames(page, false);
-    await page.goto('/admin');
-    await page.locator('#nav-account').click();
-    await expect(page.locator('#acc-first-name')).toHaveValue('Nora');
-    await expect(page.locator('#acc-first-name')).toBeEditable();
-    await expect(page.locator('#acc-last-name')).toBeEditable();
-    await expect(page.getByTestId('names-from-provider-note')).toBeHidden();
-  });
+  // No V1 test since #2528: V1 serves admins only, and this needs a non-admin account.
 });

@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * The access-control form: mode first, every field visible, only the relevant ones settable
@@ -39,13 +40,13 @@ const RESERVATIONS = [
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 async function stubReservations(page: any) {
@@ -70,8 +71,8 @@ async function stubReservations(page: any) {
 
 async function openAccessControl(page: any) {
   // ReservationsPanel is rendered by the Dashboard, not on a route of its own -- there is no
-  // /portalv2/reservations.
-  await page.goto('/portalv2/dashboard');
+  // /portal/reservations.
+  await page.goto(`${V2}/dashboard`);
   const row = page.locator('tr', { hasText: 'locked' }).first();
   await row.getByRole('button', { name: /Access Control/ }).click();
   await expect(page.getByRole('dialog')).toBeVisible();

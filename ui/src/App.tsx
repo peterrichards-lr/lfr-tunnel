@@ -23,6 +23,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { I18nProvider } from './contexts/I18nContext';
 import { UIProvider } from './contexts/UIContext';
 import { MfaGateProvider } from './contexts/MfaGateContext';
+import { PORTAL_BASE } from './portalBase';
 
 function App() {
   return (
@@ -30,7 +31,7 @@ function App() {
       <I18nProvider>
         <UIProvider>
           <MfaGateProvider>
-            <BrowserRouter basename="/portalv2">
+            <BrowserRouter basename={PORTAL_BASE}>
               <Routes>
                 <Route path="/login" element={<Login />} />
 
@@ -100,6 +101,12 @@ function App() {
 
                 <Route
                   path="/"
+                  element={<Navigate to="/dashboard" replace />}
+                />
+                {/* Anything else under /portal -- a V1 section the server has no mapping for, a
+                    mistyped link -- lands on the dashboard rather than a blank page (#2528). */}
+                <Route
+                  path="*"
                   element={<Navigate to="/dashboard" replace />}
                 />
               </Routes>

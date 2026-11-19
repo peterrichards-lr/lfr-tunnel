@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Registered Subdomains must show when a reservation expires (#1617).
@@ -16,13 +17,13 @@ const adminEmail = 'admin@lfr-demo.local'; // owner in tests/e2e/server-config.y
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 // Stubbed: the test stack holds no reservations, so a real fetch renders an empty table and every
@@ -64,7 +65,7 @@ test.describe('V2 Registered Subdomains expiry', () => {
   test('an Expires column is shown by default', async ({ page }) => {
     await stubSubdomains(page);
     await loginV2(page);
-    await page.goto('/portalv2/admin/subdomains');
+    await page.goto(`${V2}/admin/subdomains`);
 
     // Positive anchor: the table must have rendered, or the column assertions mean nothing.
     await expect(page.getByText('demo.lfr-demo.local')).toBeVisible();
@@ -76,7 +77,7 @@ test.describe('V2 Registered Subdomains expiry', () => {
   test('the dates are readable, not raw ISO strings', async ({ page }) => {
     await stubSubdomains(page);
     await loginV2(page);
-    await page.goto('/portalv2/admin/subdomains');
+    await page.goto(`${V2}/admin/subdomains`);
     await expect(page.getByText('demo.lfr-demo.local')).toBeVisible();
 
     const row = page.locator('tbody tr').first();
@@ -93,7 +94,7 @@ test.describe('V2 Registered Subdomains expiry', () => {
   }) => {
     await stubSubdomains(page);
     await loginV2(page);
-    await page.goto('/portalv2/admin/subdomains');
+    await page.goto(`${V2}/admin/subdomains`);
     await expect(page.getByText('demo.lfr-demo.local')).toBeVisible();
 
     // The request was "the column, or at least the option to add it from the visible columns",

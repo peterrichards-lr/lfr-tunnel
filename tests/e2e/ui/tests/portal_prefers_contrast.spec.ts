@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { V2, signInToV1 } from './utils/portal';
 
 /**
  * prefers-contrast: more (#1521), part 2.
@@ -36,11 +37,21 @@ test.describe('prefers-contrast: more', () => {
   }
 
   for (const [portal, url] of [
-    ['Portal V2', '/portalv2/'],
-    ['Portal V1', '/admin'],
+    ['Portal V2', `${V2}/`],
+    ['Portal V1', ''],
   ] as const) {
     test(`${portal}: muted text is strengthened`, async ({ page }) => {
-      await page.goto(url);
+      if (url) {
+        await page.goto(url);
+      } else {
+        // V1 is served to an admin session only (#2528), so this is the admin's portal and
+        // carries their saved theme -- high-contrast, if an earlier spec left it there, where
+        // this override is already in force. Pinned to the default the signed-out page had.
+        await signInToV1(page);
+        await page.evaluate(() =>
+          document.documentElement.setAttribute('data-theme', 'dark'),
+        );
+      }
       const before = await readMuted(page);
       expect(before, 'the theme tokens did not load at all').toBeTruthy();
 

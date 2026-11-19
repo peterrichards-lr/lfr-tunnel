@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * The second half of a non-admin's custom-domain journey: releasing one gives the quota back
@@ -35,13 +36,13 @@ const nonAdminEmail = `cr${Date.now().toString().slice(-6)}@lfr-demo.local`;
 
 async function loginV2(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('V2 custom-domain release', () => {

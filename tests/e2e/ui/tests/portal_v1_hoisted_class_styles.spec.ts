@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * Portal V1's hoisted class rules (#1752).
@@ -21,13 +22,12 @@ const adminEmail = 'admin@lfr-demo.local'; // owner in tests/e2e/server-config.y
 
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -38,32 +38,8 @@ const styleOf = (locator: any, prop: string) =>
   );
 
 test.describe('Portal V1 hoisted class rules', () => {
-  /**
-   * The regression the buttons hoist could most easily have caused, and the reason
-   * `.login-card .btn` exists. .btn is the login card's own button -- full width, stacked --
-   * and `.btn-secondary, .btn-outline { width: auto }` would otherwise shrink the one variant
-   * button still living there. Asserted against its plain-.btn sibling rather than a pixel
-   * count, so it holds at any viewport.
-   */
-  test('a variant button on the login card is still full width', async ({
-    page,
-  }) => {
-    await page.goto('/admin');
-
-    const plain = page.locator('#btn-show-email'); // .btn
-    const variant = page.locator('#btn-show-register'); // .btn.btn-outline
-    await expect(plain).toBeVisible();
-    await expect(variant).toBeVisible();
-
-    const plainBox = await plain.boundingBox();
-    const variantBox = await variant.boundingBox();
-    expect(plainBox).not.toBeNull();
-    expect(variantBox).not.toBeNull();
-    expect(variantBox!.width).toBeCloseTo(plainBox!.width, 0);
-
-    // And it keeps the stacked rhythm: .btn's 12px, not .btn-secondary/.btn-outline's 0.
-    expect(await styleOf(variant, 'margin-bottom')).toBe('12px');
-  });
+  // V1's login card is no longer reachable (#2528: V1 is served to an admin session only, and
+  // signing in happens in V2), so its `.login-card .btn` rule is no longer asserted here.
 
   /**
    * The other half of the same rule: away from the login card a variant button is inline-sized,

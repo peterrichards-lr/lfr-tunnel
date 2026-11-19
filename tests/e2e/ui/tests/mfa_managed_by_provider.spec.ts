@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * When the identity provider handles MFA, Account Settings says so instead of offering the
@@ -32,25 +33,13 @@ async function stubManaged(page: any, managed: boolean) {
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', userEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(userEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
-}
-
-async function loginV1(page: any) {
-  await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
-  await page.fill('#email-input', userEmail);
-  await page.click('button[type="submit"]');
-  const token = await getMagicLinkToken(userEmail);
-  expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
-  await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('MFA handled by the identity provider', () => {
@@ -69,7 +58,7 @@ test.describe('MFA handled by the identity provider', () => {
     await loginV2(page);
 
     await stubManaged(page, true);
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/account`);
     const notice = page.getByTestId('mfa-managed-notice');
     await expect(notice).toBeVisible();
     await expect(notice).toContainText(PROVIDER);
@@ -80,37 +69,11 @@ test.describe('MFA handled by the identity provider', () => {
     // CONTROL: the same page without the flag offers setup, as today.
     await page.unroute('**/api/me');
     await stubManaged(page, false);
-    await page.goto('/portalv2/dashboard');
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/dashboard`);
+    await page.goto(`${V2}/account`);
     await expect(page.getByRole('button', { name: 'Setup MFA' })).toBeVisible();
     await expect(page.getByTestId('mfa-managed-notice')).toHaveCount(0);
   });
 
-  test('V1: the card names the provider and offers no setup; without the flag it does', async ({
-    page,
-  }) => {
-    await stubManaged(page, true);
-    await loginV1(page);
-    await page.locator('#nav-account').click();
-    const notice = page.getByTestId('mfa-managed-notice');
-    await expect(notice).toBeVisible();
-    await expect(notice).toContainText(PROVIDER);
-    await expect(
-      page
-        .locator('#mfa-status-container')
-        .getByRole('button', { name: 'Enable MFA' }),
-    ).toHaveCount(0);
-
-    // CONTROL: without the flag the card offers to enable MFA, as today.
-    await page.unroute('**/api/me');
-    await stubManaged(page, false);
-    await page.goto('/admin');
-    await page.locator('#nav-account').click();
-    await expect(
-      page
-        .locator('#mfa-status-container')
-        .getByRole('button', { name: 'Enable MFA' }),
-    ).toBeVisible();
-    await expect(page.getByTestId('mfa-managed-notice')).toHaveCount(0);
-  });
+  // No V1 test since #2528: V1 serves admins only, and this needs a non-admin account.
 });

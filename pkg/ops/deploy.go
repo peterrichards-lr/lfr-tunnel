@@ -343,7 +343,7 @@ func verifyPortalV2(host string) error {
 
 func verifyPortalV2At(baseURL string) error {
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/portalv2")
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/portal")
 	if err != nil {
 		// A gateway that cannot be reached at all is already reported by the version check; not
 		// worth failing twice for one problem.
@@ -357,10 +357,10 @@ func verifyPortalV2At(baseURL string) error {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
 	if err == nil && strings.Contains(string(body), "UI not built") {
 		return fmt.Errorf(
-			"the deployed gateway serves 500 for /portalv2: %q.\n"+
+			"the deployed gateway serves 500 for /portal: %q.\n"+
 				"The binary embedded no UI. Run `make build` and deploy again", strings.TrimSpace(string(body)))
 	}
-	return fmt.Errorf("the deployed gateway serves 500 for /portalv2")
+	return fmt.Errorf("the deployed gateway serves 500 for /portal")
 }
 
 func verifyDeployedVersion(host, want string, timeout time.Duration) error {

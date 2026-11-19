@@ -279,14 +279,14 @@ print(h.unescape(m.group(1)) if m else "")
 
 sso_return_location() { sso_callback "$1" "$2"; }
 
-echo "[5b/7] Verifying the callback returns to the portal that started the sign-in..."
+echo "[5b/7] Verifying the callback returns to the portal..."
+# Every sign-in lands on V2 at /portal (#2528). An older V2 page still sends portal=v2, which no
+# longer changes anything, so both arms want the same place.
 V2_RETURN=$(sso_return_location "&portal=v2" v2)
-[ "$V2_RETURN" = "/portalv2/dashboard" ] || fail "A sign-in started from Portal V2 returned to '${V2_RETURN}', want /portalv2/dashboard"
-# Control: the same flow without portal=v2 still returns to V1, so the value above is the
-# parameter's doing and not a changed default.
-V1_RETURN=$(sso_return_location "" v1)
-[ "$V1_RETURN" = "/" ] || fail "A sign-in started from Portal V1 returned to '${V1_RETURN}', want /"
-echo "  ✅ V2 sign-in returned to /portalv2/dashboard; V1 sign-in returned to /"
+[ "$V2_RETURN" = "/portal/dashboard" ] || fail "A sign-in sent with portal=v2 returned to '${V2_RETURN}', want /portal/dashboard"
+PLAIN_RETURN=$(sso_return_location "" v1)
+[ "$PLAIN_RETURN" = "/portal/dashboard" ] || fail "A plain sign-in returned to '${PLAIN_RETURN}', want /portal/dashboard"
+echo "  ✅ Both sign-ins returned to /portal/dashboard"
 
 # ── Step 5c: An email the identity provider has not verified does not sign in ─
 # #2451: email_verified was parsed and ignored. Keycloak issues this user's ID token with

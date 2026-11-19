@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * All Time actually means all time, in both portals (#1565).
@@ -18,14 +19,14 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 test.describe('All Time analytics range', () => {
   test('V2 asks for days=0, not for nothing', async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/admin/analytics');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/admin/analytics`);
     await expect(
       page.getByRole('heading', { name: /Analytics/i }),
     ).toBeVisible();
@@ -41,12 +42,11 @@ test.describe('All Time analytics range', () => {
     page,
   }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();

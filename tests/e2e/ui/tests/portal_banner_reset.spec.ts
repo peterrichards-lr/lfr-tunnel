@@ -1,38 +1,27 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, V1, openV1 } from './utils/portal';
 
 /**
- * The promo banner can be turned back on from Account Settings, in both portals (#1626).
+ * V1's promo banner can be turned back on from Account Settings (#1626).
  *
  * Dismissing it wrote its localStorage key with no expiry and nothing in the UI could clear it
  * again. That became load-bearing when #1622 removed the Classic Dashboard link from the V2
  * sidebar and left the banner as the only in-app route back to V1.
  *
- * Note the two portals use DIFFERENT keys -- V1's banner promotes V2 (`v2_promo_dismissed`) and
- * V2's promotes V1 (`v1_promo_dismissed`) -- so each arm is asserted against its own.
+ * V1's banner promotes V2 (`v2_promo_dismissed`). V2 no longer has a banner of its own, nor the
+ * setting to restore it (#2528): admins reach V1 from the Admin Zone, and nobody else reaches it.
  */
 const adminEmail = 'admin@lfr-demo.local';
 
-async function loginV2(page: any) {
-  await clearMailpit();
-  await page.goto('/portalv2/');
-  await page.fill('#email-input', adminEmail);
-  await page.click('button[type="submit"]');
-  const token = await getMagicLinkToken(adminEmail);
-  expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
-}
-
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -47,43 +36,6 @@ async function flipToggle(page: any, inputSelector: string) {
 }
 
 test.describe('Promo banner can be restored from Account Settings', () => {
-  test('V2: dismiss, then switch it back on', async ({ page }) => {
-    await loginV2(page);
-
-    const banner = page.getByRole('link', { name: /Switch back to V1/i });
-    await expect(banner).toBeVisible();
-
-    await page.getByRole('button', { name: /Dismiss promo banner/i }).click();
-    await expect(banner).toHaveCount(0);
-
-    await page.goto('/portalv2/account');
-    const toggle = page.locator('#portal-banner-toggle');
-    // Positive anchor: the control has to exist and reflect the dismissal, or "turning it on"
-    // proves nothing. Attached rather than visible -- see flipToggle above.
-    await expect(toggle).toBeAttached();
-    await expect(toggle).not.toBeChecked();
-
-    await flipToggle(page, '#portal-banner-toggle');
-    await expect(toggle).toBeChecked();
-    await page.goto('/portalv2/dashboard');
-    await expect(banner).toBeVisible();
-  });
-
-  test('V2: the preference survives a reload', async ({ page }) => {
-    await loginV2(page);
-    await page.getByRole('button', { name: /Dismiss promo banner/i }).click();
-    await page.reload();
-    // Without persistence this passes trivially on first load, so the reload is the point.
-    await expect(
-      page.getByRole('link', { name: /Switch back to V1/i }),
-    ).toHaveCount(0);
-
-    await page.goto('/portalv2/account');
-    await flipToggle(page, '#portal-banner-toggle');
-    await page.reload();
-    await expect(page.locator('#portal-banner-toggle')).toBeChecked();
-  });
-
   test('V1: dismiss, then switch it back on', async ({ page }) => {
     await loginV1(page);
 
@@ -114,7 +66,7 @@ test.describe('Promo banner can be restored from Account Settings', () => {
 
     // Navigate rather than reload -- the login URL carries a one-time token, and reloading it
     // re-runs the magic-link exchange instead of restoring the session.
-    await page.goto('/admin');
+    await page.goto(V1);
     await expect(page.locator('#v2-promo-banner')).toBeHidden();
 
     await page.locator('#nav-account').click();

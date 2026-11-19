@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 form labelling (#1584).
@@ -35,13 +36,12 @@ const SECTIONS = [
 test.describe('Portal V1 form labels', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -52,7 +52,7 @@ test.describe('Portal V1 form labels', () => {
     let examined = 0;
 
     for (const section of SECTIONS) {
-      await page.goto(`/admin/${section}`);
+      await page.goto(`${V1}/${section}`);
       await page.waitForTimeout(600);
 
       const result = await page.evaluate((sec) => {
@@ -107,7 +107,7 @@ test.describe('Portal V1 form labels', () => {
   // box it creates with exactly this call, so asking it directly covers all four panels
   // instead of whichever happened to have rows today.
   test('search boxes on one page are named distinctly', async ({ page }) => {
-    await page.goto('/admin/analytics');
+    await page.goto(`${V1}/analytics`);
     await page.waitForTimeout(800);
 
     const names = await page.evaluate(() => {

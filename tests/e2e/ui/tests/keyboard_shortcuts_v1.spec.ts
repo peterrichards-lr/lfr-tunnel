@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 keyboard shortcuts (#1611), matching the set V2 gained in #1613.
@@ -11,13 +12,12 @@ const adminEmail = 'admin@lfr-demo.local'; // owner in tests/e2e/server-config.y
 
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -48,7 +48,7 @@ test.describe('V1 keyboard shortcuts', () => {
     await page.keyboard.press('g');
     await page.keyboard.press('u');
     await expect(page.locator('#tab-users')).toBeVisible();
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/users$`));
   });
 
   test('shortcuts are inert while typing', async ({ page }) => {

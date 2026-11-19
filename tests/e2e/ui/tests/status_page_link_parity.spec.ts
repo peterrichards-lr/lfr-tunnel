@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * The status-page link, in both portals (#1559).
@@ -35,12 +36,12 @@ test.describe('Status page link parity', () => {
   test('V2 links the header indicator when configured', async ({ page }) => {
     await stubStatusUrl(page, STATUS_URL);
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
     // The status link moved to the page header and is labelled "System Online" (#1603); the
     // footer copy was removed as a duplicate.
@@ -57,12 +58,12 @@ test.describe('Status page link parity', () => {
   }) => {
     // The test stack leaves status_page_url empty, so this is the unstubbed behaviour.
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
     // Positive anchor first, or this passes on a page that rendered nothing.
     await expect(
@@ -85,12 +86,11 @@ test.describe('Status page link parity', () => {
     page,
   }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -109,12 +109,11 @@ test.describe('Status page link parity', () => {
   test('V1 shows it when configured', async ({ page }) => {
     await stubStatusUrl(page, STATUS_URL);
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();

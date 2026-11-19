@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * The Block IP button must line up with the inputs beside it (#1627).
@@ -14,19 +15,19 @@ const adminEmail = 'admin@lfr-demo.local';
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('V2 Block IP form alignment', () => {
   test('the button and the inputs share a bottom edge', async ({ page }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/blacklist');
+    await page.goto(`${V2}/admin/blacklist`);
 
     const ip = page.locator('#ip-address');
     const reason = page.locator('#reason');
@@ -56,7 +57,7 @@ test.describe('V2 Block IP form alignment', () => {
 
   test('the controls are the same height as each other', async ({ page }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/blacklist');
+    await page.goto(`${V2}/admin/blacklist`);
 
     const ip = page.locator('#ip-address');
     const button = page.getByRole('button', { name: /Block IP/i });

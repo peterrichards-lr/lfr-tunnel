@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * Diagnostic log sharing consent, in both portals (#1696).
@@ -27,25 +28,13 @@ const userEmail = `dc${Date.now().toString().slice(-6)}@lfr-demo.local`;
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', userEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(userEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
-}
-
-async function loginV1(page: any) {
-  await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
-  await page.fill('#email-input', userEmail);
-  await page.click('button[type="submit"]');
-  const token = await getMagicLinkToken(userEmail);
-  expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
-  await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 // The native checkbox in a .toggle-switch is opacity:0 / width:0 / height:0 -- visually replaced
@@ -72,7 +61,7 @@ test.describe('Diagnostic log sharing consent', () => {
     page,
   }) => {
     await loginV2(page);
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/account`);
 
     const toggle = page.locator('#diagnostics-consent');
     // Anchor on something that must be present before asserting the absence of a tick --
@@ -85,41 +74,17 @@ test.describe('Diagnostic log sharing consent', () => {
 
     // Leave and come back. The switch can only still be on if the POST was accepted and the
     // gateway stored it -- this is the assertion that the immediate-apply path actually works.
-    await page.goto('/portalv2/dashboard');
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/dashboard`);
+    await page.goto(`${V2}/account`);
     await expect(page.locator('#diagnostics-consent')).toBeChecked();
 
     // And withdrawing has to work the same way round, which is the direction that matters.
     await flipToggle(page, '#diagnostics-consent');
     await expect(page.locator('#diagnostics-consent')).not.toBeChecked();
-    await page.goto('/portalv2/dashboard');
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/dashboard`);
+    await page.goto(`${V2}/account`);
     await expect(page.locator('#diagnostics-consent')).not.toBeChecked();
   });
 
-  test('V1: the same control exists and behaves the same way', async ({
-    page,
-  }) => {
-    await loginV1(page);
-    await page.locator('#nav-account').click();
-
-    const toggle = page.locator('#acc-diagnostics-consent');
-    await expect(toggle).toHaveCount(1);
-    await expect(toggle).not.toBeChecked();
-
-    await flipToggle(page, '#acc-diagnostics-consent');
-    await expect(toggle).toBeChecked();
-
-    // Navigate rather than reload: the login URL carries a one-time token, and reloading it
-    // re-runs the magic-link exchange instead of restoring the session.
-    await page.goto('/admin');
-    await page.locator('#nav-account').click();
-    await expect(page.locator('#acc-diagnostics-consent')).toBeChecked();
-
-    await flipToggle(page, '#acc-diagnostics-consent');
-    await expect(page.locator('#acc-diagnostics-consent')).not.toBeChecked();
-    await page.goto('/admin');
-    await page.locator('#nav-account').click();
-    await expect(page.locator('#acc-diagnostics-consent')).not.toBeChecked();
-  });
+  // No V1 test since #2528: V1 serves admins only, and this needs a non-admin account.
 });

@@ -1,8 +1,9 @@
 package server
 
-// PortalV2Base is where the V2 single-page app is mounted (`BrowserRouter basename` in
-// ui/src/App.tsx). The paths in PortalV1SectionToV2 are relative to it.
-const PortalV2Base = "/portalv2"
+// PortalV2Base is where the V2 single-page app is mounted: PORTAL_BASE in ui/src/portalBase.ts,
+// which the router's basename and Vite's base both read. The paths in PortalV1SectionToV2 are
+// relative to it. V2 moved here from /portalv2 in #2528.
+const PortalV2Base = "/portal"
 
 // v1SectionSystem is V1's System Settings section. Named only because "system" is also an
 // audit target type elsewhere in this package, and goconst counts the two together.
@@ -50,4 +51,19 @@ var PortalV1SectionToV2 = map[string]string{
 	"backups":        "/admin/backups",
 	"maintenance":    "/admin/maintenance",
 	v1SectionSystem:  "/admin/settings",
+}
+
+// v1SectionRedirect returns the V2 URL path for an old V1 section link, `/portal/<section>` or
+// `/admin/<section>` (#2528), or "" when the section is not one V1 had.
+//
+// The table maps by section alone. In V1 an admin's Tokens tab also held Token Permanence
+// Requests and Reservations held Extension Requests; their old links land on the personal
+// sections, which is where everyone else's go, and the admin queues are one click away in V2's
+// Admin Zone.
+func v1SectionRedirect(section string) string {
+	target, ok := PortalV1SectionToV2[section]
+	if !ok {
+		return ""
+	}
+	return PortalV2Base + target
 }

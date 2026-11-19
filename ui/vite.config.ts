@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { PORTAL_BASE } from './src/portalBase.ts';
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/portalv2/',
+  base: `${PORTAL_BASE}/`,
   server: {
     proxy: {
       '/api': {

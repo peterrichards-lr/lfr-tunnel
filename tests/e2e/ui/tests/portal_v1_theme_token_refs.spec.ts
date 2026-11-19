@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, V1, openV1 } from './utils/portal';
 
 /**
  * Portal V1's inline styles referenced four custom properties no theme defines (#1774):
@@ -32,13 +33,12 @@ const THEMES = ['dark', 'light', 'liferay', 'high-contrast'] as const;
 
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -367,7 +367,9 @@ test.describe('Portal V1 inline theme-token references (#1774)', () => {
   test('no undefined token name survives in the served assets', async ({
     page,
   }) => {
-    for (const path of ['/admin', '/static/dashboard.js']) {
+    // V1's document is served to an admin session only (#2528).
+    await loginV1(page);
+    for (const path of [V1, '/static/dashboard.js']) {
       const raw = await (await page.request.get(path)).text();
       expect(raw.length, `${path} served nothing`).toBeGreaterThan(1000);
 

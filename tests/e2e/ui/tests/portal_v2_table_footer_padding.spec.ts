@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * The table footer must be inset like the toolbar above it (#1651).
@@ -15,13 +16,13 @@ const adminEmail = 'admin@lfr-demo.local';
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('V2 table footer padding', () => {
@@ -29,7 +30,7 @@ test.describe('V2 table footer padding', () => {
     page,
   }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/users');
+    await page.goto(`${V2}/admin/users`);
 
     const card = page.locator('.card.p-0').first();
     const toolbar = card.locator('.p-md.border-b').first();
@@ -65,7 +66,7 @@ test.describe('V2 table footer padding', () => {
     page,
   }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/users');
+    await page.goto(`${V2}/admin/users`);
 
     const card = page.locator('.card.p-0').first();
     const pagination = card.locator('.pagination-row').first();

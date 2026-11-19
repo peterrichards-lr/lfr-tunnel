@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * Analytics PDF export, both portals (#2430).
@@ -15,24 +16,23 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 async function loginV2(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 async function loginV1(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -52,7 +52,7 @@ async function waitForPortraitChart(page: any, portal: string, canvas: any) {
 
 async function openV2Analytics(page: any) {
   await loginV2(page, adminEmail);
-  await page.goto('/portalv2/admin/analytics');
+  await page.goto(`${V2}/admin/analytics`);
   await waitForPortraitChart(
     page,
     'v2',
@@ -208,18 +208,12 @@ test.describe('Personal usage with no traffic', () => {
 
   test('V2 says so instead of a bare heading', async ({ page }) => {
     await loginV2(page, email);
-    await page.goto('/portalv2/analytics');
+    await page.goto(`${V2}/analytics`);
     await expect(
       page.getByRole('heading', { name: 'Personal Usage' }),
     ).toBeVisible();
     await expect(page.getByTestId('personal-usage-empty')).toBeVisible();
   });
 
-  test('V1 says so instead of two empty cards', async ({ page }) => {
-    await loginV1(page, email);
-    await page.click('#nav-analytics-personal');
-    await expect(page.locator('#tab-analytics')).toBeVisible();
-    await expect(page.getByTestId('personal-usage-empty')).toBeVisible();
-    await expect(page.locator('#my-usage-grid')).toBeHidden();
-  });
+  // No V1 half since #2528: V1 serves admins only, and this case needs a fresh non-admin.
 });

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Per-alert Email and Slack toggles, both portals (#2445).
@@ -86,14 +87,14 @@ async function labelsByKey(page: Page): Promise<Record<string, string>> {
 test.describe('Alert destinations — Portal V2', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/admin/settings`);
     await expect(page.getByTestId('alert-settings-grid')).toBeVisible();
   });
 
@@ -137,17 +138,16 @@ test.describe('Alert destinations — Portal V2', () => {
 test.describe('Alert destinations — Portal V1', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
-    await page.goto('/portal/system');
+    await page.goto(`${V1}/system`);
   });
 
   test('every alert has an Email and a Slack toggle, matching the gateway', async ({

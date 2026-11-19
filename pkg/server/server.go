@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"io/fs"
 	"log"
 	"log/slog"
 	mathrand "math/rand"
@@ -1066,7 +1065,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			isRootChainPath := p == "/" || p == "/admin" || p == "/portal" ||
 				p == "/favicon.ico" || p == "/robots.txt" ||
 				p == "/portal/" || p == "/admin/" || p == "/setup/" || p == "/privacy/" || p == "/cookies/" ||
-				strings.HasPrefix(p, "/portalv2")
+				strings.HasPrefix(p, "/portalv2") || strings.HasPrefix(p, PortalV2Base+"/") ||
+				strings.HasPrefix(p, "/admin/") || s.isClassicPortalPath(p)
 			if isRootChainPath {
 				w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 				w.WriteHeader(http.StatusNoContent)
@@ -1084,32 +1084,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
 				return
-			}
-
-			// Portal V1 now routes on the PATH, so /portal/users is a real route serving the
-			// portal document, and the address bar keeps that path (#1513).
-			//
-			// #1477 answered this with a 302 to /portal#users, which fixed the reported bug --
-			// the path used to fall through to the data-plane ProxyHandler and answer with the
-			// "Developer Environment Offline" page (#1215) -- but left V1 handing out fragment
-			// links where V2 hands out paths. Under an A/B test that is a parity gap: someone
-			// comparing the two portals sees them produce different kinds of link. That 302 was
-			// deliberately Found rather than MovedPermanently so this change would not have to
-			// fight browsers' aggressively cached 301s, and that is now the reason it works.
-			//
-			// Served rather than enumerated: the server does NOT know which sections exist. The
-			// valid set is read from the DOM by showTab (see dashboard.js), so a section added
-			// or renamed in the markup cannot drift out of sync with a list kept here. An
-			// unknown section is normalised client-side to the overview, exactly as an unknown
-			// fragment already was. This mirrors how /portalv2 is served below.
-			//
-			// "/portalv2/..." does not match "/portal/" -- the character after "portal" is "v",
-			// not "/" -- so the V2 SPA is untouched.
-			for _, base := range []string{"/portal", "/admin"} {
-				if strings.HasPrefix(p, base+"/") {
-					s.serveDashboardHTML(w, r)
-					return
-				}
 			}
 		}
 
@@ -1822,74 +1796,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
-			s.serveDashboardHTML(w, r)
-			return
-		}
-
-		// Catch-all SPA routing for Control Plane GET requests under /portalv2
-		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.HasPrefix(r.URL.Path, "/portalv2") {
-			subFS, err := fs.Sub(uiDistFS, "ui-dist")
-			if err == nil {
-				// ui-dist is generated and no longer committed (#1196), so a binary built
-				// with a bare `go build` embeds only the .gitkeep placeholder. Without this
-				// the SPA fallback below would ask for an index.html that isn't there and
-				// return a bare 404, which reads as a routing bug rather than a missing
-				// build step.
-				if _, statErr := fs.Stat(subFS, "index.html"); statErr != nil {
-					http.Error(w, "UI not built. Run 'make build' first.", http.StatusInternalServerError)
-					return
-				}
-
-				cleanPath := strings.TrimPrefix(r.URL.Path, "/portalv2")
-				cleanPath = strings.TrimPrefix(cleanPath, "/")
-				if cleanPath == "" {
-					cleanPath = "index.html"
-				}
-
-				// Check if the file exists in the embedded FS
-				f, err := subFS.Open(cleanPath)
-				if err != nil {
-					// SPA Fallback: Serve index.html for client-side routing
-					r.URL.Path = "/portalv2/"
-					cleanPath = "index.html"
-				} else {
-					_ = f.Close() //nolint:errcheck
-				}
-
-				if strings.HasSuffix(cleanPath, ".html") || cleanPath == "index.html" {
-					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-				}
-
-				// The SPA shell is served with its root element rewritten to the resolved locale
-				// (#2271), the same contract V1 gets in serveDashboardHTML and /privacy has had
-				// since #1954. Every other file under ui-dist is a hashed asset and goes through
-				// the FileServer below untouched.
-				//
-				// Written directly rather than through http.ServeContent because the body is no
-				// longer the file: its length and modification time no longer describe what is on
-				// the wire, and a Last-Modified/ETag derived from the embedded file would let a
-				// cache serve one visitor's locale to the next. The no-store header above is
-				// already set for exactly this document.
-				if cleanPath == "index.html" {
-					if shell, readErr := fs.ReadFile(subFS, "index.html"); readErr == nil {
-						lang := s.ResolveLocale(r)
-						w.Header().Set("Content-Type", "text/html; charset=utf-8")
-						w.Header().Set("Vary", "Accept-Language")
-						w.WriteHeader(http.StatusOK)
-						if _, err := w.Write([]byte(withDocumentLocale(string(shell), lang, GetDirection(lang)))); err != nil {
-							log.Printf("[Warning] Failed to write response: %v", err)
-						}
-						return
-					}
-				}
-
-				// Use StripPrefix to strip /portalv2 from the request path before serving from subFS
-				http.StripPrefix("/portalv2", http.FileServer(http.FS(subFS))).ServeHTTP(w, r)
-				return
-			}
-
-			http.Error(w, "UI not built. Run 'make build' first.", http.StatusInternalServerError)
+		// Every portal page: V2 at /portal, V1 for admins at classic_portal_path, and the
+		// redirects from every older entry point (#2528).
+		if s.routePortalPage(w, r) {
 			return
 		}
 	}
@@ -2398,7 +2307,7 @@ func (s *Server) respondRegisterResponse(w http.ResponseWriter, status int, r *h
 	if resp.PortalURL == "" {
 		portalURL := s.cfg.PortalURL
 		if portalURL == "" {
-			portalURL = s.getPortalBaseURL(r) + "/portal"
+			portalURL = s.getPortalBaseURL(r) + PortalV2Base
 		}
 		resp.PortalURL = portalURL
 	}
@@ -4311,12 +4220,9 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
 			scheme = "http"
 		}
-		var link string
-		if strings.Contains(r.Referer(), "/portalv2") {
-			link = fmt.Sprintf("%s://%s/portalv2/login?token=%s&lang=%s", scheme, host, magicToken, lang)
-		} else {
-			link = fmt.Sprintf("%s://%s/portal?token=%s&lang=%s", scheme, host, magicToken, lang)
-		}
+		// V2's sign-in page, whichever page asked: V1 is admin-only and is reached from V2 once
+		// signed in (#2528).
+		link := fmt.Sprintf("%s://%s%s/login?token=%s&lang=%s", scheme, host, PortalV2Base, magicToken, lang)
 		// A sign-in started by `lfr-tunnel login` keeps its marker through the email, so the portal
 		// can still ask for a token once the link signs the user in (#2459). A fixed value, never
 		// anything the request supplied.
@@ -6497,7 +6403,7 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 		return
 	}
 
-	portalURL := s.getPortalBaseURL(r) + "/portal"
+	portalURL := s.getPortalBaseURL(r) + PortalV2Base
 
 	htmlContent := string(htmlBytes)
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.Host}}", html.EscapeString(host))

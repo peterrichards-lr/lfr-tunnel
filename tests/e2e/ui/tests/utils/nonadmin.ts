@@ -19,7 +19,7 @@ const MAILPIT = 'http://localhost:8025';
 const ADMIN_EMAIL = 'admin@lfr-demo.local';
 
 /** The login link both portals put in a magic-link mail. Nothing else in the inbox looks like it. */
-const MAGIC_LINK = /\/portal(?:v2\/login)?\?token=([a-zA-Z0-9]+)/;
+const MAGIC_LINK = /\/portal\/login\?token=([a-zA-Z0-9]+)/;
 
 /** Every message Mailpit is holding right now. Anything absent from this set arrived later. */
 async function mailpitMessageIDs(ctx: APIRequestContext): Promise<Set<string>> {

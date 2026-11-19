@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Portal V1 View As bar placement (#1289).
@@ -22,15 +23,14 @@ test.describe('Portal V1 View As bar placement', () => {
       window.localStorage.setItem('v2_promo_dismissed', 'true');
     });
 
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', ownerEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(ownerEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -83,7 +83,7 @@ test.describe('Portal V1 View As bar placement', () => {
 
     // Hiding a link is not access control: the hash is still typeable. The panel must not
     // render either.
-    await page.goto('/admin#system');
+    await page.goto(`${V1}#system`);
     await expect(page.locator('#tab-system')).toBeHidden();
 
     await page.click('#view-as-bar button:has-text("Exit preview")');

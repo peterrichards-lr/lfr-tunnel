@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * `<html lang>` follows the chosen locale, in BOTH portal arms (#2262).
@@ -41,17 +42,17 @@ declare function changePortalLanguage(
 test.describe('Portal V1 declares its locale on <html lang>', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
+    await page.goto(`${V2}/login`);
     // The context is shared, and `lfr_lang` outranks everything else in init()'s precedence —
     // so a preference left behind by an earlier spec would decide this one's baseline. Pinned
     // rather than removed, because removing it falls back to Accept-Language negotiation.
     await page.evaluate(() => localStorage.setItem('lfr_lang', 'en'));
-    await page.click('#btn-show-email');
+
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -161,16 +162,16 @@ test.describe('Portal V1 declares its locale on <html lang>', () => {
 test.describe('Portal V2 declares its locale on <html lang>', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     // Same reason as V1: the shared context carries `lfr_lang` between specs.
     await page.evaluate(() => localStorage.setItem('lfr_lang', 'en'));
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/account');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/account`);
     await expect(page.locator('#language')).toBeVisible();
   });
 

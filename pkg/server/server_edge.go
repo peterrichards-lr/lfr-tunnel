@@ -517,7 +517,7 @@ func (s *Server) checkExpiringReservations() {
 
 		lang := user.LanguagePreference
 		baseURL := s.getPortalBaseURL(nil)
-		portalLink := baseURL + "/portal"
+		portalLink := baseURL + PortalV2Base
 
 		if res.ExpiresAt != nil && res.ExpiresAt.Before(now) {
 			// Stage 2: Already expired and quarantined

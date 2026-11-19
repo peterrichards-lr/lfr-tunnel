@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Choosing the geo-IP vendor from System Settings, both portals (#1995).
@@ -45,14 +46,14 @@ const DBIP = { value: 'dbip', host: 'db-ip.com' };
 test.describe('Geo-IP vendor selection — Portal V2', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/admin/settings`);
   });
 
   test('the vendors are a dropdown, offered by the gateway, with a not-set option', async ({
@@ -175,17 +176,16 @@ test.describe('Geo-IP vendor selection — Portal V2', () => {
 test.describe('Geo-IP vendor selection — Portal V1', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
-    await page.goto('/portal/system');
+    await page.goto(`${V1}/system`);
   });
 
   test('the vendors are a dropdown, offered by the gateway, with a not-set option', async ({

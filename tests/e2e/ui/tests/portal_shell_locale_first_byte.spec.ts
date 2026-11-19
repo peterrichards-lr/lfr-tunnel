@@ -1,4 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { V2 } from './utils/portal';
 
 /**
  * The portal shells declare their locale in the FIRST BYTES, before any bundle runs (#2271).
@@ -31,8 +32,7 @@ import { test, expect, APIRequestContext } from '@playwright/test';
  * It creates no data and signs nothing in, so it has no §4 fixture obligations.
  */
 
-const V1_ROUTES = ['/admin', '/portal', '/admin/users'];
-const V2_ROUTES = ['/portalv2/', '/portalv2/dashboard'];
+const V2_ROUTES = [`${V2}/`, `${V2}/dashboard`];
 
 /** The opening root element tag of a document, whatever attributes it carries. */
 function rootElementTag(body: string): string {
@@ -61,10 +61,8 @@ async function expectShellDeclares(
   expect(res.status(), `GET ${path}`).toBe(200);
   const body = await res.text();
 
-  // Anchor. Written by the server for this document and by nothing else in either arm.
-  const marker = path.startsWith('/portalv2')
-    ? '<div id="root">'
-    : '/static/dashboard.js?v=';
+  // Anchor. Written by the server for this document and by nothing else.
+  const marker = '<div id="root">';
   expect(
     body,
     `GET ${path} did not return the portal shell, so the attribute assertions below would be meaningless`,
@@ -80,14 +78,8 @@ async function expectShellDeclares(
 }
 
 test.describe('the served shell declares its locale before any script runs', () => {
-  for (const path of V1_ROUTES) {
-    test(`V1 ${path} honours ?lang=`, async ({ request }) => {
-      await expectShellDeclares(request, `${path}?lang=ar`, {
-        lang: 'ar',
-        dir: 'rtl',
-      });
-    });
-  }
+  // V1 is served to an admin session only since #2528, so its shell is asserted in Go, with a
+  // session (TestPortalShellsDeclareTheResolvedLocale); this request context has none.
 
   for (const path of V2_ROUTES) {
     test(`V2 ${path} honours ?lang=`, async ({ request }) => {
@@ -101,23 +93,10 @@ test.describe('the served shell declares its locale before any script runs', () 
     });
   }
 
-  test('V1 honours Accept-Language for a visitor who has chosen nothing', async ({
-    request,
-  }) => {
-    // The only signal the server has on a first visit. `?lang=` alone passing would leave every
-    // first-time RTL visitor with an LTR first paint, which is the half of this the client-side
-    // fix in #2262 could never cover.
-    await expectShellDeclares(request, '/', {
-      lang: 'ja',
-      dir: 'ltr',
-      headers: { 'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8' },
-    });
-  });
-
   test('V2 honours Accept-Language for a visitor who has chosen nothing', async ({
     request,
   }) => {
-    await expectShellDeclares(request, '/portalv2/', {
+    await expectShellDeclares(request, `${V2}/`, {
       lang: 'ar',
       dir: 'rtl',
       headers: { 'Accept-Language': 'ar-EG,ar;q=0.9,en;q=0.8' },
@@ -133,11 +112,7 @@ test.describe('the served shell declares its locale before any script runs', () 
     // V2 seeds the shared `lfr_lang` preference from navigator.language, so `it` arrives from a
     // browser nobody configured; the server answers an unsupported locale with the English
     // bundle, and declaring Italian over English prose would be worse than declaring nothing.
-    await expectShellDeclares(request, '/admin?lang=it', {
-      lang: 'en',
-      dir: 'ltr',
-    });
-    await expectShellDeclares(request, '/portalv2/?lang=it', {
+    await expectShellDeclares(request, `${V2}/?lang=it`, {
       lang: 'en',
       dir: 'ltr',
     });
@@ -149,7 +124,7 @@ test.describe('the served shell declares its locale before any script runs', () 
     // The document now depends on a request header, so a cache keyed on the URL alone may hand
     // the first visitor's locale to the next. `?lang=` is already part of that key;
     // Accept-Language is not, which is what `Vary` is for.
-    for (const path of ['/admin', '/portalv2/']) {
+    for (const path of [`${V2}/`]) {
       const res = await request.get(path);
       expect(res.headers()['vary'], `Vary on ${path}`).toContain(
         'Accept-Language',
@@ -159,7 +134,7 @@ test.describe('the served shell declares its locale before any script runs', () 
     // V2's shell used to be served by http.FileServer, whose Last-Modified/ETag describe the
     // FILE — validators that would now be lying about a body the server rewrites per request. A
     // revert to ServeContent brings them back, and this is what notices.
-    const v2 = await request.get('/portalv2/');
-    expect(v2.headers()['etag'], 'ETag on /portalv2/').toBeUndefined();
+    const v2 = await request.get(`${V2}/`);
+    expect(v2.headers()['etag'], `ETag on ${V2}/`).toBeUndefined();
   });
 });

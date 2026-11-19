@@ -234,7 +234,17 @@ type ServerConfig struct {
 	SecureTokenGuideURL     string        `yaml:"secure_token_guide_url"`
 	DockerHubURL            string        `yaml:"docker_hub_url"`
 	StatusPageURL           string        `yaml:"status_page_url"`
-	PruneInterval           time.Duration `yaml:"prune_interval"`
+
+	// ClassicPortalPath is where Portal V1 is served, and only to admins (#2528). V2 is the
+	// portal at /portal; V1 stays as a fallback for admins in case V2 missed something. The
+	// path is unadvertised and given to admins alone through /api/me, so nobody else lands on
+	// a portal that is no longer maintained -- but it is not the control: every request for it
+	// is checked for an admin session, and anyone else is redirected to /portal.
+	//
+	// One path segment, such as "/classic-7f3k9q2m". Empty means V1 is not served at all.
+	ClassicPortalPath string `yaml:"classic_portal_path"`
+
+	PruneInterval time.Duration `yaml:"prune_interval"`
 
 	// WatchdogSpoolPath is where scripts/common/gateway-watchdog.sh records the services it
 	// restarted, so the gateway can forward them to the owner once it is back up (#1875). Empty
@@ -1249,8 +1259,44 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if err := validateSSOProviders(cfg); err != nil {
 		return nil, err
 	}
+	if err := validateClassicPortalPath(cfg); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
+}
+
+// classicPortalPathMinLength keeps the classic portal's path from being a word someone would try,
+// and, as a side effect, off every exact path the gateway already routes (all shorter).
+const classicPortalPathMinLength = 12
+
+// classicPortalPathRoutedPrefix is the one prefix the gateway routes without a following slash:
+// anything beginning /tunnel goes to the tunnel handler before a portal page is considered, so a
+// classic portal there would be advertised to admins and never reached.
+const classicPortalPathRoutedPrefix = "tunnel"
+
+// validateClassicPortalPath normalises classic_portal_path to "/<segment>" and refuses one that
+// is not a single, long segment (#2528).
+func validateClassicPortalPath(cfg *ServerConfig) error {
+	p := strings.TrimSpace(cfg.ClassicPortalPath)
+	p = strings.TrimSuffix(strings.TrimPrefix(p, "/"), "/")
+	if p == "" {
+		cfg.ClassicPortalPath = ""
+		return nil
+	}
+	for _, c := range p {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			return fmt.Errorf("classic_portal_path %q: use one path segment of letters, digits, '-' and '_'", cfg.ClassicPortalPath)
+		}
+	}
+	if len(p) < classicPortalPathMinLength {
+		return fmt.Errorf("classic_portal_path %q: use at least %d characters, so the path cannot be guessed", cfg.ClassicPortalPath, classicPortalPathMinLength)
+	}
+	if strings.HasPrefix(p, classicPortalPathRoutedPrefix) {
+		return fmt.Errorf("classic_portal_path %q: paths beginning /%s belong to the tunnel handler", cfg.ClassicPortalPath, classicPortalPathRoutedPrefix)
+	}
+	cfg.ClassicPortalPath = "/" + p
+	return nil
 }
 
 // SaveClientConfig saves the client configuration to a YAML file.

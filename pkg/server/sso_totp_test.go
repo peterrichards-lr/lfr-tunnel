@@ -66,8 +66,8 @@ func TestSSOSignInAsksAnEnrolledAccountForItsTOTP(t *testing.T) {
 	if hasSession(rec) {
 		t.Fatal("an account with TOTP enrolled got a session from SSO alone, through a provider that does not perform MFA")
 	}
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/admin?sso_mfa=1" {
-		t.Fatalf("want a redirect to the V1 code prompt, got %d %q", rec.Code, rec.Header().Get("Location"))
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/portal/login?sso_mfa=1" {
+		t.Fatalf("want a redirect to V2's code prompt, got %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	pending := pendingCookie(rec)
 	if pending == nil || !pending.HttpOnly || pending.Path != ssoMFACookiePath {
@@ -151,15 +151,12 @@ func TestTheChallengeReturnsToThePortalItStartedFrom(t *testing.T) {
 	enrolledTOTP(t, srv, st.idTokenEmail())
 	cookies, state := startSignIn(t, srv, st)
 	for _, c := range cookies {
-		switch c.Name {
-		case ssoPortalCookie:
-			c.Value = ssoPortalV2
-		case ssoCLICookie:
+		if c.Name == ssoCLICookie {
 			c.Value = "1"
 		}
 	}
 	rec := finishSignIn(srv, cookies, state)
-	if got := rec.Header().Get("Location"); got != "/portalv2/login?sso_mfa=1&cli_login=1" {
+	if got := rec.Header().Get("Location"); got != "/portal/login?sso_mfa=1&cli_login=1" {
 		t.Errorf("challenge redirect = %q, want V2's prompt with the CLI marker", got)
 	}
 }

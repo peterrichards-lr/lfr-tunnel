@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Backups and Gateway Maintenance belong to their own pages, not to System Settings (#1599).
@@ -19,19 +20,19 @@ const adminEmail = 'admin@lfr-demo.local'; // owner in tests/e2e/server-config.y
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('V2 System Settings does not duplicate other pages', () => {
   test('Settings still renders its own sections', async ({ page }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
 
     // Positive anchor first: the page must actually be there. Every absence check below would
     // pass on a Settings page that failed to render at all.
@@ -45,7 +46,7 @@ test.describe('V2 System Settings does not duplicate other pages', () => {
     page,
   }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
     await expect(
       page.getByRole('heading', { name: /System Settings/i }),
     ).toBeVisible();
@@ -72,7 +73,7 @@ test.describe('V2 System Settings does not duplicate other pages', () => {
   }) => {
     await loginV2(page);
 
-    await page.goto('/portalv2/admin/backups');
+    await page.goto(`${V2}/admin/backups`);
     await expect(
       page.getByRole('heading', { name: /Database Backups/i }),
     ).toBeVisible();
@@ -80,7 +81,7 @@ test.describe('V2 System Settings does not duplicate other pages', () => {
       page.getByRole('button', { name: /Create Backup/i }),
     ).toBeVisible();
 
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
     await expect(
       page.getByRole('heading', { name: /Gateway Maintenance/i }),
     ).toBeVisible();
@@ -94,7 +95,7 @@ test.describe('V2 System Settings does not duplicate other pages', () => {
     // destination shown beside the Integrations test button (#1290). Removing the maintenance
     // controls must not have taken that with it.
     await loginV2(page);
-    await page.goto('/portalv2/admin/settings');
+    await page.goto(`${V2}/admin/settings`);
     await expect(
       page.getByRole('heading', { name: /System Settings/i }),
     ).toBeVisible();

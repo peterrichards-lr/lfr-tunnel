@@ -2012,6 +2012,32 @@ the warning for the new date. A send that fails is retried by the next sweep ins
 recorded as delivered. Nothing here changes what a refused token is told: the gateway still answers
 every token failure with the same `401 unauthorized` (#2342).
 
+### 8.15. The Portal, and the Classic Portal for Admins (`classic_portal_path`)
+
+The portal is at `/portal` (#2528). The gateway redirects every older entry point there with a
+`302`, keeping the query string:
+
+| Request | Goes to |
+| --- | --- |
+| `/` and `/admin` | `/portal` |
+| `/portalv2/<rest>` | `/portal/<rest>` |
+| `/portal/<section>` and `/admin/<section>`, the classic portal's section links | the same section in the portal, for example `/portal/users` to `/portal/admin/users` |
+
+System emails, magic links, SSO sign-in and the CLI all link to `/portal`.
+
+The classic portal (V1) is kept for admins, in case the portal is missing something. It is served
+at the path set in `classic_portal_path`, and only to a signed-in admin or the owner. Anyone else
+who requests that path, signed in or not, is redirected to `/portal`. The path is not advertised:
+admins open it from **Classic portal (V1)** in the portal's Admin Zone, which only admins see.
+
+```yaml
+classic_portal_path: "/classic-<random>"
+```
+
+The path must be one segment of at least 12 letters, digits, `-` or `_`. Choose a random one; the
+gateway refuses to start with a shorter or multi-segment value. Leave it empty, which is the
+default, and the classic portal is not served at all.
+
 ---
 
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)

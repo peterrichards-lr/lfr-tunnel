@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 gained an admin-wide Registered Subdomains screen (#1619).
@@ -12,14 +13,14 @@ const adminEmail = 'admin@lfr-demo.local';
 
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
+  await page.goto(`${V2}/login`);
   // The email field is hidden behind this button; filling it directly just times out.
-  await page.click('#btn-show-email');
+
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -87,7 +88,7 @@ test.describe('V1 admin-wide Registered Subdomains', () => {
     await expect(page.locator('#tab-admin-subdomains')).toBeVisible();
     // Either base is served (server.go routes both /portal/ and /admin/), and which one you
     // get depends on where you signed in, so both are accepted here.
-    await expect(page).toHaveURL(/\/(portal|admin)\/admin-subdomains$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/admin-subdomains$`));
 
     // The whole point: a reservation belonging to somebody else.
     const row = page.locator('#admin-subdomains-table-body tr').first();
@@ -100,7 +101,7 @@ test.describe('V1 admin-wide Registered Subdomains', () => {
   test('live lease data is merged in, not left blank', async ({ page }) => {
     await stubAdminData(page, { withLease: true });
     await loginV1(page);
-    await page.goto('/admin/admin-subdomains');
+    await page.goto(`${V1}/admin-subdomains`);
     await expect(page.locator('#tab-admin-subdomains')).toBeVisible();
 
     const row = page.locator('#admin-subdomains-table-body tr').first();
@@ -114,7 +115,7 @@ test.describe('V1 admin-wide Registered Subdomains', () => {
   test('a reservation with no lease reads as offline', async ({ page }) => {
     await stubAdminData(page, { withLease: false });
     await loginV1(page);
-    await page.goto('/admin/admin-subdomains');
+    await page.goto(`${V1}/admin-subdomains`);
     await expect(page.locator('#tab-admin-subdomains')).toBeVisible();
 
     const row = page.locator('#admin-subdomains-table-body tr').first();

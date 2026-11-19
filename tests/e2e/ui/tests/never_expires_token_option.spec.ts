@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * The never-expiring token option comes from the operator's policy, in BOTH arms (#2266).
@@ -28,25 +29,24 @@ test.describe('the never-expiring token option follows the operator policy', () 
   });
 
   async function signInV2(page: import('@playwright/test').Page) {
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
   }
 
   async function signInV1(page: import('@playwright/test').Page) {
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -57,7 +57,7 @@ test.describe('the never-expiring token option follows the operator policy', () 
   }) => {
     await signInV1(page);
 
-    await page.goto('/admin#tokens');
+    await page.goto(`${V1}#tokens`);
     await page.reload();
 
     // The modal, not the static markup: V1 keeps the <option> in the DOM and decides its
@@ -115,7 +115,7 @@ test.describe('the never-expiring token option follows the operator policy', () 
   test('both arms offer the same expiry options', async ({ page }) => {
     await signInV1(page);
 
-    await page.goto('/admin#tokens');
+    await page.goto(`${V1}#tokens`);
     await page.reload();
     await page.click('button[onclick="openTokenModal()"]');
     const v1 = await page
@@ -127,11 +127,11 @@ test.describe('the never-expiring token option follows the operator policy', () 
       );
 
     // Straight to V2, NOT a second sign-in. Both arms share the lfr_session cookie, so the
-    // context is already authenticated and /portalv2/ redirects past the login form -- there
+    // context is already authenticated and /portal/ redirects past the login form -- there
     // is no #email-input to fill, which is how the first version of this test timed out.
     // Comparing the same session across the two arms is also closer to what a user does.
-    await page.goto('/portalv2/dashboard');
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/dashboard`);
+    await page.waitForURL(`**${V2}/dashboard`);
     const generate = page.getByRole('button', { name: /generate token/i });
     await expect(generate).toBeVisible({ timeout: 20000 });
     await generate.click();

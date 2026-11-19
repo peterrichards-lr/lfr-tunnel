@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Portal V2 landmarks and heading structure (#1219).
@@ -13,17 +14,17 @@ test.describe('Portal V2 landmarks and headings', () => {
 
   test.beforeEach(async ({ page }) => {
     // V2's login differs from V1's: the email field is shown directly rather than behind
-    // a #btn-show-email toggle, and the token is redeemed at /portalv2/login.
+    // a #btn-show-email toggle, and the token is redeemed at /portal/login.
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
     await expect(page.getByRole('main')).toBeVisible();
   });
 
@@ -48,9 +49,9 @@ test.describe('Portal V2 landmarks and headings', () => {
     // Every admin page used to start at h3 with no h1 above it, so heading navigation
     // had nothing to anchor on.
     for (const path of [
-      '/portalv2/admin/users',
-      '/portalv2/admin/blacklist',
-      '/portalv2/admin/tokens',
+      `${V2}/admin/users`,
+      `${V2}/admin/blacklist`,
+      `${V2}/admin/tokens`,
     ]) {
       await page.goto(path);
       await expect(page.locator('h1')).toHaveCount(1);

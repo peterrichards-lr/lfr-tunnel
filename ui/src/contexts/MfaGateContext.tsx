@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useI18n } from './I18nContext';
 import { useUI } from './UIContext';
 import { reloadKeepingCLILogin } from '../cliLogin';
+import { PORTAL_BASE } from '../portalBase';
 
 // #1055: force_mfa (server-side) blocks any authenticated request with
 // 403 {"error": "MFA setup required", "mfa_required": true} until the user sets up
@@ -100,7 +101,7 @@ function MfaSetupGate() {
     } catch {
       // Best-effort -- redirect regardless.
     }
-    window.location.href = '/portalv2/login';
+    window.location.href = `${PORTAL_BASE}/login`;
   };
 
   return (

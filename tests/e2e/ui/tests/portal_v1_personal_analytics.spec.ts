@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 personal analytics for non-admins (#1561).
@@ -18,51 +18,18 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 async function loginV1(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
 test.describe('Portal V1 personal analytics', () => {
-  // One shared non-admin, created once and removed afterwards. Leaving fixture users behind
-  // widens the Admin Users email column for portal_v2_table_scroll, which runs later against
-  // this same database and only fails in CI, where the Linux font stack is wider than macOS's
-  // (#1525). A short local part is not sufficient on its own -- the row has to go.
-  const nonAdminEmail = `pa${Date.now().toString().slice(-6)}@lfr-demo.local`;
-
-  test.beforeAll(async () => {
-    await createApprovedUser(nonAdminEmail);
-  });
-
-  test.afterAll(async () => {
-    await deleteUser(nonAdminEmail);
-  });
-
-  test('a non-admin can reach Analytics and sees their own usage', async ({
-    page,
-  }) => {
-    await loginV1(page, nonAdminEmail);
-
-    const link = page.locator('#nav-analytics-personal');
-    await expect(link).toBeVisible();
-    await link.click();
-
-    await expect(page.locator('#tab-analytics')).toBeVisible();
-
-    // Positive anchor: the personal chart canvas must actually be present. Asserting only that
-    // the admin section is hidden would pass on a tab that rendered nothing at all.
-    await expect(page.locator('#myBandwidthChart')).toBeAttached();
-
-    // ...and only then the absence: the global/admin block stays hidden, because the API does
-    // not return `data.global` to a non-admin.
-    await expect(page.locator('#admin-analytics-section')).toBeHidden();
-  });
-
+  // The non-admin tests went with #2528: V1 serves admins only, and anyone else who opens it is
+  // redirected to V2 (portal_v2_entry_point.spec.ts). The admin arm is what is left to watch.
   test('an admin keeps one Analytics entry, under Reporting', async ({
     page,
   }) => {
@@ -75,18 +42,5 @@ test.describe('Portal V1 personal analytics', () => {
     await page.click('#nav-analytics');
     await expect(page.locator('#tab-analytics')).toBeVisible();
     await expect(page.locator('#admin-analytics-section')).toBeVisible();
-  });
-
-  test('the admin-only tabs are still refused to a non-admin', async ({
-    page,
-  }) => {
-    await loginV1(page, nonAdminEmail);
-
-    // Removing 'analytics' from ADMIN_ONLY_TABS must not have opened the rest of that list.
-    await page.goto('/portal/users');
-    await expect(page.locator('#tab-users')).toBeHidden();
-
-    await page.goto('/portal/audit');
-    await expect(page.locator('#tab-audit')).toBeHidden();
   });
 });

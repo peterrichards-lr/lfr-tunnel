@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * The power schedule on Edge Gateways, in BOTH portals (#1689).
@@ -124,19 +125,18 @@ test.describe('Edge gateway power schedule', () => {
     await stubEdgeHealth(page, payload);
 
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
 
-    await page.goto('/admin/network-health');
+    await page.goto(`${V1}/network-health`);
     await page.reload();
 
     // Positive anchor first: every assertion below is about the contents of a row, and a
@@ -194,16 +194,16 @@ test.describe('Edge gateway power schedule', () => {
     await stubEdgeHealth(page, payload);
 
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
-    await page.goto('/portalv2/admin/edge-health');
+    await page.goto(`${V2}/admin/edge-health`);
 
     const asleepRow = page.locator('tbody tr', { hasText: 'edge-night' });
     await expect(asleepRow).toHaveCount(1);

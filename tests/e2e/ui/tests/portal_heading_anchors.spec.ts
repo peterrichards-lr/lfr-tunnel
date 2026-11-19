@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, V1, openV1 } from './utils/portal';
 
 /**
  * Heading anchor links, both portals (#1520).
@@ -22,13 +23,13 @@ declare function changePortalLanguage(lang: string): Promise<void>;
 test.describe('Portal V2 heading anchors', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
   });
 
   test('the heading text links to its own section', async ({ page }) => {
@@ -122,13 +123,12 @@ test.describe('Portal V2 heading anchors', () => {
 test.describe('Portal V1 heading anchors', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -155,9 +155,7 @@ test.describe('Portal V1 heading anchors', () => {
     for (const { slug, href } of pairs) {
       // A path, not a fragment: V1 routes on the path since #1513, and a heading handing
       // out '#users' would reintroduce the very gap that issue closed.
-      expect(href, `section ${slug} has no heading link`).toBe(
-        `/admin/${slug}`,
-      );
+      expect(href, `section ${slug} has no heading link`).toBe(`${V1}/${slug}`);
     }
   });
 

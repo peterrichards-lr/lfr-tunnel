@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 telemetry screen (#1559).
@@ -17,29 +17,22 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 async function loginV1(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
 test.describe('Portal V1 telemetry', () => {
-  const nonAdminEmail = `tm${Date.now().toString().slice(-6)}@lfr-demo.local`;
+  // The non-admin tests went with #2528: V1 serves admins only, and anyone else who opens it is
+  // redirected to V2 (portal_v2_entry_point.spec.ts). The admin arm is what is left to watch.
 
   // Created in beforeAll rather than inside the test that uses it. When an earlier test fails
   // the run can stop before reaching that one, leaving afterAll to delete a user that was never
   // created -- which surfaces as a confusing "User not found" alongside the real failure.
-  test.beforeAll(async () => {
-    await createApprovedUser(nonAdminEmail);
-  });
-
-  test.afterAll(async () => {
-    await deleteUser(nonAdminEmail);
-  });
 
   test('an admin reaches the screen and sees the aggregates', async ({
     page,
@@ -112,13 +105,5 @@ test.describe('Portal V1 telemetry', () => {
     await expect(rows.first()).toContainText('edge-1');
     // Visitors is a count of visitor_ips, not the raw array.
     await expect(rows.first()).toContainText('2');
-  });
-
-  test('a non-admin cannot reach it', async ({ page }) => {
-    await loginV1(page, nonAdminEmail);
-
-    await expect(page.locator('#nav-telemetry')).toBeHidden();
-    await page.goto('/portal/telemetry');
-    await expect(page.locator('#tab-telemetry')).toBeHidden();
   });
 });

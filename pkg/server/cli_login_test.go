@@ -19,11 +19,11 @@ func TestSSOReturnCarriesTheCLILoginMarker(t *testing.T) {
 	cases := []struct {
 		name, query, want string
 	}{
-		{"V1 from the CLI", "&cli_login=1", "/?cli_login=1"},
-		{"V2 from the CLI", "&portal=v2&cli_login=1", "/portalv2/dashboard?cli_login=1"},
-		{"V1 ordinary sign-in", "", "/"},
-		{"V2 ordinary sign-in", "&portal=v2", "/portalv2/dashboard"},
-		{"an unrecognised value is ignored", "&cli_login=yes", "/"},
+		{"from the CLI", "&cli_login=1", "/portal/dashboard?cli_login=1"},
+		// An older V2 page still sends portal=v2; it no longer changes anything (#2528).
+		{"from the CLI, older V2 page", "&portal=v2&cli_login=1", "/portal/dashboard?cli_login=1"},
+		{"ordinary sign-in", "", "/portal/dashboard"},
+		{"an unrecognised value is ignored", "&cli_login=yes", "/portal/dashboard"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,8 +66,8 @@ func TestAnAbandonedCLISignInDoesNotMarkTheNextOne(t *testing.T) {
 	}
 
 	done := finishSignIn(srv, cookies, state)
-	if got := done.Header().Get("Location"); done.Code != http.StatusFound || got != "/" {
-		t.Errorf("return %d %q, want 302 to %q -- a stale CLI marker carried over", done.Code, got, "/")
+	if got := done.Header().Get("Location"); done.Code != http.StatusFound || got != "/portal/dashboard" {
+		t.Errorf("return %d %q, want 302 to %q -- a stale CLI marker carried over", done.Code, got, "/portal/dashboard")
 	}
 }
 
@@ -76,9 +76,10 @@ func TestMagicLinkEmailCarriesTheCLILoginMarker(t *testing.T) {
 		name, query, referer, want string
 		carries                    bool
 	}{
-		{"V1 from the CLI", "&cli_login=1", "http://example.com/portal", "/portal?token=", true},
-		{"V2 from the CLI", "&cli_login=1", "http://example.com/portalv2/login", "/portalv2/login?token=", true},
-		{"ordinary request", "", "http://example.com/portal", "/portal?token=", false},
+		{"from the CLI", "&cli_login=1", "http://example.com/portal/login", "/portal/login?token=", true},
+		// Asked from V1 (an admin on the classic portal): the link still opens V2 (#2528).
+		{"from V1", "&cli_login=1", "http://example.com/classic-7f3k9q2m", "/portal/login?token=", true},
+		{"ordinary request", "", "http://example.com/portal/login", "/portal/login?token=", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, mail, cleanup := setupTestServer(t)

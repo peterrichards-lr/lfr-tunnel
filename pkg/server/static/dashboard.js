@@ -1583,9 +1583,8 @@ async function showDashboard() {
 
   // Route to the initial section from the path, falling back to the fragment for
   // bookmarks made before #1513. showTab normalises the address to the path form.
-  // The sidebar hrefs are written as /portal/<section> in the markup. Someone who came in
-  // via /admin should get /admin/<section> when they copy a link or open one in a new tab,
-  // or the portal hands out links to a base they did not use.
+  // The sidebar hrefs are written as /portal/<section> in the markup, and V1 is served at its
+  // own path (#2528): rewritten so copying a link or opening one in a new tab stays in V1.
   if (portalBase() !== '/portal') {
     document.querySelectorAll('a.nav-item[href^="/portal/"]').forEach((el) => {
       el.setAttribute(
@@ -2807,25 +2806,22 @@ const ADMIN_ONLY_TABS = [
  * so these are real URLs that survive a reload rather than client-side fiction.
  */
 
-// Which base the user arrived on. "/" and "/portal" are the same document, and so is
-// "/admin"; whichever they used is the one they keep, because rewriting /admin to /portal
-// mid-session would look like being redirected somewhere else.
+// Where V1 is served: the gateway's classic_portal_path, for admins only (#2528). /portal is V2
+// now, so the base is whatever single segment this document was loaded under.
 function portalBase() {
-  const p = window.location.pathname;
-  return p === '/admin' || p.startsWith('/admin/') ? '/admin' : '/portal';
+  return '/' + window.location.pathname.split('/')[1];
 }
 
 // The section named by the current URL. The path wins; the fragment is still read so that
 // bookmarks made before this change keep working, and so does anything that still links
 // with a '#'.
 function sectionFromLocation() {
-  for (const base of ['/portal', '/admin']) {
-    if (window.location.pathname.startsWith(base + '/')) {
-      const section = window.location.pathname
-        .slice(base.length + 1)
-        .replace(/\/+$/, '');
-      if (section) return section;
-    }
+  const base = portalBase();
+  if (window.location.pathname.startsWith(base + '/')) {
+    const section = window.location.pathname
+      .slice(base.length + 1)
+      .replace(/\/+$/, '');
+    if (section) return section;
   }
   if (window.location.hash) return window.location.hash.slice(1);
   return 'overview';
@@ -3337,14 +3333,12 @@ document.addEventListener('click', (e) => {
   const url = new URL(link.href, window.location.href);
   if (url.origin !== window.location.origin) return;
 
-  for (const base of ['/portal', '/admin']) {
-    if (url.pathname.startsWith(base + '/')) {
-      const section = url.pathname.slice(base.length + 1).replace(/\/+$/, '');
-      if (section) {
-        e.preventDefault();
-        showTab(section);
-      }
-      return;
+  const base = portalBase();
+  if (url.pathname.startsWith(base + '/')) {
+    const section = url.pathname.slice(base.length + 1).replace(/\/+$/, '');
+    if (section) {
+      e.preventDefault();
+      showTab(section);
     }
   }
 });

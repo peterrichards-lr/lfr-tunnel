@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 test.describe('Dashboard UI Automation', () => {
   const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
@@ -15,10 +16,7 @@ test.describe('Dashboard UI Automation', () => {
 
   test('Magic Link Login, Theme Toggle, and Pagination', async ({ page }) => {
     // 1. Trigger Magic Link
-    await page.goto('/admin');
-
-    // Show email form
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
 
     // Fill email
     await page.fill('#email-input', adminEmail);
@@ -32,7 +30,7 @@ test.describe('Dashboard UI Automation', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load (the body or h2 should be visible)
     await expect(
@@ -70,8 +68,7 @@ test.describe('Dashboard UI Automation', () => {
 
   test('Admin IP Blacklist and Backups Sections', async ({ page }) => {
     // 1. Trigger Magic Link
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
@@ -80,7 +77,7 @@ test.describe('Dashboard UI Automation', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(
@@ -103,8 +100,7 @@ test.describe('Dashboard UI Automation', () => {
     page,
   }) => {
     // 1. Trigger Magic Link
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
@@ -113,7 +109,7 @@ test.describe('Dashboard UI Automation', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(
@@ -181,14 +177,13 @@ test.describe('Dashboard UI Automation', () => {
 
   test('Subdomain Reservations flow', async ({ page }) => {
     // 1. Login
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // 2. Navigate to Reservations
     await page.click('#nav-reservations');
@@ -224,14 +219,13 @@ test.describe('Dashboard UI Automation', () => {
 
   test('Verify Telemetry Maintenance Countdown Widget', async ({ page }) => {
     // 1. Login
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(
@@ -280,14 +274,13 @@ test.describe('Dashboard UI Automation', () => {
     page,
   }) => {
     // 1. Login
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(
@@ -324,14 +317,13 @@ test.describe('Dashboard UI Automation', () => {
     page,
   }) => {
     // 1. Login
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(
@@ -365,14 +357,13 @@ test.describe('Dashboard UI Automation', () => {
     await page.setViewportSize({ width: 375, height: 812 });
 
     // 2. Login
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
 
     // Wait for Dashboard to load
     await expect(

@@ -39,21 +39,13 @@ const ActionSSODeniedUnverified = "user.sso_denied.unverified_email"
 // bool made both of them read as a refusal to the person signing in.
 var errSSORegistrationRejected = errors.New("registration was rejected by an administrator")
 
-// ssoPortalCookie remembers which portal started an SSO sign-in, so the callback can return the
-// person to it (#2447). The callback used to redirect to "/" unconditionally, so a sign-in started
-// from Portal V2 landed in V1 -- one arm of a live A/B test handing its users to the other.
-//
-// It holds a fixed value, never a URL: a return URL carried through the identity provider is an
-// open redirect waiting for someone to put an address in it. ssoReturnPath maps the value to a
-// path, and anything it does not recognise returns to V1, the old behaviour.
-const ssoPortalCookie = "oidc_portal"
-
-// ssoPortalV2 is the only value ssoPortalCookie can usefully hold.
-const ssoPortalV2 = "v2"
-
 // ssoCLICookie remembers that `lfr-tunnel login` started this sign-in (#2459), so the portal the
-// callback returns to can ask the user to create a token for the waiting CLI. Like
-// ssoPortalCookie it holds a fixed value, never anything that becomes a URL by itself.
+// callback returns to can ask the user to create a token for the waiting CLI. It holds a fixed
+// value, never anything that becomes a URL by itself: a return URL carried through the identity
+// provider is an open redirect waiting for someone to put an address in it.
+//
+// Every sign-in returns to V2 (#2528). Which portal started it used to be remembered too (#2447),
+// when V1 and V2 were both offered to everyone.
 const ssoCLICookie = "oidc_cli"
 
 // ssoReturnPath is where the callback sends someone who has just signed in.
@@ -65,15 +57,11 @@ func ssoReturnPath(r *http.Request) string {
 // sign-in when the gateway confirms the address itself (#2472) -- the link may be opened in a
 // browser that never saw those cookies.
 type ssoReturn struct {
-	v2  bool
 	cli bool
 }
 
 func ssoReturnFromCookies(r *http.Request) ssoReturn {
 	var rt ssoReturn
-	if c, err := r.Cookie(ssoPortalCookie); err == nil && c.Value == ssoPortalV2 {
-		rt.v2 = true
-	}
 	if c, err := r.Cookie(ssoCLICookie); err == nil && c.Value == "1" {
 		rt.cli = true
 	}
@@ -81,10 +69,7 @@ func ssoReturnFromCookies(r *http.Request) ssoReturn {
 }
 
 func (rt ssoReturn) path() string {
-	path := "/"
-	if rt.v2 {
-		path = "/portalv2/dashboard"
-	}
+	path := PortalV2Base + "/dashboard"
 	if rt.cli {
 		path += "?cli_login=1"
 	}
@@ -197,14 +182,7 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 	setSSOFlowCookie(w, "oidc_state", state, secure)
 	setSSOFlowCookie(w, ssoVerifierCookie, verifier, secure)
 	setSSOFlowCookie(w, ssoNonceCookie, nonce, secure)
-	// Always written, so a V1 sign-in clears a V2 one abandoned in the same browser rather than
-	// inheriting its destination.
-	portal := ""
-	if r.URL.Query().Get("portal") == ssoPortalV2 {
-		portal = ssoPortalV2
-	}
-	setSSOFlowCookie(w, ssoPortalCookie, portal, secure)
-	// Always written too, so an abandoned CLI sign-in does not mark a later ordinary one.
+	// Always written, so an abandoned CLI sign-in does not mark a later ordinary one.
 	cli := ""
 	if r.URL.Query().Get("cli_login") == "1" {
 		cli = "1"
@@ -519,7 +497,7 @@ func (s *Server) finishSSOSignIn(w http.ResponseWriter, r *http.Request, p *conf
 		IPAddress:  s.clientIP(r),
 	})
 
-	// Back to the portal the sign-in started from (#2447).
+	// Back to the portal (V2, #2528).
 	http.Redirect(w, r, rt.path(), http.StatusFound)
 }
 
@@ -548,7 +526,7 @@ const (
 
 // startSSOMFAChallenge holds an SSO sign-in until the account's TOTP code is entered, through the
 // same pre_auth_ token and /api/auth/mfa-verify the magic-link path uses. The browser goes back
-// to the portal the sign-in started from, with ?sso_mfa=1 telling it to show the code prompt.
+// to V2's sign-in page, with ?sso_mfa=1 telling it to show the code prompt.
 func (s *Server) startSSOMFAChallenge(w http.ResponseWriter, r *http.Request, user *db.User, p *config.SSOProviderConfig, rt ssoReturn, namesFromProvider bool) {
 	tempToken, err := generateSecureToken()
 	if err != nil {
@@ -575,13 +553,10 @@ func (s *Server) startSSOMFAChallenge(w http.ResponseWriter, r *http.Request, us
 	http.Redirect(w, r, rt.mfaPromptPath(), http.StatusFound)
 }
 
-// mfaPromptPath is the sign-in page of the portal the sign-in started from, told to ask for the
+// mfaPromptPath is V2's sign-in page, told to ask for the
 // TOTP code; the CLI marker rides along so the portal can still offer the CLI a token (#2459).
 func (rt ssoReturn) mfaPromptPath() string {
-	path := "/admin?sso_mfa=1"
-	if rt.v2 {
-		path = "/portalv2/login?sso_mfa=1"
-	}
+	path := PortalV2Base + "/login?sso_mfa=1"
 	if rt.cli {
 		path += "&cli_login=1"
 	}

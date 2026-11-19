@@ -915,7 +915,6 @@ html[dir='rtl'] th {
   .mobile-header,
   .btn,
   .print-hide,
-  .v1-promo-banner,
   .view-as-bar,
   .session-expiry-banner,
   .policy-consent-banner,
@@ -2439,70 +2438,6 @@ html[dir='rtl'] th {
   color: var(--status-warning-text);
   border-bottom: 1px solid var(--status-warning-border);
   text-align: center;
-}
-
-.v1-promo-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  box-sizing: border-box;
-  padding: var(--spacing-xs) var(--spacing-xl);
-  background: var(--primary);
-  color: #fff;
-  text-align: center;
-  font-size: 14px;
-  /* No --shadow-sm token exists; the smallest defined one is --shadow-lg, which is
-       far too heavy for a 32px strip. Kept literal rather than inventing a token. */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-  z-index: 40;
-  flex-shrink: 0;
-}
-
-/* Login renders the same banner as a centred card above the sign-in box rather than as a
-   full-width strip. It previously hand-rolled the whole thing with bg-primary/text-white,
-   which are not defined -- so it had no background at all -- while this class sat ready
-   with the colour and typography (#1383). Only the geometry differs, so that is all this
-   modifier changes. */
-.v1-promo-banner--card {
-  max-width: 420px;
-  width: 100%;
-  padding: var(--spacing-md) var(--spacing-xl);
-  border-radius: 10px;
-}
-
-.v1-promo-banner a {
-  color: #fff;
-  text-decoration: underline;
-  font-weight: 700;
-  margin-left: var(--spacing-xs);
-}
-
-.v1-promo-banner__dismiss {
-  position: absolute;
-  right: var(--spacing-xl);
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  padding: var(--spacing-xs);
-  color: #fff;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-.v1-promo-banner__dismiss:hover {
-  opacity: 0.8;
-}
-
-/* The banner is the one place on the page with a saturated background, so the default
-   focus ring has nothing to contrast against. */
-.v1-promo-banner__dismiss:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 
 .view-as-switcher {

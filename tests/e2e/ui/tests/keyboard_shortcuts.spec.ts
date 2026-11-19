@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Keyboard shortcuts and the overlay documenting them (#1611).
@@ -12,13 +13,13 @@ const adminEmail = 'admin@lfr-demo.local'; // owner in tests/e2e/server-config.y
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
   await expect(
     page.getByRole('heading', { name: /Dashboard Overview/i }),
   ).toBeVisible();
@@ -53,7 +54,7 @@ test.describe('V2 keyboard shortcuts', () => {
 
     await page.keyboard.press('g');
     await page.keyboard.press('u');
-    await page.waitForURL('**/portalv2/admin/users');
+    await page.waitForURL(`**${V2}/admin/users`);
     expect(page.url()).toContain('/admin/users');
   });
 
@@ -61,7 +62,7 @@ test.describe('V2 keyboard shortcuts', () => {
     // The guard that makes plain-key chords safe. Without it, typing "log" in any search box
     // would navigate away mid-word.
     await loginV2(page);
-    await page.goto('/portalv2/admin/users');
+    await page.goto(`${V2}/admin/users`);
     await expect(
       page.getByRole('heading', { name: /User Management/i }),
     ).toBeVisible();
@@ -95,7 +96,7 @@ test.describe('V2 keyboard shortcuts', () => {
     expect(
       page.url(),
       'Ctrl+G should not have started a go-to chord',
-    ).toContain('/portalv2/dashboard');
+    ).toContain(`${V2}/dashboard`);
   });
 
   test('the overlay documents the sidebar keys from #1562 too', async ({

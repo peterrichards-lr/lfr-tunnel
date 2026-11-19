@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * Anonymous geographic distribution, both portals (#1152).
@@ -20,14 +21,14 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 test.describe('Geographic distribution — Portal V2', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/admin/analytics');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/admin/analytics`);
   });
 
   test('the panel is present and explains that it is switched off', async ({
@@ -59,13 +60,12 @@ test.describe('Geographic distribution — Portal V2', () => {
 test.describe('Geographic distribution — Portal V1', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -143,14 +143,14 @@ test.describe('Geographic distribution — Portal V1', () => {
 test.describe('Geographic distribution attribution — Portal V2', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
-    await page.goto('/portalv2/admin/analytics');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
+    await page.goto(`${V2}/admin/analytics`);
   });
 
   test('no vendor is credited while the feature is switched off', async ({
@@ -186,13 +186,12 @@ test.describe('Geographic distribution attribution — Portal V2', () => {
 test.describe('Geographic distribution attribution — Portal V1', () => {
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -240,15 +239,15 @@ test.describe('Geographic distribution — access', () => {
 
   test('a non-admin sees no geographic panel', async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', email);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(email);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
-    await page.goto('/portalv2/analytics');
+    await page.goto(`${V2}/analytics`);
     // Not merely hidden: #1512 was a non-admin reaching admin analytics at all, and this
     // panel reports where a deployment's users are.
     await expect(

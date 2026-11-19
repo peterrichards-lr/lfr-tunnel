@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, V1, openV1 } from './utils/portal';
 
 /**
  * Portal V1 sidebar accessibility (#1212).
@@ -21,15 +22,14 @@ test.describe('Portal V1 sidebar accessibility', () => {
       window.localStorage.setItem('v2_promo_dismissed', 'true');
     });
 
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -48,8 +48,9 @@ test.describe('Portal V1 sidebar accessibility', () => {
       await expect(item).toHaveRole('link');
       // A real, resolvable href -- that is what makes it a link to assistive technology,
       // and what middle-click and "Copy link address" need. The shape changed from '#users'
-      // to '/admin/users' in #1513; what #1212 established is that there IS one.
-      await expect(item).toHaveAttribute('href', /^\/(admin|portal)\/[a-z-]+$/);
+      // to '/admin/users' in #1513, and to V1's own path in #2528; what #1212 established is
+      // that there IS one.
+      await expect(item).toHaveAttribute('href', new RegExp(`^${V1}/[a-z-]+$`));
     }
 
     // Logout acts rather than navigates, so it is deliberately a button.

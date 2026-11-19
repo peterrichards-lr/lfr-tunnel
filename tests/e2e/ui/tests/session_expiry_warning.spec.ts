@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * The portal warns before the session ends, in both arms (#1656).
@@ -36,24 +37,23 @@ async function stubExpiry(page: any, minutes: number | null) {
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 async function loginV1(page: any) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 

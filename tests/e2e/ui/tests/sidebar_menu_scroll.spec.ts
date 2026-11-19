@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * The sidebar must stay on screen, and every admin entry must be reachable (#1598).
@@ -23,13 +24,13 @@ const SHORT = { width: 1280, height: 600 };
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
   // Wait for the dashboard to actually render. waitForURL only proves navigation started, and
   // measuring before the content exists reports a page that does not overflow -- which made the
   // precondition below fail on a correctly-behaving page.

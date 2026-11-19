@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import GeoAttribution from './GeoAttribution';
 import { useI18n } from '../contexts/I18nContext';
 import { useAdminQueueCounts } from '../hooks/useAdminQueueCounts';
+import { PORTAL_BASE } from '../portalBase';
 
 interface SidebarProps {
   user: any;
@@ -312,6 +313,18 @@ export default function Sidebar({
                 >
                   {t('sidebar_system', 'System Settings')}
                 </NavLink>
+                {/* Portal V1, kept for admins in case V2 missed something (#2528). Its path is
+                    unadvertised and /api/me gives it to admins only, so it is absent when the
+                    gateway serves no V1. A full page load: V1 is a different document. */}
+                {user?.classic_portal_path && (
+                  <a
+                    href={user.classic_portal_path}
+                    className="nav-item"
+                    data-testid="classic-portal-link"
+                  >
+                    {t('sidebar_classic_portal', 'Classic portal (V1)')}
+                  </a>
+                )}
               </div>
             </>
           )}
@@ -370,7 +383,7 @@ export default function Sidebar({
             className="btn btn-secondary w-full p-sm"
             onClick={async () => {
               await fetch('/api/auth/logout', { method: 'POST' });
-              window.location.href = '/portalv2/login';
+              window.location.href = `${PORTAL_BASE}/login`;
             }}
           >
             {t('sign_out', 'Sign Out')}

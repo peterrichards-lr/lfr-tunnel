@@ -2,6 +2,7 @@ import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { V2, openV1 } from './utils/portal';
 
 const execAsync = promisify(exec);
 
@@ -16,8 +17,7 @@ test.describe('Analytics & Tunnel Automation', () => {
     page,
   }) => {
     // 1. Trigger Magic Link
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
@@ -27,7 +27,7 @@ test.describe('Analytics & Tunnel Automation', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();

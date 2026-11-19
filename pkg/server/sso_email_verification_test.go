@@ -112,8 +112,8 @@ func TestGatewayModeConfirmsAnUnverifiedAddressByEmail(t *testing.T) {
 			}
 
 			done := serveConfirm(srv, http.MethodPost, token)
-			if done.Code != http.StatusFound || !hasSession(done) || done.Header().Get("Location") != "/" {
-				t.Fatalf("confirming: want a session and a redirect to /, got %d %q (%s)", done.Code, done.Header().Get("Location"), done.Body.String())
+			if done.Code != http.StatusFound || !hasSession(done) || done.Header().Get("Location") != "/portal/dashboard" {
+				t.Fatalf("confirming: want a session and a redirect to /portal/dashboard, got %d %q (%s)", done.Code, done.Header().Get("Location"), done.Body.String())
 			}
 			user, err := srv.db.GetUserByEmail(addr)
 			if err != nil {
@@ -147,16 +147,13 @@ func TestGatewayModeReturnsToThePortalTheSignInStartedFrom(t *testing.T) {
 	srv, m := gatewayModeServer(t, st)
 	cookies, state := startSignIn(t, srv, st)
 	for _, c := range cookies {
-		switch c.Name {
-		case ssoPortalCookie:
-			c.Value = ssoPortalV2
-		case ssoCLICookie:
+		if c.Name == ssoCLICookie {
 			c.Value = "1"
 		}
 	}
 	finishSignIn(srv, cookies, state)
 	done := serveConfirm(srv, http.MethodPost, confirmationToken(t, m, st.idTokenEmail()))
-	if got := done.Header().Get("Location"); got != "/portalv2/dashboard?cli_login=1" {
+	if got := done.Header().Get("Location"); got != "/portal/dashboard?cli_login=1" {
 		t.Errorf("confirmed sign-in went to %q, want the V2 dashboard with the CLI marker", got)
 	}
 }

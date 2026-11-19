@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Portal V2 modals must cover the viewport and must be dismissable (#1558).
@@ -23,14 +24,14 @@ test.describe('Portal V2 modal positioning and dismissal', () => {
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
   });
 
   test('the install dialog is on screen, not below the fold', async ({

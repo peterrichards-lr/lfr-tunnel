@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Portal V1 selects must always show the value that is actually stored (#1201).
@@ -46,15 +47,14 @@ test.describe('Portal V1 selects never render blank', () => {
   }
 
   async function signIn(page: import('@playwright/test').Page) {
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -73,7 +73,7 @@ test.describe('Portal V1 selects never render blank', () => {
     // /admin#account is a same-document hash change, not a reload -- the page would keep
     // the profile it fetched at sign-in and never see the value just written. Force a
     // real document load.
-    await page.goto('/admin#account');
+    await page.goto(`${V1}#account`);
     await page.reload();
     await waitForProfileApplied(page);
   }

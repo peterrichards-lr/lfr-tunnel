@@ -162,6 +162,11 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	namesFromProvider, namesProvider := s.sessionNamesFromProvider(r)
 	resp["names_from_provider"] = namesFromProvider
 	resp["names_provider_name"] = namesProvider
+	// Where Portal V1 is served, for V2's "Classic portal (V1)" link (#2528). Admins only, and
+	// absent rather than empty for everyone else: the path is not advertised.
+	if classic := s.classicPortalPathFor(r); classic != "" {
+		resp["classic_portal_path"] = classic
+	}
 
 	// When this session expires, so the portal can warn before it does (#1656).
 	//
@@ -1125,7 +1130,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 	}
 	lang := user.LanguagePreference
 	baseURL := s.getPortalBaseURL(r)
-	portalLink := baseURL + "/portal"
+	portalLink := baseURL + PortalV2Base
 
 	formattedExpiry := "Never"
 	if expiresAt != nil {
@@ -1156,7 +1161,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 	}
 	lang := user.LanguagePreference
 	baseURL := s.getPortalBaseURL(r)
-	portalLink := baseURL + "/portal"
+	portalLink := baseURL + PortalV2Base
 
 	formattedExpiry := "Never"
 	isPermanent := true
@@ -1191,7 +1196,7 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 	}
 	lang := user.LanguagePreference
 	baseURL := s.getPortalBaseURL(r)
-	portalLink := baseURL + "/portal"
+	portalLink := baseURL + PortalV2Base
 
 	formattedExpiry := "Never"
 	if expiresAt != nil {

@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * V1 Custom Domains (#1559).
@@ -18,24 +18,20 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 async function loginV1(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
 test.describe('Portal V1 Custom Domains', () => {
+  // The non-admin tests went with #2528: V1 serves admins only, and anyone else who opens it is
+  // redirected to V2 (portal_v2_entry_point.spec.ts). The admin arm is what is left to watch.
   // Removed afterwards: a fixture left behind widens the Admin Users email column for
   // portal_v2_table_scroll, which runs later against this same database and fails in CI only.
-  const nonAdminEmail = `cd${Date.now().toString().slice(-6)}@lfr-demo.local`;
-
-  test.afterAll(async () => {
-    await deleteUser(nonAdminEmail);
-  });
 
   test('an admin reaches it and sees every provisioning stage', async ({
     page,
@@ -193,15 +189,5 @@ test.describe('Portal V1 Custom Domains', () => {
     await expect(row.locator('img')).toHaveCount(0);
     const pwned = await page.evaluate(() => (window as any).__pwned);
     expect(pwned, 'the error message must not execute').toBeUndefined();
-  });
-
-  test('a non-admin cannot reach it', async ({ page }) => {
-    await createApprovedUser(nonAdminEmail);
-    await loginV1(page, nonAdminEmail);
-
-    await expect(page.locator('#nav-custom-domains')).toBeHidden();
-
-    await page.goto('/portal/custom-domains');
-    await expect(page.locator('#tab-custom-domains')).toBeHidden();
   });
 });

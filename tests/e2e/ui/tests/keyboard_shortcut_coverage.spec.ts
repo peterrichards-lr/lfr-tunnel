@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * Every sidebar destination has a shortcut, and the overlay lists only what the current user can
@@ -29,24 +30,23 @@ test.afterAll(async () => {
 
 async function loginV2(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 async function loginV1(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/admin');
-  await page.click('#btn-show-email');
+  await page.goto(`${V2}/login`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/admin?token=${token}`);
+  await openV1(page, token);
   await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 }
 
@@ -131,7 +131,7 @@ test.describe('Keyboard shortcut coverage', () => {
     await page.keyboard.press('g');
     await page.keyboard.press('a');
     // Previously this navigated to /admin/analytics, which they cannot use.
-    await expect(page).toHaveURL(/\/portalv2\/analytics$/);
+    await expect(page).toHaveURL(/\/portal\/analytics$/);
   });
 
   /**

@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * Database Backups, in both portals (#1567).
@@ -17,13 +18,13 @@ const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('Database Backups parity', () => {
@@ -39,7 +40,7 @@ test.describe('Database Backups parity', () => {
 
   test('V2 offers list, create and download', async ({ page }) => {
     await loginV2(page);
-    await page.goto('/portalv2/admin/backups');
+    await page.goto(`${V2}/admin/backups`);
 
     // Positive anchor before any absence or capability check: an unrendered page would
     // otherwise satisfy several of the assertions below by rendering nothing.
@@ -68,12 +69,11 @@ test.describe('Database Backups parity', () => {
 
   test('V1 offers the same three operations', async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -95,14 +95,14 @@ test.describe('Database Backups parity', () => {
     await createApprovedUser(nonAdminEmail);
 
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', nonAdminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(nonAdminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
-    await page.goto('/portalv2/admin/backups');
+    await page.goto(`${V2}/admin/backups`);
 
     // Anchored positively: assert we landed somewhere real, then that it is not this screen.
     // Without the first assertion a blank page would satisfy the second perfectly.

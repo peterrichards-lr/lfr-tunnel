@@ -120,13 +120,9 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 
 	srv.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200 OK, got %d", rec.Code)
-	}
-
-	body := rec.Body.String()
-	if !strings.Contains(body, "Liferay Tunnel Identity") {
-		t.Error("expected dashboard landing page content")
+	// The control host's root is the portal, V2 at /portal (#2528).
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != PortalV2Base {
+		t.Errorf("expected 302 to %s, got %d %q", PortalV2Base, rec.Code, rec.Header().Get("Location"))
 	}
 }
 

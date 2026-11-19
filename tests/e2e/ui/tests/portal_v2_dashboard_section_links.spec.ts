@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Portal V2 dashboard sections by path (#2527).
  *
  * V1 gives tokens, reservations and tunnels a route each (`/portal/tokens`); V2 puts them all
- * on one dashboard. `/portalv2/dashboard/<section>` is what the V1 -> V2 redirects (#2528)
+ * on one dashboard. `/portal/dashboard/<section>` is what the V1 -> V2 redirects (#2528)
  * and the system emails land on, so arriving there has to put that section in front of the
  * reader -- not merely load the dashboard, which is what every one of these URLs would do if
  * the section part were ignored.
@@ -89,8 +90,8 @@ async function clientNavigate(page: Page, path: string) {
 
 /** Arrive at a section in-app and wait until it is placed. */
 async function arriveAt(page: Page, segment: string, id: string) {
-  await clientNavigate(page, `/portalv2/dashboard/${segment}`);
-  await expect(page).toHaveURL(new RegExp(`/portalv2/dashboard/${segment}$`));
+  await clientNavigate(page, `${V2}/dashboard/${segment}`);
+  await expect(page).toHaveURL(new RegExp(`${V2}/dashboard/${segment}$`));
   await expect
     .poll(async () => arrivedAt(await placement(page, id)), {
       message: `in-app arrival at /dashboard/${segment} should put #${id} in view`,
@@ -132,14 +133,14 @@ test.describe('Portal V2 dashboard section links', () => {
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', userEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
 
     const token = await getMagicLinkToken(userEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
   });
 
   // Three tests rather than one per section: every test signs in, and the control plane
@@ -176,10 +177,8 @@ test.describe('Portal V2 dashboard section links', () => {
     expect(navTargets.sort()).toEqual(SECTIONS.map(([, id]) => id).sort());
 
     for (const [segment, id] of SECTIONS) {
-      await page.goto(`/portalv2/dashboard/${segment}`);
-      await expect(page).toHaveURL(
-        new RegExp(`/portalv2/dashboard/${segment}$`),
-      );
+      await page.goto(`${V2}/dashboard/${segment}`);
+      await expect(page).toHaveURL(new RegExp(`${V2}/dashboard/${segment}$`));
       // Positive anchor: the dashboard itself rendered.
       await expect(
         page.getByRole('heading', { name: 'Dashboard Overview' }),
@@ -222,7 +221,7 @@ test.describe('Portal V2 dashboard section links', () => {
     }
 
     // A section is still the Overview page as far as the sidebar is concerned.
-    const overview = page.locator('.sidebar a[href="/portalv2/dashboard"]');
+    const overview = page.locator(`.sidebar a[href="${V2}/dashboard"]`);
     await expect(overview).toHaveClass(/\bactive\b/);
     await expect(overview).toHaveAttribute('aria-current', 'page');
   });
@@ -230,9 +229,9 @@ test.describe('Portal V2 dashboard section links', () => {
   test('an unknown section falls back to the top of the dashboard', async ({
     page,
   }) => {
-    await page.goto('/portalv2/dashboard/no-such-section');
+    await page.goto(`${V2}/dashboard/no-such-section`);
     // The address is corrected, so what is bookmarked next is a real page.
-    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await expect(page).toHaveURL(/\/portal\/dashboard$/);
     const heading = page.getByRole('heading', { name: 'Dashboard Overview' });
     await expect(heading).toBeVisible();
     await expect(heading).toBeInViewport();
@@ -248,8 +247,8 @@ test.describe('Portal V2 dashboard section links', () => {
     // The same, reached in-app from a dashboard that is scrolled down: falling back means the
     // top, not wherever the reader happened to be.
     await arriveAt(page, 'tokens', 'access-tokens');
-    await clientNavigate(page, '/portalv2/dashboard/no-such-section');
-    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await clientNavigate(page, `${V2}/dashboard/no-such-section`);
+    await expect(page).toHaveURL(/\/portal\/dashboard$/);
     await expect
       .poll(() => headingScrolledAway(page), {
         message:
@@ -298,8 +297,8 @@ test.describe('Portal V2 dashboard section links', () => {
 
     // The sidebar's Overview from a section: back to the top.
     await arriveAt(page, 'reservations', 'reservations-overview');
-    await page.locator('.sidebar a[href="/portalv2/dashboard"]').click();
-    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await page.locator(`.sidebar a[href="${V2}/dashboard"]`).click();
+    await expect(page).toHaveURL(/\/portal\/dashboard$/);
     await expect
       .poll(() => headingScrolledAway(page), {
         message: 'Overview from a section should show the top of the dashboard',
@@ -309,7 +308,7 @@ test.describe('Portal V2 dashboard section links', () => {
     // Back from a section to the plain dashboard: the same.
     await arriveAt(page, 'tokens', 'access-tokens');
     await page.goBack();
-    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await expect(page).toHaveURL(/\/portal\/dashboard$/);
     await expect
       .poll(() => headingScrolledAway(page), {
         message: 'Back to /dashboard from a section should show the top',

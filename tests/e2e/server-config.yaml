@@ -15,6 +15,9 @@ admin_notification_email: "admin@lfr-demo.local"
 owner_max_reservations: -1
 allow_client_auto_reservation: true
 
+# Portal V1, admins only (#2528). tests/e2e/ui/tests/utils/portal.ts reads the same value.
+classic_portal_path: "/classic-e2e-4k7q9z"
+
 sso_providers:
   - id: "keycloak"
     name: "Liferay Keycloak"

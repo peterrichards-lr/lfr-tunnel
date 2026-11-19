@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * #dashboard-shell must close where #1292 meant it to (#1791).
@@ -21,15 +22,14 @@ test.describe('Portal V1 dashboard shell nesting', () => {
     page,
   }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -92,12 +92,11 @@ test.describe('Portal V1 dashboard shell nesting', () => {
     page,
   }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -146,39 +145,6 @@ test.describe('Portal V1 dashboard shell nesting', () => {
     expect(anchored.fromBottom).toBe(24);
   });
 
-  test('a toast raised on the login screen is actually visible', async ({
-    page,
-  }) => {
-    // The user-visible half of the bug, and the assertion the old DOM cannot satisfy: with
-    // #toast-container inside #dashboard-shell, the container inherited `display: none` until
-    // sign-in, so showToast() on the login screen painted nothing and announced nothing.
-    // dashboard.js does exactly that on a bad magic link ("Magic link error: ...").
-    await page.goto('/admin');
-
-    // Anchor: we really are on the login screen, with the shell hidden. Without this the
-    // toast assertion below could pass on a signed-in page and prove nothing.
-    await expect(page.locator('#login-screen')).toBeVisible();
-    await expect(page.locator('#dashboard-shell')).toBeHidden();
-
-    await page.evaluate(() =>
-      (window as unknown as { showToast: (m: string) => void }).showToast(
-        'login-screen-toast-probe',
-      ),
-    );
-
-    await expect(
-      page.locator('#toast-container .toast', {
-        hasText: 'login-screen-toast-probe',
-      }),
-    ).toBeVisible();
-
-    // And the screen-reader announcement, which is the other half of #1520 that the nesting
-    // silenced: a display:none live region is not in the accessibility tree at all.
-    const announced = await page.evaluate(() =>
-      ['toast-live-a', 'toast-live-b']
-        .map((id) => document.getElementById(id)?.textContent ?? '')
-        .join(''),
-    );
-    expect(announced).toContain('login-screen-toast-probe');
-  });
+  // The login-screen half of #1520 is no longer reachable: V1 serves an admin session only and
+  // signing in happens in V2 (#2528), so V1's login screen never paints.
 });

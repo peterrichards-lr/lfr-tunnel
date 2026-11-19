@@ -1,6 +1,7 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 import { createApprovedUser, deleteUser } from './utils/nonadmin';
+import { V2 } from './utils/portal';
 
 /**
  * Gateway Maintenance in V2 (#1568), the counterpart of V1's screen.
@@ -14,13 +15,13 @@ const adminEmail = 'admin@lfr-demo.local'; // Also the owner, per tests/e2e/serv
 
 async function loginV2(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('Gateway Maintenance in V2', () => {
@@ -38,7 +39,7 @@ test.describe('Gateway Maintenance in V2', () => {
     page,
   }) => {
     await loginV2(page, adminEmail);
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     await expect(
       page.getByRole('heading', { name: /Gateway Maintenance/i }),
@@ -56,7 +57,7 @@ test.describe('Gateway Maintenance in V2', () => {
     page,
   }) => {
     await loginV2(page, adminEmail);
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     await page.locator('#maint-countdown-select').selectOption('0');
     await page.locator('#btn-toggle-maint').click();
@@ -76,7 +77,7 @@ test.describe('Gateway Maintenance in V2', () => {
     page,
   }) => {
     await loginV2(page, adminEmail);
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     await page.locator('#maint-countdown-select').selectOption('5');
     await page.locator('#btn-toggle-maint').click();
@@ -115,7 +116,7 @@ test.describe('Gateway Maintenance in V2', () => {
       });
     });
 
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     await expect(page.getByTestId('soft-status')).toHaveText(/Scheduled/i);
     await expect(page.getByTestId('soft-status')).not.toHaveText(/Inactive/i);
@@ -127,7 +128,7 @@ test.describe('Gateway Maintenance in V2', () => {
     page,
   }) => {
     await loginV2(page, adminEmail); // owner
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     const curtain = page.getByTestId('iron-curtain');
     await expect(curtain).toBeVisible();
@@ -139,7 +140,7 @@ test.describe('Gateway Maintenance in V2', () => {
     await createApprovedUser(nonAdminEmail);
     await loginV2(page, nonAdminEmail);
 
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     // Positive anchor first: a blank page would satisfy the absence check on its own.
     await expect(page.locator('#root')).not.toBeEmpty();
@@ -167,7 +168,7 @@ test.describe('Gateway Maintenance renders words, not markup (#2327)', () => {
 
   test('the status badge shows no HTML tags', async ({ page }) => {
     await loginV2(page, adminOnly);
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     const body = await page.locator('main').innerText();
     // The exact shape of the defect: a bundle value that is markup arrives as literal text.
@@ -178,7 +179,7 @@ test.describe('Gateway Maintenance renders words, not markup (#2327)', () => {
 
   test('the Iron Curtain heading carries no icon at all', async ({ page }) => {
     await loginV2(page, adminOnly);
-    await page.goto('/portalv2/admin/maintenance');
+    await page.goto(`${V2}/admin/maintenance`);
 
     const heading = page.getByTestId('iron-curtain').getByRole('heading');
     const text = await heading.innerText();

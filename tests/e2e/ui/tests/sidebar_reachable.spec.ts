@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 /**
  * Every admin nav item must be clickable, not merely present (#1984).
@@ -29,20 +30,20 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 const adminEmail = 'admin@lfr-demo.local';
 
 const ADMIN_TAIL = [
-  { href: '/portalv2/admin/backups', label: 'Database Backups' },
-  { href: '/portalv2/admin/maintenance', label: 'Gateway Maintenance' },
-  { href: '/portalv2/admin/settings', label: 'System Settings' },
+  { href: `${V2}/admin/backups`, label: 'Database Backups' },
+  { href: `${V2}/admin/maintenance`, label: 'Gateway Maintenance' },
+  { href: `${V2}/admin/settings`, label: 'System Settings' },
 ];
 
 async function loginV2(page: any, email: string) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', email);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(email);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
   // Layout renders a spinner with NO nav while it loads, so evaluating straight after the URL
   // settles measures an empty shell. An earlier run of this spec did exactly that and failed
   // for the wrong reason.
@@ -132,9 +133,7 @@ test.describe('Sidebar reachability — Portal V2', () => {
     }
 
     // And the user-facing claim, end to end.
-    await page
-      .locator('.sidebar-menu a[href="/portalv2/admin/settings"]')
-      .click();
-    await page.waitForURL('**/portalv2/admin/settings');
+    await page.locator(`.sidebar-menu a[href="${V2}/admin/settings"]`).click();
+    await page.waitForURL(`**${V2}/admin/settings`);
   });
 });

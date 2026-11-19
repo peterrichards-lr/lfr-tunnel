@@ -10,8 +10,8 @@ import (
 	"lfr-tunnel/pkg/config"
 )
 
-// An SSO sign-in returns to the portal that started it (#2447). The callback used to redirect to
-// "/" whatever the starting portal, so Portal V2's users were handed to V1.
+// An SSO sign-in returns to V2, the portal (#2528), carrying `lfr-tunnel login`'s marker when the
+// CLI started it (#2459).
 
 // stubIssuer serves just enough OIDC discovery for oidc.NewProvider; nothing here exchanges a
 // code, so the endpoints only have to exist as URLs.
@@ -47,68 +47,61 @@ func ssoLoginCookie(t *testing.T, query string) (*http.Cookie, *httptest.Respons
 		t.Fatalf("login: want 302 to the provider, got %d (%s)", rec.Code, rec.Body.String())
 	}
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == ssoPortalCookie {
+		if c.Name == ssoCLICookie {
 			return c, rec
 		}
 	}
 	return nil, rec
 }
 
-func TestSSOLoginRemembersAV2Start(t *testing.T) {
-	c, rec := ssoLoginCookie(t, "provider=liferay&portal=v2")
-	if c == nil || c.Value != ssoPortalV2 {
-		t.Fatalf("a V2 sign-in must record its portal; got cookie %+v", c)
+func TestSSOLoginRemembersACLIStart(t *testing.T) {
+	c, rec := ssoLoginCookie(t, "provider=liferay&cli_login=1")
+	if c == nil || c.Value != "1" {
+		t.Fatalf("a CLI sign-in must record the marker; got cookie %+v", c)
 	}
 	if !c.HttpOnly {
-		t.Error("the portal cookie must be HttpOnly")
+		t.Error("the CLI cookie must be HttpOnly")
 	}
-	// It still goes to the provider: remembering the portal must not replace the sign-in.
+	// It still goes to the provider: remembering the marker must not replace the sign-in.
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "/auth?") {
 		t.Errorf("want a redirect to the provider's authorization endpoint, got %q", loc)
 	}
 }
 
-func TestSSOLoginFromV1ClearsAnEarlierV2Start(t *testing.T) {
-	// Written empty, not omitted: an abandoned V2 sign-in in the same browser must not send a
-	// later V1 sign-in to V2.
+func TestSSOLoginClearsAnEarlierCLIStart(t *testing.T) {
+	// Written empty, not omitted: an abandoned CLI sign-in in the same browser must not mark a
+	// later ordinary one.
 	c, _ := ssoLoginCookie(t, "provider=liferay")
 	if c == nil {
-		t.Fatal("a V1 sign-in must overwrite the portal cookie, not leave an earlier one in place")
+		t.Fatal("an ordinary sign-in must overwrite the CLI cookie, not leave an earlier one in place")
 	}
 	if c.Value != "" {
-		t.Fatalf("a V1 sign-in recorded portal %q", c.Value)
-	}
-}
-
-func TestSSOLoginIgnoresAnUnknownPortal(t *testing.T) {
-	c, _ := ssoLoginCookie(t, "provider=liferay&portal=https://evil.example")
-	if c == nil || c.Value != "" {
-		t.Fatalf("an unrecognised portal value must be dropped, got %+v", c)
+		t.Fatalf("an ordinary sign-in recorded CLI marker %q", c.Value)
 	}
 }
 
 func TestSSOReturnPath(t *testing.T) {
 	for _, tc := range []struct {
-		cookie string
-		want   string
+		cli  string
+		want string
 	}{
-		{"", "/"},
-		{ssoPortalV2, "/portalv2/dashboard"},
+		{"", "/portal/dashboard"},
+		{"1", "/portal/dashboard?cli_login=1"},
 		// Only the fixed value is honoured: the cookie can never become an open redirect.
-		{"https://evil.example", "/"},
-		{"//evil.example", "/"},
-		{"V2", "/"},
+		{"https://evil.example", "/portal/dashboard"},
 	} {
 		r := httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)
-		if tc.cookie != "" {
-			r.AddCookie(&http.Cookie{Name: ssoPortalCookie, Value: tc.cookie})
+		if tc.cli != "" {
+			r.AddCookie(&http.Cookie{Name: ssoCLICookie, Value: tc.cli})
 		}
 		if got := ssoReturnPath(r); got != tc.want {
-			t.Errorf("cookie %q: return path %q, want %q", tc.cookie, got, tc.want)
+			t.Errorf("cli cookie %q: return path %q, want %q", tc.cli, got, tc.want)
 		}
 	}
-	// No cookie at all is the old behaviour.
-	if got := ssoReturnPath(httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)); got != "/" {
-		t.Errorf("no cookie: return path %q, want /", got)
+	// A V1 sign-in from before the change still has its old portal cookie; it lands in V2 too.
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)
+	r.AddCookie(&http.Cookie{Name: "oidc_portal", Value: ""})
+	if got := ssoReturnPath(r); got != "/portal/dashboard" {
+		t.Errorf("old V1 portal cookie: return path %q, want /portal/dashboard", got)
 	}
 }

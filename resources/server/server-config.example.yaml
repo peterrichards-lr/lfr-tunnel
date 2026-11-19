@@ -296,6 +296,13 @@ repository_url: "https://example.com"
 secure_token_guide_url: "https://example.com"
 docker_hub_url: "https://example.com"
 status_page_url: "https://example.com"
+
+# --- Portal V1 (classic), admins only (#2528) ---
+# V2 is the portal, at /portal. V1 is kept as a fallback for admins and served at this path,
+# only to an admin session; anyone else is redirected to /portal. One path segment of at least
+# 12 letters, digits, '-' or '_' -- make it unguessable, and do not reuse the example. Admins
+# find it under "Classic portal (V1)" in V2's Admin Zone. Empty: V1 is not served at all.
+classic_portal_path: ""
 privacy_policy_url: "https://example.com"
 cookie_policy_url: "https://example.com"
 

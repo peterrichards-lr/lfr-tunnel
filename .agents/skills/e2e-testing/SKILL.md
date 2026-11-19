@@ -59,9 +59,9 @@ time: the mutation looked like it had failed to break anything, when the test si
 So **verify the artefact under test actually contains the mutation** before believing any result:
 
 ```bash
-b=$(curl -s http://localhost:8000/portalv2/ | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1)
+b=$(curl -s http://localhost:8000/portal/ | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1)
 echo "$b"                                    # hash MUST change when the source changes
-curl -s "http://localhost:8000/portalv2/assets/$b" | grep -oE 'path:`/[a-z/-]*analytics`'
+curl -s "http://localhost:8000/portal/assets/$b" | grep -oE 'path:`/[a-z/-]*analytics`'
 ```
 
 Note the backticks: the bundler emits route paths as template literals, so grepping for
@@ -105,7 +105,7 @@ the app. Pick something that exists only in the mutant.
 live, and the real rule was untouched. Assert on the rule itself:
 
 ```bash
-curl -s "http://localhost:8000/portalv2/assets/$css" | grep -o '\.pagination-row{[^}]*}'
+curl -s "http://localhost:8000/portal/assets/$css" | grep -o '\.pagination-row{[^}]*}'
 ```
 
 **So: make every mutation self-identifying, and assert it in the served artefact.** Write the
@@ -323,4 +323,4 @@ do not need. It runs `npm install` against a pnpm project (#1863) and installs `
 the container on every run; `scripts/run-e2e-ui.sh` is the maintained path.
 
 ---
-*Last Updated: 2026-09-28* | *Last Reviewed: 2026-09-28*
+*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*

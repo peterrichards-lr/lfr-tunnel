@@ -1,9 +1,10 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V1, V2 } from './utils/portal';
 
 /**
- * The V2 sidebar no longer carries a "Use Classic Dashboard" link (#1622) -- the promo banner is
- * the route back to V1 now.
+ * The V2 sidebar footer no longer carries a "Use Classic Dashboard" link (#1622). Since #2528 the
+ * only way into V1 is the Admin Zone's "Classic portal (V1)" link, shown to admins alone.
  *
  * Every assertion here is an absence, which passes perfectly well on a page that failed to
  * render, so each one is anchored on sidebar content that must be present.
@@ -12,13 +13,13 @@ const adminEmail = 'admin@lfr-demo.local';
 
 async function loginV2(page: any) {
   await clearMailpit();
-  await page.goto('/portalv2/');
+  await page.goto(`${V2}/`);
   await page.fill('#email-input', adminEmail);
   await page.click('button[type="submit"]');
   const token = await getMagicLinkToken(adminEmail);
   expect(token).toBeTruthy();
-  await page.goto(`/portalv2/login?token=${token}`);
-  await page.waitForURL('**/portalv2/dashboard');
+  await page.goto(`${V2}/login?token=${token}`);
+  await page.waitForURL(`**${V2}/dashboard`);
 }
 
 test.describe('V2 sidebar has no Classic Dashboard link', () => {
@@ -37,22 +38,26 @@ test.describe('V2 sidebar has no Classic Dashboard link', () => {
     await expect(
       page.getByRole('link', { name: /Classic Dashboard/i }),
     ).toHaveCount(0);
-    // Belt and braces: no sidebar anchor points at V1 by href either. Matched exactly rather
-    // than by prefix, because every V2 nav link lives under /portalv2/ and would match a prefix.
-    const v1Hrefs = await page.$$eval('.sidebar a', (els) =>
-      els
-        .map((e) => e.getAttribute('href') || '')
-        .filter((h) => h === '/portal' || h === '/portal/'),
+    // Belt and braces: no footer anchor points at V1 by href either.
+    const v1Hrefs = await page.$$eval(
+      '.sidebar-footer a',
+      (els, v1) =>
+        els
+          .map((e) => e.getAttribute('href') || '')
+          .filter((h) => h === v1 || h.startsWith(v1 + '/')),
+      V1,
     );
     expect(v1Hrefs).toEqual([]);
   });
 
-  test('the promo banner still offers the way back to V1', async ({ page }) => {
-    // Removing the sidebar link makes the banner the only in-app route to V1, so it has to work.
+  test('the Admin Zone is the one way back to V1, for an admin', async ({
+    page,
+  }) => {
     await loginV2(page);
-    // Note the trailing slash -- the banner links to /portal/, not /portal.
-    const back = page.getByRole('link', { name: /Switch back to V1/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute('href', '/portal/');
+    const links = page.locator(`.sidebar a[href="${V1}"]`);
+    await expect(links).toHaveCount(1);
+    await expect(page.getByTestId('classic-portal-link')).toHaveText(
+      'Classic portal (V1)',
+    );
   });
 });

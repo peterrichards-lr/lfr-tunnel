@@ -128,7 +128,7 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 
 	portalLink := state.PortalURL
 	if portalLink == "" {
-		portalLink = s.getPortalBaseURL(r) + "/portal"
+		portalLink = s.getPortalBaseURL(r) + PortalV2Base
 	}
 	deadline := state.Deadline
 	if deadline == "" {

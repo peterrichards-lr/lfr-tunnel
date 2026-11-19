@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Portal V1 section URLs (#1215).
@@ -31,14 +32,13 @@ test.describe('Portal V1 section URLs', () => {
 
   async function signIn(page: import('@playwright/test').Page) {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -59,17 +59,17 @@ test.describe('Portal V1 section URLs', () => {
   test('a path URL deep-links to its section and survives a reload', async ({
     page,
   }) => {
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     await page.reload();
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/users$`));
 
     // The reload is the assertion that matters: it is what "bookmarkable" means, and a
     // same-document route change would prove nothing.
-    await page.goto('/admin/blacklist');
+    await page.goto(`${V1}/blacklist`);
     await page.reload();
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
-    await expect(page).toHaveURL(/\/admin\/blacklist$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/blacklist$`));
   });
 
   test('a fragment URL still works, and is upgraded to the path form', async ({
@@ -77,15 +77,15 @@ test.describe('Portal V1 section URLs', () => {
   }) => {
     // Bookmarks made before #1513 have to keep working -- silently rewriting them to the
     // path form is what stops the two shapes coexisting forever.
-    await page.goto('/admin#users');
+    await page.goto(`${V1}#users`);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/users$`));
   });
 
   test('back and forward move between sections, not just the URL', async ({
     page,
   }) => {
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
     // A plain left click must route in place rather than reloading the document, or the
@@ -94,11 +94,11 @@ test.describe('Portal V1 section URLs', () => {
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/users$`));
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
     await page.goForward();
-    await expect(page).toHaveURL(/\/admin\/blacklist$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/blacklist$`));
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
   });
 
@@ -106,7 +106,7 @@ test.describe('Portal V1 section URLs', () => {
     page,
   }) => {
     for (const section of ['nonsense', 'tokens-renamed']) {
-      await page.goto(`/admin/${section}`);
+      await page.goto(`${V1}/${section}`);
       await page.reload();
 
       await expect
@@ -120,7 +120,7 @@ test.describe('Portal V1 section URLs', () => {
       await expect(page.locator('#nav-overview')).toHaveClass(/active/);
 
       // And the address bar is corrected, so a reload lands where the URL says.
-      await expect(page).toHaveURL(/\/admin\/overview$/);
+      await expect(page).toHaveURL(new RegExp(`${V1}/overview$`));
     }
   });
 
@@ -129,7 +129,7 @@ test.describe('Portal V1 section URLs', () => {
   }) => {
     // replaceState, not pushState -- otherwise Back from a corrected URL returns to the
     // broken one and the user bounces.
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
     await page.evaluate(() => {
@@ -146,10 +146,10 @@ test.describe('Portal V1 section URLs', () => {
   }) => {
     // The shape Portal V2 teaches. Before #1477 it answered 404 carrying offline.html;
     // before #1513 it worked but bounced to the fragment form.
-    const res = await page.goto('/admin/users');
+    const res = await page.goto(`${V1}/users`);
     expect(res?.ok()).toBeTruthy();
 
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/users$`));
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
     await expect(page.locator('body')).not.toContainText('Environment Offline');
   });
@@ -158,24 +158,24 @@ test.describe('Portal V1 section URLs', () => {
     page,
   }) => {
     // The gap this issue was filed for: V1 handed out /portal#users where V2 hands out
-    // /portalv2/admin/users, so the two portals produced different kinds of link for the
+    // /portal/admin/users, so the two portals produced different kinds of link for the
     // same section while being compared against each other.
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     await page.click('#nav-blacklist');
-    await expect(page).toHaveURL(/\/admin\/blacklist$/);
+    await expect(page).toHaveURL(new RegExp(`${V1}/blacklist$`));
     expect(new URL(page.url()).hash).toBe('');
   });
 
   test('the sidebar links are real, copyable URLs', async ({ page }) => {
     // They are anchors with real hrefs (#1212) so that middle-click, open-in-new-tab and
     // "Copy link address" work. Routing in place must not have cost that.
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     // Polled: the markup ships these as /portal/... and the portal rewrites them to match the
     // prefix it was opened under. Reading the attribute once races that rewrite and sees the
     // original -- which is how this failed in CI while passing locally.
     await expect
       .poll(() => page.locator('#nav-blacklist').getAttribute('href'))
-      .toBe('/admin/blacklist');
+      .toBe(`${V1}/blacklist`);
     const href = await page.locator('#nav-blacklist').getAttribute('href');
 
     // And that href is a real route, not decoration: opening it directly works.
@@ -195,7 +195,7 @@ test.describe('Portal V1 section URLs', () => {
         failed.push(`${r.status()} ${r.url()}`);
       }
     });
-    await page.goto('/admin/users');
+    await page.goto(`${V1}/users`);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
     expect(failed).toEqual([]);
   });
@@ -203,7 +203,7 @@ test.describe('Portal V1 section URLs', () => {
   test('a path URL for a section that does not exist still lands somewhere real', async ({
     page,
   }) => {
-    const res = await page.goto('/admin/not-a-section');
+    const res = await page.goto(`${V1}/not-a-section`);
     expect(res?.ok()).toBeTruthy();
     await expect.poll(() => visibleSection(page)).toEqual(['overview']);
     await expect(page.locator('body')).not.toContainText('Environment Offline');

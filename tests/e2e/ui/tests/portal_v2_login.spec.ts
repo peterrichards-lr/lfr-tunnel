@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2 } from './utils/portal';
 
 test.describe('Portal v2 Login Flow', () => {
   const adminEmail = 'admin@lfr-demo.local';
@@ -10,7 +11,7 @@ test.describe('Portal v2 Login Flow', () => {
 
   test('React SPA Magic Link Login', async ({ page }) => {
     // 1. Trigger Magic Link from new React SPA
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
 
     // Check if we are on the login screen
     await expect(page.locator('h1', { hasText: 'Welcome' })).toBeVisible();
@@ -29,10 +30,10 @@ test.describe('Portal v2 Login Flow', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link via React UI
-    await page.goto(`/portalv2/login?token=${token}`);
+    await page.goto(`${V2}/login?token=${token}`);
 
-    // It should verify the token and redirect to /portalv2/dashboard
-    await page.waitForURL('**/portalv2/dashboard');
+    // It should verify the token and redirect to /portal/dashboard
+    await page.waitForURL(`**${V2}/dashboard`);
     await expect(
       page.locator('h1', { hasText: 'Dashboard Overview' }),
     ).toBeVisible();

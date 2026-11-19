@@ -18,8 +18,8 @@ import (
 //   - page loads only (GET/HEAD of a portal document path). /api/* -- clients, edges, the portal's
 //     own calls -- keeps working on every host, and a redirected POST would lose its body.
 //   - not the downloads or install scripts (/static/downloads/..., /install.sh), which curl and
-//     PowerShell fetch from the apex; nor /static assets. (V2's /portalv2/assets/* fall under the
-//     /portalv2/ prefix and are redirected too -- harmless: only a page already on some host asks
+//     PowerShell fetch from the apex; nor /static assets. (V2's /portal/assets/* fall under the
+//     /portal/ prefix and are redirected too -- harmless: only a page already on some host asks
 //     for them, and the canonical host serves identical files.)
 //   - only the four control names of a configured domain: a tunnel under the same domain
 //     (<name>.lfr-demo.online), an edge's own name, localhost and an IP are never redirected.
@@ -75,7 +75,8 @@ func (s *Server) canonicalPortalRedirect(r *http.Request, host string) string {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return ""
 	}
-	if !isPortalDocumentPath(r.URL.Path) || !s.isConfiguredControlName(host) {
+	isPage := isPortalDocumentPath(r.URL.Path) || s.isClassicPortalPath(r.URL.Path)
+	if !isPage || !s.isConfiguredControlName(host) {
 		return ""
 	}
 	base := s.ssoCanonicalBase(r)

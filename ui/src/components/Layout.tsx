@@ -9,6 +9,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import SessionExpiryWarning from './SessionExpiryWarning';
 import PolicyConsentGate from './PolicyConsentGate';
+import { rememberReturnPath, takeReturnPath } from '../loginReturn';
 
 export default function Layout() {
   const [user, setUser] = useState<any>(null);
@@ -44,13 +45,7 @@ export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { formatDate, showPortalBanner, setShowPortalBanner } = useSettings();
-
-  // Read from SettingsContext rather than local state so the Account Settings toggle can turn it
-  // back on (#1626); dismissing here is the same preference, written the same way.
-  const showV1Promo = showPortalBanner;
-
-  const dismissV1Promo = () => setShowPortalBanner(false);
+  const { formatDate } = useSettings();
 
   const dismissTargetedMessage = async () => {
     try {
@@ -64,12 +59,18 @@ export default function Layout() {
   // Re-reads /api/me so session_expires_at reflects the slide the request itself caused
   // (#1655/#1656). Declared here rather than inside the effect because the expiry warning needs
   // to call it after extending.
+  // Sent to sign in, the page asked for is remembered and returned to afterwards (#2528).
+  const toSignIn = () => {
+    rememberReturnPath();
+    navigate('/login');
+  };
+
   const refreshUser = async () => {
     try {
       const res = await axios.get('/api/me');
       setUser(res.data);
     } catch {
-      navigate('/login');
+      toSignIn();
     }
   };
 
@@ -81,6 +82,10 @@ export default function Layout() {
           axios.get('/api/version').catch(() => null),
         ]);
         setUser(userRes.data);
+
+        // Signed in: back to the page that sent this visitor to sign in, if one did.
+        const returnTo = takeReturnPath();
+        if (returnTo) navigate(returnTo, { replace: true });
 
         // null means the gateway did not answer, which is different from answering with nothing
         // configured. Collapsing the two is what made the outage invisible.
@@ -122,6 +127,7 @@ export default function Layout() {
           setUptime(`${d}d ${h}h ${m}m`);
         }
       } catch {
+        rememberReturnPath();
         navigate('/login');
       } finally {
         setLoading(false);
@@ -142,6 +148,7 @@ export default function Layout() {
         })
         .catch((err) => {
           if (err.response?.status === 401) {
+            rememberReturnPath();
             navigate('/login');
             return;
           }
@@ -193,29 +200,10 @@ export default function Layout() {
 
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
 
-      {/* Above the promo banner: losing unsaved work matters more than the offer to switch
-          portals, and only one of the two is time-critical (#1656). */}
       <SessionExpiryWarning
         expiresAt={user.session_expires_at}
         onExtended={refreshUser}
       />
-
-      {showV1Promo && (
-        <div className="v1-promo-banner">
-          <p className="m-0 text-sm fw-medium">
-            {t('banner_legacy_interface', 'Need the legacy interface?')}{' '}
-            <a href="/portal/">{t('btn_switch_v1', 'Switch back to V1 →')}</a>
-          </p>
-          <button
-            onClick={dismissV1Promo}
-            className="v1-promo-banner__dismiss"
-            title={t('dismiss_promo_banner', 'Dismiss promo banner')}
-            aria-label={t('dismiss_promo_banner', 'Dismiss promo banner')}
-          >
-            &times;
-          </button>
-        </div>
-      )}
 
       <div
         id="dashboard-screen"

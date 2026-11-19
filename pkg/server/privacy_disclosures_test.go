@@ -174,10 +174,22 @@ func TestPortalShellsDeclareTheResolvedLocale(t *testing.T) {
 	// too, or an Arabic reader who switches back is left in an RTL document.
 	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro", "ar"}
 
+	// V1 is served to admins only, at classic_portal_path (#2528).
+	srv.cfg.ClassicPortalPath = testClassicPortalPath
+	_, admin := userWithSession(t, srv, "admin@example.com", "admin")
+	asAdmin := func(h map[string]string) map[string]string {
+		out := map[string]string{"Cookie": "lfr_session=" + admin}
+		for k, v := range h {
+			out[k] = v
+		}
+		return out
+	}
+	v1 := testClassicPortalPath
+
 	t.Run("v1 honours ?lang=", func(t *testing.T) {
 		for _, lang := range locales {
-			body := serveDashboardShell(t, srv, "/admin?lang="+lang, nil)
-			assertRootElementDeclares(t, body, "/admin?lang="+lang, lang, GetDirection(lang))
+			body := serveDashboardShell(t, srv, v1+"?lang="+lang, asAdmin(nil))
+			assertRootElementDeclares(t, body, v1+"?lang="+lang, lang, GetDirection(lang))
 		}
 	})
 
@@ -186,18 +198,18 @@ func TestPortalShellsDeclareTheResolvedLocale(t *testing.T) {
 		// query string, no localStorage the server could read. `?lang=` alone passing would leave
 		// every first-time RTL visitor with an LTR first paint.
 		for _, lang := range locales {
-			body := serveDashboardShell(t, srv, "/", map[string]string{
+			body := serveDashboardShell(t, srv, v1, asAdmin(map[string]string{
 				"Accept-Language": lang + "-XX," + lang + ";q=0.9,en;q=0.8",
-			})
-			assertRootElementDeclares(t, body, "/ with Accept-Language: "+lang, lang, GetDirection(lang))
+			}))
+			assertRootElementDeclares(t, body, v1+" with Accept-Language: "+lang, lang, GetDirection(lang))
 		}
 	})
 
-	t.Run("v1 serves the shell under /portal/ and /admin/ too", func(t *testing.T) {
-		// #1513 made V1 answer beneath those prefixes as well, from a second call site. A fix
-		// applied to one call site and not the other is this repo's most common defect shape.
-		for _, path := range []string{"/portal", "/portal/tunnels", "/admin/users"} {
-			body := serveDashboardShell(t, srv, path+"?lang=ar", nil)
+	t.Run("v1 serves the shell beneath its path too", func(t *testing.T) {
+		// #1513 made V1 answer beneath its base as well as at it. A fix applied to one and not
+		// the other is this repo's most common defect shape.
+		for _, path := range []string{v1, v1 + "/tunnels", v1 + "/users"} {
+			body := serveDashboardShell(t, srv, path+"?lang=ar", asAdmin(nil))
 			assertRootElementDeclares(t, body, path, "ar", "rtl")
 		}
 	})
@@ -209,8 +221,8 @@ func TestPortalShellsDeclareTheResolvedLocale(t *testing.T) {
 		// preference from navigator.language, so `it` arrives from a browser nobody configured.
 		// The server answers an unsupported locale with the English bundle (handleGetI18n), so
 		// echoing `it` would declare a language the page is not rendering.
-		body := serveDashboardShell(t, srv, "/admin?lang=it", nil)
-		assertRootElementDeclares(t, body, "/admin?lang=it", "en", "ltr")
+		body := serveDashboardShell(t, srv, v1+"?lang=it", asAdmin(nil))
+		assertRootElementDeclares(t, body, v1+"?lang=it", "en", "ltr")
 	})
 
 	t.Run("v2 shell", func(t *testing.T) {

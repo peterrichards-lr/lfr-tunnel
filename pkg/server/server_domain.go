@@ -261,7 +261,7 @@ func (s *Server) alertVanityDomainHookFailure(action, domain, requestingUserID s
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "vanity_domain_hook_failed.html", map[string]interface{}{
 		"Name":       user.FirstName,
 		"Domain":     domain,
-		"PortalLink": s.getPortalBaseURL(nil) + "/portal",
+		"PortalLink": s.getPortalBaseURL(nil) + PortalV2Base,
 	})
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Failed to render vanity_domain_hook_failed email: %v", err))

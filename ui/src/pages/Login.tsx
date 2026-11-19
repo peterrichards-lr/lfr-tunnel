@@ -209,16 +209,6 @@ export default function Login() {
       {/* Premium ambient animated orb */}
       <div className="login-orb" aria-hidden="true" />
 
-      {/* V1 Promo Banner */}
-      <div className="v1-promo-banner v1-promo-banner--card z-10 mb-xl">
-        <p className="m-0 text-sm fw-medium">
-          {t('banner_classic_look', 'Prefer the classic look?')}{' '}
-          <a href="/" className="ml-xs">
-            {t('btn_return_v1', 'Return to V1 →')}
-          </a>
-        </p>
-      </div>
-
       <div className="login-card z-10">
         <div className="flex justify-center mb-xl">
           <img
@@ -302,7 +292,7 @@ export default function Login() {
                   // portal=v2 so the callback returns here rather than to V1.
                   <a
                     key={p.id}
-                    href={`/api/auth/login?provider=${encodeURIComponent(p.id)}&portal=v2${cliLoginQuery()}`}
+                    href={`/api/auth/login?provider=${encodeURIComponent(p.id)}${cliLoginQuery()}`}
                     className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm"
                   >
                     {t('btn_continue_with', 'Continue with {0}').replace(

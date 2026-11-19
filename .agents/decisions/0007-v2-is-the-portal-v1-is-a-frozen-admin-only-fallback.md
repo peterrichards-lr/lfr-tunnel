@@ -13,10 +13,10 @@ v1 to be available for admins with the option in case anything has been missed."
 - **V1 is not deleted. It is frozen**: left alone, and kept as a fallback in case something was
   missed. The parity rule in 0004 ends, and so does the V1 half of every gate that enforced it
   (#2529).
-- **Admin-only is the target, not yet the state.** Until #2528 lands, V1 is still the front door
-  for everyone: it serves `/`, `/portal` and `/admin`, and every system email and the CLI link
-  there. #2528 moves V2 to `/portal` and puts V1 at an unadvertised path set in the server YAML,
+- **V1 is admin-only (#2528).** V2 is at `/portal`, and `/`, `/admin` and `/portalv2` redirect
+  there. V1 is served at an unadvertised path set in the server YAML (`classic_portal_path`),
   behind an admin check on every V1 request ("we need an admin check on portal v1 for sure").
+  Every system email, sign-in path and the CLI link to V2.
 - **Deleting V1 is a later, separate decision.** Epic #2524.
 
 ## Cost

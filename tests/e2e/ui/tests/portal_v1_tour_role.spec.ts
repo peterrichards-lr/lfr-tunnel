@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1 } from './utils/portal';
 
 /**
  * The V1 onboarding tour must not walk a non-admin through admin-only navigation (#1291).
@@ -22,14 +23,13 @@ test.describe('Portal V1 onboarding tour respects role', () => {
       window.localStorage.setItem('v2_promo_dismissed', 'true');
     });
 
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();

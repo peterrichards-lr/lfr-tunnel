@@ -1,5 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
+import { V2, openV1, V1 } from './utils/portal';
 
 /**
  * Sessions per gateway, in BOTH portals (#1150).
@@ -26,13 +27,12 @@ test.describe('Sessions per gateway', () => {
     page,
   }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
@@ -68,18 +68,17 @@ test.describe('Sessions per gateway', () => {
 
   test('Portal V1 renders the sessions-per-gateway chart', async ({ page }) => {
     await clearMailpit();
-    await page.goto('/admin');
-    await page.click('#btn-show-email');
+    await page.goto(`${V2}/login`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/admin?token=${token}`);
+    await openV1(page, token);
     await expect(
       page.locator('h2:has-text("Dashboard Overview")'),
     ).toBeVisible();
 
-    await page.goto('/admin#analytics');
+    await page.goto(`${V1}#analytics`);
     await page.reload();
 
     // The admin section is display:none until loadAnalytics confirms the role.
@@ -110,15 +109,15 @@ test.describe('Sessions per gateway', () => {
 
   test('Portal V2 renders the sessions-per-gateway chart', async ({ page }) => {
     await clearMailpit();
-    await page.goto('/portalv2/');
+    await page.goto(`${V2}/`);
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
-    await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL('**/portalv2/dashboard');
+    await page.goto(`${V2}/login?token=${token}`);
+    await page.waitForURL(`**${V2}/dashboard`);
 
-    await page.goto('/portalv2/admin/analytics');
+    await page.goto(`${V2}/admin/analytics`);
 
     // Titled the same as V1's, so the two arms are describing one feature rather than two
     // similarly-shaped ones -- the naming problem #1209 had to fix.

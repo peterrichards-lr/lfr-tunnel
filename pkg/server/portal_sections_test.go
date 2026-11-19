@@ -20,6 +20,8 @@ const (
 	v2DashboardSection = "../../ui/src/dashboardSections.ts"
 	v2DashboardPage    = "../../ui/src/pages/Dashboard.tsx"
 	v2SourceDir        = "../../ui/src"
+	v2PortalBase       = "../../ui/src/portalBase.ts"
+	v2ViteConfig       = "../../ui/vite.config.ts"
 )
 
 // v2SectionRoute is the route that makes /dashboard/<section> a real address. Without it
@@ -143,9 +145,9 @@ func v2Routes(tsx string) (routes, admin map[string]bool) {
 	return routes, admin
 }
 
-// v2Basename returns the BrowserRouter basename declared in App.tsx.
-func v2Basename(tsx string) string {
-	m := regexp.MustCompile(`\bbasename="([^"]+)"`).FindStringSubmatch(stripTSXComments(tsx))
+// v2Basename returns PORTAL_BASE from portalBase.ts, where V2 is mounted (#2528).
+func v2Basename(ts string) string {
+	m := regexp.MustCompile(`\bPORTAL_BASE = '([^']+)'`).FindStringSubmatch(stripTSXComments(ts))
 	if m == nil {
 		return ""
 	}
@@ -283,10 +285,16 @@ func TestPortalV1SectionToV2(t *testing.T) {
 		t.Fatalf("DASHBOARD_SECTIONS scan of %s is broken: %v", v2DashboardSection, ps.sections)
 	}
 
-	// The table's paths are relative to the router's basename; if V2 moves (#2528 may mount
-	// it at /portal), PortalV2Base has to move with it.
-	if got := v2Basename(app); got != PortalV2Base {
-		t.Errorf("App.tsx mounts V2 at basename %q but PortalV2Base is %q", got, PortalV2Base)
+	// The table's paths are relative to the router's basename, so PortalV2Base has to be where
+	// V2 is mounted: PORTAL_BASE, which the router and Vite both read rather than restate.
+	if got := v2Basename(readSource(t, v2PortalBase)); got != PortalV2Base {
+		t.Errorf("%s mounts V2 at %q but PortalV2Base is %q", v2PortalBase, got, PortalV2Base)
+	}
+	if !strings.Contains(stripTSXComments(app), "basename={PORTAL_BASE}") {
+		t.Errorf("%s does not mount the router at PORTAL_BASE", v2AppRoutes)
+	}
+	if !strings.Contains(readSource(t, v2ViteConfig), "base: `${PORTAL_BASE}/`") {
+		t.Errorf("%s does not build V2's assets under PORTAL_BASE", v2ViteConfig)
 	}
 
 	if problems := portalSectionProblems(PortalV1SectionToV2, ps); len(problems) > 0 {

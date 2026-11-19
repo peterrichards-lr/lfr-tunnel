@@ -5757,10 +5757,18 @@ func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Apply override dynamically to active lease in memory!
+	// On whichever gateway holds the tunnel (#2530): central's registry only has its own.
 	if err := s.registry.UpdateLeaseRateLimit(req.Host, req.RateLimit); err != nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
+		el, onEdge := s.findEdgeLease(req.Host)
+		if !onEdge {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		if !s.sendEdgeControl(el.NodeID, ControlMessage{Type: edgeFrameLeaseRateLimit, FullHost: el.FullHost, RateLimit: req.RateLimit}) {
+			respondJSON(w, http.StatusBadGateway, map[string]string{"error": "The gateway serving this tunnel (" + el.NodeID + ") is not reachable right now; nothing was changed."})
+			return
+		}
+		s.updateEdgeLease(req.Host, func(l *EdgeLease) { l.RateLimit = req.RateLimit })
 	}
 
 	s.goTracked(s.BroadcastTelemetry)

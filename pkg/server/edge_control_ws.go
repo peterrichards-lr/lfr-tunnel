@@ -121,6 +121,10 @@ type ControlMessage struct {
 	SecondsRemaining int               `json:"seconds_remaining,omitempty"`
 	ShutdownAt       int64             `json:"shutdown_at,omitempty"`
 	Headers          map[string]string `json:"headers,omitempty"`
+	// HeaderSet and HeaderRemove carry a portal header edit on lease_headers_patch (#2530): the
+	// change, not the result, because central does not hold an edge lease's header values.
+	HeaderSet    map[string]string `json:"header_set,omitempty"`
+	HeaderRemove []string          `json:"header_remove,omitempty"`
 	// Schedule fields, carried by the "node_schedule" frame (#1276). ScheduleEnabled has no
 	// omitempty: false is meaningful here -- it is how central tells a node it has come off
 	// the rota, and dropping it would leave the edge believing its last known schedule.
@@ -828,27 +832,6 @@ func (s *Server) sendEdgeWSKick(nodeID, subdomain string) bool {
 	return err == nil
 }
 
-// sendEdgeWSHeaders sends a lease headers update to a specific Edge node via WebSocket.
-// Returns true if the message was sent successfully.
-func (s *Server) sendEdgeWSHeaders(nodeID, fullHost string, headers map[string]string) bool {
-	s.edgeClientsMu.RLock()
-	conn, exists := s.edgeClients[nodeID]
-	s.edgeClientsMu.RUnlock()
-
-	if !exists {
-		return false
-	}
-
-	msg := ControlMessage{
-		Type:      "lease_headers",
-		Subdomain: fullHost,
-		Headers:   headers,
-	}
-
-	err := conn.WriteJSON(msg)
-	return err == nil
-}
-
 // broadcastQuotaEnforcement tells every connected edge what the bandwidth quota now says
 // about one user (#1959).
 //
@@ -1451,6 +1434,22 @@ func (s *Server) runEdgeControlChannel() {
 				slog.Info(fmt.Sprintf("[Edge Control] Updating custom headers for lease %s", msg.Subdomain))
 				if err := s.registry.UpdateLeaseHeaders(msg.Subdomain, msg.Headers); err != nil {
 					slog.Error(fmt.Sprintf("[Edge Control] Failed to update lease headers for %s: %v", msg.Subdomain, err))
+				}
+			case edgeFrameLeaseHeadersPatch:
+				// Validated again here rather than trusted: the edge is the one injecting.
+				patch := leaseHeaderPatch{Set: msg.HeaderSet, Remove: msg.HeaderRemove}
+				if err := patch.validate(); err != nil {
+					slog.Warn(fmt.Sprintf("[Edge Control] Refusing header edit for %s: %v", msg.FullHost, err))
+				} else if err := s.registry.PatchLeaseHeaders(msg.FullHost, patch); err != nil {
+					slog.Error(fmt.Sprintf("[Edge Control] Failed to edit lease headers for %s: %v", msg.FullHost, err))
+				} else {
+					slog.Info(fmt.Sprintf("[Edge Control] Edited custom headers for lease %s", msg.FullHost))
+				}
+			case edgeFrameLeaseRateLimit:
+				if err := s.registry.UpdateLeaseRateLimit(msg.FullHost, msg.RateLimit); err != nil {
+					slog.Error(fmt.Sprintf("[Edge Control] Failed to set the rate limit for %s: %v", msg.FullHost, err))
+				} else {
+					slog.Info(fmt.Sprintf("[Edge Control] Rate limit for %s set to %d RPS", msg.FullHost, msg.RateLimit))
 				}
 			default:
 				// Ignoring a frame this build has no case for is the correct behaviour --

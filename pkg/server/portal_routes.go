@@ -24,6 +24,9 @@ import (
 // The table of V1 sections is PortalV1SectionToV2. A fragment (/portal#users, from bookmarks made
 // before #1513) never reaches the server, so it is not mapped: it lands on V2's dashboard.
 
+// v1AdminBase is V1's old admin alias, which now only redirects.
+const v1AdminBase = "/admin"
+
 // routePortalPage serves or redirects a GET or HEAD for a portal page, and reports whether it did.
 func (s *Server) routePortalPage(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -32,60 +35,78 @@ func (s *Server) routePortalPage(w http.ResponseWriter, r *http.Request) bool {
 	p := r.URL.Path
 
 	if s.isClassicPortalPath(p) {
-		// The path is unadvertised, but that is not the control: this check is. Anyone without an
-		// admin session -- signed out included -- gets V2, the same as anyone else.
-		if _, _, ok := s.portalSessionAdmin(r); ok {
-			s.serveDashboardHTML(w, r)
-		} else {
-			redirectKeepingQuery(w, r, PortalV2Base)
-		}
+		s.serveClassicPortal(w, r)
 		return true
 	}
 
 	// A sign-in already in flight when the gateway moved V2 to /portal: V1 emailed magic links as
 	// /portal?token=... and sent SSO's code prompt to /admin?sso_mfa=1. V2 reads both only on its
 	// sign-in page -- at its root the router goes to /dashboard and drops the query.
-	if (p == "/" || p == "/admin" || p == PortalV2Base || p == PortalV2Base+"/") && isSignInQuery(r) {
+	if (p == "/" || p == v1AdminBase || p == PortalV2Base || p == PortalV2Base+"/") && isSignInQuery(r) {
 		redirectKeepingQuery(w, r, PortalV2Base+"/login")
 		return true
 	}
 
-	switch {
-	case p == "/":
-		redirectKeepingQuery(w, r, PortalV2Base)
-		return true
-
-	case p == "/admin":
-		redirectKeepingQuery(w, r, PortalV2Base)
-		return true
-
-	case strings.HasPrefix(p, "/admin/"):
-		target := v1SectionRedirect(strings.TrimSuffix(strings.TrimPrefix(p, "/admin/"), "/"))
-		if target == "" {
-			target = PortalV2Base
-		}
+	if target, ok := oldPortalEntryRedirect(p); ok {
 		redirectKeepingQuery(w, r, target)
 		return true
+	}
 
-	case p == "/portalv2" || strings.HasPrefix(p, "/portalv2/"):
-		redirectKeepingQuery(w, r, PortalV2Base+strings.TrimPrefix(p, "/portalv2"))
-		return true
-
-	case p == PortalV2Base || strings.HasPrefix(p, PortalV2Base+"/"):
-		// A V1 section link, /portal/<section>, from an old email or bookmark. Only where the V2
-		// page has a different path: /portal/account and /portal/analytics are V2 pages already,
-		// and redirecting them to themselves would loop.
-		rest := strings.TrimPrefix(p, PortalV2Base+"/")
-		if rest != p && rest != "" && !strings.Contains(rest, "/") {
-			if target := v1SectionRedirect(rest); target != "" && target != p {
-				redirectKeepingQuery(w, r, target)
-				return true
-			}
-		}
+	if p == PortalV2Base || strings.HasPrefix(p, PortalV2Base+"/") {
 		s.serveV2(w, r)
 		return true
 	}
 	return false
+}
+
+// serveClassicPortal serves V1 to an admin session and sends everyone else to V2.
+//
+// The path is unadvertised, but that is not the control: this check is. Anyone without an admin
+// session -- signed out included -- gets V2, the same as anyone else.
+func (s *Server) serveClassicPortal(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := s.portalSessionAdmin(r); !ok {
+		redirectKeepingQuery(w, r, PortalV2Base)
+		return
+	}
+	// The answer depends on the session, so no cache may hand it to anyone else.
+	w.Header().Set("Cache-Control", "no-store")
+	s.serveDashboardHTML(w, r)
+}
+
+// oldPortalEntryRedirect returns where an older portal URL now lives, and whether p is one.
+func oldPortalEntryRedirect(p string) (string, bool) {
+	switch {
+	case p == "/" || p == v1AdminBase:
+		return PortalV2Base, true
+
+	case strings.HasPrefix(p, v1AdminBase+"/"):
+		if target := v1SectionRedirect(v1Section(strings.TrimPrefix(p, v1AdminBase+"/"))); target != "" {
+			return target, true
+		}
+		return PortalV2Base, true
+
+	case p == "/portalv2" || strings.HasPrefix(p, "/portalv2/"):
+		return PortalV2Base + strings.TrimPrefix(p, "/portalv2"), true
+
+	case strings.HasPrefix(p, PortalV2Base+"/"):
+		// A V1 section link, /portal/<section>, from an old email or bookmark. Only where the V2
+		// page has a different path: /portal/account and /portal/analytics are V2 pages already,
+		// and redirecting them to themselves would loop.
+		if target := v1SectionRedirect(v1Section(strings.TrimPrefix(p, PortalV2Base+"/"))); target != "" && target != p {
+			return target, true
+		}
+	}
+	return "", false
+}
+
+// v1Section is the section a V1 link names beneath its base: one segment, a trailing slash
+// allowed, as V1's own sectionFromLocation read it. "" for anything deeper.
+func v1Section(rest string) string {
+	rest = strings.TrimSuffix(rest, "/")
+	if strings.Contains(rest, "/") {
+		return ""
+	}
+	return rest
 }
 
 // isSignInQuery reports whether the query carries a magic-link token or SSO's code prompt.

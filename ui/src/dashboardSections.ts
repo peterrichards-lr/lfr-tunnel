@@ -1,5 +1,5 @@
 /**
- * Dashboard sections addressable by path (#2527): `/portalv2/dashboard/<section>`.
+ * Dashboard sections addressable by path (#2527): `/portal/dashboard/<section>`.
  *
  * Tokens, reservations and tunnels live on the one Overview page in V2, where V1 gave each a
  * route of its own (`/portal/tokens`, ...). A path rather than a fragment keeps V2's links one

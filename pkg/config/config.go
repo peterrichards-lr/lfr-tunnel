@@ -1267,8 +1267,13 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 }
 
 // classicPortalPathMinLength keeps the classic portal's path from being a word someone would try,
-// and, as a side effect, off every path the gateway already routes (all shorter).
+// and, as a side effect, off every exact path the gateway already routes (all shorter).
 const classicPortalPathMinLength = 12
+
+// classicPortalPathRoutedPrefix is the one prefix the gateway routes without a following slash:
+// anything beginning /tunnel goes to the tunnel handler before a portal page is considered, so a
+// classic portal there would be advertised to admins and never reached.
+const classicPortalPathRoutedPrefix = "tunnel"
 
 // validateClassicPortalPath normalises classic_portal_path to "/<segment>" and refuses one that
 // is not a single, long segment (#2528).
@@ -1286,6 +1291,9 @@ func validateClassicPortalPath(cfg *ServerConfig) error {
 	}
 	if len(p) < classicPortalPathMinLength {
 		return fmt.Errorf("classic_portal_path %q: use at least %d characters, so the path cannot be guessed", cfg.ClassicPortalPath, classicPortalPathMinLength)
+	}
+	if strings.HasPrefix(p, classicPortalPathRoutedPrefix) {
+		return fmt.Errorf("classic_portal_path %q: paths beginning /%s belong to the tunnel handler", cfg.ClassicPortalPath, classicPortalPathRoutedPrefix)
 	}
 	cfg.ClassicPortalPath = "/" + p
 	return nil

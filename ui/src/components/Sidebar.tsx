@@ -4,6 +4,7 @@ import GeoAttribution from './GeoAttribution';
 import { useI18n } from '../contexts/I18nContext';
 import { useAdminQueueCounts } from '../hooks/useAdminQueueCounts';
 import { PORTAL_BASE } from '../portalBase';
+import { forgetReturnPath } from '../loginReturn';
 
 interface SidebarProps {
   user: any;
@@ -383,6 +384,7 @@ export default function Sidebar({
             className="btn btn-secondary w-full p-sm"
             onClick={async () => {
               await fetch('/api/auth/logout', { method: 'POST' });
+              forgetReturnPath();
               window.location.href = `${PORTAL_BASE}/login`;
             }}
           >

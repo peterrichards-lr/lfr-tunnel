@@ -33,6 +33,8 @@ func TestLoadServerConfigRefusesABadClassicPortalPath(t *testing.T) {
 		{"two segments", "classic_portal_path: \"/classic-7f3k9q2m/x\"\n", "one path segment"},
 		{"query", "classic_portal_path: \"/classic-7f3k9q2m?x\"\n", "one path segment"},
 		{"an existing route", "classic_portal_path: \"/portalv2\"\n", "at least"},
+		// Long enough, but /tunnel... is routed to the tunnel handler before any portal page.
+		{"the tunnel prefix", "classic_portal_path: \"/tunnel-classic-7f3k\"\n", "tunnel handler"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -486,7 +486,7 @@ yourself.
 
 *Note: the edges do not serve the portal. Every portal path on an edge 301-redirects to the
 apex, which central serves -- verified against production on 2026-09-01: `/portal/`,
-`/portalv2/` and `/static/dashboard.js` all return 301 to `https://lfr-demo.se/...` on
+`/portalv2/` (V2's base until #2528 moved it to `/portal`) and `/static/dashboard.js` all return 301 to `https://lfr-demo.se/...` on
 in/apac, while central returns 200. So a portal-only release (`dashboard.*`, `ui/`,
 `static/`, and nothing in `*.go` but `version.go`) does not functionally require an edge
 deploy at all.*
@@ -992,4 +992,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-10* | *Last Reviewed: 2026-11-10*
+*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*

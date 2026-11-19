@@ -43,6 +43,18 @@ export function rememberReturnPath(): void {
   }
 }
 
+/**
+ * Forgets the remembered page. Called on a deliberate sign-out, so the next person to sign in on
+ * this browser is not sent to the page the last one was on.
+ */
+export function forgetReturnPath(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // Nothing stored that can be read either.
+  }
+}
+
 /** The remembered page, once: it is forgotten as it is read. Null when there is none. */
 export function takeReturnPath(): string | null {
   let raw: string | null = null;

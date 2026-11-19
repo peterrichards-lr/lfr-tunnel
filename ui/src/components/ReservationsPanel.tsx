@@ -358,12 +358,31 @@ export default function ReservationsPanel() {
   // The same file V1 has always offered (#2526): every reservation, custom domains included,
   // with the same columns and the same status words, so a spreadsheet built on one portal's
   // export reads the other's.
-  const exportReservations = () => {
+  // The same file V1 has always offered (#2526): every reservation, custom domains included,
+  // with the same columns and the same status words, so a spreadsheet built on one portal's
+  // export reads the other's. Fetched at the click, as V1 does, rather than read from this
+  // panel's state: that is loaded once and misses anything reserved or released since (from
+  // the CLI or another tab). Expired means at or past the expiry, as the table shows it.
+  const exportReservations = async () => {
+    let list: Reservation[];
+    try {
+      const res = await axios.get('/api/portal/reservations');
+      list = res.data.reservations || [];
+    } catch {
+      showToast(
+        t(
+          'reservations_export_failed',
+          'Could not load reservations to export.',
+        ),
+        'error',
+      );
+      return;
+    }
     const now = new Date();
-    const rows = reservations.map((r) => {
+    const rows = list.map((r) => {
       let status = 'Active';
       if (r.expires_at) {
-        if (new Date(r.expires_at) < now) status = 'Quarantined';
+        if (new Date(r.expires_at) <= now) status = 'Quarantined';
         else if (r.extension_requested) status = 'Extension Requested';
       }
       return [

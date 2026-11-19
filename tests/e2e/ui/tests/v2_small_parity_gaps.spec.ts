@@ -62,6 +62,7 @@ test.describe('V2 closes the small gaps with V1', () => {
       const users = await res.json();
       for (const u of users) {
         if (u.email === adminEmail) {
+          adminId = u.id;
           u.onboarding_status = 'aborted';
           u.onboarding_last_step = 'tokens';
           u.onboarding_reruns = 2;
@@ -73,6 +74,7 @@ test.describe('V2 closes the small gaps with V1', () => {
         body: JSON.stringify(users),
       });
     });
+    let adminId = '';
     let put: { url: string; body: any } | null = null;
     await page.route('**/preferred-domain', async (route: any) => {
       put = {
@@ -101,8 +103,11 @@ test.describe('V2 closes the small gaps with V1', () => {
       .locator('#user-preferred-domain')
       .selectOption('lfr-demo.local');
     await expect.poll(() => put).not.toBeNull();
+    // By ID, like every other admin call: the server resolves the ID first (#2469), and an email
+    // can name a different account among case duplicates.
+    expect(adminId).not.toBe('');
     expect(put!.url).toContain(
-      `/api/admin/users/${encodeURIComponent(adminEmail)}/preferred-domain`,
+      `/api/admin/users/${encodeURIComponent(adminId)}/preferred-domain`,
     );
     expect(put!.body).toEqual({ preferred_domain: 'lfr-demo.local' });
     await expect(modal.locator('#user-preferred-domain')).toHaveValue(
@@ -112,11 +117,27 @@ test.describe('V2 closes the small gaps with V1', () => {
 
   test('reservations export as the same CSV V1 produces', async ({ page }) => {
     await loginV2(page);
+    // `late` appears only once the panel has loaded: the export must fetch at the click, as V1
+    // does, and not hand over the list the panel read when the page opened.
+    let gets = 0;
+    let exporting = false;
     await page.route('**/api/portal/reservations', async (route: any) => {
       if (route.request().method() !== 'GET') return route.continue();
+      gets++;
       const res = await route.fetch();
       const body = await res.json();
+      const late = exporting
+        ? [
+            {
+              id: 'r-late',
+              subdomain: 'latesub',
+              domain: 'lfr-demo.local',
+              status: 'active',
+            },
+          ]
+        : [];
       body.reservations = [
+        ...late,
         {
           id: 'r-live',
           subdomain: 'livesub',
@@ -152,6 +173,9 @@ test.describe('V2 closes the small gaps with V1', () => {
     await page.reload();
 
     const section = page.locator('#registered-subdomains');
+    await expect(section).toContainText('livesub');
+    expect(gets).toBeGreaterThan(0);
+    exporting = true;
     const download = page.waitForEvent('download');
     await section.locator('button:text-is("Export CSV")').click();
     const file = await download;
@@ -168,6 +192,7 @@ test.describe('V2 closes the small gaps with V1', () => {
     expect(lines).toContain(
       '"r-old","oldsub","lfr-demo.local","owner-1","Quarantined","2026-02-01T00:00:00Z","2026-01-01T00:00:00Z"',
     );
+    expect(lines.some((l) => l.startsWith('"r-late"'))).toBe(true);
     // Quoted, quotes doubled, and defused with a leading apostrophe.
     expect(lines).toContain(
       `"'=HYPERLINK(""x"")","formula","lfr-demo.local","","Active","Never",""`,
@@ -197,6 +222,22 @@ test.describe('V2 closes the small gaps with V1', () => {
     // No hub URL configured: V1's fallback, the image's repository on Docker Hub.
     await expect(
       box.locator('a[href="https://hub.docker.com/r/example/tunnel-client"]'),
+    ).toBeVisible();
+  });
+
+  test('the help links do not depend on the release notes loading', async ({
+    page,
+  }) => {
+    await loginV2(page);
+    await page.route('**/static/whats-new.json', (route: any) =>
+      route.fulfill({ status: 404, body: '' }),
+    );
+    await stubVersion(page, (v) => {
+      v.documentation_url = 'https://docs.example.test/tunnel';
+    });
+    await openHelp(page);
+    await expect(
+      page.locator('a[href="https://docs.example.test/tunnel"]'),
     ).toBeVisible();
   });
 

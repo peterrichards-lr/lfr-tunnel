@@ -101,9 +101,8 @@ export default function WhatsNewHelpBar({
     }
   };
 
-  if (releases.length === 0) {
-    return null;
-  }
+  // Not hidden when the release notes are missing or failed to load: the bar also carries the
+  // help links and the docker pull box (#2526), and those must not depend on whats-new.json.
 
   return (
     <div className="card mb-xl">

@@ -537,23 +537,25 @@ export default function AdminUsers() {
   };
 
   // V1's user modal always let an admin choose the domain a user's subdomains are offered on
-  // (#2526). Sent by email -- the handler's path parameter -- and applied to the open modal and
-  // the table only once the server has accepted it.
+  // (#2526). Addressed by the user's ID, like every other admin call here: the server resolves
+  // the ID first (adminTargetUser, #2469), and an email can name the oldest of several
+  // case-duplicate accounts rather than the one open in this modal. Applied to the modal and the
+  // table only once the server has accepted it, and to the modal only if it is still showing
+  // this user -- it may have been closed, or moved on, while the request was in flight.
   const updatePreferredDomain = async (domain: string) => {
     if (!selectedUser) return;
+    const id = selectedUser.id;
     try {
       await axios.put(
-        `/api/admin/users/${encodeURIComponent(selectedUser.email)}/preferred-domain`,
+        `/api/admin/users/${encodeURIComponent(id)}/preferred-domain`,
         { preferred_domain: domain },
       );
       setUsers((prev) =>
-        prev.map((u) =>
-          u.email === selectedUser.email
-            ? { ...u, preferred_domain: domain }
-            : u,
-        ),
+        prev.map((u) => (u.id === id ? { ...u, preferred_domain: domain } : u)),
       );
-      setSelectedUser({ ...selectedUser, preferred_domain: domain });
+      setSelectedUser((prev) =>
+        prev && prev.id === id ? { ...prev, preferred_domain: domain } : prev,
+      );
       showToast(
         t('preferred_domain_updated', 'Preferred domain updated.'),
         'success',

@@ -161,6 +161,32 @@ export default function AdminUsers() {
   const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
   const { showToast, showConfirm, showPrompt } = useUI();
+
+  // The onboarding tour's state, as V1 shows it: pending until started (#2526).
+  const tourStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'completed':
+        return t('tour_status_completed', 'Completed');
+      case 'in_progress':
+        return t('tour_status_in_progress', 'In Progress');
+      case 'aborted':
+        return t('tour_status_aborted', 'Aborted');
+      default:
+        return t('tour_status_pending', 'Pending');
+    }
+  };
+  const tourBadgeClass = (status?: string) => {
+    switch (status) {
+      case 'completed':
+        return 'badge-success';
+      case 'in_progress':
+        return 'badge-primary';
+      case 'aborted':
+        return 'badge-danger';
+      default:
+        return 'badge-warning';
+    }
+  };
   const { formatDate } = useSettings();
   const [loadError, setLoadError] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -182,7 +208,7 @@ export default function AdminUsers() {
   // instant the wait gives up at (#1944).
   const [diagPollDeadline, setDiagPollDeadline] = useState<number | null>(null);
   const [diagPollTimedOut, setDiagPollTimedOut] = useState(false);
-  const [_domains, _setDomains] = useState<string[]>([]);
+  const [domains, setDomains] = useState<string[]>([]);
 
   useEffect(() => {
     // A wait belongs to the dialog that started it: opening a different user must not inherit
@@ -510,6 +536,39 @@ export default function AdminUsers() {
     showToast(text, type === 'error' ? 'error' : 'success');
   };
 
+  // V1's user modal always let an admin choose the domain a user's subdomains are offered on
+  // (#2526). Sent by email -- the handler's path parameter -- and applied to the open modal and
+  // the table only once the server has accepted it.
+  const updatePreferredDomain = async (domain: string) => {
+    if (!selectedUser) return;
+    try {
+      await axios.put(
+        `/api/admin/users/${encodeURIComponent(selectedUser.email)}/preferred-domain`,
+        { preferred_domain: domain },
+      );
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.email === selectedUser.email
+            ? { ...u, preferred_domain: domain }
+            : u,
+        ),
+      );
+      setSelectedUser({ ...selectedUser, preferred_domain: domain });
+      showToast(
+        t('preferred_domain_updated', 'Preferred domain updated.'),
+        'success',
+      );
+    } catch (e: any) {
+      showToast(
+        t(
+          'preferred_domain_update_failed',
+          'Failed to update preferred domain: {0}',
+        ).replace('{0}', e.response?.data?.error || e.message || ''),
+        'error',
+      );
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const [res, domRes] = await Promise.all([
@@ -521,7 +580,7 @@ export default function AdminUsers() {
         'registrations',
         (res.data || []).filter((u: User) => u.status === 'pending').length,
       );
-      if (domRes.data) _setDomains(domRes.data);
+      if (domRes.data) setDomains(domRes.data);
     } catch (e: any) {
       // An empty table is indistinguishable from "no results" (#1868). Say which.
       console.error(e);
@@ -1330,6 +1389,51 @@ export default function AdminUsers() {
                 {selectedUser.rate_limit
                   ? `${selectedUser.rate_limit} RPS`
                   : 'Unlimited'}
+              </div>
+            </div>
+            <div>
+              <label
+                htmlFor="user-preferred-domain"
+                className="block text-2xs text-muted tracking-wider uppercase mb-2xs"
+              >
+                {t('user_lbl_preferred_domain', 'Preferred Domain')}
+              </label>
+              <select
+                id="user-preferred-domain"
+                className="input-field"
+                value={selectedUser.preferred_domain || ''}
+                onChange={(e) => updatePreferredDomain(e.target.value)}
+              >
+                <option value="">
+                  {t('domain_default_contextual', 'Default (Contextual)')}
+                </option>
+                {domains.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                {t('user_lbl_tour_status', 'Onboarding Tour Status')}
+              </div>
+              <div data-testid="user-tour-status">
+                <span
+                  className={`badge ${tourBadgeClass(selectedUser.onboarding_status)}`}
+                >
+                  {tourStatusLabel(selectedUser.onboarding_status)}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                {t('user_lbl_tour_detail', 'Onboarding Tour Detail')}
+              </div>
+              <div className="fw-medium" data-testid="user-tour-detail">
+                {t('tour_detail_value', 'Last step: {0} · Reruns: {1}')
+                  .replace('{0}', selectedUser.onboarding_last_step || 'N/A')
+                  .replace('{1}', String(selectedUser.onboarding_reruns || 0))}
               </div>
             </div>
           </div>

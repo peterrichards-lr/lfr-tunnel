@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 interface ReleaseNote {
   version: string;
@@ -32,12 +33,38 @@ function renderFeatureItem(feature: string) {
 // collapsed to the *bottom* of a long single-column stack (after Reservations,
 // Vanity Domains, Tunnels), so a fixed top bar is also the more consistent mobile
 // layout, not just a desktop decluttering.
+// The gateway's /api/version fields this bar reads (#2526). Each is optional: a deployment that
+// configures none of them shows none of these links, as V1 does.
+interface HelpLinks {
+  documentation_url?: string;
+  secure_token_guide_url?: string;
+  docker_image?: string;
+  docker_hub_url?: string;
+  docker_bypass_url?: string;
+}
+
 export default function WhatsNewHelpBar({
   onInstallClick,
+  serverConfig,
 }: {
   onInstallClick: () => void;
+  serverConfig?: HelpLinks | null;
 }) {
   const { t } = useI18n();
+  const { showToast } = useUI();
+  const docker = serverConfig?.docker_image;
+  // V1's fallback when the gateway names an image but no Docker Hub page.
+  const dockerHub =
+    serverConfig?.docker_hub_url ||
+    (docker ? `https://hub.docker.com/r/${docker.split(':')[0]}` : '');
+  const copyDockerPull = async () => {
+    try {
+      await navigator.clipboard.writeText(`docker pull ${docker}`);
+      showToast(t('copied_to_clipboard', 'Copied to clipboard.'), 'success');
+    } catch {
+      showToast(t('copy_failed', 'Could not copy to the clipboard.'), 'error');
+    }
+  };
   const [releases, setReleases] = useState<ReleaseNote[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [hasUnseen, setHasUnseen] = useState(false);
@@ -164,7 +191,74 @@ export default function WhatsNewHelpBar({
               >
                 {t('onboarding_guide_title', 'Onboarding Tour')}
               </button>
+              {serverConfig?.documentation_url && (
+                <a
+                  className="btn btn-outline justify-start text-left"
+                  href={serverConfig.documentation_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  📖 {t('read_documentation', 'Read the Documentation')}
+                </a>
+              )}
+              {serverConfig?.secure_token_guide_url && (
+                <a
+                  className="btn btn-outline justify-start text-left"
+                  href={serverConfig.secure_token_guide_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  🔐{' '}
+                  {t(
+                    'secure_token_storage',
+                    'Secure Token Storage (LDM-Style)',
+                  )}
+                </a>
+              )}
             </div>
+            {docker && (
+              <div className="mt-lg" data-testid="docker-pull-box">
+                <h4 className="section-title text-sm mb-xs">
+                  {t('docker_image_title', 'Docker Hub Image')}
+                </h4>
+                <p className="text-xs text-muted mb-sm">
+                  {t(
+                    'docker_pull_desc',
+                    'You can pull the official Docker client image directly:',
+                  )}
+                </p>
+                <div className="flex items-center surface-subtle rounded border px-md py-xs gap-sm mb-sm">
+                  <code className="text-xs font-mono text-main flex-1">
+                    docker pull {docker}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={copyDockerPull}
+                    className="btn-bare p-xs text-xs rounded text-muted"
+                    aria-label={t(
+                      'copy_docker_pull',
+                      'Copy the docker pull command',
+                    )}
+                  >
+                    📋
+                  </button>
+                </div>
+                <div className="flex flex-col gap-xs text-sm">
+                  <a href={dockerHub} target="_blank" rel="noreferrer">
+                    → {t('docker_view_hub', 'View on Docker Hub')}
+                  </a>
+                  {serverConfig?.docker_bypass_url && (
+                    <a
+                      href={serverConfig.docker_bypass_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      → {t('docker_edr_guide', 'EDR Bypass Guide')}
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

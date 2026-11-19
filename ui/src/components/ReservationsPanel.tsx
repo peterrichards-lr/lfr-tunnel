@@ -8,6 +8,7 @@ import { useUI } from '../contexts/UIContext';
 import ReservationsTable from './ReservationsTable';
 import SectionHeading from './SectionHeading';
 import ModalShell from './ModalShell';
+import { toCSV, downloadCSV } from '../csv';
 
 interface Reservation {
   id: string;
@@ -17,6 +18,7 @@ interface Reservation {
   created_at?: string;
   expires_at?: string;
   extension_requested?: boolean;
+  user_id?: string;
   access_mode?: string;
   passcode?: string;
   whitelist_ips?: string;
@@ -351,6 +353,45 @@ export default function ReservationsPanel() {
         'error',
       );
     }
+  };
+
+  // The same file V1 has always offered (#2526): every reservation, custom domains included,
+  // with the same columns and the same status words, so a spreadsheet built on one portal's
+  // export reads the other's.
+  const exportReservations = () => {
+    const now = new Date();
+    const rows = reservations.map((r) => {
+      let status = 'Active';
+      if (r.expires_at) {
+        if (new Date(r.expires_at) < now) status = 'Quarantined';
+        else if (r.extension_requested) status = 'Extension Requested';
+      }
+      return [
+        r.id,
+        r.subdomain,
+        r.domain,
+        r.user_id || '',
+        status,
+        r.expires_at || 'Never',
+        r.created_at || '',
+      ];
+    });
+    downloadCSV(
+      'subdomain_reservations.csv',
+      toCSV([
+        [
+          'ID',
+          'Subdomain',
+          'Domain',
+          'Owner',
+          'Status',
+          'ExpiresAt',
+          'CreatedAt',
+        ],
+        ...rows,
+      ]),
+    );
+    showToast(t('reservations_exported', 'Reservations exported.'), 'success');
   };
 
   const requestExtension = async (id: string) => {
@@ -719,6 +760,17 @@ export default function ReservationsPanel() {
       <ReservationsTable
         id="registered-subdomains"
         title={t('subdomain_reservations', 'Registered Subdomains')}
+        headerAction={
+          reservations.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary py-xs px-md text-xs w-auto m-0"
+              onClick={exportReservations}
+            >
+              {t('btn_export_csv', 'Export CSV')}
+            </button>
+          )
+        }
         emptyMessage={t(
           'no_subdomains_reserved',
           'No subdomains reserved yet.',

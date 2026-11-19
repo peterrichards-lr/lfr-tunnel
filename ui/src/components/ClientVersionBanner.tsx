@@ -54,15 +54,17 @@ export default function ClientVersionBanner({ state }: { state?: MinVersion }) {
       ),
     );
   } else if (state.deadline) {
+    // The time left goes beside the date, inside the sentence, once the warning window is open.
+    const remaining =
+      state.phase === 'warning' ? formatRemaining(state.seconds_remaining) : '';
+    const when =
+      formatDate(state.deadline) + (remaining ? ` (${remaining})` : '');
     message = fill(
       t(
         'client_version_banner_deadline',
         'Your Liferay Tunnel client ({0}) is older than the minimum this gateway accepts ({1}). Upgrade by {2}, or new tunnels will be refused.',
       ),
-    ).replace('{2}', formatDate(state.deadline));
-    const remaining =
-      state.phase === 'warning' ? formatRemaining(state.seconds_remaining) : '';
-    if (remaining) message += ` (${remaining})`;
+    ).replace('{2}', when);
   } else {
     message = fill(
       t(

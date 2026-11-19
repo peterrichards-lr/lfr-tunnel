@@ -23,8 +23,15 @@ import (
 // and a new email for everybody below it, once.
 //
 // Only users whose client was seen below the floor have a first-sight row, so a user with no
-// recorded client, or one at or above the floor, is never a candidate. Each candidate is checked
-// again against the version their client last reported: one who has upgraded since is skipped.
+// recorded client, or one at or above the floor, is never a candidate.
+//
+// The row, not the version the user's client last reported, decides who is told. A user may run
+// more than one client -- a current one on their laptop and an old one in a script, an IDE task or
+// LDM, which is exactly the client nobody reads the output of -- and the last to register is
+// whichever ran last. Judged by that alone, the old client's window passes unannounced whenever the
+// laptop registered more recently, and once it expires the old client is refused before its
+// version is recorded, so it never would be. The cost of trusting the row instead is one email to a
+// user who has already upgraded every client; the email says so.
 func (s *Server) warnUsersEnteringMinVersionWindow() {
 	if s.cfg == nil || s.db == nil || s.cfg.MinClientVersion == "" {
 		return
@@ -47,8 +54,7 @@ func (s *Server) warnUsersEnteringMinVersionWindow() {
 		if err != nil || user == nil {
 			continue
 		}
-		// Read-only: the window was started by the client's registration, never by this sweep.
-		state := s.minVersionState(user, user.LastClientVersion, false)
+		state := s.minVersionSighting(user)
 		// Expired as well as warning: a user whose window passed while no sweep ran (a gateway
 		// down for the day) still has not been told, and is told what has happened instead.
 		if !state.Required || state.Phase == GracePhaseGrace {
@@ -72,6 +78,34 @@ func (s *Server) warnUsersEnteringMinVersionWindow() {
 	}
 }
 
+// minVersionSighting is a user's standing against the floor for the email: minVersionState for
+// the client they last registered with when that one is below the floor, and otherwise the window
+// a client seen below it earlier started -- with no version named, because which one it was is not
+// recorded. Read-only: windows are started by registrations, never by the sweep.
+func (s *Server) minVersionSighting(user *db.User) MinVersionState {
+	if state := s.minVersionState(user, user.LastClientVersion, false); state.Required {
+		return state
+	}
+	floor := s.cfg.MinClientVersion
+	firstSeen, err := s.db.GetFirstSeen(user.ID, MinVersionDocumentID, floor)
+	if err != nil || firstSeen.IsZero() {
+		return MinVersionState{}
+	}
+	now := time.Now().UTC()
+	phase, deadline := gracePhase(firstSeen, now, s.minVersionGraceDays(), s.minVersionWarningDays())
+	state := MinVersionState{
+		Required:       true,
+		MinVersion:     floor,
+		UpgradeCommand: UpgradeCommand,
+		Phase:          phase,
+		Deadline:       deadline.Format(time.RFC3339),
+	}
+	if remaining := deadline.Sub(now); remaining > 0 {
+		state.SecondsRemaining = int64(remaining.Seconds())
+	}
+	return state
+}
+
 // minVersionWarningEmail is the template context for min_version_warning.html.
 type minVersionWarningEmail struct {
 	Name           string
@@ -82,6 +116,14 @@ type minVersionWarningEmail struct {
 	Remaining      string
 	UpgradeCommand string
 	PortalLink     string
+}
+
+// minVersionClientPhrase names the client the email is about: by version when it is known.
+func minVersionClientPhrase(version string) string {
+	if version == "" {
+		return "A Liferay Tunnel client on your account"
+	}
+	return fmt.Sprintf("Your Liferay Tunnel client (%s)", version)
 }
 
 // sendMinVersionWarningEmail sends one min_version_warning email, synchronously, so the sweep can
@@ -111,15 +153,19 @@ func (s *Server) sendMinVersionWarningEmail(user *db.User, state MinVersionState
 	body, err := s.renderEmailTemplate(user.LanguagePreference, "min_version_warning.html", data)
 	if err != nil {
 		slog.Warn("[MinVersion] Failed to render the min_version_warning template; sending the plain version", "error", err)
-		body = fmt.Sprintf("<p>Hi %s,</p><p>Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s). Run <code>%s</code>.</p>",
-			html.EscapeString(data.Name), html.EscapeString(data.ClientVersion), html.EscapeString(data.MinVersion), data.UpgradeCommand)
+		body = fmt.Sprintf("<p>Hi %s,</p><p>%s is older than the minimum this gateway accepts (%s). Run <code>%s</code>.</p>",
+			html.EscapeString(data.Name), html.EscapeString(minVersionClientPhrase(data.ClientVersion)), html.EscapeString(data.MinVersion), data.UpgradeCommand)
 	}
-	when := fmt.Sprintf("within %s (by %s), or new tunnels will be refused", data.Remaining, data.Deadline)
+	when := fmt.Sprintf("Upgrade it within %s (by %s), or new tunnels will be refused.", data.Remaining, data.Deadline)
 	if data.Expired {
-		when = fmt.Sprintf("to start new tunnels again: the upgrade period ended on %s", data.Deadline)
+		when = fmt.Sprintf("The upgrade period ended on %s, so new tunnels are refused until it is upgraded.", data.Deadline)
 	}
-	plain := fmt.Sprintf("Hi %s,\n\nYour Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s).\n\nRun:\n  %s\n\n%s. Tunnels already running are not interrupted.\n\nPortal: %s\n",
-		data.Name, data.ClientVersion, data.MinVersion, data.UpgradeCommand, when, data.PortalLink)
+	ignore := ""
+	if data.ClientVersion == "" {
+		ignore = "If you have already upgraded every client you use, you can ignore this.\n\n"
+	}
+	plain := fmt.Sprintf("Hi %s,\n\n%s is older than the minimum this gateway accepts (%s). %s Tunnels already running are not interrupted.\n\nTo upgrade, run:\n  %s\n\n%sPortal: %s\n\nThis is sent regardless of your notification preferences, because new tunnels are refused after the deadline.\n",
+		data.Name, minVersionClientPhrase(data.ClientVersion), data.MinVersion, when, data.UpgradeCommand, ignore, data.PortalLink)
 	subject := fmt.Sprintf("Action required: upgrade your Liferay Tunnel client to %s", data.MinVersion)
 	return s.sendNotification(notifyMinVersionWarning, user.Email, subject, body, plain)
 }

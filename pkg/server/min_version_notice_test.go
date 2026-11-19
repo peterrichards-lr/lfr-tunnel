@@ -157,13 +157,11 @@ func TestTheVersionWarningIsNotEmailedTooEarlyOrToTheWrongPeople(t *testing.T) {
 
 	inGrace := userOnClient(t, srv, "grace@example.com", "v1.40.0")
 	minVersionFirstSeenDaysAgo(t, srv, inGrace.ID, 2)
-	// Seen below the floor, and has upgraded since.
-	upgraded := userOnClient(t, srv, "upgraded@example.com", "v1.45.0")
-	minVersionFirstSeenDaysAgo(t, srv, upgraded.ID, 11)
+	// Never seen below the floor, so no window: a current, a dev and an unknown client. (A dev or
+	// version-less registration never records a first sight, so none of these has a row.)
+	current := userOnClient(t, srv, "current@example.com", "v1.52.9")
 	dev := userOnClient(t, srv, "dev@example.com", "dev")
-	minVersionFirstSeenDaysAgo(t, srv, dev.ID, 11)
 	unknown := userOnClient(t, srv, "unknown@example.com", "")
-	minVersionFirstSeenDaysAgo(t, srv, unknown.ID, 11)
 	// Control, in the same sweep: due a warning, so the sweep is shown to send.
 	due := userOnClient(t, srv, "due@example.com", "v1.40.0")
 	minVersionFirstSeenDaysAgo(t, srv, due.ID, 11)
@@ -172,7 +170,7 @@ func TestTheVersionWarningIsNotEmailedTooEarlyOrToTheWrongPeople(t *testing.T) {
 	if warningsTo(mail, due.Email) != 1 {
 		t.Fatal("control: the user due a warning was not emailed, so the absences below prove nothing")
 	}
-	for _, u := range []*db.User{inGrace, upgraded, dev, unknown} {
+	for _, u := range []*db.User{inGrace, current, dev, unknown} {
 		if got := warningsTo(mail, u.Email); got != 0 {
 			t.Errorf("%s was emailed %d time(s), want none", u.Email, got)
 		}
@@ -211,5 +209,47 @@ func TestAFailedVersionWarningIsRetried(t *testing.T) {
 	srv.warnUsersEnteringMinVersionWindow()
 	if got := warningsTo(mail, user.Email); got != 1 {
 		t.Errorf("after a failed send and a recovered relay, emails = %d, want 1 -- the claim was not released", got)
+	}
+}
+
+// Two clients: an old one in a script opened the window, and a current one on the laptop
+// registered since. The old one is the client nobody reads the output of, so its window is still
+// emailed -- without naming a version it no longer knows, and saying to ignore it if upgraded.
+func TestAnOldClientIsEmailedAboutEvenWhenANewerOneRegisteredSince(t *testing.T) {
+	srv, mail, cleanup := setupMinVersionNoticeServer(t)
+	defer cleanup()
+	user := userOnClient(t, srv, "two@example.com", "v1.52.9")
+	minVersionFirstSeenDaysAgo(t, srv, user.ID, 11)
+
+	srv.warnUsersEnteringMinVersionWindow()
+	if got := warningsTo(mail, user.Email); got != 1 {
+		t.Fatalf("emails = %d, want 1: the old client's window would pass unannounced", got)
+	}
+	e := mail.getSentEmails()[0]
+	body := e.HtmlBody + e.TextBody
+	for _, want := range []string{"A Liferay Tunnel client on your account", "v1.45.0", "already upgraded every client"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the email does not say %q", want)
+		}
+	}
+	if strings.Contains(body, "v1.52.9") {
+		t.Error("the email names the current client's version as the old one")
+	}
+}
+
+// Sent whatever the notification preference: it is the last notice before tunnels are refused.
+func TestTheVersionWarningIgnoresMutedNotifications(t *testing.T) {
+	srv, mail, cleanup := setupMinVersionNoticeServer(t)
+	defer cleanup()
+	user := userOnClient(t, srv, "muted@example.com", "v1.40.0")
+	user.NotificationPrefs = "disabled"
+	if err := srv.db.UpdateUser(user); err != nil {
+		t.Fatalf("muting: %v", err)
+	}
+	minVersionFirstSeenDaysAgo(t, srv, user.ID, 11)
+
+	srv.warnUsersEnteringMinVersionWindow()
+	if got := warningsTo(mail, user.Email); got != 1 {
+		t.Errorf("a muted user was emailed %d time(s), want 1", got)
 	}
 }

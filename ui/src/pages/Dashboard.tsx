@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
@@ -17,6 +17,7 @@ import { useUI } from '../contexts/UIContext';
 import SectionHeading from '../components/SectionHeading';
 import ModalShell from '../components/ModalShell';
 import { consumeCLILogin } from '../cliLogin';
+import { useDashboardSection } from '../hooks/useDashboardSection';
 
 function isOlderVersion(current: string, target: string): boolean {
   if (!current || !target) return false;
@@ -87,6 +88,9 @@ export default function Dashboard() {
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const { showToast } = useUI();
+  // `/dashboard/<section>` lands on that section (#2527); see dashboardSections.ts.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDashboardSection(rootRef);
 
   const columns: ColumnDef<any>[] = useMemo(
     () => [
@@ -363,7 +367,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" ref={rootRef}>
       <div className="mb-2xl flex justify-between items-center flex-wrap gap-md">
         <div>
           <h1

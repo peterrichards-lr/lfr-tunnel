@@ -28,17 +28,17 @@ func TestLoadServerConfigReadsClassicPortalPath(t *testing.T) {
 }
 
 func TestLoadServerConfigRefusesABadClassicPortalPath(t *testing.T) {
-	cases := []struct{ name, value, wantInErr string }{
-		{"too short", "/classic", "at least"},
-		{"two segments", "/classic-7f3k9q2m/x", "one path segment"},
-		{"query", "/classic-7f3k9q2m?x", "one path segment"},
-		{"an existing route", "/portalv2", "at least"},
+	cases := []struct{ name, yaml, wantInErr string }{
+		{"too short", "classic_portal_path: \"/classic\"\n", "at least"},
+		{"two segments", "classic_portal_path: \"/classic-7f3k9q2m/x\"\n", "one path segment"},
+		{"query", "classic_portal_path: \"/classic-7f3k9q2m?x\"\n", "one path segment"},
+		{"an existing route", "classic_portal_path: \"/portalv2\"\n", "at least"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := LoadServerConfig(writeServerConfig(t, "classic_portal_path: \""+tc.value+"\"\n"))
+			_, err := LoadServerConfig(writeServerConfig(t, tc.yaml))
 			if err == nil {
-				t.Fatalf("LoadServerConfig accepted classic_portal_path %q", tc.value)
+				t.Fatalf("LoadServerConfig accepted %q", tc.yaml)
 			}
 			if !strings.Contains(err.Error(), tc.wantInErr) {
 				t.Errorf("error %q does not mention %q", err, tc.wantInErr)

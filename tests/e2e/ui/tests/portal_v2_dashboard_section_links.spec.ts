@@ -75,6 +75,58 @@ async function headingScrolledAway(page: Page): Promise<boolean> {
   });
 }
 
+/**
+ * Navigate inside the app, the way a link or the router would, without a page load: the
+ * dashboard stays mounted and keeps whatever scroll position it had, which is the state the
+ * "leaving a section" rules are about. React Router reads the address on popstate.
+ */
+async function clientNavigate(page: Page, path: string) {
+  await page.evaluate((p) => {
+    window.history.pushState({}, '', p);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
+/** Arrive at a section in-app and wait until it is placed. */
+async function arriveAt(page: Page, segment: string, id: string) {
+  await clientNavigate(page, `/portalv2/dashboard/${segment}`);
+  await expect(page).toHaveURL(new RegExp(`/portalv2/dashboard/${segment}$`));
+  await expect
+    .poll(async () => arrivedAt(await placement(page, id)), {
+      message: `in-app arrival at /dashboard/${segment} should put #${id} in view`,
+      timeout: 10_000,
+    })
+    .toBe(true);
+  expect(await headingScrolledAway(page)).toBe(true);
+}
+
+/**
+ * A scroll with no wheel, key or pointer behind it, as a screen reader or a script makes:
+ * every candidate scroller is moved to the top.
+ */
+async function programmaticScrollToTop(page: Page) {
+  await page.evaluate(() => {
+    for (const s of [
+      document.scrollingElement,
+      document.querySelector('.main-content'),
+    ]) {
+      s?.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  });
+}
+
+/** Grow the dashboard above every section, as a panel loading its data does. */
+async function growDashboard(page: Page, px: number) {
+  await page.evaluate((h) => {
+    const root = document
+      .getElementById('dashboard-overview')!
+      .closest('.animate-fade-in')!;
+    const spacer = document.createElement('div');
+    spacer.style.height = `${h}px`;
+    root.prepend(spacer);
+  }, px);
+}
+
 test.describe('Portal V2 dashboard section links', () => {
   const userEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
@@ -90,7 +142,7 @@ test.describe('Portal V2 dashboard section links', () => {
     await page.waitForURL('**/portalv2/dashboard');
   });
 
-  // Two tests rather than one per section: every test signs in, and the control plane
+  // Three tests rather than one per section: every test signs in, and the control plane
   // rate-limits magic links by IP, which a local stack shares with everything else.
   test('each section URL lands with that section in view', async ({ page }) => {
     // CONTROL first, on the plain dashboard this test signed in to: the measurement used
@@ -192,5 +244,67 @@ test.describe('Portal V2 dashboard section links', () => {
       await headingScrolledAway(page),
       'an unknown section should leave the dashboard at the top',
     ).toBe(false);
+
+    // The same, reached in-app from a dashboard that is scrolled down: falling back means the
+    // top, not wherever the reader happened to be.
+    await arriveAt(page, 'tokens', 'access-tokens');
+    await clientNavigate(page, '/portalv2/dashboard/no-such-section');
+    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await expect
+      .poll(() => headingScrolledAway(page), {
+        message:
+          'an unknown section reached from a scrolled dashboard should show the top',
+      })
+      .toBe(false);
+  });
+
+  // Its own test, so a third sign-in: kept to three in all because of the rate limit noted
+  // on the first test.
+  test('leaving a section returns to the top, and a reader scroll ends re-anchoring', async ({
+    page,
+  }) => {
+    await page.waitForLoadState('networkidle');
+
+    // A scroll the reader makes without wheel, key or pointer must stop the page pulling
+    // them back. The first growth is only a sanity check that the section is held (the
+    // browser's own scroll anchoring may hold it too); what proves the rule is the second
+    // growth, after scrolling to the top, where the browser does not anchor -- so only the
+    // hook could pull the reader back down. The mutation that drops the scroll check makes
+    // exactly that happen.
+    await arriveAt(page, 'tokens', 'access-tokens');
+    await growDashboard(page, 400);
+    await expect
+      .poll(async () => arrivedAt(await placement(page, 'access-tokens')), {
+        message: 'growth above the section should leave it in place',
+      })
+      .toBe(true);
+    await programmaticScrollToTop(page);
+    await expect.poll(() => headingScrolledAway(page)).toBe(false);
+    await growDashboard(page, 400);
+    await page.waitForTimeout(500);
+    expect(
+      await headingScrolledAway(page),
+      'a reader scroll was undone by re-anchoring when the page grew',
+    ).toBe(false);
+
+    // The sidebar's Overview from a section: back to the top.
+    await arriveAt(page, 'reservations', 'reservations-overview');
+    await page.locator('.sidebar a[href="/portalv2/dashboard"]').click();
+    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await expect
+      .poll(() => headingScrolledAway(page), {
+        message: 'Overview from a section should show the top of the dashboard',
+      })
+      .toBe(false);
+
+    // Back from a section to the plain dashboard: the same.
+    await arriveAt(page, 'tokens', 'access-tokens');
+    await page.goBack();
+    await expect(page).toHaveURL(/\/portalv2\/dashboard$/);
+    await expect
+      .poll(() => headingScrolledAway(page), {
+        message: 'Back to /dashboard from a section should show the top',
+      })
+      .toBe(false);
   });
 });

@@ -268,7 +268,7 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
 
     await modal.locator('#detail-tunnel-header-key').fill('X-New');
     await modal.locator('#detail-tunnel-header-value').fill('v1');
-    await modal.getByRole('button', { name: 'Add' }).click();
+    await modal.locator('button:text-is("Add")').click();
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0]).toEqual({
       subdomain: 'locked',
@@ -278,7 +278,7 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
 
     await modal
       .locator('#detail-tunnel-headers-container')
-      .getByRole('button', { name: 'Remove' })
+      .locator('button:text-is("Remove")')
       .first()
       .click();
     await expect.poll(() => sent.length).toBe(2);

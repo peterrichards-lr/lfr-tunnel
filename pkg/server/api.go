@@ -2128,9 +2128,9 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	patching := !req.leaseHeaderPatch.empty()
+	patching := !req.empty()
 	if patching {
-		if err := req.leaseHeaderPatch.validate(); err != nil {
+		if err := req.validate(); err != nil {
 			respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -2170,7 +2170,7 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		}
 		s.updateEdgeLease(fullHost, func(l *EdgeLease) {
 			if patching {
-				l.AddedHeaderNames = req.leaseHeaderPatch.applyToNames(l.AddedHeaderNames)
+				l.AddedHeaderNames = req.applyToNames(l.AddedHeaderNames)
 			} else {
 				l.AddedHeaderNames = sortedHeaderNames(req.AddedHeaders)
 			}

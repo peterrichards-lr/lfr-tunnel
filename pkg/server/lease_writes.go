@@ -188,5 +188,5 @@ const (
 
 // canEditLease reports whether user may edit a tunnel owned by ownerID.
 func canEditLease(userID, role, ownerID string) bool {
-	return userID == ownerID || role == "admin" || role == "owner"
+	return userID == ownerID || role == roleAdmin || role == roleOwner
 }

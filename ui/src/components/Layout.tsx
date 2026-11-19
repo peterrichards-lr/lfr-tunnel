@@ -8,6 +8,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import SessionExpiryWarning from './SessionExpiryWarning';
+import ClientVersionBanner from './ClientVersionBanner';
 import PolicyConsentGate from './PolicyConsentGate';
 import { rememberReturnPath, takeReturnPath } from '../loginReturn';
 
@@ -199,6 +200,8 @@ export default function Layout() {
       />
 
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
+
+      <ClientVersionBanner state={user.min_version} />
 
       <SessionExpiryWarning
         expiresAt={user.session_expires_at}

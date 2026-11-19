@@ -1355,7 +1355,8 @@ To prevent developers from seeing client CLI update warnings when you deploy cos
     * a warning when the warning window opens and again at the deadline, even for a tunnel that has been running for days;
     * a banner in the local Inspector;
     * at an interactive terminal, the offer "Upgrade now? [Y/n]". Yes runs the same verified upgrade as `lfr-tunnel -upgrade`, then restarts the client. With `auto_upgrade` on, the client upgrades and restarts without asking.
-  * **The portal and email** are tracked in #2522.
+  * **The portal** (#2522). A banner at the top of every page names the user's client version, the minimum and `lfr-tunnel -upgrade`. Before the user's window has started it says an upgrade is required, with no date. It shows the deadline once the window has started, the time left once the warning window opens, and that new tunnels are refused once it has passed. It reads the version the user's client last reported, and opening the portal never starts the window: only the client registering a tunnel does.
+  * **Email** (#2522). One email per floor, sent by the hourly sweep when the user's warning window opens. A user whose deadline passed while no sweep ran is still sent one, saying new tunnels are refused. Raising `min_client_version` sends one more, once. A failed send is retried next hour. It is sent even when the user has switched notifications off, like the policy reminder, because it is the last notice before tunnels are refused. Users whose client is current, a `dev` build, or never seen are not emailed.
 * `latest_client_version`: Specifies the latest recommended client CLI version. If set, the gateway will return this version as the `latest_version` to connecting client instances. If a client's version is older than this (but newer than `min_client_version`), it displays a soft update warning.
 
 #### How it works:

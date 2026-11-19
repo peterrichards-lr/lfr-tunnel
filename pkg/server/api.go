@@ -210,6 +210,12 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		// switch must never render -- let alone be flipped -- against somebody else's
 		// account.
 		resp["diagnostics_consent"] = diagnosticsConsentState(realUser)
+		// The real account's client against min_client_version (#2522), for V2's banner.
+		// Read-only: looking at the portal must not start anybody's grace window -- that is
+		// started by the client registering a tunnel. Absent when there is nothing to say.
+		if mv := s.minVersionState(realUser, realUser.LastClientVersion, false); mv.Required {
+			resp["min_version"] = mv
+		}
 	}
 
 	respondJSON(w, http.StatusOK, resp)

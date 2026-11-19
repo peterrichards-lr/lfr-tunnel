@@ -115,7 +115,9 @@ export default function AdminTelemetry() {
   // Which groups are open. Collapsed by default -- except a group that is not up, which is
   // opened below: hiding the row someone needs to see defeats the point of the table.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [detailsFor, setDetailsFor] = useState<TunnelGroup | null>(null);
+  // The key of the open group, looked up afresh from each telemetry frame (#2525), so the
+  // details view shows an edit as soon as the gateway broadcasts it.
+  const [detailsKey, setDetailsKey] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
 
@@ -196,6 +198,10 @@ export default function AdminTelemetry() {
     'node_id',
     'client_ip',
   ]);
+  // From the unfiltered list: typing in the search box must not close the panel it is behind.
+  const detailsFor = detailsKey
+    ? (groupTunnels(tunnels).find((g) => g.key === detailsKey) ?? null)
+    : null;
 
   const handleKick = async (subdomain: string) => {
     if (
@@ -446,7 +452,7 @@ export default function AdminTelemetry() {
                         <td className="td-cell text-right whitespace-nowrap">
                           <button
                             className="btn btn-secondary py-xs px-md text-xs w-auto mr-sm"
-                            onClick={() => setDetailsFor(group)}
+                            onClick={() => setDetailsKey(group.key)}
                           >
                             {t('details', 'Details')}
                           </button>
@@ -509,7 +515,7 @@ export default function AdminTelemetry() {
                             belongs on the parent rather than repeated on every child. */}
                         <button
                           className="btn btn-secondary py-xs px-md text-xs w-auto mr-sm"
-                          onClick={() => setDetailsFor(group)}
+                          onClick={() => setDetailsKey(group.key)}
                         >
                           {t('details', 'Details')}
                         </button>
@@ -597,10 +603,10 @@ export default function AdminTelemetry() {
           members={detailsFor.members}
           isAdmin
           onKick={() => {
-            setDetailsFor(null);
+            setDetailsKey(null);
             handleKick(detailsFor.subdomain);
           }}
-          onClose={() => setDetailsFor(null)}
+          onClose={() => setDetailsKey(null)}
         />
       )}
     </div>

@@ -21,6 +21,8 @@ interface Props {
   tunnels: Tunnel[];
   serverConfig?: any;
   user?: any;
+  // Re-reads /api/me, so an edit made in the details view shows without waiting for the poll.
+  onRefresh?: () => Promise<void>;
 }
 
 // One client's tunnels, as one row (#2143, extending #2129 to this table).
@@ -73,7 +75,12 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
+export default function TunnelsPanel({
+  tunnels,
+  serverConfig,
+  user,
+  onRefresh,
+}: Props) {
   const { t } = useI18n();
   const { formatDate } = useSettings();
 
@@ -109,10 +116,14 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
 
   // Grouped BEFORE the table sees them, so pagination counts clients rather than ports and a
   // client's rows cannot straddle a page boundary.
+  // The KEY of the client whose details are open, not a copy of it. The group is looked up
+  // afresh on every render, so the panel follows the 10-second poll and shows an edit made in
+  // it (#2525); a stored copy froze the moment the panel opened.
+  const [detailsKey, setDetailsKey] = useState<string | null>(null);
   const grouped = useMemo(() => groupTunnels(tunnels), [tunnels]);
+  const detailsFor = grouped.find((g) => g.groupKey === detailsKey) ?? null;
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [detailsFor, setDetailsFor] = useState<TunnelGroup | null>(null);
 
   const {
     paginatedItems,
@@ -407,7 +418,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                         <button
                           type="button"
                           className="btn btn-secondary py-xs px-md text-xs w-auto"
-                          onClick={() => setDetailsFor(tItem)}
+                          onClick={() => setDetailsKey(tItem.groupKey)}
                         >
                           {t('details', 'Details')}
                         </button>
@@ -434,7 +445,8 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
           tunnel={detailsFor}
           members={detailsFor.members}
           isAdmin={user?.role === 'admin' || user?.role === 'owner'}
-          onClose={() => setDetailsFor(null)}
+          onRefresh={onRefresh}
+          onClose={() => setDetailsKey(null)}
         />
       )}
     </div>

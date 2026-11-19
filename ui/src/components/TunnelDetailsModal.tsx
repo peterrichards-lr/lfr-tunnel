@@ -1,5 +1,9 @@
+import { useState } from 'react';
+import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { useUI } from '../contexts/UIContext';
+import { parseRateLimit } from '../rateLimit';
 import ModalShell from './ModalShell';
 
 // The fields the telemetry payload carries for one lease. Named exactly as the server sends
@@ -38,7 +42,15 @@ interface Props {
   members: TunnelDetailFields[];
   isAdmin?: boolean;
   onKick?: () => void;
+  // Re-reads whatever the tunnel came from. Shown as a Refresh button when given, and called
+  // after an edit so the panel shows the result rather than what was there before.
+  onRefresh?: () => void | Promise<void>;
   onClose: () => void;
+}
+
+// The error text the gateway gave, or a generic one. The handlers answer {"error": "..."}.
+function errorText(e: any): string {
+  return e?.response?.data?.error || e?.message || 'Unknown error';
 }
 
 function formatBytes(bytes?: number): string {
@@ -67,13 +79,13 @@ function formatBytes(bytes?: number): string {
  * Those are not fields presented differently in the two arms. They were absent from one of
  * them. The gap survived because each arm was only ever compared against itself.
  *
- * ## What it deliberately does not do
+ * ## The writes (#2525)
  *
- * V1's modal can ADD and REMOVE custom headers and override the rate limit. Both are writes
- * with their own endpoints and confirmation semantics, and folding two mutation paths into a
- * parity fix makes it hard to review and hard to revert. They are left to a follow-up, and
- * named here so their absence is a decision on the record rather than something overlooked
- * the way the read-only fields above were.
+ * Custom headers can be added and removed, and an admin can override the rate limit -- what
+ * V1's modal always offered. Both go to every port of the client, because a client's -header
+ * and its rate limit apply to all of its ports alike. A header edit sends the CHANGE (set one,
+ * remove one), never a rebuilt map: this panel only ever has header names, and the gateway
+ * holding the lease applies the change to the values it has (#2530).
  *
  * ## The rule this panel must not break
  *
@@ -88,10 +100,122 @@ export default function TunnelDetailsModal({
   members,
   isAdmin,
   onKick,
+  onRefresh,
   onClose,
 }: Props) {
   const { t } = useI18n();
   const { formatDate } = useSettings();
+  const { showToast, showPrompt } = useUI();
+  const [headerName, setHeaderName] = useState('');
+  const [headerValue, setHeaderValue] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Every port of the client. The group row blanks full_host when there are several, so the
+  // members are the source of truth for which hosts exist.
+  const hosts = members
+    .map((m) => m.full_host || '')
+    .filter((h) => h.includes('.'));
+
+  const editHeaders = async (change: {
+    set?: Record<string, string>;
+    remove?: string[];
+  }) => {
+    setBusy(true);
+    try {
+      await Promise.all(
+        hosts.map((host) => {
+          const dot = host.indexOf('.');
+          return axios.post('/api/portal/reservations/headers', {
+            subdomain: host.slice(0, dot),
+            domain: host.slice(dot + 1),
+            ...change,
+          });
+        }),
+      );
+      showToast(t('headers_updated', 'Custom headers updated.'), 'success');
+      await onRefresh?.();
+      return true;
+    } catch (e) {
+      showToast(
+        t('headers_update_failed', 'Failed to update headers: {0}').replace(
+          '{0}',
+          errorText(e),
+        ),
+        'error',
+      );
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addHeader = async () => {
+    const name = headerName.trim();
+    const value = headerValue.trim();
+    if (!name || !value) {
+      showToast(
+        t('header_name_value_required', 'Header name and value are required.'),
+        'error',
+      );
+      return;
+    }
+    if (await editHeaders({ set: { [name]: value } })) {
+      setHeaderName('');
+      setHeaderValue('');
+    }
+  };
+
+  const overrideRateLimit = async () => {
+    const input = await showPrompt(
+      t('tunnel_override_modal_title', 'Override Tunnel Rate Limit'),
+      t('lbl_live_rps_override', 'Live Rate Limit Override (RPS)'),
+      String(tunnel.rate_limit || 0),
+    );
+    if (input === null) return;
+    const limit = parseRateLimit(input);
+    if (limit === null) {
+      showToast(
+        t(
+          'rate_limit_invalid',
+          'Enter a whole number of requests per second (0 removes the limit).',
+        ),
+        'error',
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      await Promise.all(
+        hosts.map((host) =>
+          axios.post('/api/admin/leases/rate-limit', {
+            host,
+            rate_limit: limit,
+          }),
+        ),
+      );
+      showToast(t('rate_limit_updated', 'Rate limit updated.'), 'success');
+      await onRefresh?.();
+    } catch (e) {
+      showToast(
+        t(
+          'rate_limit_update_failed',
+          'Failed to update rate limit: {0}',
+        ).replace('{0}', errorText(e)),
+        'error',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(`https://${hosts[0]}`);
+      showToast(t('link_copied', 'Link copied'), 'success');
+    } catch {
+      showToast(t('copy_failed', 'Could not copy to the clipboard.'), 'error');
+    }
+  };
 
   const row = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-lg py-xs border-b text-sm">
@@ -162,9 +286,25 @@ export default function TunnelDetailsModal({
       )}
       {row(
         t('detail_lbl_rate_limit', 'Rate Limit'),
-        tunnel.rate_limit
-          ? `${tunnel.rate_limit} RPS`
-          : t('unlimited', 'Unlimited'),
+        <span className="flex items-center justify-end gap-sm">
+          <span data-testid="tunnel-rate-limit">
+            {tunnel.rate_limit
+              ? `${tunnel.rate_limit} RPS`
+              : t('unlimited', 'Unlimited')}
+          </span>
+          {/* Admin only: the override endpoint is an admin route, and an owner who wants a
+              different limit asks for one rather than lifting their own. */}
+          {isAdmin && hosts.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-outline py-xs px-md text-xs w-auto m-0"
+              onClick={overrideRateLimit}
+              disabled={busy}
+            >
+              {t('btn_override', 'Override')}
+            </button>
+          )}
+        </span>,
       )}
       {row(t('bytes_in', '↓ In'), formatBytes(tunnel.bytes_in))}
       {row(t('bytes_out', '↑ Out'), formatBytes(tunnel.bytes_out))}
@@ -237,14 +377,66 @@ export default function TunnelDetailsModal({
         headerNames.map((name) => (
           <div
             key={name}
-            className="flex justify-between gap-lg py-xs border-b text-sm"
+            className="flex justify-between items-center gap-lg py-xs border-b text-sm"
           >
             <span className="td-cell--mono">{name}</span>
-            <span className="text-muted italic text-xs">
-              {t('value_hidden', 'value hidden')}
+            <span className="flex items-center gap-sm">
+              <span className="text-muted italic text-xs">
+                {t('value_hidden', 'value hidden')}
+              </span>
+              {hosts.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-outline py-xs px-md text-xs w-auto m-0 text-danger"
+                  onClick={() => editHeaders({ remove: [name] })}
+                  disabled={busy}
+                  aria-label={t('remove_header_named', 'Remove {0}').replace(
+                    '{0}',
+                    name,
+                  )}
+                >
+                  {t('btn_remove', 'Remove')}
+                </button>
+              )}
             </span>
           </div>
         ))
+      )}
+      {hosts.length > 0 && (
+        <div className="flex gap-sm mt-sm">
+          <input
+            type="text"
+            className="input-field flex-1"
+            value={headerName}
+            onChange={(e) => setHeaderName(e.target.value)}
+            placeholder={t(
+              'detail_header_key_placeholder',
+              'Header Name (e.g. X-Frame-Options)',
+            )}
+            aria-label={t(
+              'detail_header_key_placeholder',
+              'Header Name (e.g. X-Frame-Options)',
+            )}
+            data-testid="header-name-input"
+          />
+          <input
+            type="text"
+            className="input-field flex-1"
+            value={headerValue}
+            onChange={(e) => setHeaderValue(e.target.value)}
+            placeholder={t('detail_header_value_placeholder', 'Value')}
+            aria-label={t('aria_header_value', 'Custom header value')}
+            data-testid="header-value-input"
+          />
+          <button
+            type="button"
+            className="btn btn-primary w-auto"
+            onClick={addHeader}
+            disabled={busy}
+          >
+            {t('btn_add', 'Add')}
+          </button>
+        </div>
       )}
 
       {sectionTitle(t('detail_lbl_launched_with', 'Launched With'))}
@@ -270,6 +462,25 @@ export default function TunnelDetailsModal({
       )}
 
       <div className="flex justify-end gap-md mt-lg">
+        {hosts.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-secondary w-auto"
+            onClick={copyUrl}
+          >
+            {t('btn_copy_url', 'Copy URL')}
+          </button>
+        )}
+        {onRefresh && (
+          <button
+            type="button"
+            className="btn btn-secondary w-auto"
+            onClick={() => onRefresh()}
+            disabled={busy}
+          >
+            {t('btn_refresh', 'Refresh')}
+          </button>
+        )}
         {isAdmin && onKick && (
           <button
             type="button"

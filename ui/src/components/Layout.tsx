@@ -351,7 +351,7 @@ export default function Layout() {
             </div>
           </header>
           <div>
-            <Outlet context={{ user }} />
+            <Outlet context={{ user, refreshUser }} />
           </div>
           <ScrollToTopButton />
         </main>

@@ -7,6 +7,7 @@ import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import { useSettings } from '../contexts/SettingsContext';
+import { parseRateLimit } from '../rateLimit';
 
 interface SubdomainInfo {
   id: number;
@@ -196,10 +197,8 @@ export default function AdminSubdomains() {
     );
     if (rate === null) return;
 
-    // parseInt('abc') is NaN, which JSON.stringify turns into null, which the handler reads as
-    // 0 -- silently REMOVING the limit when the intent was to set one. Rejected here instead.
-    const parsed = Number(rate);
-    if (!Number.isInteger(parsed) || parsed < 0) {
+    const parsed = parseRateLimit(rate);
+    if (parsed === null) {
       showToast(
         'Enter a whole number of requests per second (0 removes the limit)',
         'error',

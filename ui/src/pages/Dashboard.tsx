@@ -65,7 +65,10 @@ const CLI_HANDOFF_URL = 'http://127.0.0.1:4444/handoff';
 type HandoffStatus = 'pending' | 'delivered' | 'unavailable';
 
 export default function Dashboard() {
-  const { user } = useOutletContext<{ user: any }>();
+  const { user, refreshUser } = useOutletContext<{
+    user: any;
+    refreshUser?: () => Promise<void>;
+  }>();
   const { policies: neverExpires } = useNeverExpires();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
@@ -480,6 +483,7 @@ export default function Dashboard() {
             tunnels={user.tunnels || []}
             serverConfig={serverConfig}
             user={user}
+            onRefresh={refreshUser}
           />
         </section>
         <section id="reservations-overview" className="scroll-target">

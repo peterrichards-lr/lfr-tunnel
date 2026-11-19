@@ -124,10 +124,10 @@ export default function Sidebar({
             </span>
           </div>
           <div className="sidebar-section-content block">
+            {/* No `end`: /dashboard/<section> is still the Overview (#2527). */}
             <NavLink
               to="/dashboard"
               onClick={onClose}
-              end
               className={({ isActive }) =>
                 `nav-item ${isActive ? 'active' : ''}`
               }

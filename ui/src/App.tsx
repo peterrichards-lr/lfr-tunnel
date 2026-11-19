@@ -36,7 +36,11 @@ function App() {
 
                 {/* Protected Routes wrapped in Layout */}
                 <Route element={<Layout />}>
-                  <Route path="/dashboard" element={<Dashboard />} />
+                  {/* The optional segment names a section of the dashboard (#2527):
+                      /dashboard/tokens lands on Personal Access Tokens. One route rather than
+                      two, so moving between sections does not remount the page and refetch
+                      everything on it. The sections are listed in dashboardSections.ts. */}
+                  <Route path="/dashboard/:section?" element={<Dashboard />} />
                   <Route path="/account" element={<AccountSettings />} />
                   {/* Analytics is not admin-only (#1512). The same component serves both:
                       it renders the personal section for everyone and the system sections

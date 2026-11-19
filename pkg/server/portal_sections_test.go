@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"lfr-tunnel/pkg/config/configtest"
 )
 
 // The three files PortalV1SectionToV2 has to agree with. Read rather than restated, so a
@@ -198,7 +200,13 @@ func TestDashboardSectionsMatchThePage(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".tsx") {
+		if d.IsDir() {
+			if path != v2SourceDir && (configtest.IsNonSourceDir(d.Name()) || configtest.IsNestedWorktreeRoot(path)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".tsx") {
 			return nil
 		}
 		b, err := os.ReadFile(path)

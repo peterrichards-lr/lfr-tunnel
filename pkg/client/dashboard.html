@@ -929,7 +929,8 @@ function setLanguage(lang) {
                 .replace('{1}', m.min_version || '')
                 .replace('{2}', when)
                 .replace('{3}', m.upgrade_command || 'lfr-tunnel -upgrade');
-            el.className = 'min-version-banner min-version-banner--' + m.phase;
+            const pastDeadline = m.phase === phases[2];
+            el.classList.toggle('min-version-banner--expired', pastDeadline);
             el.hidden = false;
         }
 

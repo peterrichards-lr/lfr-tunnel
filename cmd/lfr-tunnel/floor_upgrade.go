@@ -61,17 +61,27 @@ const floorPromptTimeout = 30 * time.Second
 // typed. That is accepted: Go has no portable way to cancel a terminal read, and the cost is one
 // line of input at an unattended terminal, against a client that would otherwise never start.
 func askToUpgrade(out io.Writer, in io.Reader, current, floor string, timeout time.Duration) bool {
-	_, _ = fmt.Fprintf(out, "\nThis client (%s) is older than the minimum this gateway accepts (%s).\nUpgrade now? [Y/n] ", current, floor) //nolint:errcheck
+	// A question that could not be shown is not asked: no answer to it can be taken as yes.
+	if _, err := fmt.Fprintf(out, "\nThis client (%s) is older than the minimum this gateway accepts (%s).\nUpgrade now? [Y/n] ", current, floor); err != nil {
+		return false
+	}
 	answer := make(chan string, 1)
 	go func() {
-		line, _ := bufio.NewReader(in).ReadString('\n') //nolint:errcheck
+		line, err := bufio.NewReader(in).ReadString('\n')
+		if err != nil && line == "" {
+			// stdin closed or unreadable before anything was typed: that is not an Enter.
+			answer <- "n"
+			return
+		}
 		answer <- strings.ToLower(strings.TrimSpace(line))
 	}()
 	select {
 	case a := <-answer:
 		return a == "" || a == "y" || a == "yes"
 	case <-time.After(timeout):
-		_, _ = fmt.Fprintln(out, "\nNo answer; continuing without upgrading.") //nolint:errcheck
+		if _, err := fmt.Fprintln(out, "\nNo answer; continuing without upgrading."); err != nil {
+			slog.Debug("could not write the prompt timeout notice", "error", err)
+		}
 		return false
 	}
 }

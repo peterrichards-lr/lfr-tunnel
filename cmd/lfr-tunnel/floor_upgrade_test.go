@@ -58,10 +58,22 @@ func TestAskToUpgrade(t *testing.T) {
 	}
 }
 
+// stdin closed before anything was typed is not an Enter, so not a yes.
+func TestAskToUpgradeClosedInputIsNo(t *testing.T) {
+	var out bytes.Buffer
+	if askToUpgrade(&out, strings.NewReader(""), "v1.52.1", "v1.53.0", time.Second) {
+		t.Fatal("an empty, closed stdin was taken as yes")
+	}
+}
+
 // Nobody at the terminal: the client must carry on, and must not upgrade.
 func TestAskToUpgradeUnansweredIsNo(t *testing.T) {
 	r, w := io.Pipe()
-	defer w.Close() //nolint:errcheck
+	t.Cleanup(func() {
+		if err := w.Close(); err != nil {
+			t.Logf("closing the pipe: %v", err)
+		}
+	})
 	var out bytes.Buffer
 	start := time.Now()
 	if askToUpgrade(&out, r, "v1.52.1", "v1.53.0", 50*time.Millisecond) {

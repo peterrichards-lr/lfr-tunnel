@@ -3,11 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { dashboardSectionAnchor } from '../dashboardSections';
 
 /**
- * How long arrival keeps the section in place while the panels above it load. Long enough
- * for the slowest of the dashboard's own requests on a cold gateway, short enough that it
- * cannot be mistaken for the page fighting the reader.
+ * The longest arrival keeps the section in place while the panels above it load. It is a cap,
+ * not a delay: re-anchoring only happens when the dashboard changes size, and stops at once
+ * when the reader scrolls, types or clicks. Generous because a slow gateway is exactly when
+ * the panels arrive late: Registered Subdomains, for one, is not rendered until its panel's
+ * data arrives. A 4s cap missed it once on a loaded local test stack.
  */
-const SETTLE_MS = 4000;
+const SETTLE_MS = 15000;
 
 /** Anything that means the reader has taken over the scroll position. */
 const READER_EVENTS = ['wheel', 'touchstart', 'keydown', 'mousedown'] as const;
@@ -20,6 +22,7 @@ const READER_EVENTS = ['wheel', 'touchstart', 'keydown', 'mousedown'] as const;
  * on mount is pushed back down the page a moment later -- the URL said tokens and the reader
  * is left looking at reservations. So the section is re-anchored whenever the dashboard
  * changes size, until the reader scrolls, types or clicks, or until SETTLE_MS has passed.
+ * A section that is not on the page yet is placed when it appears, by the same rule.
  *
  * An unknown section is not an error page: the address is corrected to `/dashboard` and the
  * page shown from the top, the same thing V1 does for `/portal/<unknown>` (#1215).

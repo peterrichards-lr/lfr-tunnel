@@ -133,11 +133,26 @@ test.describe('Portal V2 dashboard section links', () => {
         page.getByRole('heading', { name: 'Dashboard Overview' }),
       ).toBeAttached();
 
+      // Ten seconds, not the default five: a section below a panel that loads its own data
+      // can only be placed once that data has arrived.
+      let last: Placement = null;
       await expect
-        .poll(async () => arrivedAt(await placement(page, id)), {
-          message: `/dashboard/${segment} should put #${id} at the top of the view`,
-        })
-        .toBe(true);
+        .poll(
+          async () => {
+            last = await placement(page, id);
+            return arrivedAt(last);
+          },
+          {
+            message: `/dashboard/${segment} should put #${id} at the top of the view`,
+            timeout: 10_000,
+          },
+        )
+        .toBe(true)
+        .catch((e: Error) => {
+          throw new Error(
+            `${e.message}\nlast placement: ${JSON.stringify(last)}`,
+          );
+        });
       expect(
         await headingScrolledAway(page),
         `/dashboard/${segment} should scroll the page, not leave it at the top`,

@@ -45,7 +45,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CSS_REL="scripts/check-css-modifiers.cjs"
 TOK_REL="scripts/check-theme-tokens.mjs"
 I18N_REL="scripts/check-i18n-keys.cjs"
-PARITY_REL="scripts/check-portal-parity.cjs"
 PRINT_REL="scripts/check-print-selectors.cjs"
 
 PASS=0
@@ -67,7 +66,7 @@ harness() {
   FAIL=$((FAIL + 1))
 }
 
-for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PARITY_REL" "$PRINT_REL"; do
+for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PRINT_REL" "scripts/lib/token-match.cjs" "scripts/check-v2-capabilities.cjs"; do
   [ -f "${REPO_ROOT}/${f}" ] || {
     echo "FATAL: ${f} missing"
     exit 1
@@ -895,161 +894,172 @@ fi
 rm -f "${OUT_FILE}.all" "${OUT_FILE}.ign" "${OUT_FILE}.info"
 
 echo ""
-echo "-- check-portal-parity.cjs: what counts as finding a marker"
+echo "-- scripts/lib/token-match.cjs: what counts as finding a marker"
 
 # ---------------------------------------------------------------------------
-# The parity sandbox: the gate plus every file it reads, so each case below differs from a
-# passing tree by exactly one edit. No git repository is needed -- unlike check-i18n-keys.cjs
-# this gate reads a fixed list of paths and never asks git anything.
+# Cases 19-21 used to drive findMarker() through check-portal-parity.cjs, which #2529 replaced
+# with the V2-only check-v2-capabilities.cjs (decision 0007 froze Portal V1). findMarker() is
+# shared by that gate and check-print-selectors.cjs. The
+# rule they pinned is the matcher's, not the gate's, so they now call it directly: a symbol must
+# match whole, and a URL path stays a substring on purpose. Without this the path exception
+# would have no test at all, since no print selector contains a `/`.
+#
+# find_marker <src> <marker> -> sets $OUT to the index findMarker() returns (-1 when not found).
 # ---------------------------------------------------------------------------
-reset_parity_sandbox() {
-  [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"
-  SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-parity.XXXXXX")"
-  mkdir -p "$SANDBOX/scripts" "$SANDBOX/pkg/server/static" "$SANDBOX/ui"
-  cp "${REPO_ROOT}/${PARITY_REL}" "$SANDBOX/scripts/"
-  # findMarker() moved to scripts/lib/token-match.cjs when check-print-selectors.cjs needed the
-  # same rule (#2208). Without this the gate dies on MODULE_NOT_FOUND, which run() reports as a
-  # harness failure rather than letting it satisfy the fire-cases below.
-  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
-  cp "${REPO_ROOT}"/pkg/server/*.html "$SANDBOX/pkg/server/"
-  cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
-  cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+TM_REL="scripts/lib/token-match.cjs"
+find_marker() {
+  OUT="$(node -e '
+const { findMarker } = require(process.argv[1]);
+process.stdout.write(String(findMarker(process.argv[2], process.argv[3])));
+' "${REPO_ROOT}/${TM_REL}" "$1" "$2" 2>&1)"
 }
 
-run_parity() { run "$PARITY_REL"; }
-
-V1_JS="pkg/server/static/dashboard.js"
-
-reset_parity_sandbox
-run_parity
-if [ "$RC" -eq 0 ]; then
-  pass "PREMISE   the parity sandbox reproduces a passing run"
+find_marker "x = t('session_keys_unacked');" "'session_keys_unacked'"
+if [ "$OUT" = "6" ]; then
+  pass "PREMISE   findMarker() finds a whole marker where it is (index 6)"
 else
-  harness "the parity sandbox does not pass as built; every case below would fail for that reason:
-$(printf '%s' "$OUT" | head -6)"
+  harness "findMarker() did not find a marker that is plainly there, so every case below is moot: $OUT"
 fi
 
 # ---------------------------------------------------------------------------
-# 19. FIRING. A rename that EXTENDS a marker no longer satisfies it.
+# 19. FIRING. A rename that EXTENDS a marker no longer satisfies it (#2201).
 #
-#     findsIt() decided a capability was present with String.includes(), so a marker that is a
-#     PREFIX of the renamed symbol still matched and the gate vouched for something that no
-#     longer existed. Measured while writing #2196's spec: renaming session_keys_unacked to
-#     session_keys_unacked_MUTANT in the V1 renderer -- which then resolves that key nowhere at
-#     all -- still printed "5 capabilities present". Renaming it to a name that does NOT contain
-#     the needle caught it, so the mechanism worked; the matching rule was what was too loose.
-#
-#     A rename is the most likely way a marker rots, and one that extends the old name
-#     (foo -> fooV2, unacked -> unacknowledged) is both the common shape and exactly the case
-#     this could not see. The same failure openerLabel() has always refused to be quiet about.
-#
-#     Matched on the MESSAGE, not the exit code: the sandbox exits 0 to begin with, so an
-#     exit-code assertion alone would be satisfied by any unrelated breakage the edit caused
-#     (SKILL 5c.1), and "only present as part of a longer symbol" has exactly one source.
+#     String.includes() matched a marker that is a PREFIX of the renamed symbol, so a gate
+#     vouched for something that no longer existed. Measured on #2196: renaming
+#     session_keys_unacked to session_keys_unacked_MUTANT still read as present. A rename that
+#     extends the old name (foo -> fooV2) is both the common shape and the case this could not
+#     see. The unquoted form is used so the quote is not what makes it fail.
 # ---------------------------------------------------------------------------
-reset_parity_sandbox
-if ! python3 - "$SANDBOX/$V1_JS" <<'PY'; then
-import sys
-p = sys.argv[1]
-s = open(p).read()
-old = "'session_keys_unacked'"
-assert old in s, "the V1 unacked-nodes marker is not there -- the mutation would silently no-op"
-open(p, "w").write(s.replace(old, "'session_keys_unacked_MUTANT'"))
-PY
-  harness "could not rename the V1 unacked-nodes marker"
+find_marker "x = t('session_keys_unacked_MUTANT');" "session_keys_unacked"
+if [ "$OUT" = "-1" ]; then
+  pass "FIRING    a marker renamed to EXTEND itself is not found (#2201)"
 else
-  run_parity
-  if [ "$RC" -ne 0 ] \
-    && says "$OUT" 'session_keys_unacked' \
-    && says "$OUT" 'only present as part of a longer symbol'; then
-    pass "FIRING    a capability marker renamed to EXTEND itself is reported, not matched (#2201)"
-  else
-    fail "an extended rename still satisfied the capability marker (rc=$RC): $OUT"
-  fi
+  fail "an extended rename still satisfied the marker (got $OUT)"
 fi
 
 # ---------------------------------------------------------------------------
-# 20. FIRING. The shared-label half matches the same way.
-#
-#     The reported defect was findsIt(), but SHARED_LABELS resolved its i18n key with a second,
-#     independent String.includes() -- the same class, in the same file, one loop down
-#     (SKILL 5b). An i18n key is if anything MORE prone to this: session_keys_current sits one
-#     underscore away from a dozen plausible longer keys, and a key that resolves nowhere renders
-#     as the raw key or falls back silently.
+# 20. FIRING. The same holds for an i18n-key-shaped marker, one underscore from a longer key.
 # ---------------------------------------------------------------------------
-reset_parity_sandbox
-if ! python3 - "$SANDBOX/$V1_JS" <<'PY'; then
-import sys
-p = sys.argv[1]
-s = open(p).read()
-old = "'session_keys_current'"
-assert old in s, "the V1 shared label key is not there -- the mutation would silently no-op"
-open(p, "w").write(s.replace(old, "'session_keys_current_MUTANT'"))
-PY
-  harness "could not rename the V1 shared-label key"
+find_marker "label: session_keys_current_MUTANT," "session_keys_current"
+if [ "$OUT" = "-1" ]; then
+  pass "FIRING    an i18n key renamed to EXTEND itself is not found either (#2201)"
 else
-  run_parity
-  if [ "$RC" -ne 0 ] \
-    && says "$OUT" 'session_keys_current' \
-    && says "$OUT" 'only present as part of a longer key'; then
-    pass "FIRING    a shared-label i18n key renamed to EXTEND itself is reported too (#2201)"
-  else
-    fail "an extended rename still satisfied the shared-label key (rc=$RC): $OUT"
-  fi
+  fail "an extended key rename still satisfied the marker (got $OUT)"
 fi
 
 # ---------------------------------------------------------------------------
 # 21. BOUNDING. A URL-path marker goes on matching as a substring, deliberately.
 #
-#     Anchoring is right for a symbol and wrong for a route. A capability reached at
-#     /api/admin/session-secrets/rotate is still reached when the arm moves it to
-#     .../rotate/all or hangs a query on it -- the endpoint is the same endpoint, and demanding
-#     a delimiter after the path would report parity problems for routes that never moved.
-#     So findMarker() treats any marker containing a slash as a path and skips the boundary
-#     check. The shape IS the rule: there is no per-entry flag to forget, and anything without
-#     a slash gets the strict treatment by default rather than by opting in.
-#
-#     If path markers are ever anchored too, this case goes red and whoever does it has to say
-#     so where the exception is defined.
+#     A route moved to a sub-route (/rotate -> /rotate/all) is still reached, so findMarker()
+#     treats any marker containing a slash as a path and skips the boundary check. If path
+#     markers are ever anchored too, this goes red and whoever does it has to say so where the
+#     exception is defined.
 # ---------------------------------------------------------------------------
-reset_parity_sandbox
-if ! python3 - "$SANDBOX/$V1_JS" <<'PY'; then
+find_marker "fetch('/api/admin/session-secrets/rotate/all')" "/api/admin/session-secrets/rotate"
+if [ "$OUT" != "-1" ] && [ -n "$OUT" ] && [ "$OUT" -ge 0 ] 2>/dev/null; then
+  pass "BOUNDING  a URL-path marker still matches a sub-route, so paths stay substrings"
+else
+  fail "a path marker is now anchored -- intended? then say so where findMarker's slash exception is defined and update this case (got $OUT)"
+fi
+
+# The other half of case 21: a matcher that found everything would pass it just as well
+# (SKILL 5c.3), so the same marker is looked for where it genuinely is not.
+find_marker "fetch('/api/admin/session-keys/rotate')" "/api/admin/session-secrets/rotate"
+if [ "$OUT" = "-1" ]; then
+  pass "CONTROL   a path marker is NOT found on a different route, so case 21 bounds rather than silences"
+else
+  fail "a path marker matched a route it is not on (got $OUT)"
+fi
+
+echo ""
+echo "-- check-v2-capabilities.cjs: V2 keeps what it was given, and V1 is not read"
+
+# ---------------------------------------------------------------------------
+# check-portal-parity.cjs became check-v2-capabilities.cjs in #2529: decision 0007 froze V1, so
+# only V2's half of each capability is asserted. The sandbox holds the gate, the shared matcher
+# and ui/src -- and deliberately NO pkg/server, which is case 22a.
+# ---------------------------------------------------------------------------
+V2CAP_REL="scripts/check-v2-capabilities.cjs"
+reset_v2cap_sandbox() {
+  [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"
+  SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-v2cap.XXXXXX")"
+  mkdir -p "$SANDBOX/scripts" "$SANDBOX/ui"
+  cp "${REPO_ROOT}/${V2CAP_REL}" "$SANDBOX/scripts/"
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
+  cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+}
+run_v2cap() { run "$V2CAP_REL"; }
+
+# 22a. PREMISE, and BOUNDING at once: the sandbox has no V1 source at all, so a pass here is also
+#      the proof that V1 is not read. If V1 is ever read again this goes red, and whoever does it
+#      has to reopen decision 0007 rather than re-impose parity quietly.
+reset_v2cap_sandbox
+run_v2cap
+if [ "$RC" -eq 0 ]; then
+  pass "BOUNDING  the V2 capability gate passes with no V1 source present, so V1 is not read (#2529)"
+else
+  harness "the V2 capability sandbox does not pass as built; every case below would fail for that reason:
+$(printf '%s' "$OUT" | head -6)"
+fi
+
+# 22b. FIRING. A capability V2 was fixed to have, removed, is reported by name.
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/pages/AdminUsers.tsx" <<'PY'; then
 import sys
 p = sys.argv[1]
 s = open(p).read()
-old = "/api/admin/session-secrets/rotate"
-assert old in s, "the V1 rotate endpoint is not there -- the mutation would silently no-op"
-open(p, "w").write(s.replace(old, old + "/all"))
+old = 'data-testid="invite-disabled-note"'
+assert old in s, "the invite-disabled note is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, 'data-testid="some-other-note"'))
 PY
-  harness "could not move the rotate endpoint to a sub-route"
+  harness "could not remove the V2 invite-disabled note"
 else
-  run_parity
-  if [ "$RC" -eq 0 ]; then
-    pass "BOUNDING  a URL-path marker still matches a sub-route, so paths stay substrings"
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'withdraw admin invites' && says "$OUT" 'is not in Portal V2'; then
+    pass "FIRING    a V2 capability that disappears is reported by name (#2449)"
   else
-    fail "a path marker is now anchored -- intended? then say so where findMarker's slash exception is defined and update this case: $OUT"
+    fail "a missing V2 capability was not reported (rc=$RC): $OUT"
   fi
 fi
 
-# The other half of case 21. A gate that had stopped reading the V1 file at all would pass it
-# just as well (SKILL 5c.3), so the same marker is moved somewhere it genuinely is not: a
-# DIFFERENT route, which no substring rule can find.
-reset_parity_sandbox
-if ! python3 - "$SANDBOX/$V1_JS" <<'PY'; then
+# 22c. FIRING. The #2114 rule: an opener that shows only an icon says nothing about what it does.
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/components/ReservationsTable.tsx" <<'PY'; then
 import sys
 p = sys.argv[1]
 s = open(p).read()
-old = "/api/admin/session-secrets/rotate"
-assert old in s, "the V1 rotate endpoint is not there -- the mutation would silently no-op"
-open(p, "w").write(s.replace(old, "/api/admin/session-keys/rotate"))
+old = "🔒 {t('access_control', 'Access Control')}"
+assert old in s, "the access-control opener label is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, "🔒"))
 PY
-  harness "could not repoint the rotate endpoint at a different route"
+  harness "could not strip the words from the access-control opener"
 else
-  run_parity
-  if [ "$RC" -ne 0 ] && says "$OUT" 'trigger a visitor session-key rotation'; then
-    pass "CONTROL   a path marker moved to a different route IS reported, so case 21 bounds rather than silences"
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'no words'; then
+    pass "FIRING    an icon-only opener is reported, not accepted (#2114)"
   else
-    fail "the V1 path marker is not read at all (rc=$RC): $OUT"
+    fail "an icon-only opener was accepted (rc=$RC): $OUT"
+  fi
+fi
+
+# 22d. FIRING. A marker renamed to EXTEND itself is reported as a rename, through the gate, not
+#      only through findMarker() directly (cases 19-21).
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/pages/AdminSettings.tsx" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "session_keys_unacked"
+assert old in s, "the unacked-nodes marker is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, "session_keys_unacked_MUTANT"))
+PY
+  harness "could not rename the V2 unacked-nodes marker"
+else
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'only present as part of a' && says "$OUT" 'session_keys_unacked'; then
+    pass "FIRING    a V2 marker renamed to EXTEND itself is reported as a rename (#2201)"
+  else
+    fail "an extended rename still satisfied the V2 marker (rc=$RC): $OUT"
   fi
 fi
 
@@ -1058,9 +1068,9 @@ echo "-- check-print-selectors.cjs: what counts as a live print selector"
 
 # ---------------------------------------------------------------------------
 # The print sandbox: the gate, the shared matcher it now requires, and both arms' stylesheets
-# and markup. Same shape as the parity sandbox -- every case differs from a passing tree by
-# exactly one edit to the MARKUP, never to the stylesheet, because the question here is whether
-# a selector is still matched and not whether it is still written.
+# and markup. Every case differs from a passing tree by exactly one edit to the MARKUP, never to
+# the stylesheet, because the question here is whether a selector is still matched and not
+# whether it is still written.
 # ---------------------------------------------------------------------------
 reset_print_sandbox() {
   [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"

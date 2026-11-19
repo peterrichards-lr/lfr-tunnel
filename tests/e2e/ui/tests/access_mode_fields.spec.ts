@@ -11,8 +11,8 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
  * every surface let you fill in a field the chosen mode then ignored, which is how `and` came
  * to be saved with an empty IP list (#2156).
  *
- * `check-access-mode-parity.cjs` already asserts, statically and with its own mutation
- * controls, that all three forms and the server agree on the five modes. What it cannot see is
+ * `check-access-mode-parity.cjs` already asserts, statically, that the Inspector, Portal V2 and
+ * the server agree on the five modes (it read V1 too until #2529 froze V1). What it cannot see is
  * the behaviour this file is for: that a field the mode does not use is **disabled and still
  * visible**, rather than hidden. That distinction is the whole point -- the public notice
  * promises the values are "kept for when you switch back", and a hidden field is no evidence of

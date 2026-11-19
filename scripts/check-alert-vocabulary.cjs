@@ -14,7 +14,7 @@
  *
  * So this compares rather than documents, the same reasoning as check-status-vocabulary.cjs:
  * every key raised by sendAdminAlert must be declared in AlertSettings, and every declared key
- * must carry a label both portals can render.
+ * must carry a label Portal V2 can render.
  *
  * Fails closed. If either side parses to nothing the run exits 1 rather than reporting that two
  * empty sets agree -- a gate that cannot fail is worse than none (#1779).
@@ -136,15 +136,18 @@ for (const d of declared) {
   }
 }
 
-// -- Both portal arms must render the table rather than a copy of it.
+// -- Portal V2 must render the table rather than a copy of it.
 //
-// There is deliberately nothing per-key to grep for here: the portals build their checkboxes
-// from the alert_settings the endpoint returns, which is the property that stops the drift.
-// So the gate asserts that wiring instead -- each arm fetches /api/admin/settings AND reads
-// alert_settings off the response. An arm that reverts to naming keys inline, or drops the
-// section, stops matching and fails, which is the #1866 parity rule applied to this surface.
+// There is deliberately nothing per-key to grep for here: the portal builds its checkboxes from
+// the alert_settings the endpoint returns, which is the property that stops the drift. So the
+// gate asserts that wiring instead -- V2 fetches /api/admin/settings AND reads alert_settings off
+// the response. A portal that reverts to naming keys inline, or drops the section, stops matching
+// and fails.
+//
+// Portal V1 was checked the same way until #2529. Decision 0007 froze V1 as an admin-only
+// fallback, so it is no longer read: a new column like #2445's Slack toggles must not require a
+// V1 edit.
 const ARMS = [
-  { name: 'V1', file: path.join(REPO, 'pkg/server/static/dashboard.js') },
   { name: 'V2', file: path.join(REPO, 'ui/src/pages/AdminSettings.tsx') },
 ];
 
@@ -168,16 +171,13 @@ for (const arm of ARMS) {
       '  Render from the server-declared table; a list held in the portal is the drift.',
     );
   }
-  // Each alert has a Slack toggle beside its email one (#2445). An arm that renders only the
-  // email column leaves the owner unable to keep an alert out of the inbox while it still
-  // reaches Slack in the other arm -- the #1866 parity defect, one column wide.
+  // Each alert has a Slack toggle beside its email one (#2445). A portal that renders only the
+  // email column leaves the owner unable to keep an alert out of Slack.
   if (!src.includes('slack_key')) {
     fail(
       `${arm.name} (${rel(arm.file)}) does not read slack_key, so it has no Slack column.`,
     );
-    fail(
-      '  Render a Slack toggle per alert from alert_settings[].slack_key, as the other arm does.',
-    );
+    fail('  Render a Slack toggle per alert from alert_settings[].slack_key.');
   }
   // A hardcoded key is the exact regression this replaced, so name it rather than waiting
   // for the counts to disagree somewhere else.
@@ -204,11 +204,11 @@ if (failed) {
     '  Add the alert to AlertSettings in pkg/server/alert_settings.go, give it a',
   );
   console.error(
-    '  label in every locale bundle, and both portals will render it.',
+    '  label in every locale bundle, and Portal V2 will render it.',
   );
   process.exit(1);
 }
 
 console.log(
-  `OK -- ${declaredKeys.length} alert(s) declared, raised, labelled and rendered in both arms: ${declaredKeys.join(', ')}`,
+  `OK -- ${declaredKeys.length} alert(s) declared, raised, labelled and rendered in Portal V2: ${declaredKeys.join(', ')}`,
 );

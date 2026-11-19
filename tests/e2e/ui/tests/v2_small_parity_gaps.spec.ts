@@ -62,6 +62,10 @@ test.describe('V2 closes the small gaps with V1', () => {
       const users = await res.json();
       for (const u of users) {
         if (u.email === adminEmail) {
+          // An ID that is not the email, as the owner row's is in production (its ID comes from
+          // owner.user_id). In this stack the two are equal, so without this a call addressed by
+          // email would pass for one addressed by ID.
+          u.id = 'u-admin-2534';
           adminId = u.id;
           u.onboarding_status = 'aborted';
           u.onboarding_last_step = 'tokens';

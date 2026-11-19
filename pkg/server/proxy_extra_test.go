@@ -27,11 +27,6 @@ func TestProxy_verifySessionCookie(t *testing.T) {
 	}
 }
 
-func TestEdgeControlWS_sendEdgeWSHeaders(t *testing.T) {
-	s := &Server{}
-	s.sendEdgeWSHeaders("nodeID", "fullHost", nil)
-}
-
 func TestEdgeControlWS_SendEdgeMaintenance(t *testing.T) {
 	s := &Server{}
 	_ = s.SendEdgeMaintenance("nodeID", "action", 60, "reason") //nolint:errcheck

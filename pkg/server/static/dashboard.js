@@ -7510,10 +7510,9 @@ async function addTunnelHeader() {
     return;
   }
 
-  const currentHeaders = t.added_headers || {};
-  currentHeaders[key] = val;
-
-  await updateTunnelHeadersAPI(t, currentHeaders);
+  // The change, not the resulting map (#2530): this page only ever sees header NAMES, so a
+  // whole map built here would wipe every header it cannot see the value of.
+  await updateTunnelHeadersAPI(t, { set: { [key]: val } });
   keyInput.value = '';
   valInput.value = '';
 }
@@ -7525,13 +7524,10 @@ async function removeTunnelHeader(key) {
   );
   if (!t) return;
 
-  const currentHeaders = t.added_headers || {};
-  delete currentHeaders[key];
-
-  await updateTunnelHeadersAPI(t, currentHeaders);
+  await updateTunnelHeadersAPI(t, { remove: [key] });
 }
 
-async function updateTunnelHeadersAPI(tunnel, headers) {
+async function updateTunnelHeadersAPI(tunnel, change) {
   try {
     const parts = tunnel.full_host.split('.');
     const subdomain = parts[0];
@@ -7543,7 +7539,7 @@ async function updateTunnelHeadersAPI(tunnel, headers) {
       body: JSON.stringify({
         subdomain: subdomain,
         domain: domain,
-        added_headers: headers,
+        ...change,
       }),
     });
 

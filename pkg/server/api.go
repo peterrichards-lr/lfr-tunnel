@@ -2098,12 +2098,16 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 }
 
 type updateHeadersRequest struct {
-	Subdomain    string            `json:"subdomain"`
-	Domain       string            `json:"domain"`
+	Subdomain string `json:"subdomain"`
+	Domain    string `json:"domain"`
+	// AddedHeaders replaces the whole map: the original form, kept for API callers. The portals
+	// send Set/Remove instead (#2530), because they hold header names, not values.
 	AddedHeaders map[string]string `json:"added_headers"`
+	leaseHeaderPatch
 }
 
-// handleUpdateReservationHeaders dynamically updates the AddedHeaders map of an active tunnel lease.
+// handleUpdateReservationHeaders edits the injected headers of an active tunnel, on whichever
+// gateway holds it (#2530).
 func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUserOrToken(r)
 	if err != nil {
@@ -2124,28 +2128,58 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	patching := !req.empty()
+	if patching {
+		if err := req.validate(); err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	} else if err := validateLeaseHeaders(req.AddedHeaders); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	fullHost := fmt.Sprintf("%s.%s", req.Subdomain, req.Domain)
-	lease, exists := s.registry.GetLease(fullHost)
-	if !exists {
+	if lease, exists := s.registry.GetLease(fullHost); exists {
+		if !canEditLease(user.ID, user.Role, lease.UserID) {
+			http.Error(w, `{"error":"Forbidden: you do not own this tunnel"}`, http.StatusForbidden)
+			return
+		}
+		var err error
+		if patching {
+			err = s.registry.PatchLeaseHeaders(fullHost, req.leaseHeaderPatch)
+		} else {
+			err = s.registry.UpdateLeaseHeaders(fullHost, req.AddedHeaders)
+		}
+		if err != nil {
+			respondWithError(w, ErrInternalError)
+			return
+		}
+	} else if el, onEdge := s.findEdgeLease(fullHost); onEdge {
+		if !canEditLease(user.ID, user.Role, el.UserID) {
+			http.Error(w, `{"error":"Forbidden: you do not own this tunnel"}`, http.StatusForbidden)
+			return
+		}
+		frame := ControlMessage{Type: edgeFrameLeaseHeadersPatch, FullHost: el.FullHost, HeaderSet: req.Set, HeaderRemove: req.Remove}
+		if !patching {
+			frame = ControlMessage{Type: "lease_headers", Subdomain: el.FullHost, Headers: req.AddedHeaders}
+		}
+		if !s.sendEdgeControl(el.NodeID, frame) {
+			respondJSON(w, http.StatusBadGateway, map[string]string{"error": "The gateway serving this tunnel (" + el.NodeID + ") is not reachable right now; nothing was changed."})
+			return
+		}
+		s.updateEdgeLease(fullHost, func(l *EdgeLease) {
+			if patching {
+				l.AddedHeaderNames = req.applyToNames(l.AddedHeaderNames)
+			} else {
+				l.AddedHeaderNames = sortedHeaderNames(req.AddedHeaders)
+			}
+		})
+	} else {
 		http.Error(w, `{"error":"Active tunnel not found"}`, http.StatusNotFound)
 		return
 	}
-
-	if lease.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: you do not own this tunnel"}`, http.StatusForbidden)
-		return
-	}
-
-	if err := s.registry.UpdateLeaseHeaders(fullHost, req.AddedHeaders); err != nil {
-		respondWithError(w, ErrInternalError)
-		return
-	}
-
-	if lease.NodeID != "" && lease.NodeID != "local" {
-		if !s.sendEdgeWSHeaders(lease.NodeID, fullHost, req.AddedHeaders) {
-			slog.Warn(fmt.Sprintf("[API] Failed to propagate headers for %s to edge node %s", fullHost, lease.NodeID))
-		}
-	}
+	s.goTracked(s.BroadcastTelemetry)
 
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,

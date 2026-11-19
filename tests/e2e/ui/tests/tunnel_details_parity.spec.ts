@@ -228,4 +228,64 @@ test.describe('Tunnel details reach parity across both portal arms', () => {
     await expect(headers).toContainText('X-Demo-Auth');
     await expect(headers).not.toContainText(SECRET_HEADER_VALUE);
   });
+
+  test('V1 header Add and Remove send only the change (#2530)', async ({
+    page,
+  }) => {
+    // The edit endpoint used to receive the whole header map, built here from a payload that
+    // carries header NAMES only -- so Add sent one header and wiped the rest, and Remove sent
+    // none and wiped them all. The request body is the thing to assert: the server applies
+    // whatever it is told, and the stack has no live tunnel to observe the result on.
+    await loginV1(page);
+    await silenceTelemetrySocket(page);
+    await stubTunnels(page);
+    await page.reload();
+
+    const sent: any[] = [];
+    await page.route(
+      '**/api/portal/reservations/headers',
+      async (route: any) => {
+        sent.push(route.request().postDataJSON());
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: '{"status":"success"}',
+        });
+      },
+    );
+
+    await page.locator('#nav-tunnels').click();
+    const row = page.locator('#tunnels-table-body tr', { hasText: 'locked' });
+    await row.locator('.action-menu-btn').click();
+    await page
+      .locator(
+        '.action-menu-dropdown.show .action-menu-item:has-text("Details")',
+      )
+      .first()
+      .click();
+    const modal = page.locator('#tunnel-details-modal');
+    await expect(modal).toBeVisible();
+
+    await modal.locator('#detail-tunnel-header-key').fill('X-New');
+    await modal.locator('#detail-tunnel-header-value').fill('v1');
+    await modal.locator('button:text-is("Add")').click();
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]).toEqual({
+      subdomain: 'locked',
+      domain: 'lfr-demo.local',
+      set: { 'X-New': 'v1' },
+    });
+
+    await modal
+      .locator('#detail-tunnel-headers-container')
+      .locator('button:text-is("Remove")')
+      .first()
+      .click();
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]).toEqual({
+      subdomain: 'locked',
+      domain: 'lfr-demo.local',
+      remove: ['X-Demo-Auth'],
+    });
+  });
 });

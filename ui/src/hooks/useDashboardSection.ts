@@ -42,10 +42,13 @@ function scrollToTop() {
  *
  * "The reader scrolls" includes a scroll with no wheel, key or pointer behind it -- a screen
  * reader moving through the page, say. Such a scroll is told apart from the hook's own by
- * where things ended up: after each placement the scroll positions and the section's offset
- * are recorded, and a scroll event that changed a scroll position AND moved the section
- * cannot have been ours (our scrolls change neither once recorded; the browser's scroll
- * anchoring, as panels above load, changes the position but keeps the section where it is).
+ * where things ended up: after each placement the scroll positions, the section's offset and
+ * the dashboard's height are recorded. A scroll event that changed a scroll position AND moved
+ * the section while the dashboard kept its height cannot have been ours (our scrolls change
+ * none of them once recorded) nor the browser's: when the page changes size the browser
+ * scrolls too, clamping at the bottom or anchoring as panels load, and a first version that
+ * did not check the height failed an e2e run with Custom Domain Status left 891px down a
+ * 720px viewport, most likely by reading one of those as the reader.
  *
  * An unknown section is not an error page: the address is corrected to `/dashboard` and the
  * page shown from the top, the same thing V1 does for `/portal/<unknown>` (#1215). Leaving a
@@ -76,7 +79,12 @@ export function useDashboardSection(rootRef: RefObject<HTMLElement | null>) {
       return;
     }
 
-    let placed: { positions: number[]; top: number | null } | null = null;
+    let placed: {
+      positions: number[];
+      top: number | null;
+      height: number;
+    } | null = null;
+    const height = () => rootRef.current?.getBoundingClientRect().height ?? 0;
     // 'instant' rather than the page's smooth scrolling: a smooth scroll restarted on every
     // resize never finishes, and arrival is not a transition anyone watches.
     const place = () => {
@@ -85,6 +93,7 @@ export function useDashboardSection(rootRef: RefObject<HTMLElement | null>) {
       placed = {
         positions: scrollers().map((s) => s.scrollTop),
         top: el ? el.getBoundingClientRect().top : null,
+        height: height(),
       };
     };
 
@@ -94,6 +103,9 @@ export function useDashboardSection(rootRef: RefObject<HTMLElement | null>) {
     });
     const onScroll = () => {
       if (done || !placed) return;
+      // The page changed size since the last placement: this scroll is the browser
+      // clamping or anchoring, and the ResizeObserver is about to re-place. Not the reader.
+      if (Math.abs(height() - placed.height) > 1) return;
       const now = scrollers().map((s) => s.scrollTop);
       const scrolled = now.some(
         (p, i) => Math.abs(p - placed!.positions[i]) > 1,

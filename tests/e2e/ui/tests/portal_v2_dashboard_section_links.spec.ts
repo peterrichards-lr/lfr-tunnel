@@ -280,6 +280,15 @@ test.describe('Portal V2 dashboard section links', () => {
       .toBe(true);
     await programmaticScrollToTop(page);
     await expect.poll(() => headingScrolledAway(page)).toBe(false);
+    // Let the scroll event be delivered before the page grows. Scroll events fire on the next
+    // frame; growing the page inside that frame would make the reader's scroll and the
+    // panel's growth one event, which the hook (rightly) attributes to the growth.
+    await page.evaluate(
+      () =>
+        new Promise((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(r)),
+        ),
+    );
     await growDashboard(page, 400);
     await page.waitForTimeout(500);
     expect(

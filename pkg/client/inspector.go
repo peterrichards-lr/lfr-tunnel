@@ -97,6 +97,8 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"language_preference": engine.LanguagePreference,
 			"theme_preference":    engine.ThemePreference,
 			"preserve_host":       engine.PreserveHost,
+			// The Inspector's banner (#2523): the same state the CLI notice is rendered from.
+			"min_version": engine.MinVersion,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

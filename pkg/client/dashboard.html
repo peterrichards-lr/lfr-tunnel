@@ -111,6 +111,9 @@
         .header-panel h1 { font-size: 20px; font-weight: 700; margin-bottom: 15px; color: var(--text-main); display: flex; align-items: center; justify-content: space-between; }
         
         .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        /* The minimum-version banner (#2523). Amber before the deadline, red after it. */
+        .min-version-banner { margin: 0 0 12px; padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 1.4; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.45); color: var(--text-main, inherit); }
+        .min-version-banner--expired { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.5); }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 24px; }
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
@@ -215,6 +218,7 @@
             <h1 style="margin-bottom: 15px;">
                 <span data-i18n="client_inspector">Inspector</span>
             </h1>
+            <div id="min-version-banner" class="min-version-banner" role="status" hidden></div>
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: normal; margin-bottom: 10px;">
                 <select id="lang-selector" onchange="setLanguage(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; font-size: 11px; outline: none; cursor: pointer;">
                     <option value="en">English</option>
@@ -306,6 +310,9 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_min_version_grace": "Your client ({0}) is older than this gateway's minimum ({1}). New tunnels will be refused from {2}. Run {3} before then.",
+        "client_min_version_warning": "Your client ({0}) is older than this gateway's minimum ({1}). New tunnels will be refused from {2} -- run {3} now.",
+        "client_min_version_expired": "Your client ({0}) is older than this gateway's minimum ({1}). New tunnels are now refused; this one keeps running. Run {3} to update.",
         "client_settings_group_restart_hint": "Saved now, in force the next time the client starts. Saving offers to restart it.",
         "client_settings_group_live_hint": "Takes effect on the running client as soon as you save.",
         "client_passcode_confirm": "Confirm passcode",
@@ -384,6 +391,9 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_min_version_grace": "Tu cliente ({0}) es anterior a la versión mínima de esta pasarela ({1}). Los túneles nuevos se rechazarán a partir del {2}. Ejecuta {3} antes de esa fecha.",
+        "client_min_version_warning": "Tu cliente ({0}) es anterior a la versión mínima de esta pasarela ({1}). Los túneles nuevos se rechazarán a partir del {2}: ejecuta {3} ahora.",
+        "client_min_version_expired": "Tu cliente ({0}) es anterior a la versión mínima de esta pasarela ({1}). Los túneles nuevos ya se rechazan; este sigue funcionando. Ejecuta {3} para actualizar.",
         "client_settings_group_restart_hint": "Se guarda ahora y se aplica la próxima vez que se inicie el cliente. Al guardar se ofrece reiniciarlo.",
         "client_settings_group_live_hint": "Se aplica al cliente en ejecución en cuanto guardas.",
         "client_passcode_confirm": "Confirmar código",
@@ -462,6 +472,9 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_min_version_grace": "Ihr Client ({0}) ist älter als die Mindestversion dieses Gateways ({1}). Neue Tunnel werden ab {2} abgelehnt. Führen Sie vorher {3} aus.",
+        "client_min_version_warning": "Ihr Client ({0}) ist älter als die Mindestversion dieses Gateways ({1}). Neue Tunnel werden ab {2} abgelehnt – führen Sie jetzt {3} aus.",
+        "client_min_version_expired": "Ihr Client ({0}) ist älter als die Mindestversion dieses Gateways ({1}). Neue Tunnel werden jetzt abgelehnt; dieser läuft weiter. Führen Sie {3} zum Aktualisieren aus.",
         "client_settings_group_restart_hint": "Jetzt gespeichert, wirksam beim nächsten Start des Clients. Beim Speichern wird ein Neustart angeboten.",
         "client_settings_group_live_hint": "Wird sofort beim Speichern auf den laufenden Client angewendet.",
         "client_passcode_confirm": "Passcode bestätigen",
@@ -540,6 +553,9 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_min_version_grace": "Votre client ({0}) est antérieur à la version minimale de cette passerelle ({1}). Les nouveaux tunnels seront refusés à partir du {2}. Exécutez {3} avant cette date.",
+        "client_min_version_warning": "Votre client ({0}) est antérieur à la version minimale de cette passerelle ({1}). Les nouveaux tunnels seront refusés à partir du {2} : exécutez {3} maintenant.",
+        "client_min_version_expired": "Votre client ({0}) est antérieur à la version minimale de cette passerelle ({1}). Les nouveaux tunnels sont désormais refusés ; celui-ci continue de fonctionner. Exécutez {3} pour mettre à jour.",
         "client_settings_group_restart_hint": "Enregistré maintenant, appliqué au prochain démarrage du client. L'enregistrement propose de le redémarrer.",
         "client_settings_group_live_hint": "Prend effet sur le client en cours dès l'enregistrement.",
         "client_passcode_confirm": "Confirmer le code",
@@ -618,6 +634,9 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_min_version_grace": "O seu cliente ({0}) é anterior à versão mínima deste gateway ({1}). Novos túneis serão recusados a partir de {2}. Execute {3} antes disso.",
+        "client_min_version_warning": "O seu cliente ({0}) é anterior à versão mínima deste gateway ({1}). Novos túneis serão recusados a partir de {2}: execute {3} agora.",
+        "client_min_version_expired": "O seu cliente ({0}) é anterior à versão mínima deste gateway ({1}). Novos túneis já são recusados; este continua a funcionar. Execute {3} para atualizar.",
         "client_settings_group_restart_hint": "Guardado agora, em vigor no próximo arranque do cliente. Ao guardar é oferecido reiniciá-lo.",
         "client_settings_group_live_hint": "Aplica-se ao cliente em execução assim que guardar.",
         "client_passcode_confirm": "Confirmar código",
@@ -696,6 +715,9 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_min_version_grace": "このクライアント ({0}) はこのゲートウェイの最小バージョン ({1}) より古いです。{2} 以降、新しいトンネルは拒否されます。それまでに {3} を実行してください。",
+        "client_min_version_warning": "このクライアント ({0}) はこのゲートウェイの最小バージョン ({1}) より古いです。{2} 以降、新しいトンネルは拒否されます。今すぐ {3} を実行してください。",
+        "client_min_version_expired": "このクライアント ({0}) はこのゲートウェイの最小バージョン ({1}) より古いです。新しいトンネルは拒否されるようになりました（このトンネルは動作を続けます）。{3} を実行して更新してください。",
         "client_settings_group_restart_hint": "今すぐ保存され、次回クライアント起動時に有効になります。保存時に再起動を提案します。",
         "client_settings_group_live_hint": "保存するとすぐに実行中のクライアントに反映されます。",
         "client_passcode_confirm": "パスコードの確認",
@@ -890,6 +912,28 @@ function setLanguage(lang) {
             }
         }
 
+        // The client's standing against the gateway's minimum version (#2523): the same state
+        // the CLI notice is rendered from, so the two cannot disagree. textContent, not
+        // innerHTML -- the versions and the command come from the gateway.
+        function renderMinVersionBanner(m) {
+            const el = document.getElementById('min-version-banner');
+            if (!el) return;
+            const phases = ['grace', 'warning', 'expired'];
+            if (!m || !m.required || !phases.includes(m.phase)) {
+                el.hidden = true;
+                return;
+            }
+            const when = m.deadline ? new Date(m.deadline).toLocaleString() : '';
+            el.textContent = t('client_min_version_' + m.phase)
+                .replace('{0}', m.client_version || '')
+                .replace('{1}', m.min_version || '')
+                .replace('{2}', when)
+                .replace('{3}', m.upgrade_command || 'lfr-tunnel -upgrade');
+            const pastDeadline = m.phase === phases[2];
+            el.classList.toggle('min-version-banner--expired', pastDeadline);
+            el.hidden = false;
+        }
+
         async function fetchState() {
             try {
                 const res = await fetch('/api/state');
@@ -913,6 +957,7 @@ function setLanguage(lang) {
                 }
 
                 document.getElementById('maint-toggle').checked = state.maintenance_mode;
+                renderMinVersionBanner(state.min_version);
                 
                 const pill = document.getElementById('preserve-host-pill');
                 if (pill) {

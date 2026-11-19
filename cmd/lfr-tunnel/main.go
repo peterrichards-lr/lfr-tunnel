@@ -382,10 +382,21 @@ func main() {
 	// off -- a binary on somebody's machine should not change without them asking -- and a
 	// failure is reported rather than fatal, because an upgrade that could not be verified
 	// must not happen but also must not stop the client that already works.
+	//
+	// Below the gateway's minimum version the client also offers the upgrade at a terminal, and
+	// restarts after either kind so this session is the new version (#2523; floor_upgrade.go).
+	interactive := !*background && isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+	floorAction := floorUpgradeDecision(config.Version, info, cfg.AutoUpgrade, interactive)
+	if floorAction == floorAsk && askToUpgrade(os.Stdout, os.Stdin, config.Version, info.MinVersion, floorPromptTimeout) {
+		upgradeAndRestart(config.Version, cfg.ServerURL)
+	}
 	if upgraded, err := client.AutoUpgradeAtStart(cfg.AutoUpgrade, config.Version, cfg.ServerURL, info); err != nil {
 		slog.Warn(fmt.Sprintf("[Client] Automatic upgrade failed, continuing on the current version: %v", err))
 	} else if upgraded {
 		slog.Info("[Client] Automatic upgrade completed.")
+		if floorAction == floorRestartAfterAuto {
+			restartIntoUpgrade()
+		}
 	}
 
 	// 3. Resolve port mappings
@@ -564,9 +575,15 @@ func main() {
 	// (#1988). Printed here for the same reason the consent notice is, and separately from it
 	// because the remedy is different: consent is accepted in the portal, a version is fixed
 	// with `lfr-tunnel -upgrade`. Silent unless the warning window has started.
+	// One line at info level during grace, a warning once the window has opened (#2523).
 	if notice := client.MinVersionNotice(regResp); notice != "" {
-		slog.Warn(fmt.Sprintf("[Client] %s", notice))
+		if regResp.MinVersion.Phase == client.ConsentPhaseGrace {
+			slog.Info(fmt.Sprintf("[Client] %s", notice))
+		} else {
+			slog.Warn(fmt.Sprintf("[Client] %s", notice))
+		}
 	}
+	engine.NoteMinVersion(regResp.MinVersion)
 
 	if regResp.LanguagePreference != "" {
 		engine.LanguagePreference = regResp.LanguagePreference
@@ -716,6 +733,8 @@ func main() {
 		// control comes back with it and must be re-applied -- otherwise the Inspector would
 		// show the truth until the first reconnect and a stale copy afterwards (#2130).
 		applyGatewayAccessControl(engine, newResp)
+		// The gateway may have a different floor, or this client a new window, after a move.
+		engine.NoteMinVersion(newResp.MinVersion)
 		state.Region = cfg.Region
 		state.ServerURL = cfg.ServerURL
 		state.PublicURLs = publicURLs

@@ -1349,7 +1349,13 @@ sudo restore-with-maintenance.sh [backup_file_path]
 To prevent developers from seeing client CLI update warnings when you deploy cosmetic or backend changes to the server gateway, you can separate the latest client version from the server's running version.
 
 #### Configuration keys in `server-config.yaml`:
-* `min_client_version`: Specifies the minimum client version required to connect to the gateway. If a client is older than this, it is hard-blocked and exits immediately.
+* `min_client_version`: The minimum client version this gateway accepts. A client below it is **not** cut off at once. Each user gets a grace period from the first time this gateway sees them below the floor: `min_client_version_grace_days`, default 14. The last `min_client_version_warning_days` of it (default 5) are the warning window. After the deadline, **new** tunnels from that client are refused; tunnels already running are never disconnected. How the user is told:
+  * **The client's own output.** The refusal text is written by the gateway, so even clients from before the floor existed print it. From client releases containing #2523 onwards:
+    * a dated line from the first day ("New tunnels will be refused from <date>");
+    * a warning when the warning window opens and again at the deadline, even for a tunnel that has been running for days;
+    * a banner in the local Inspector;
+    * at an interactive terminal, the offer "Upgrade now? [Y/n]". Yes runs the same verified upgrade as `lfr-tunnel -upgrade`, then restarts the client. With `auto_upgrade` on, the client upgrades and restarts without asking.
+  * **The portal and email** are tracked in #2522.
 * `latest_client_version`: Specifies the latest recommended client CLI version. If set, the gateway will return this version as the `latest_version` to connecting client instances. If a client's version is older than this (but newer than `min_client_version`), it displays a soft update warning.
 
 #### How it works:
@@ -2058,4 +2064,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*

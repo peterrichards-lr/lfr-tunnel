@@ -56,6 +56,11 @@ type InterceptorEngine struct {
 	// owed for them (#1763). Delivery is at-least-once, so dedupe lives here.
 	diagAcks diagnosticsAckState
 
+	// MinVersion is this client's standing against the gateway's minimum version, as of the
+	// last registration or reminder (#2523); the Inspector shows it. Guarded by mu.
+	MinVersion         *MinVersionState
+	minVersionReminder minVersionReminder
+
 	mu                 sync.RWMutex
 	MaintenanceMode    bool
 	Status             string

@@ -27,16 +27,19 @@ if [ ! -f "$GATE" ]; then
     echo ""; echo "passed: $PASS  failed: $FAIL"; exit 1
 fi
 
-# Portal fixtures. The arms render from the server-declared table, so there is nothing
-# per-key to plant -- what the gate checks is that each arm asks for the table and reads it.
-# <arms> selects which of those two properties to break.
+# Portal fixtures. V2 renders from the server-declared table, so there is nothing per-key to
+# plant -- what the gate checks is that V2 asks for the table and reads it. <arms> selects which
+# property to break. A V1 file is still written so the BOUNDING cases can break it and require
+# the gate not to care: V1 is frozen (decision 0007, #2529) and no longer read.
 #
 # write_arms <dir> <arms>
-#   ok         both arms wired correctly
-#   v1-nofetch V1 never calls the endpoint
+#   ok         both files wired correctly
+#   v1-nofetch V1 never calls the endpoint                       (BOUNDING: ignored)
+#   v1-noslack V1 renders only the email column                  (BOUNDING: ignored)
+#   v2-nofetch V2 never calls the endpoint
 #   v2-inline  V2 names an alert key inline instead of rendering the table
 #   v2-missing the V2 file does not exist at all
-#   v1-noslack V1 renders only the email column (#2445)
+#   v2-noslack V2 renders only the email column (#2445)
 #   v2-slack-inline V2 names a Slack toggle key inline
 write_arms() {
     local dir="$1" arms="$2"
@@ -47,6 +50,8 @@ write_arms() {
         v1-nofetch) v1="renderAlertSettings(data.alert_settings, x => x.slack_key);" ;;
         v2-inline)  v2="$v2 if (k === 'alert_notify_registration') show();" ;;
         v1-noslack) v1="fetch('/api/admin/settings'); data.alert_settings.map(x => x.key);" ;;
+        v2-nofetch) v2="renderAlertSettings(res.data.alert_settings, a => a.slack_key);" ;;
+        v2-noslack) v2="axios.get('/api/admin/settings'); res.data.alert_settings.forEach(a => a.key);" ;;
         v2-slack-inline) v2="$v2 if (k === 'alert_slack_registration') show();" ;;
     esac
     printf '%s\n' "$v1" > "$dir/pkg/server/static/dashboard.js"
@@ -127,21 +132,25 @@ run_case "declared without a label" 1 "registration,blacklist" "registration,bla
 # sites appear wherever the feature lives.
 run_case "a different order still agrees" 0 "registration,blacklist" "blacklist,registration" "blacklist,registration"
 
-# FIRING. An arm that never asks the server for the table cannot show a toggle, whatever the
-# server declares -- the state both arms were actually in before #1882.
-run_case "an arm that never fetches the settings" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v1-nofetch"
+# FIRING. A portal that never asks the server for the table cannot show a toggle, whatever the
+# server declares -- the state both portals were actually in before #1882.
+run_case "V2 never fetching the settings" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-nofetch"
 
 # FIRING. An arm naming a key inline is the drift itself: it renders whatever the portal
 # happens to list, so a seventh alert stays invisible until someone remembers this file.
 run_case "an arm naming an alert key inline" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-inline"
 
-# FIRING. A missing arm must fail rather than be quietly skipped -- a parity check that
-# silently ignores the arm it cannot find is the #1866 defect with extra steps.
-run_case "a missing portal arm is not a pass" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-missing"
+# FIRING. A missing V2 file must fail rather than be quietly skipped.
+run_case "a missing V2 file is not a pass" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-missing"
 
-# FIRING. An arm with only the email column (#2445): the owner could keep an alert out of the
-# inbox in one portal and not the other.
-run_case "an arm with no Slack column" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v1-noslack"
+# FIRING. V2 with only the email column (#2445): the owner could not keep an alert out of Slack.
+run_case "V2 with no Slack column" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-noslack"
+
+# BOUNDING (#2529). V1 is frozen (decision 0007), so a V1 that lacks the wiring must not fail the
+# gate. Both of these failed while V1 was read; if V1 is ever read again they go red, and whoever
+# does it has to reopen 0007 rather than re-impose parity quietly.
+run_case "V1 never fetching the settings is not read" 0 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v1-nofetch"
+run_case "V1 with no Slack column is not read" 0 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v1-noslack"
 
 # FIRING. A Slack key named inline is the same drift as an email key named inline.
 run_case "an arm naming a Slack toggle key inline" 1 "registration,blacklist" "registration,blacklist" "registration,blacklist" "v2-slack-inline"

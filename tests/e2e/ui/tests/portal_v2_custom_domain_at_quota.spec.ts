@@ -13,8 +13,9 @@ import { createApprovedUser, deleteUser } from './utils/nonadmin';
  *
  * V1 disables the inputs and shows a warning. This asserts V2 now does the same.
  *
- * Why an e2e spec rather than a source check: `check-portal-parity` asserts a capability is
- * present in the SOURCE of both arms, which it was. It cannot see that one arm renders it
+ * Why an e2e spec rather than a source check: `check-portal-parity` (V2-only
+ * `check-v2-capabilities` since #2529) asserted a capability is present in the SOURCE of both
+ * arms, which it was. It could not see that one arm renders it
  * conditionally on something the other does not, which is precisely this defect. The only level
  * that distinguishes "present" from "reachable" is the rendered page.
  */

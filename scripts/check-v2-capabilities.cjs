@@ -1,30 +1,33 @@
 #!/usr/bin/env node
 /**
- * Fail when a capability exists in one portal arm and not the other.
+ * check-v2-capabilities.cjs -- Portal V2 must keep every capability it was given (#2529).
  *
- * V1 and V2 are an A/B test: the same person may be served either, so a feature in only one of
- * them is a defect rather than a roadmap item. Access control was exactly that -- V2 had a full
- * dialog, V1 could only DISPLAY the mode and whitelist in a read-only line, and nobody noticed
- * because each arm was only ever checked against itself (#2101).
+ * This was check-portal-parity.cjs (#2101), which required each capability below to be present
+ * in BOTH portal arms, because V1 and V2 were an A/B test (decision 0004). Decision 0007 ended
+ * that: V2 is the portal and V1 is a frozen, admin-only fallback, so a capability in V2 alone is
+ * no longer a defect and V1 is not read at all.
  *
- * Asserts the CLASS: for each capability below, both arms must show evidence of it. Checking
- * "does V1 have access control" alone is what allowed this; the pairing is the test.
+ * What survives is V2's half, which was never about symmetry: each entry is a capability V2 was
+ * fixed to have, often after a defect report, and a refactor that drops the marker drops the
+ * capability with nothing else to notice. Most entries have no e2e spec behind them. The
+ * per-entry comments are the history of each fix; where they say "both arms" or "V1", that is
+ * the A/B period they were written in.
  *
- * Wired up is not the same as findable. V2 could always reach the access-control endpoint, so the
- * capability half of this gate was green throughout #2101 -- and the owner still reported the
- * feature missing from both arms, because V2's only affordance was a bare padlock sitting between
- * two text buttons (#2114). So where a capability names its opener, the control that opens it must
- * say what it does IN WORDS, in both arms.
+ * Wired up is not the same as findable (#2114): V2 could always reach the access-control
+ * endpoint, and the owner still reported the feature missing, because V2's only affordance was a
+ * bare padlock. So where a capability names its opener, the control that opens it must say what
+ * it does IN WORDS.
  *
- * Every marker below is matched by findMarker() from scripts/lib/token-match.cjs, NOT by
- * String.includes(). A bare substring match
- * is satisfied by any rename that EXTENDS the old name -- `session_keys_unacked` still "found" in
- * a file that only has `session_keys_unacked_MUTANT` -- so the gate vouches for a marker that no
- * longer exists (#2201). That is the same rot openerLabel() has always refused to be quiet about;
- * the needle half simply had no equivalent. The one deliberate exception is a marker containing
- * `/`, which is a URL path: a sub-route is still the capability, so those go on matching loosely.
- * Both halves of that rule are asserted in tests/hooks/test-gate-scope-boundaries.sh rather than
- * stated only here -- prose does not fail a build (github-workflow SKILL 5b rule 6).
+ * Every marker is matched by findMarker() from scripts/lib/token-match.cjs, NOT by
+ * String.includes(): a rename that EXTENDS the old name (`session_keys_unacked` ->
+ * `session_keys_unacked_MUTANT`) must not go on satisfying it (#2201). A marker containing `/` is
+ * a URL path and matches loosely on purpose -- a sub-route is still the capability. Both halves
+ * are asserted in tests/hooks/test-gate-scope-boundaries.sh.
+ *
+ * KNOWN LIMIT, stated so it is not mistaken for coverage: CAPABILITIES is a closed, hand-written
+ * allow-list. A capability nobody added to it is invisible here. And it asserts SOURCE presence,
+ * not render-time reachability -- #2241 shipped a control present in source and unreachable on
+ * screen with this green throughout. tests/e2e/ui/tests/ is the half that watches the screen.
  */
 
 'use strict';
@@ -32,141 +35,76 @@
 const fs = require('fs');
 const path = require('path');
 
-// One home for the boundary rule, shared with check-print-selectors.cjs (#2208). It was defined
-// here by #2201 and copying it into the second gate would have been the same mistake #2211 was
-// fixing on the Go side at the time.
 const { findMarker } = require('./lib/token-match.cjs');
 
 const ROOT = path.join(__dirname, '..');
 
-// Each capability names what to look for in each arm. Deliberately behavioural markers -- the
-// endpoint or the handler -- rather than wording, which changes without the capability changing.
+// Each capability names where in V2 to look and what to look for. Deliberately behavioural
+// markers -- the endpoint or the handler -- rather than wording, which changes without the
+// capability changing.
 const CAPABILITIES = [
   {
     // #2447. V2's login page never asked which SSO providers exist, so a V2 user had no way to
     // sign in with SSO at all -- and the Okta rollout would have depended on V1 alone.
     name: 'sign in with a configured SSO provider',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: "'/api/auth/providers'",
-    },
-    v2: {
-      files: ['ui/src/pages/Login.tsx'],
-      needle: "'/api/auth/providers'",
-    },
+    files: ['ui/src/pages/Login.tsx'],
+    needle: "'/api/auth/providers'",
   },
   {
     // Same defect, other half: V2 kept offering a magic-link form on a gateway that refuses
     // every magic link.
     name: 'withdraw email sign-in when the operator disables it',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'data.disable_email_login',
-    },
-    v2: {
-      files: ['ui/src/pages/Login.tsx'],
-      needle: '{!emailLoginDisabled && (',
-    },
+    files: ['ui/src/pages/Login.tsx'],
+    needle: '{!emailLoginDisabled && (',
   },
   {
     // An invite is an emailed sign-in link; SSO-only refuses it, so neither arm may offer it (#2449).
     name: 'withdraw admin invites when email sign-in is disabled',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: "getElementById('invite-disabled-note')",
-    },
-    v2: {
-      files: ['ui/src/pages/AdminUsers.tsx'],
-      needle: 'data-testid="invite-disabled-note"',
-    },
+    files: ['ui/src/pages/AdminUsers.tsx'],
+    needle: 'data-testid="invite-disabled-note"',
   },
   {
     // #2430: an analytics export prints the wide sections on landscape pages.
     name: 'print the wide analytics sections on landscape pages',
-    v1: {
-      files: ['pkg/server/dashboard.html'],
-      needle: 'class="glass print-wide"',
-    },
-    v2: {
-      files: ['ui/src/pages/AdminAnalytics.tsx'],
-      needle: 'card p-xl mb-xl print-wide',
-    },
+    files: ['ui/src/pages/AdminAnalytics.tsx'],
+    needle: 'card p-xl mb-xl print-wide',
   },
   {
     // #2430: charts are redrawn at their printed size rather than scaled from the screen.
     name: 'redraw analytics charts at their printed size',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: "addEventListener('beforeprint', sizeChartsForPrint)",
-    },
-    v2: {
-      files: ['ui/src/pages/AdminAnalytics.tsx'],
-      needle: 'usePrintSizedCharts();',
-    },
+    files: ['ui/src/pages/AdminAnalytics.tsx'],
+    needle: 'usePrintSizedCharts();',
   },
   {
     // #2430: no personal traffic is stated, not left as an empty section.
     name: 'say so when there is no personal usage to show',
-    v1: {
-      files: ['pkg/server/dashboard.html'],
-      needle: 'data-testid="personal-usage-empty"',
-    },
-    v2: {
-      files: ['ui/src/pages/AdminAnalytics.tsx'],
-      needle: 'data-testid="personal-usage-empty"',
-    },
+    files: ['ui/src/pages/AdminAnalytics.tsx'],
+    needle: 'data-testid="personal-usage-empty"',
   },
   {
     name: 'set a reservation passcode / IP whitelist',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: '/api/portal/reservations/access-control',
-      // The button a person actually clicks to get at it, named by its handler call.
-      opener: {
-        files: ['pkg/server/static/dashboard.js'],
-        call: 'openReservationAcModal(',
-      },
-    },
-    v2: {
-      files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: '/api/portal/reservations/access-control',
-      opener: {
-        files: ['ui/src/components/ReservationsTable.tsx'],
-        call: 'openAcModal(r)',
-      },
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: '/api/portal/reservations/access-control',
+    opener: {
+      files: ['ui/src/components/ReservationsTable.tsx'],
+      call: 'openAcModal(r)',
     },
   },
   {
     name: 'confirm a passcode before saving it',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'reservation-ac-passcode-confirm',
-    },
-    v2: {
-      files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: 'acPasscodeConfirm',
-    },
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: 'acPasscodeConfirm',
   },
   {
     // #2196. Rotating the fleet's visitor session-signing key is an operator action with no
     // other route -- there is no CLI for it -- so an arm without the control cannot do it at
     // all, which is the shape of #2101 exactly.
     name: 'trigger a visitor session-key rotation',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: '/api/admin/session-secrets/rotate',
-      opener: {
-        files: ['pkg/server/dashboard.html'],
-        call: 'rotateSessionKeys()',
-      },
-    },
-    v2: {
+    files: ['ui/src/pages/AdminSettings.tsx'],
+    needle: '/api/admin/session-secrets/rotate',
+    opener: {
       files: ['ui/src/pages/AdminSettings.tsx'],
-      needle: '/api/admin/session-secrets/rotate',
-      opener: {
-        files: ['ui/src/pages/AdminSettings.tsx'],
-        call: 'setSessionKeysConfirming(true)',
-      },
+      call: 'setSessionKeysConfirming(true)',
     },
   },
   {
@@ -175,14 +113,8 @@ const CAPABILITIES = [
     // that shows the button but not the outcome is worse than one that shows neither, because
     // it invites the click and then says nothing about it.
     name: 'see why the last session-key rotation aborted',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'session_keys_reason',
-    },
-    v2: {
-      files: ['ui/src/pages/AdminSettings.tsx'],
-      needle: 'session_keys_reason',
-    },
+    files: ['ui/src/pages/AdminSettings.tsx'],
+    needle: 'session_keys_reason',
   },
   {
     // #2223/#2224. The portal register control is the ONLY route to a custom domain for a user
@@ -195,21 +127,11 @@ const CAPABILITIES = [
     // survives the renames a handler name does not. It contains `/`, so findMarker matches it
     // loosely by design -- a sub-route is still the capability.
     name: 'register a custom domain from the portal',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: '/api/portal/custom-domains',
-      opener: {
-        files: ['pkg/server/dashboard.html'],
-        call: 'reserveCustomDomain()',
-      },
-    },
-    v2: {
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: '/api/portal/custom-domains',
+    opener: {
       files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: '/api/portal/custom-domains',
-      opener: {
-        files: ['ui/src/components/ReservationsPanel.tsx'],
-        call: 'register_custom_domain',
-      },
+      call: 'register_custom_domain',
     },
   },
   {
@@ -218,14 +140,8 @@ const CAPABILITIES = [
     // so a name that does not resolve here can never be served. An arm that asks for a domain
     // name without saying this sends the user away to find out why nothing happened.
     name: 'state the CNAME requirement where the domain is asked for',
-    v1: {
-      files: ['pkg/server/dashboard.html'],
-      needle: 'custom_domain_cname_hint',
-    },
-    v2: {
-      files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: 'custom_domain_cname_hint',
-    },
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: 'custom_domain_cname_hint',
   },
   {
     // #2233. The per-user provisioning view. The endpoint scopes to the caller
@@ -244,41 +160,23 @@ const CAPABILITIES = [
     // was green throughout. portal_v1_custom_domain_status.spec.ts is the half that proves a
     // non-admin actually sees it.
     name: "see your own custom domain's provisioning status",
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: '/api/portal/vanity-domain-status',
-    },
-    v2: {
-      files: ['ui/src/components/VanityDomainStatusPanel.tsx'],
-      needle: '/api/portal/vanity-domain-status',
-    },
+    files: ['ui/src/components/VanityDomainStatusPanel.tsx'],
+    needle: '/api/portal/vanity-domain-status',
   },
   {
     // Which pinned above the rest: quota, conflict and invalid-request are three different
     // instructions (release one / it is someone else's / fix the name), and the endpoint answers
     // the first two on the SAME 400. An arm that shows one "failed" toast has thrown that away.
     name: 'distinguish the custom-domain refusals from each other',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'error_custom_domain_invalid',
-    },
-    v2: {
-      files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: 'error_custom_domain_invalid',
-    },
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: 'error_custom_domain_invalid',
   },
   {
     // Which nodes did not acknowledge, named. "2 of 3 nodes did not confirm" is the reason
     // string; this is the list, and it is what turns an abort into something actionable.
     name: 'name the nodes that did not acknowledge a rotation',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'session_keys_unacked',
-    },
-    v2: {
-      files: ['ui/src/pages/AdminSettings.tsx'],
-      needle: 'session_keys_unacked',
-    },
+    files: ['ui/src/pages/AdminSettings.tsx'],
+    needle: 'session_keys_unacked',
   },
   {
     // #2259: the token-expiry select offered different options in each arm, and each arm
@@ -292,17 +190,8 @@ const CAPABILITIES = [
     // this capability is an <option> inside a select. The needle is the whole assertion --
     // the option must be rendered from the advertised policy, in both arms.
     name: 'render the never-expiring token option from the operator policy',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      // The CALL, not the variable. `neverExpiresPolicies` alone was satisfied by its own
-      // declaration -- and was satisfied while V1 never loaded the policy at all on the MFA
-      // path, which is the defect review of this PR found.
-      needle: 'applyTokenExpiryPolicy()',
-    },
-    v2: {
-      files: ['ui/src/pages/Dashboard.tsx'],
-      needle: "neverExpires.tokens !== 'disabled' &&",
-    },
+    files: ['ui/src/pages/Dashboard.tsx'],
+    needle: "neverExpires.tokens !== 'disabled' &&",
   },
   {
     // The admin extension queue offered "Approve Permanent" unconditionally, so on a gateway
@@ -310,40 +199,22 @@ const CAPABILITIES = [
     // custom domain a subdomain, because a custom domain IS a reservation with an empty
     // subdomain (#1004) and neither arm said so.
     name: 'gate the permanent approval on what the gateway will accept',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'item.permanence_allowed',
-    },
-    v2: {
-      files: ['ui/src/pages/AdminExtensions.tsx'],
-      needle: 'req.permanence_allowed &&',
-    },
+    files: ['ui/src/pages/AdminExtensions.tsx'],
+    needle: 'req.permanence_allowed &&',
   },
   {
     // #2273. One handler serves both the subdomain and custom-domain tables in each arm, and
     // every string it showed was written for a subdomain -- so releasing demo.customer.com
     // asked the user to confirm releasing "this subdomain" and then said one was released.
     name: 'name the resource being released in the confirmation',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: 'confirm_release_custom_domain',
-    },
-    v2: {
-      files: ['ui/src/components/ReservationsPanel.tsx'],
-      needle: 'confirm_release_custom_domain',
-    },
+    files: ['ui/src/components/ReservationsPanel.tsx'],
+    needle: 'confirm_release_custom_domain',
   },
   {
     // Same queue: which resource each row is about.
     name: 'name the resource an extension request is about',
-    v1: {
-      files: ['pkg/server/static/dashboard.js'],
-      needle: "item.resource_kind === 'custom_domain'",
-    },
-    v2: {
-      files: ['ui/src/pages/AdminExtensions.tsx'],
-      needle: "req.resource_kind === 'custom_domain'",
-    },
+    files: ['ui/src/pages/AdminExtensions.tsx'],
+    needle: "req.resource_kind === 'custom_domain'",
   },
 ];
 
@@ -426,8 +297,8 @@ const ROT_HINT =
  * Walks from the `<button` that encloses the handler call to the `>` that closes its open tag --
  * tracking quotes and braces, because `onClick={() => openAcModal(r)}` contains a `>` that ends
  * nothing -- then takes everything up to `</button>`. It starts at the tag rather than at the call
- * so that quote parity is right in both arms: V1's call sits INSIDE a double-quoted `onclick=`
- * attribute, and a scan beginning there reads every later quote inverted. JSX expressions are
+ * so that quote parity is right wherever the call sits: inside a double-quoted `onclick=`
+ * attribute (as V1's did), a scan beginning at the call reads every later quote inverted. JSX expressions are
  * reduced to the default string of a `t(key, default)` lookup where there is one, since that is
  * the text that reaches the screen.
  *
@@ -478,85 +349,54 @@ function openerLabel(spec) {
 let failures = 0;
 
 for (const cap of CAPABILITIES) {
-  const hitV1 = locateMarker(cap.v1.files, cap.v1.needle);
-  const hitV2 = locateMarker(cap.v2.files, cap.v2.needle);
-  const inV1 = hitV1.found;
-  const inV2 = hitV2.found;
+  const hit = locateMarker(cap.files, cap.needle);
 
-  if (inV1 && inV2) {
-    for (const [arm, spec] of [
-      ['V1', cap.v1],
-      ['V2', cap.v2],
-    ]) {
-      if (!spec.opener) continue;
-      const label = openerLabel(spec.opener);
-      if (label === null) {
-        failures += 1;
-        console.log(
-          `  \u2717 "${cap.name}": ${arm}'s opener \`${spec.opener.call}\` is not in ` +
-            `${spec.opener.files.join(', ')} any more. Point this check at the control that ` +
-            `replaced it -- an unfindable marker vouches for nothing.`,
-        );
-      } else if (!/[A-Za-z]/.test(label)) {
-        failures += 1;
-        console.log(
-          `  \u2717 "${cap.name}": ${arm}'s opener shows ${label ? `"${label}"` : 'nothing'} and ` +
-            `no words.\n` +
-            `      An icon alone is decoration until you already know what it does. The owner ` +
-            `reported this capability missing from a portal that had it (#2114).`,
-        );
-      }
-    }
-    continue;
-  }
-
-  failures += 1;
-  const present = inV1 ? 'V1' : 'V2';
-  const missing = inV1 ? 'V2' : 'V1';
-
-  // The rename case first, because it is a different instruction to the reader: the marker IS
-  // in the file, as the prefix of something longer, and the arm may well still have the
-  // capability under its new name.
-  const rotted = [
-    ['V1', cap.v1, hitV1],
-    ['V2', cap.v2, hitV2],
-  ].filter(([, , hit]) => hit.looseOnly);
-  if (rotted.length > 0) {
-    for (const [arm, spec] of rotted) {
+  if (hit.found) {
+    if (!cap.opener) continue;
+    const label = openerLabel(cap.opener);
+    if (label === null) {
+      failures += 1;
       console.log(
-        `  ✗ "${cap.name}": ${arm}'s marker \`${spec.needle}\` is only present as part of ` +
-          `a longer symbol in ${spec.files.join(', ')}.\n      ${ROT_HINT}`,
+        `  \u2717 "${cap.name}": the opener \`${cap.opener.call}\` is not in ` +
+          `${cap.opener.files.join(', ')} any more. Point this check at the control that ` +
+          `replaced it -- an unfindable marker vouches for nothing.`,
+      );
+    } else if (!/[A-Za-z]/.test(label)) {
+      failures += 1;
+      console.log(
+        `  \u2717 "${cap.name}": the opener shows ${label ? `"${label}"` : 'nothing'} and ` +
+          `no words.\n` +
+          `      An icon alone is decoration until you already know what it does. The owner ` +
+          `reported this capability missing from a portal that had it (#2114).`,
       );
     }
     continue;
   }
 
-  if (!inV1 && !inV2) {
+  failures += 1;
+  if (hit.looseOnly) {
+    // The rename case first, because it is a different instruction to the reader: the marker IS
+    // in the file, as the prefix of something longer, and V2 may well still have the capability
+    // under its new name.
     console.log(
-      `  ✗ "${cap.name}" is in NEITHER arm. Either both lost it, or this check is ` +
-        `looking for a marker that no longer exists -- which is worse than not checking.`,
+      `  \u2717 "${cap.name}": the marker \`${cap.needle}\` is only present as part of a ` +
+        `longer symbol in ${cap.files.join(', ')}.\n      ${ROT_HINT}`,
     );
   } else {
     console.log(
-      `  ✗ "${cap.name}" is in ${present} but not ${missing}.\n` +
-        `      The portals are an A/B test: the same person may be served either arm, so a ` +
-        `capability in one is not a capability.`,
+      `  \u2717 "${cap.name}" is not in Portal V2 (${cap.files.join(', ')}).\n` +
+        `      Either V2 lost a capability it was fixed to have, or this check is looking for ` +
+        `a marker that no longer exists -- which is worse than not checking. Decision 0007 ` +
+        `makes V2 the only portal anyone is sent to, so there is no other arm to fall back on.`,
     );
   }
 }
 
-// Same data, same name.
-//
-// The capabilities above deliberately ignore WORDING, because wording changes without a
-// capability changing. This is a different question: where both arms render the SAME field from
-// the SAME endpoint, they must resolve it through the same i18n key. A key is not wording -- it
-// is the claim that the two arms are naming one thing -- and the wording then follows from the
-// bundle, in every locale, for both.
-//
-// V2's Client Versions table headed a user count "Active Tunnels" while V1 headed the identical
-// column "User Count" from the identical endpoint (#2158). The figure is COUNT(*) FROM users
-// grouped by last_client_version, so V2's header was wrong on both words, and no gate could see
-// it: the string was hardcoded, so check-i18n-keys had no key to find missing.
+// Same data, same name: where V2 renders a field from an endpoint, it must do so through the
+// i18n key, not a hardcoded string. A hardcoded header is invisible to check-i18n-keys -- it has
+// no key to report missing -- and goes untranslated in every locale besides English. V2's Client
+// Versions table headed a user count "Active Tunnels" from a hardcoded string (#2158).
+// The i18n keys V2 must render these labels through (they were shared with V1 until #2529).
 const SHARED_LABELS = [
   {
     // #2266. A custom domain is a reservation with an empty subdomain (#1004), so the
@@ -565,22 +405,19 @@ const SHARED_LABELS = [
     // reading one field under one name.
     name: 'the extension queue Type column (/api/admin/reservations/extensions)',
     key: 'th_type',
-    v1: 'pkg/server/dashboard.html',
-    v2: 'ui/src/pages/AdminExtensions.tsx',
+    file: 'ui/src/pages/AdminExtensions.tsx',
   },
   {
     name: 'the Client Versions count column (/api/admin/analytics/clients)',
     key: 'th_user_count',
-    v1: 'pkg/server/dashboard.html',
-    v2: 'ui/src/pages/AdminAnalytics.tsx',
+    file: 'ui/src/pages/AdminAnalytics.tsx',
   },
   {
     // #2196. Both arms label current_generation from GET /api/admin/session-secrets, and an
     // operator comparing the two portals must be reading one field under one name.
     name: 'the current session-key generation (/api/admin/session-secrets)',
     key: 'session_keys_current',
-    v1: 'pkg/server/static/dashboard.js',
-    v2: 'ui/src/pages/AdminSettings.tsx',
+    file: 'ui/src/pages/AdminSettings.tsx',
   },
   {
     // The interval and the lag are STATED by the endpoint so that neither arm keeps a second
@@ -588,48 +425,39 @@ const SHARED_LABELS = [
     // free to describe a cadence the engine does not run.
     name: 'the rotation interval and retirement lag (/api/admin/session-secrets)',
     key: 'session_keys_interval_note',
-    v1: 'pkg/server/static/dashboard.js',
-    v2: 'ui/src/pages/AdminSettings.tsx',
+    file: 'ui/src/pages/AdminSettings.tsx',
   },
 ];
 
 for (const label of SHARED_LABELS) {
-  for (const [arm, rel] of [
-    ['V1', label.v1],
-    ['V2', label.v2],
-  ]) {
-    const file = path.join(ROOT, rel);
-    if (!fs.existsSync(file)) {
-      failures += 1;
-      console.log(
-        `  \u2717 "${label.name}": ${arm}'s file ${rel} does not exist.`,
-      );
-      continue;
-    }
-    const hit = locateMarker([rel], label.key);
-    if (hit.found) continue;
+  const file = path.join(ROOT, label.file);
+  if (!fs.existsSync(file)) {
     failures += 1;
-    if (hit.looseOnly) {
-      console.log(
-        `  \u2717 "${label.name}": ${arm}'s key '${label.key}' is only present as part of a ` +
-          `longer key in ${rel}.\n      ${ROT_HINT}`,
-      );
-      continue;
-    }
-    console.log(
-      `  \u2717 "${label.name}": ${arm} does not use the '${label.key}' key.\n` +
-        `      Both arms render this column from one endpoint, so both must name it the same ` +
-        `way. A hardcoded header is invisible to check-i18n-keys -- it has no key to report ` +
-        `missing -- and goes untranslated in every locale besides English.`,
-    );
+    console.log(`  \u2717 "${label.name}": ${label.file} does not exist.`);
+    continue;
   }
+  const hit = locateMarker([label.file], label.key);
+  if (hit.found) continue;
+  failures += 1;
+  if (hit.looseOnly) {
+    console.log(
+      `  \u2717 "${label.name}": the key '${label.key}' is only present as part of a ` +
+        `longer key in ${label.file}.\n      ${ROT_HINT}`,
+    );
+    continue;
+  }
+  console.log(
+    `  \u2717 "${label.name}": ${label.file} does not use the '${label.key}' key.\n` +
+      `      Render this label through the i18n key, or it goes untranslated in every locale ` +
+      `besides English and check-i18n-keys cannot see it.`,
+  );
 }
 
 console.log(
   failures === 0
-    ? `✅ ${CAPABILITIES.length} capability/capabilities present, and named in words, in both ` +
-        `portal arms; ${SHARED_LABELS.length} shared column label(s) resolve through one key.`
-    : `\n❌ ${failures} parity problem(s): a capability is missing from an arm, or its control ` +
+    ? `\u2705 ${CAPABILITIES.length} capability/capabilities present in Portal V2, each opener ` +
+        `named in words; ${SHARED_LABELS.length} label(s) resolve through their i18n key.`
+    : `\n\u274c ${failures} problem(s): Portal V2 is missing a capability, or its control ` +
         `does not say what it does.`,
 );
 process.exit(failures === 0 ? 0 : 1);

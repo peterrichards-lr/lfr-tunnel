@@ -74,7 +74,9 @@ wrong failure. The prose bullets below carry each rule's reasoning; this table i
 - **Settled trade-offs and why they were made** — [`.agents/decisions/`](.agents/decisions/README.md)
   Read before reopening a choice that looks wrong, or before proposing something the repo appears
   to have ignored. These are decisions with **no rule to attach them to** — central being a
-  deliberate SPOF, the public release tier being unsigned on purpose, V1/V2 being a live A/B test.
+  deliberate SPOF, the public release tier being unsigned on purpose, V2 being the portal and V1
+  frozen (new features are V2-only; 0007 superseded the A/B test and its parity rule). V1 becomes
+  an admin-only fallback with #2528; until that lands it is still the front door for everyone.
   Each record names what the decision cost and, crucially, **what would reopen it**, so "don't
   raise this" is a condition to watch for rather than an instruction to stop thinking.
   Constraints stay in the skills above and state stays in `.agent-state.md`; the README's
@@ -307,4 +309,4 @@ in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*
+*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*

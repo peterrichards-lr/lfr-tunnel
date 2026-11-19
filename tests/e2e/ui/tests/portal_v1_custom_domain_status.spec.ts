@@ -16,9 +16,10 @@ import { createApprovedUser, deleteUser } from './utils/nonadmin';
  * sign in as admin@lfr-demo.local, which is how #1512 shipped a page that rendered perfectly and
  * was unreachable for the people it was written for.
  *
- * check-portal-parity.cjs carries a capability entry for the same endpoint, and it cannot prove
- * this: it asserts source presence, not render-time reachability. #2241 shipped a control present
- * in both arms' source and unreachable in one with that gate green throughout. This file is the
+ * check-portal-parity.cjs carried a capability entry for the same endpoint, and could not prove
+ * this: it asserted source presence, not render-time reachability. #2241 shipped a control present
+ * in both arms' source and unreachable in one with that gate green throughout. #2529 replaced it
+ * with check-v2-capabilities.cjs, which does not read V1 at all. This file is the
  * half that watches the screen.
  */
 const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml

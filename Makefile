@@ -1,4 +1,4 @@
-.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-skill-routing check-deprecated-flags check-inspector check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-skill-routing check-deprecated-flags check-inspector check-v2-capabilities check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -85,8 +85,8 @@ help:
 	@echo "  make check-e2e-names   - e2e name assertions are not prefixes of other strings"
 	@echo "  make check-bundle-decoration - bundle values carry words, not markup or icons"
 	@echo "  make check-mcp-coverage - every advertised MCP tool is mentioned by a test"
-	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
-	@echo "  make check-alerts      - Every admin alert has a toggle in both portal arms"
+	@echo "  make check-status      - Portal V2 user statuses match the server's vocabulary"
+	@echo "  make check-alerts      - Every admin alert has a toggle in Portal V2"
 	@echo "  make check-print       - Print stylesheets only target markup that exists"
 	@echo "  make check-testids     - E2E specs only name data-testids that markup renders"
 	@echo "  make check-html        - Every HTML document has balanced tags"
@@ -99,6 +99,7 @@ help:
 	@echo "  make check-skill-routing - Every skill is routed from AGENTS.md and every link to one resolves"
 	@echo "  make check-deprecated-flags - No user-visible string names a deprecated flag"
 	@echo "  make check-inspector   - Inspector page functions behave (executed, not grepped)"
+	@echo "  make check-v2-capabilities - Portal V2 keeps every capability it was fixed to have"
 	@echo "  make check-tunnel-grouping - Portal V2 groups a client's tunnels into one row"
 	@echo "  make check-access-mode-parity - The Inspector, Portal V2 and the server agree on access modes"
 	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
@@ -536,8 +537,11 @@ check-deprecated-flags:
 check-inspector:
 	@node scripts/check-inspector-behaviour.cjs
 
-# check-portal-parity (#2101) was retired by #2529: decision 0007 froze V1 as an admin-only
-# fallback, so a capability in V2 alone is no longer a defect.
+# Was check-portal-parity (#2101), which required every capability in both arms. Decision 0007
+# froze V1 as an admin-only fallback, so #2529 kept only V2's half: a capability V2 was fixed to
+# have must not quietly disappear.
+check-v2-capabilities:
+	@node scripts/check-v2-capabilities.cjs
 
 # A client that maps several ports gets one lease per port, so it occupied one ROW per port --
 # repeating the node, the client and the status, which describe the client and not the port

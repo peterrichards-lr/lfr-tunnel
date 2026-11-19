@@ -13,9 +13,8 @@
  * It lives here, shared, because the first fix (#2201) fixed check-portal-parity.cjs and a sweep
  * for the SHAPE rather than for the symbol immediately found the same defect one file over. A
  * second copy would have been a third one waiting to happen; this is the same "one rule, one
- * home" reasoning #2211 applied to the Go side in the same PR. check-portal-parity.cjs was
- * retired by #2529, which leaves check-print-selectors.cjs as the only caller -- and so the
- * URL-path exception below with no caller that exercises it.
+ * home" reasoning #2211 applied to the Go side in the same PR. check-portal-parity.cjs became
+ * the V2-only check-v2-capabilities.cjs in #2529.
  *
  * The scope this does NOT have, stated where it can be asserted rather than only described:
  * matching is lexical, over a blob of source. A marker that is a whole word of English prose --

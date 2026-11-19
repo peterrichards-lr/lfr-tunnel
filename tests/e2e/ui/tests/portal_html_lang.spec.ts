@@ -29,8 +29,8 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
 // The codes in `supportedLocales` (pkg/server/static/dashboard.js) and `DEFAULT_LANGUAGES`
-// (ui/src/contexts/I18nContext.tsx). Both lists carry the same ten; a divergence between them
-// is check-portal-parity's job, not this file's.
+// (ui/src/contexts/I18nContext.tsx). Both lists carry the same ten. Nothing checks that they
+// stay equal: V1 is frozen (decision 0007, #2529), so V2 may add a locale V1 never learns.
 const NON_ENGLISH = ['ar', 'de', 'es', 'fr', 'ja', 'ko', 'pt', 'ro', 'zh'];
 
 declare function changePortalLanguage(

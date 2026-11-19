@@ -16,12 +16,21 @@ bundled arm, and verified in both. Several defects have been exactly this asymme
 
 ## Enforced by
 
-No longer enforced. Superseded by [0007](0007-v2-is-the-portal-v1-is-a-frozen-admin-only-fallback.md)
-on 2026-11-19: V2 was chosen, and #2529 deleted `make check-portal-parity`
-(scripts/check-portal-parity.cjs, a closed, hand-written allow-list of capabilities, one marker per
-arm) and stopped `make check-access-mode-parity` and `make check-tunnel-grouping` reading V1.
-Those paths are left unquoted because the first no longer exists. Kept as the record of why the
-two arms were built twice until then.
+Retired by [0007](0007-v2-is-the-portal-v1-is-a-frozen-admin-only-fallback.md) on 2026-11-19
+(#2529): the gate below became the V2-only `scripts/check-v2-capabilities.cjs`, and the other two
+stopped reading V1. The original text follows unchanged, except that the deleted script's path is
+no longer backticked, because `tests/hooks/test-decisions-integrity.sh` resolves every backticked
+path in every record.
+
+`make check-portal-parity` (scripts/check-portal-parity.cjs), plus
+`make check-access-mode-parity` and `make check-tunnel-grouping` for two specific surfaces.
+
+**Known limit of that gate, stated so it is not mistaken for coverage:**
+scripts/check-portal-parity.cjs:44 is a **closed, hand-written allow-list** — `CAPABILITIES`, one
+`{files, needle}` pair per arm per capability. A capability nobody added to that array is invisible
+to it, which is exactly the defect class this record says is enforced. **Adding a capability means
+adding an entry**, or the gate reports parity it never checked. Its boundary cases live in
+`tests/hooks/test-gate-scope-boundaries.sh`; behavioural coverage is in `tests/e2e/ui/tests/`.
 
 ## Revisit when
 

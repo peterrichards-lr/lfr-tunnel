@@ -66,7 +66,7 @@ harness() {
   FAIL=$((FAIL + 1))
 }
 
-for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PRINT_REL" "scripts/lib/token-match.cjs"; do
+for f in "$CSS_REL" "$TOK_REL" "$I18N_REL" "$PRINT_REL" "scripts/lib/token-match.cjs" "scripts/check-v2-capabilities.cjs"; do
   [ -f "${REPO_ROOT}/${f}" ] || {
     echo "FATAL: ${f} missing"
     exit 1
@@ -897,14 +897,14 @@ echo ""
 echo "-- scripts/lib/token-match.cjs: what counts as finding a marker"
 
 # ---------------------------------------------------------------------------
-# Cases 19-21 used to drive findMarker() through check-portal-parity.cjs. That gate was retired
-# by #2529 (decision 0007 froze Portal V1, so a capability in V2 alone is no longer a defect),
-# and findMarker() outlived it as the shared matcher check-print-selectors.cjs requires. The
+# Cases 19-21 used to drive findMarker() through check-portal-parity.cjs, which #2529 replaced
+# with the V2-only check-v2-capabilities.cjs (decision 0007 froze Portal V1). findMarker() is
+# shared by that gate and check-print-selectors.cjs. The
 # rule they pinned is the matcher's, not the gate's, so they now call it directly: a symbol must
 # match whole, and a URL path stays a substring on purpose. Without this the path exception
 # would have no test at all, since no print selector contains a `/`.
 #
-# find <src> <marker> -> sets $OUT to the index findMarker() returns (-1 when not found).
+# find_marker <src> <marker> -> sets $OUT to the index findMarker() returns (-1 when not found).
 # ---------------------------------------------------------------------------
 TM_REL="scripts/lib/token-match.cjs"
 find_marker() {
@@ -969,6 +969,98 @@ if [ "$OUT" = "-1" ]; then
   pass "CONTROL   a path marker is NOT found on a different route, so case 21 bounds rather than silences"
 else
   fail "a path marker matched a route it is not on (got $OUT)"
+fi
+
+echo ""
+echo "-- check-v2-capabilities.cjs: V2 keeps what it was given, and V1 is not read"
+
+# ---------------------------------------------------------------------------
+# check-portal-parity.cjs became check-v2-capabilities.cjs in #2529: decision 0007 froze V1, so
+# only V2's half of each capability is asserted. The sandbox holds the gate, the shared matcher
+# and ui/src -- and deliberately NO pkg/server, which is case 22a.
+# ---------------------------------------------------------------------------
+V2CAP_REL="scripts/check-v2-capabilities.cjs"
+reset_v2cap_sandbox() {
+  [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"
+  SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/gate-scope-v2cap.XXXXXX")"
+  mkdir -p "$SANDBOX/scripts" "$SANDBOX/ui"
+  cp "${REPO_ROOT}/${V2CAP_REL}" "$SANDBOX/scripts/"
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
+  cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+}
+run_v2cap() { run "$V2CAP_REL"; }
+
+# 22a. PREMISE, and BOUNDING at once: the sandbox has no V1 source at all, so a pass here is also
+#      the proof that V1 is not read. If V1 is ever read again this goes red, and whoever does it
+#      has to reopen decision 0007 rather than re-impose parity quietly.
+reset_v2cap_sandbox
+run_v2cap
+if [ "$RC" -eq 0 ]; then
+  pass "BOUNDING  the V2 capability gate passes with no V1 source present, so V1 is not read (#2529)"
+else
+  harness "the V2 capability sandbox does not pass as built; every case below would fail for that reason:
+$(printf '%s' "$OUT" | head -6)"
+fi
+
+# 22b. FIRING. A capability V2 was fixed to have, removed, is reported by name.
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/pages/AdminUsers.tsx" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = 'data-testid="invite-disabled-note"'
+assert old in s, "the invite-disabled note is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, 'data-testid="some-other-note"'))
+PY
+  harness "could not remove the V2 invite-disabled note"
+else
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'withdraw admin invites' && says "$OUT" 'is not in Portal V2'; then
+    pass "FIRING    a V2 capability that disappears is reported by name (#2449)"
+  else
+    fail "a missing V2 capability was not reported (rc=$RC): $OUT"
+  fi
+fi
+
+# 22c. FIRING. The #2114 rule: an opener that shows only an icon says nothing about what it does.
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/components/ReservationsTable.tsx" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "🔒 {t('access_control', 'Access Control')}"
+assert old in s, "the access-control opener label is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, "🔒"))
+PY
+  harness "could not strip the words from the access-control opener"
+else
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'no words'; then
+    pass "FIRING    an icon-only opener is reported, not accepted (#2114)"
+  else
+    fail "an icon-only opener was accepted (rc=$RC): $OUT"
+  fi
+fi
+
+# 22d. FIRING. A marker renamed to EXTEND itself is reported as a rename, through the gate, not
+#      only through findMarker() directly (cases 19-21).
+reset_v2cap_sandbox
+if ! python3 - "$SANDBOX/ui/src/pages/AdminSettings.tsx" <<'PY'; then
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "session_keys_unacked"
+assert old in s, "the unacked-nodes marker is not there -- the mutation would silently no-op"
+open(p, "w").write(s.replace(old, "session_keys_unacked_MUTANT"))
+PY
+  harness "could not rename the V2 unacked-nodes marker"
+else
+  run_v2cap
+  if [ "$RC" -ne 0 ] && says "$OUT" 'only present as part of a' && says "$OUT" 'session_keys_unacked'; then
+    pass "FIRING    a V2 marker renamed to EXTEND itself is reported as a rename (#2201)"
+  else
+    fail "an extended rename still satisfied the V2 marker (rc=$RC): $OUT"
+  fi
 fi
 
 echo ""

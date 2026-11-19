@@ -4,8 +4,8 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 /**
  * The never-expiring token option comes from the operator's policy, in BOTH arms (#2266).
  *
- * Why this cannot be a source gate. check-portal-parity reads source text, so it can say the
- * policy is referenced and cannot say the reference is reached. Both halves were demonstrated
+ * Why this cannot be a source gate. check-portal-parity (now the V2-only check-v2-capabilities,
+ * #2529) read source text, so it could say the policy is referenced and not that it is reached. Both halves were demonstrated
  * while reviewing #2266: commenting out the single call that applies the policy in V1 left the
  * gate green, and V1 turned out never to load the policy at all on the MFA sign-in path while
  * the marker for it sat in the file. Only a rendered option list can tell.

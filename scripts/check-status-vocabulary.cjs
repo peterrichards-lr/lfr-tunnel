@@ -8,9 +8,10 @@
  *
  * Adding one cost an edit in every place that happened to know, and misses were silent.
  *
- * It covered only V2 at first, and #1866 is what that cost: V1 kept its own badge ternary -- three
- * copies of it, no two alike -- so the same rejected user rendered red in one arm of the A/B test
- * and amber in the other. Binding V2 to the server while leaving V1 unbound just moved the drift.
+ * It covered only V2 at first, and #1866 bound Portal V1's STATUS_BADGE to the server as well,
+ * because V1 and V2 were then an A/B test and the same rejected user rendered red in one arm and
+ * amber in the other. #2529 removed that half again: decision 0007 froze V1 as an admin-only
+ * fallback, so a status the server gains must not need a V1 edit. V2 and the server remain bound.
  *
  * #1847 is the proof: #1830 added "rejected", the portal did not learn it, and a rejected user
  * could not be filtered for or un-rejected -- the control that reverses a rejection. Nothing
@@ -33,7 +34,6 @@ const rel = (p) => path.relative(REPO, p);
 
 const GO_SOURCE = path.join(REPO, 'pkg/db/user_status.go');
 const UI_SOURCE = path.join(REPO, 'ui/src/pages/AdminUsers.tsx');
-const V1_SOURCE = path.join(REPO, 'pkg/server/static/dashboard.js');
 
 let failed = false;
 const fail = (msg) => {
@@ -41,7 +41,7 @@ const fail = (msg) => {
   failed = true;
 };
 
-for (const f of [GO_SOURCE, UI_SOURCE, V1_SOURCE]) {
+for (const f of [GO_SOURCE, UI_SOURCE]) {
   if (!fs.existsSync(f)) {
     console.error(`check-status-vocabulary: ${rel(f)} not found.`);
     console.error(
@@ -107,34 +107,17 @@ const badgeStatuses = [...badgeMatch[1].matchAll(/^\s*([a-z_]+):/gm)].map(
   (m) => m[1],
 );
 
-// -- Portal V1's badge mapping. Same shape, plain JS, no type annotation.
-const v1Src = fs.readFileSync(V1_SOURCE, 'utf8');
-const v1BadgeMatch = v1Src.match(/const STATUS_BADGE = \{([\s\S]*?)\};/);
-if (!v1BadgeMatch) {
-  console.error(
-    `check-status-vocabulary: could not find STATUS_BADGE in ${rel(V1_SOURCE)}.`,
-  );
-  console.error(
-    '  If V1 went back to deciding the colour inline, that is the defect #1866 fixed.',
-  );
-  process.exit(1);
-}
-const v1BadgeStatuses = [...v1BadgeMatch[1].matchAll(/^\s*([a-z_]+):/gm)].map(
-  (m) => m[1],
-);
-
 // -- Anti-vacuity. Two empty sets agree perfectly.
 if (
   serverStatuses.length === 0 ||
   uiStatuses.length === 0 ||
-  badgeStatuses.length === 0 ||
-  v1BadgeStatuses.length === 0
+  badgeStatuses.length === 0
 ) {
   console.error(
-    'check-status-vocabulary: one of the four lists parsed to nothing.',
+    'check-status-vocabulary: one of the three lists parsed to nothing.',
   );
   console.error(
-    `  server=${serverStatuses.length} statusOptions=${uiStatuses.length} STATUS_BADGE=${badgeStatuses.length} V1 STATUS_BADGE=${v1BadgeStatuses.length}`,
+    `  server=${serverStatuses.length} statusOptions=${uiStatuses.length} STATUS_BADGE=${badgeStatuses.length}`,
   );
   console.error('  Refusing to report that empty sets agree.');
   process.exit(1);
@@ -162,7 +145,6 @@ const compare = (label, actual) => {
 
 compare('statusOptions', uiStatuses);
 compare('STATUS_BADGE (V2)', badgeStatuses);
-compare('STATUS_BADGE (V1)', v1BadgeStatuses);
 
 if (failed) {
   console.error('');
@@ -170,14 +152,13 @@ if (failed) {
   console.error(`  server (${rel(GO_SOURCE)}): ${serverStatuses.join(', ')}`);
   console.error(`  statusOptions:              ${uiStatuses.join(', ')}`);
   console.error(`  STATUS_BADGE (V2):          ${badgeStatuses.join(', ')}`);
-  console.error(`  STATUS_BADGE (V1):          ${v1BadgeStatuses.join(', ')}`);
   console.error('');
   console.error(
-    '  Add the status to pkg/db/user_status.go first, then to all three portal lists.',
+    '  Add the status to pkg/db/user_status.go first, then to both Portal V2 lists.',
   );
   process.exit(1);
 }
 
 console.log(
-  `OK -- statusOptions and both portals' STATUS_BADGE match: ${serverStatuses.join(', ')}`,
+  `OK -- statusOptions and STATUS_BADGE match the server: ${serverStatuses.join(', ')}`,
 );

@@ -435,7 +435,10 @@ export default function Dashboard() {
           </div>
         )}
 
-      <WhatsNewHelpBar onInstallClick={() => setIsInstallModalOpen(true)} />
+      <WhatsNewHelpBar
+        onInstallClick={() => setIsInstallModalOpen(true)}
+        serverConfig={serverConfig}
+      />
 
       {/* Order matters here. Active Tunnels is the live, fast-changing panel people open
           the dashboard to check, so it leads. Reservations Overview then sits directly

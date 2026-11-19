@@ -71,6 +71,8 @@ interface ReservationsTableProps extends DataTableBag {
   totalUnfilteredCount: number;
   // Anchor target, so the Reservations Overview can link straight down to this table.
   id?: string;
+  // Rendered at the right of the heading, e.g. the Registered Subdomains export (#2526).
+  headerAction?: React.ReactNode;
 }
 
 export default function ReservationsTable({
@@ -103,6 +105,7 @@ export default function ReservationsTable({
   requestSort,
   getSortIndicator,
   getAriaSort,
+  headerAction,
 }: ReservationsTableProps) {
   const { t } = useI18n();
 
@@ -110,6 +113,7 @@ export default function ReservationsTable({
     <div id={id} className="card mb-xl scroll-target">
       <div className="section-header mb-md">
         <SectionHeading anchor={id} className="section-title" label={title} />
+        {headerAction}
       </div>
 
       {totalUnfilteredCount > 0 && (

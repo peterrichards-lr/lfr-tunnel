@@ -391,3 +391,33 @@ func TestEdgeRegisterEnforcesMinVersion(t *testing.T) {
 		t.Fatalf("a client at the floor was refused on the edge path too: %d %s", recOK.Code, recOK.Body.String())
 	}
 }
+
+// The registration response says when the warning window opens (#2523), so a client whose tunnel
+// outlives its registration can announce the window itself. It must be the gateway's own window:
+// deadline minus the configured warning days, not a constant the client guesses.
+func TestMinVersionStateSaysWhenTheWarningWindowOpens(t *testing.T) {
+	srv, cleanup := setupConsentServer(t)
+	defer cleanup()
+	srv.cfg.MinClientVersion = "v1.45.0"
+	srv.cfg.MinClientVersionGraceDays = 14
+	srv.cfg.MinClientVersionWarningDays = 3
+
+	user := seedConsentUser(t, srv, "warnat-ver@example.com", "tok-warnat-ver")
+	minVersionFirstSeenDaysAgo(t, srv, user.ID, 2)
+
+	_, resp := registerTunnelAsVersion(t, srv, "tok-warnat-ver", "warnat-ver-sub", "v1.40.0")
+	if resp.MinVersion == nil || resp.MinVersion.Phase != GracePhaseGrace {
+		t.Fatalf("expected a grace-phase state, got %+v", resp.MinVersion)
+	}
+	deadline, err := time.Parse(time.RFC3339, resp.MinVersion.Deadline)
+	if err != nil {
+		t.Fatalf("deadline %q: %v", resp.MinVersion.Deadline, err)
+	}
+	warningAt, err := time.Parse(time.RFC3339, resp.MinVersion.WarningAt)
+	if err != nil {
+		t.Fatalf("warning_at %q: %v", resp.MinVersion.WarningAt, err)
+	}
+	if got := deadline.Sub(warningAt); got != 3*24*time.Hour {
+		t.Errorf("the warning window is %v long, want the configured 3 days", got)
+	}
+}

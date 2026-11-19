@@ -51,6 +51,11 @@ type MinVersionState struct {
 	// SecondsRemaining is how long until Deadline, floored at zero. The client renders a
 	// countdown from this rather than parsing Deadline, matching ConsentState.
 	SecondsRemaining int64 `json:"seconds_remaining,omitempty"`
+	// WarningAt is when the warning window opens, RFC3339 (#2523). Sent so a client whose
+	// tunnel runs for days can say so when the window opens rather than only at its next
+	// registration: the client has no other way to learn this gateway's warning length, and
+	// the heartbeat -- served by edges, which hold no per-user state -- cannot carry it.
+	WarningAt string `json:"warning_at,omitempty"`
 	// UpgradeCommand is the remedy, carried rather than compiled into the client so a
 	// client showing this message cannot be one that predates the wording.
 	UpgradeCommand string `json:"upgrade_command,omitempty"`
@@ -133,6 +138,7 @@ func (s *Server) minVersionState(user *db.User, clientVersion string, record boo
 	state.Phase = phase
 	if !deadline.IsZero() {
 		state.Deadline = deadline.Format(time.RFC3339)
+		state.WarningAt = deadline.Add(-time.Duration(s.minVersionWarningDays()) * 24 * time.Hour).Format(time.RFC3339)
 		if remaining := deadline.Sub(now); remaining > 0 {
 			state.SecondsRemaining = int64(remaining.Seconds())
 		}

@@ -6,8 +6,8 @@ import (
 )
 
 // The warning has to appear in the CLIENT'S OWN OUTPUT, because the people running old
-// clients are the least likely to open the portal (#1988). Silent during grace, loud inside
-// the warning window, and naming the remedy in both of the phases that speak.
+// clients are the least likely to open the portal (#1988). It speaks from the first day of the
+// window with the date (#2523), and names the remedy in every phase.
 func TestMinVersionNotice(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -17,9 +17,15 @@ func TestMinVersionNotice(t *testing.T) {
 		{name: "nil state", state: nil, silent: true},
 		{name: "nothing outstanding", state: &MinVersionState{}, silent: true},
 		{
-			name:   "grace stays quiet",
+			// Without a deadline there is no date to give, and an undated line is what the
+			// preflight already says.
+			name:   "grace without a deadline stays quiet",
 			state:  &MinVersionState{Required: true, Phase: ConsentPhaseGrace, MinVersion: "v1.45.0", ClientVersion: "v1.40.0", SecondsRemaining: 10 * 24 * 3600},
 			silent: true,
+		},
+		{
+			name:  "grace with a deadline speaks",
+			state: &MinVersionState{Required: true, Phase: ConsentPhaseGrace, MinVersion: "v1.45.0", ClientVersion: "v1.40.0", SecondsRemaining: 10 * 24 * 3600, Deadline: "2026-12-03T10:00:00Z", UpgradeCommand: "lfr-tunnel -upgrade"},
 		},
 		{
 			name:  "warning speaks",
@@ -82,5 +88,25 @@ func TestVersionNoticeIsNotAConsentNotice(t *testing.T) {
 	}
 	if version == "" || consent == "" {
 		t.Fatalf("both deadlines are outstanding and both must speak: version=%q consent=%q", version, consent)
+	}
+}
+
+// The deadline is given as a date, in every phase before it, so the user can plan rather than
+// count (#2523). Rendered in local time; asserted on the year and month, which no time zone moves.
+func TestMinVersionNoticeGivesTheDate(t *testing.T) {
+	for _, phase := range []string{ConsentPhaseGrace, ConsentPhaseWarning} {
+		notice := MinVersionNotice(&RegisterResponse{MinVersion: &MinVersionState{
+			Required: true, Phase: phase, MinVersion: "v1.45.0", ClientVersion: "v1.40.0",
+			SecondsRemaining: 3 * 24 * 3600, Deadline: "2026-12-15T10:00:00Z",
+		}})
+		if !strings.Contains(notice, "2026-12-") {
+			t.Errorf("%s: the notice does not give the deadline's date: %s", phase, notice)
+		}
+	}
+	expired := MinVersionNotice(&RegisterResponse{MinVersion: &MinVersionState{
+		Required: true, Phase: ConsentPhaseExpired, MinVersion: "v1.45.0", ClientVersion: "v1.40.0",
+	}})
+	if !strings.Contains(expired, "already running are not affected") {
+		t.Errorf("after the deadline a running tunnel's user must be told it keeps running: %s", expired)
 	}
 }

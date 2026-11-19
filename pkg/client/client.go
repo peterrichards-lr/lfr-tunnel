@@ -353,6 +353,9 @@ type MinVersionState struct {
 	Deadline         string `json:"deadline,omitempty"`
 	SecondsRemaining int64  `json:"seconds_remaining,omitempty"`
 	UpgradeCommand   string `json:"upgrade_command,omitempty"`
+	// WarningAt is when the gateway's warning window opens (#2523). Empty from a gateway that
+	// predates it; see minVersionWarningAt for the fallback.
+	WarningAt string `json:"warning_at,omitempty"`
 }
 
 // defaultUpgradeCommand is what a message names when the gateway did not say. A gateway that
@@ -360,17 +363,19 @@ type MinVersionState struct {
 // failure this issue is about.
 const defaultUpgradeCommand = "lfr-tunnel -upgrade"
 
-// MinVersionNotice renders the startup warning for a client approaching the gateway's minimum
-// version, or "" when there is nothing to say.
+// MinVersionNotice renders what a client below the gateway's minimum version says about it, or
+// "" when there is nothing to say.
 //
 // This is the half of the deadline the user actually sees. The portal knows which clients are
 // old, but the people running them are the least likely to open it -- so the warning has to
 // appear in the client's own output, or the first they learn of the floor is a tunnel refused
 // at the worst possible moment.
 //
-// Silent during the grace phase, matching PolicyConsentNotice: a message on every tunnel start
-// for two weeks is noise, and a client below the floor is already being told a newer version
-// exists by the ordinary upgrade nudge.
+// It speaks from the first day of the window, with the date (#2523). It used to be silent
+// during grace on the grounds that a line on every start for two weeks is noise -- but the
+// preflight was already printing one, undated, on every start, so the silence bought nothing
+// except a user who learned the date only in the last few days. Grace is one line at info
+// level; the warning window and expiry are logged as warnings by the caller.
 func MinVersionNotice(resp *RegisterResponse) string {
 	if resp == nil {
 		return ""
@@ -386,20 +391,43 @@ func minVersionNoticeFrom(m *MinVersionState) string {
 	if cmd == "" {
 		cmd = defaultUpgradeCommand
 	}
+	when := minVersionDeadlineText(m)
 	switch m.Phase {
-	case ConsentPhaseWarning:
+	case ConsentPhaseGrace:
+		if when == "" {
+			return ""
+		}
 		return fmt.Sprintf(
-			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s). Run `%s` within %s, or new tunnels will stop being accepted.",
-			m.ClientVersion, m.MinVersion, cmd, formatConsentRemaining(m.SecondsRemaining),
+			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s). New tunnels will be refused from %s (in %s). Run `%s` before then.",
+			m.ClientVersion, m.MinVersion, when, formatConsentRemaining(m.SecondsRemaining), cmd,
+		)
+	case ConsentPhaseWarning:
+		suffix := ""
+		if when != "" {
+			suffix = " (" + when + ")"
+		}
+		return fmt.Sprintf(
+			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s). Run `%s` within %s%s, or new tunnels will stop being accepted.",
+			m.ClientVersion, m.MinVersion, cmd, formatConsentRemaining(m.SecondsRemaining), suffix,
 		)
 	case ConsentPhaseExpired:
 		return fmt.Sprintf(
-			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s) and the upgrade period has ended -- new tunnels are being refused. Run `%s` to update.",
+			"Your Liferay Tunnel client (%s) is older than the minimum this gateway accepts (%s) and the upgrade period has ended -- new tunnels are being refused. Tunnels already running are not affected. Run `%s` to update.",
 			m.ClientVersion, m.MinVersion, cmd,
 		)
 	default:
 		return ""
 	}
+}
+
+// minVersionDeadlineText is the deadline in the user's local time, or "" when the gateway sent
+// none (or one this client cannot read).
+func minVersionDeadlineText(m *MinVersionState) string {
+	deadline, err := time.Parse(time.RFC3339, m.Deadline)
+	if err != nil {
+		return ""
+	}
+	return deadline.Local().Format("2006-01-02 15:04 MST")
 }
 
 // formatConsentRemaining renders days and hours, or hours and minutes inside the last

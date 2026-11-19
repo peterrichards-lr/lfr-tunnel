@@ -1,4 +1,4 @@
-.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-skill-routing check-deprecated-flags check-inspector check-portal-parity check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: sigpipe-ratchet fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-e2e-names check-bundle-decoration check-mcp-coverage check-html check-status check-alerts check-print check-testids check-load-errors check-privacy check-docs-nav check-docs-fences check-docs-rendered check-doc-links check-docs-routing check-skill-routing check-deprecated-flags check-inspector check-tunnel-grouping check-access-mode-parity verify-release confirm-tap build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -99,9 +99,8 @@ help:
 	@echo "  make check-skill-routing - Every skill is routed from AGENTS.md and every link to one resolves"
 	@echo "  make check-deprecated-flags - No user-visible string names a deprecated flag"
 	@echo "  make check-inspector   - Inspector page functions behave (executed, not grepped)"
-	@echo "  make check-portal-parity - No capability exists in only one portal arm"
-	@echo "  make check-tunnel-grouping - Both arms group a client's tunnels the same way"
-	@echo "  make check-access-mode-parity - Every access-control form and the server agree"
+	@echo "  make check-tunnel-grouping - Portal V2 groups a client's tunnels into one row"
+	@echo "  make check-access-mode-parity - The Inspector, Portal V2 and the server agree on access modes"
 	@echo "  make check-docs-rendered - Built site consumed the markup the source intends (needs a build)"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make sigpipe-ratchet   - pipefail + grep -q pipelines have not grown"
@@ -537,18 +536,17 @@ check-deprecated-flags:
 check-inspector:
 	@node scripts/check-inspector-behaviour.cjs
 
-# V1 and V2 are an A/B test: the same person may be served either, so a capability in one arm is
-# not a capability. Access control lived only in V2 and nobody noticed, because each arm was only
-# ever checked against itself (#2101).
-check-portal-parity:
-	@node scripts/check-portal-parity.cjs
+# check-portal-parity (#2101) was retired by #2529: decision 0007 froze V1 as an admin-only
+# fallback, so a capability in V2 alone is no longer a defect.
 
 # A client that maps several ports gets one lease per port, so it occupied one ROW per port --
 # repeating the node, the client and the status, which describe the client and not the port
-# (#2129). Both arms render the same telemetry payload, so they must group it the same way.
+# (#2129). V2 only since #2529; V1 is frozen.
 check-tunnel-grouping:
 	@node scripts/check-tunnel-grouping.cjs
 
+# The Inspector, Portal V2 and the server's missingAccessControlValue agree on every access mode
+# (#2155, #2156). V1 is no longer read (#2529).
 check-access-mode-parity:
 	@node scripts/check-access-mode-parity.cjs
 

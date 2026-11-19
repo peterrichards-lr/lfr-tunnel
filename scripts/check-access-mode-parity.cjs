@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Fails when the three access-control forms disagree about which fields a mode uses (#2155).
+ * Fails when the access-control forms disagree about which fields a mode uses (#2155).
  *
- * The same table now lives in four places: the client Inspector, Portal V1, Portal V2 and --
- * as the rule that refuses a save -- the server's missingAccessControlValue (#2156). Four
- * copies of one rule is exactly the shape that produced the defect this gate exists for:
+ * The same table lives in several places: the client Inspector, Portal V2 and -- as the rule
+ * that refuses a save -- the server's missingAccessControlValue (#2156). Several copies of one
+ * rule is exactly the shape that produced the defect this gate exists for:
  *
  *   - V2 offered three modes and the other two offered five, so a reservation in `or` or `and`
  *     opened in V2 with no radio selected and no fields at all.
@@ -13,12 +13,17 @@
  *
  * Neither was noticed because each surface was only ever compared against itself.
  *
+ * Portal V1 is NOT read any more (#2529). Decision 0007 froze V1 as an admin-only fallback and
+ * ended the rule that it must match V2, so a mode added to V2 must not be blocked on V1. What
+ * this gate still holds is not V1/V2 symmetry: it is that the Inspector, V2 and the server
+ * agree, and V2 shipping without 'or' and 'and' would still fail it.
+ *
  * WHAT THIS CHECKS, and what it deliberately does not:
  *
- * It reads the `accessControlFieldsForMode` function out of each of the three client files and
+ * It reads the `accessControlFieldsForMode` function out of each of the client files and
  * asserts they map the same modes to the same fields. It does NOT execute them -- one is inside
- * an HTML <script>, one is a browser global and one is TypeScript, and standing up three
- * runtimes to compare a five-row table costs more than it protects. The parse is deliberately
+ * an HTML <script> and one is TypeScript, and standing up the runtimes to compare a five-row
+ * table costs more than it protects. The parse is deliberately
  * strict: an unreadable function fails rather than passing silently, because "I could not find
  * it" and "it agrees" must never look the same.
  */
@@ -29,7 +34,6 @@ const ROOT = path.resolve(__dirname, '..');
 
 const SOURCES = [
   ['Inspector', 'pkg/client/dashboard.html'],
-  ['Portal V1', 'pkg/server/static/dashboard.js'],
   ['Portal V2', 'ui/src/components/ReservationsPanel.tsx'],
 ];
 
@@ -156,16 +160,11 @@ for (const [label, rel] of SOURCES) {
 // The modes each surface actually OFFERS, which is a different question from the table above.
 //
 // V2's defect was never in a table -- it was that its radio list had three entries while the
-// two selects had five. A gate that only compared the field mapping would have passed that
+// Inspector's select had five. A gate that only compared the field mapping would have passed that
 // clean, because the mapping for a mode you cannot select is never wrong. So this reads the
 // controls a user actually touches.
 const OFFERED = [
   ['Inspector', 'pkg/client/dashboard.html', /id="ac-mode"[\s\S]*?<\/select>/],
-  [
-    'Portal V1',
-    'pkg/server/dashboard.html',
-    /id="reservation-ac-mode"[\s\S]*?<\/select>/,
-  ],
   // V2 builds radios from an array of [value, icon, label] tuples rather than markup.
   [
     'Portal V2',
@@ -196,7 +195,7 @@ for (const [label, rel, region] of OFFERED) {
       new RegExp(`'${mode}'`).test(text);
     if (!offered) {
       failures.push(
-        `${label}: does not offer the '${mode}' mode. A mode a user cannot select in one arm ` +
+        `${label}: does not offer the '${mode}' mode. A mode a user cannot select in one form ` +
           `and can in another is a capability gap -- V2 shipped without 'or' and 'and', so a ` +
           `reservation in either opened with no option selected and no fields at all.`,
       );
@@ -214,7 +213,7 @@ if (!fs.existsSync(serverFile)) {
   if (!/func missingAccessControlValue\(/.test(src)) {
     failures.push(
       'server: missingAccessControlValue is gone. Without it the forms are the only thing ' +
-        'stopping a mode that names a factor the tunnel does not have, and three forms are ' +
+        'stopping a mode that names a factor the tunnel does not have, and the forms are ' +
         'not a guarantee (#2156).',
     );
   }
@@ -240,7 +239,7 @@ if (failures.length > 0) {
   console.error('check-access-mode-parity: FAILED\n');
   failures.forEach((f) => console.error(`  - ${f}`));
   console.error(
-    '\n  One rule, four implementations. Update all of them, or the arms drift apart again.',
+    '\n  One rule, several implementations. Update all of them, or they drift apart again.',
   );
   process.exit(1);
 }

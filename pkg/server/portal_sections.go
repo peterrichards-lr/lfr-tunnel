@@ -4,6 +4,10 @@ package server
 // ui/src/App.tsx). The paths in PortalV1SectionToV2 are relative to it.
 const PortalV2Base = "/portalv2"
 
+// v1SectionSystem is V1's System Settings section. Named only because "system" is also an
+// audit target type elsewhere in this package, and goconst counts the two together.
+const v1SectionSystem = "system"
+
 // PortalV1SectionToV2 maps every Portal V1 section to the V2 path that shows the same thing
 // (#2527, epic #2524).
 //
@@ -45,5 +49,5 @@ var PortalV1SectionToV2 = map[string]string{
 	"network-health": "/admin/edge-health",
 	"backups":        "/admin/backups",
 	"maintenance":    "/admin/maintenance",
-	"system":         "/admin/settings",
+	v1SectionSystem:  "/admin/settings",
 }

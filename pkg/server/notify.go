@@ -106,6 +106,10 @@ var (
 		"policy_reminder",
 		"this user gets no warning at all before new tunnels are refused at the consent deadline",
 	}
+	notifyMinVersionWarning = notificationKind{
+		"min_version_warning",
+		"this user's client is below min_client_version and nobody has told them before new tunnels are refused",
+	}
 	notifyVanityDomainHookFailed = notificationKind{
 		"vanity_domain_hook_failed",
 		"this user has not been told their custom domain may have no certificate and be unreachable",

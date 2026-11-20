@@ -1,0 +1,6 @@
+<p>Hi {{.Name}},</p>
+<p>{{if .ClientVersion}}Your Liferay Tunnel client (<strong>{{.ClientVersion}}</strong>){{else}}A Liferay Tunnel client on your account{{end}} is older than the minimum this gateway accepts (<strong>{{.MinVersion}}</strong>).</p>
+{{if .Expired}}<p>The upgrade period ended on <strong>{{.Deadline}}</strong>, so new tunnels are refused. Run <code>{{.UpgradeCommand}}</code> to start them again. Tunnels already running are not interrupted.</p>{{else}}<p>Run <code>{{.UpgradeCommand}}</code> within {{.Remaining}} (by <strong>{{.Deadline}}</strong>), or new tunnels will be refused. Tunnels already running are not interrupted.</p>{{end}}
+{{if not .ClientVersion}}<p>If you have already upgraded every client you use, you can ignore this.</p>{{end}}
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>
+<p style="font-size: 13px; color: #57606a;">You are receiving this because new tunnels are refused after the deadline. It is not a marketing message and is sent regardless of your notification preferences.</p>

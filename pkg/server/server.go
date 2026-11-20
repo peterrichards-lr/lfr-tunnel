@@ -2674,6 +2674,9 @@ func (s *Server) Start() error {
 					// request because there is none -- getPortalBaseURL falls back to the
 					// configured portal_url.
 					s.runPolicyConsentSweep(nil)
+					// Emails users whose client's min_client_version warning window has
+					// opened (#2522), once per floor.
+					s.warnUsersEnteringMinVersionWindow()
 				}
 			}
 		}

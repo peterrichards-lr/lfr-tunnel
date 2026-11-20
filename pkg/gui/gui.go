@@ -670,7 +670,10 @@ func buildMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning boo
 	})
 
 	m.launchLogin = menu.Add(launchOnLoginLabel(), func() {
-		handleToggleLaunchOnLogin(m)
+		// Off the main thread: enabling asks the gateway for its install_dir (#2552), which can
+		// take the HTTP timeout when the gateway is slow or the machine is offline, and the
+		// menu bar would freeze for that long. SetLabel is dispatched to the main thread.
+		go handleToggleLaunchOnLogin(m)
 	})
 
 	menu.AddSeparator()
@@ -732,10 +735,23 @@ func launchOnLoginLabel() string {
 	return "Launch on Login"
 }
 
+// launchLoginBusy drops a second click while the first toggle is still running. The handler runs
+// off the main thread now, so two quick clicks would otherwise install and uninstall at once.
+var launchLoginBusy sync.Mutex
+
 func handleToggleLaunchOnLogin(m *trayMenu) {
+	if !launchLoginBusy.TryLock() {
+		return
+	}
+	defer launchLoginBusy.Unlock()
+
+	// A failure has to show in the menu, not only in the log: a tray started by launchd has no
+	// terminal, so an item that silently stays unticked looks like a click that did not register.
+	failed := false
 	if client.IsGUIServiceInstalled() {
 		if err := client.UninstallGUIService(); err != nil {
 			slog.Error("Failed to uninstall GUI service", "error", err)
+			failed = true
 		}
 	} else {
 		// The configured gateway is asked for its install_dir (#2552). When the config will not
@@ -750,12 +766,17 @@ func handleToggleLaunchOnLogin(m *trayMenu) {
 		}
 		if err := client.InstallGUIService(serverURL); err != nil {
 			slog.Error("Failed to install GUI service", "error", err)
+			failed = true
 		}
 	}
 	// One label, in place. This used to call updateMenu -- rebuilding and re-attaching the whole
 	// menu from a click handler. That runs on the main thread so it did not crash, but it is the
 	// same unsafe pattern and there is no reason to keep it.
-	m.launchLogin.SetLabel(launchOnLoginLabel())
+	label := launchOnLoginLabel()
+	if failed {
+		label += " (failed, see log)"
+	}
+	m.launchLogin.SetLabel(label)
 }
 
 // clientArgsForConnect is what the tray's Connect spawns the client with.

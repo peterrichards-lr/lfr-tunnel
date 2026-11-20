@@ -523,9 +523,12 @@ func TestTheMigrationPathTellsThePlannerWhatItRestarted(t *testing.T) {
 		t.Fatalf("the migration path no longer calls install-service; this test is describing "+
 			"code that has moved, and %s needs revisiting", "TestTheMigrationPathTellsThePlannerWhatItRestarted")
 	}
-	if strings.Count(text, call) != 1 {
+	// Counted by the argument, not by the call's spelling, so a second starter written another
+	// way -- reregisterAutostart(..., "install-service") or a bare exec.Command -- is still seen
+	// (#2552 review).
+	if n := strings.Count(text, `"install-service")`); n != 1 {
 		t.Errorf("install-service is invoked from %d places, want 1. Each one starts a client, "+
-			"so each one has to tell the planner", strings.Count(text, call))
+			"so each one has to tell the planner", n)
 	}
 
 	// The branch that follows the call is where the starters it created are recorded: the rest of
@@ -533,6 +536,40 @@ func TestTheMigrationPathTellsThePlannerWhatItRestarted(t *testing.T) {
 	branch := text[at:]
 	if end := strings.Index(branch, "\n\t}\n"); end > 0 {
 		branch = branch[:end]
+	}
+	// And only for a re-registration that succeeded (#2552): a failed one left the old unit or
+	// plist running the binary the move removed, which starts nothing, and recording it anyway
+	// makes the planner skip the relaunch.
+	//
+	// Per OS block, not anywhere in the branch: the guard appears in both, so a whole-branch search
+	// is satisfied by the macOS one while the Linux one is gone (#2555, measured).
+	osBlock := func(goos string) string {
+		head := `if runtime.GOOS == "` + goos + `" {`
+		i := strings.Index(branch, head)
+		if i < 0 {
+			return ""
+		}
+		block := branch[i:]
+		if end := strings.Index(block, "\n\t\t}\n"); end > 0 {
+			block = block[:end]
+		}
+		return block
+	}
+	for _, c := range []struct{ goos, guard string }{
+		{"linux", "if daemonOK {"},
+		{"darwin", "if daemonOK {"},
+		{"darwin", "if guiOK {"},
+	} {
+		block := osBlock(c.goos)
+		if block == "" {
+			t.Errorf("no %s block in the migration branch", c.goos)
+			continue
+		}
+		if !strings.Contains(block, c.guard) {
+			t.Errorf("the %s migration block records a service starter without %q. A failed "+
+				"re-registration starts nothing, and the planner would skip the relaunch (#2552)."+
+				"\nblock read:\n%s", c.goos, c.guard, block)
+		}
 	}
 	for _, want := range []string{"restartSystemd = true", "plistToReload = "} {
 		if !strings.Contains(branch, want) {

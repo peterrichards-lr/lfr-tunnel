@@ -125,6 +125,32 @@ func TestResolveInstallExeRefusesAServerDirWithNoClient(t *testing.T) {
 	}
 }
 
+// A relative install_dir from the server would resolve against the working directory and be
+// recorded in an autostart entry as that (#2552 review). One YAML edit reaches every client, so it
+// is refused -- even when a client happens to exist at that relative path from here.
+func TestResolveInstallExeRefusesARelativeServerDir(t *testing.T) {
+	for _, name := range installDirEnvVars {
+		t.Setenv(name, "")
+	}
+	t.Chdir(t.TempDir())
+	seedClient(t, filepath.Join("liferay", "lfr-tunnel"))
+
+	got, err := resolveInstallExe(filepath.Join("liferay", "lfr-tunnel"))
+	if err == nil {
+		t.Fatalf("a relative server path resolved to %q", got)
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("the refusal does not say what is wrong with the path: %v", err)
+	}
+}
+
+// A bare "~" means the home folder, as install.sh treats it.
+func TestExpandInstallDirBareTilde(t *testing.T) {
+	if got := expandInstallDir("~", "/home/u"); got != "/home/u" {
+		t.Errorf("expandInstallDir(\"~\") = %q, want the home folder", got)
+	}
+}
+
 // versionGateway serves /api/version with the given client_platforms map.
 func versionGateway(t *testing.T, platforms map[string]ServerPlatformInfo) *httptest.Server {
 	t.Helper()
@@ -179,6 +205,45 @@ func TestServerInstallDir(t *testing.T) {
 	t.Run("an unreachable gateway is an error", func(t *testing.T) {
 		if got, err := ServerInstallDir(unreachableURL(t)); err == nil {
 			t.Errorf("an unreachable gateway answered %q with no error", got)
+		}
+	})
+
+	// An older gateway sends the platform entry without install_dir. That is no opinion.
+	t.Run("an entry with no install_dir is no opinion", func(t *testing.T) {
+		srv := versionGateway(t, map[string]ServerPlatformInfo{gatewayPlatformKey(): {URL: "/x"}})
+		defer srv.Close()
+		if got, err := ServerInstallDir(srv.URL); err != nil || got != "" {
+			t.Errorf("got (%q, %v), want (\"\", nil)", got, err)
+		}
+	})
+
+	// A URL that is not a gateway, or a gateway in trouble, is unknown, not "no opinion". The
+	// body is VALID and names a directory, so only the status check can refuse it -- an HTML 404
+	// would be refused by the decoder instead, and this case would pass with the status check gone.
+	t.Run("a non-200 answer is an error, even with a usable body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if err := json.NewEncoder(w).Encode(ServerVersionInfo{ClientPlatforms: map[string]ServerPlatformInfo{
+				gatewayPlatformKey(): {InstallDir: "~/from-a-failing-gateway"},
+			}}); err != nil {
+				t.Errorf("encoding: %v", err)
+			}
+		}))
+		defer srv.Close()
+		if got, err := ServerInstallDir(srv.URL); err == nil {
+			t.Errorf("a 503 answered %q with no error", got)
+		}
+	})
+	t.Run("an answer that will not decode is an error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			if _, err := w.Write([]byte("<html>not json</html>")); err != nil {
+				t.Errorf("writing: %v", err)
+			}
+		}))
+		defer srv.Close()
+		if got, err := ServerInstallDir(srv.URL); err == nil {
+			t.Errorf("an undecodable answer produced %q with no error", got)
 		}
 	})
 

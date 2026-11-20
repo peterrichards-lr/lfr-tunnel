@@ -396,13 +396,15 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		// at the binary removed a few lines above. LFR_TUNNEL_INSTALL_DIR cannot outrank what
 		// the user set: configuredInstallDir already IS any override variable's value.
 		fmt.Println("[Update] Re-registering background services to point to the new location...")
-		reregister := func(sub string) {
+		reregister := func(sub string) bool {
 			if err := reregisterAutostart(execPath, configuredInstallDir, sub); err != nil {
 				fmt.Printf("[Warning] %s failed after moving the client to %s: %v\n", sub, target, err)
 				fmt.Printf("[Warning] Run `%s %s` to point autostart at the new location.\n", target, sub)
+				return false
 			}
+			return true
 		}
-		reregister("install-service")
+		daemonOK := reregister("install-service")
 
 		// install-service does not merely rewrite the unit file: installLinux enables AND
 		// starts the systemd unit, and installDarwin loads the plist. So by this line a
@@ -410,16 +412,26 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		// and the relaunch planner has to be told, or it starts a second one beside it
 		// (#2194). On macOS the plists below say so; on Linux nothing did, because
 		// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
+		//
+		// Only for a re-registration that SUCCEEDED (#2552). A failed one left the old unit or
+		// plist running the binary removed above, so it starts nothing -- and telling the planner
+		// it does makes the planner skip the relaunch, leaving the user with no client at all.
 		if runtime.GOOS == "linux" {
-			restartSystemd = true
+			restartSystemd = false
+			if daemonOK {
+				restartSystemd = true
+			}
 		}
 		if runtime.GOOS == "darwin" {
-			reregister("install-gui-service")
+			guiOK := reregister("install-gui-service")
 			// The install commands above generate new plists, so we must reload those instead of the old ones
 			home, _ := os.UserHomeDir()
-			plistToReload = []string{
-				filepath.Join(home, "Library", "LaunchAgents", daemonPlistName),
-				filepath.Join(home, "Library", "LaunchAgents", guiPlistName),
+			plistToReload = nil
+			if daemonOK {
+				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", daemonPlistName))
+			}
+			if guiOK {
+				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", guiPlistName))
 			}
 		}
 	}

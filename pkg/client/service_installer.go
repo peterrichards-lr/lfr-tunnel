@@ -161,6 +161,13 @@ func resolveInstallExe(serverDir string) (string, error) {
 
 	if serverDir != "" {
 		dir := expandInstallDir(serverDir, home)
+		// A relative value would resolve against whatever directory this happens to run from,
+		// and be recorded in an autostart entry as that. One YAML edit reaches every client, so
+		// refuse it here rather than write a path that changes meaning at the next login.
+		if !filepath.IsAbs(dir) {
+			return "", fmt.Errorf("the server sets the install directory for this platform to %q, "+
+				"which is not an absolute path or a ~ path; ask the server's operator to fix install_dir", serverDir)
+		}
 		exe := filepath.Join(dir, canonicalExeName())
 		if _, err := os.Stat(exe); err == nil {
 			return exe, nil
@@ -195,6 +202,9 @@ func resolveInstallExe(serverDir string) (string, error) {
 // installers do, so a value from an override variable or the gateway lands in the home folder.
 func expandInstallDir(dir, home string) string {
 	dir = os.ExpandEnv(dir)
+	if dir == "~" {
+		return home
+	}
 	if len(dir) >= 2 && (dir[:2] == "~/" || dir[:2] == "~\\") {
 		dir = filepath.Join(home, dir[2:])
 	}

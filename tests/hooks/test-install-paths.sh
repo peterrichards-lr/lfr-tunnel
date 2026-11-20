@@ -6,9 +6,10 @@
 #                 /home/*/liferay/lfr-tunnel/lfr-tunnel            (Linux)
 #                 C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe    (Windows)
 #
-# The exclusions are path wildcards: only the username is wild, so the final two directory
-# segments and the binary name are matched literally. A client installed anywhere else is not
-# excluded, and SentinelOne quarantines it.
+# The exclusions are path wildcards with the only `*` in the username position (on Windows it
+# may span more than one folder level -- docs/infosec.md section 3, #2543), so the final two
+# directory segments and the binary name are matched literally. A client installed anywhere else
+# is not excluded, and SentinelOne quarantines it.
 #
 # This checks every place that decides the path AND the document InfoSec is given, because the
 # failure being guarded against is not one wrong value -- it is the four sources disagreeing.

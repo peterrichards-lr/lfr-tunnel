@@ -167,10 +167,14 @@ C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
 C:\Users\*\.ldm\bin\lfr-tunnel.exe
 ```
 
-Only the username segment is a wildcard (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything after
-it is matched literally, so the last two directory names and the executable name are all
-load-bearing. No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and
-on Windows a leading `*\` would also span the drive and `Users`, not just the username.
+The only wildcard is in the username position (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything
+after it is matched literally, so the last two directory names and the executable name are all
+load-bearing. On Windows that `*` may span more than one folder level: InfoSec confirmed
+`C:\Users\*\...` is accepted (SentinelOne recommends `*` to cover all users), but the literal suffix
+may then sit deeper than the user folder, for example under `C:\Users\<name>\Downloads\`. The rule
+is tighter than `*\liferay\...`, not strictly limited to the username level (LRINFOSEC-7091).
+No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and on Windows a
+leading `*\` would also span the drive and `Users`.
 
 **Every rule is lowercase after its root** (`liferay`, not `Liferay`), because that is the case the
 installers ask for. InfoSec could not confirm whether the EDR matches macOS paths case-sensitively

@@ -146,26 +146,57 @@ so these are the only paths to exclude. **Two rules per platform**: InfoSec conf
 behavioural and machine-learning engines were not satisfied by a binary exclusion alone, and
 the LDM link had to be excluded as well.
 
-**macOS** (requested):
+#### Exclusion type: Alerts
+
+**Every rule below is requested as an Alerts exclusion** (LRINFOSEC-7091). That is the exclusion
+type InfoSec uses for detections. Two other types are not substitutes:
+
+- **Performance Focus** is not for detections, and it costs InfoSec visibility. It is not requested.
+- **Interoperability** is requested only where testing shows a functional problem from a path.
+  It is never the only rule for a path: InfoSec confirmed an Interoperability-only rule is not
+  enough (#2545).
+
+**How the rules are applied.** InfoSec applies these through per-OS endpoint tags,
+`macOS-global`, `Linux-global` and `Windows-global`. Each tag applies the Alerts-based exclusions
+plus the designated file path, and nothing else. The older tags that allowed earlier tests and
+PoCs are being removed, so an endpoint that relied on one of them is covered only through the new
+tag (#2546). **Which endpoints carry the new tags, and the rollout scope beyond the test
+endpoints, are open with InfoSec** (LRINFOSEC-7091).
+
+#### Rules by platform
+
+**macOS** (requested, Alerts):
 
 ```
 /Users/*/liferay/lfr-tunnel/lfr-tunnel
 /Users/*/.ldm/bin/lfr-tunnel
 ```
 
-**Linux** (requested):
+**Linux** (requested, Alerts):
 
 ```
 /home/*/liferay/lfr-tunnel/lfr-tunnel
 /home/*/.ldm/bin/lfr-tunnel
 ```
 
-**Windows** (requested):
+Linux previously had rules of another type only, which InfoSec says are not enough. The Alerts
+rules are requested *in addition*. The earlier rules are pending removal: they stay until InfoSec
+confirms the test results, and then go (#2545).
+
+**Windows** (requested, Alerts):
 
 ```
 C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
 C:\Users\*\.ldm\bin\lfr-tunnel.exe
 ```
+
+**The LDM hardlink needs its own Alerts rule** (#2544). On Windows, `.ldm\bin\lfr-tunnel.exe` is a
+hardlink: a second path to the same file, not a pointer to the first. The EDR matches the path an
+image executes from, so the binary's rule does not cover a run from the hardlink. It is a separate
+Alerts exclusion, the same as the binary. Interoperability is added for it only if testing shows a
+functional problem from that path. InfoSec found no EDR documentation on hardlinks, so this is
+still to be confirmed in the test round. On macOS and Linux the LDM link is a symlink; its rule
+stays for the reason given above, that the engines needed the link excluded as well.
 
 The only wildcard is in the username position (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything
 after it is matched literally, so the last two directory names and the executable name are all
@@ -273,7 +304,7 @@ This namespacing guarantees that environment variables exported in shell profile
 To authorize the tool with minimal impact on local endpoint alerts, we recommend the following steps:
 
 1. **Verify Binary Authenticity:** Check the downloaded executable against the release's `checksums.txt`, and that file against its minisign signature (section 2).
-2. **Apply Wildcard Path Exclusions:** Add **both** rules per platform from section 3: the installed binary and the `.ldm/bin` link. A binary-only exclusion is not sufficient: the behavioural and ML engines required the link as well. No package-manager rule is needed.
+2. **Apply Wildcard Path Exclusions as Alerts exclusions:** Add **both** rules per platform from section 3: the installed binary and the `.ldm/bin` link. A binary-only exclusion is not sufficient: the behavioural and ML engines required the link as well. Use the Alerts type, not Performance Focus; add Interoperability only where testing shows a functional problem, and never as a path's only rule. On Windows the `.ldm\bin` link is a hardlink and needs its own Alerts rule. No package-manager rule is needed.
 3. **Do not add signer exclusions.** The signing identities in section 2 are self-signed or project-held keys, not a CA-issued publisher, so trusting them would trust whoever holds the key rather than an organisation.
 4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the public image **`peterjrichards/lfr-tunnel`** hosted on Docker Hub.
 

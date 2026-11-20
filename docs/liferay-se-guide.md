@@ -37,6 +37,13 @@ This script downloads the signed client binary straight into the install directo
 * **macOS / Linux:** `curl -fsSL https://tunnel.lfr-demo.se/install.sh | sh`
 * **Windows (PowerShell):** `irm https://tunnel.lfr-demo.se/install.ps1 | iex`
 
+**How your machine is covered.** InfoSec applies the exclusions through a per-OS endpoint tag
+(`macOS-global`, `Linux-global` or `Windows-global`), which covers the install path above and the
+LDM link, nothing else. The older tags that allowed earlier tests and PoCs are being removed. If the
+client alerts or is quarantined after installing this way, tell InfoSec (ticket LRINFOSEC-7091) with the
+path the alert names; which endpoints carry the new tags is InfoSec's to confirm
+([infosec.md §3](infosec.md#exclusion-type-alerts)).
+
 **Do not set `LFT_INSTALL_DIR` or the `LFR_TUNNEL_*_INSTALL_DIR` variables.** They move the client out of the excluded directory, and `--upgrade` keeps it there. If one is in your shell profile, remove it and reinstall.
 
 To verify your installation, open a new terminal window and run: `lfr-tunnel -version`
@@ -401,4 +408,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*

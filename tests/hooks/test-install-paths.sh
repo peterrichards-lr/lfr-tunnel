@@ -216,6 +216,21 @@ for rule in '/Users/*/.ldm/bin/lfr-tunnel' '/home/*/.ldm/bin/lfr-tunnel' 'C:\Use
     fail "docs/infosec.md has no exclusion rule for the LDM link ${rule} -- the engines need it as well as the binary"
   fi
 done
+# The exclusion type (#2544, #2545). InfoSec uses Alerts exclusions for detections; an
+# Interoperability-only or Performance Focus rule is not enough. A platform heading that loses
+# "Alerts" would leave InfoSec configuring a path with no type stated, which is how Linux ended up
+# Interoperability-only. Count the headings, so one platform dropping out goes red.
+alerts_headings="$(grep -cE '^\*\*(macOS|Linux|Windows)\*\* \(requested, Alerts\):$' "$INFOSEC")"
+if [ "$alerts_headings" -eq 3 ]; then
+  pass "docs/infosec.md requests every platform's rules as Alerts exclusions"
+else
+  fail "docs/infosec.md has ${alerts_headings} of 3 platform headings marked '(requested, Alerts)'"
+fi
+if grep -qF '**The LDM hardlink needs its own Alerts rule**' "$INFOSEC"; then
+  pass "docs/infosec.md states the Windows LDM hardlink needs its own Alerts rule"
+else
+  fail "docs/infosec.md no longer states the Windows LDM hardlink needs its own Alerts rule -- the binary's rule does not cover a second path"
+fi
 # Decision 0006: no package-manager exclusion is requested for Liferay.
 if grep -qE '^/opt/' "$INFOSEC"; then
   fail "docs/infosec.md still lists a package-manager exclusion rule (decision 0006 drops them)"

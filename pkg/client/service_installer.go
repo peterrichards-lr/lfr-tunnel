@@ -165,7 +165,7 @@ func resolveInstallExe(serverDir string) (string, error) {
 		// and be recorded in an autostart entry as that. One YAML edit reaches every client, so
 		// refuse it here rather than write a path that changes meaning at the next login.
 		if !filepath.IsAbs(dir) {
-			return "", fmt.Errorf("the server sets the install directory for this platform to %q, "+
+			return "", fmt.Errorf("the server sets the install directory for this platform to \"%s\", "+
 				"which is not an absolute path or a ~ path; ask the server's operator to fix install_dir", serverDir)
 		}
 		exe := filepath.Join(dir, canonicalExeName())
@@ -176,7 +176,7 @@ func resolveInstallExe(serverDir string) (string, error) {
 		// the built-in default is in the wrong place, and on an EDR-managed machine possibly
 		// outside the exclusion. Name it rather than record it.
 		return "", fmt.Errorf(
-			"the server sets the install directory for this platform to %q, but no %s exists there\n\n"+
+			"the server sets the install directory for this platform to \"%s\", but no %s exists there\n\n"+
 				"Reinstall with the installer from the server, or run `lfr-tunnel --upgrade` to move the client there",
 			dir, canonicalExeName())
 	}

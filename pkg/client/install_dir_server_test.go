@@ -109,7 +109,11 @@ func TestResolveInstallExeRefusesAServerDirWithNoClient(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	canonical := seedClient(t, canonicalInstallDir(home))
 
-	serverDir := filepath.Join(home, "moved", "lfr-tunnel")
+	// The backslash is deliberate. On Windows every path has them, and formatting the path with
+	// %q doubled each one, so the message no longer contained the path it names -- caught only by
+	// the Windows CI job (#2555). On Linux a backslash is an ordinary file-name character, so the
+	// same mistake fails here too.
+	serverDir := filepath.Join(home, `moved\dir`, "lfr-tunnel")
 	got, err := resolveInstallExe(serverDir)
 	if err == nil {
 		t.Fatalf("resolved %q when the server's directory holds no client", got)

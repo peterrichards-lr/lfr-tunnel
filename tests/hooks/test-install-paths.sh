@@ -219,17 +219,23 @@ done
 # The exclusion type (#2544, #2545). InfoSec uses Alerts exclusions for detections; an
 # Interoperability-only or Performance Focus rule is not enough. A platform heading that loses
 # "Alerts" would leave InfoSec configuring a path with no type stated, which is how Linux ended up
-# Interoperability-only. Count the headings, so one platform dropping out goes red.
-alerts_headings="$(grep -cE '^\*\*(macOS|Linux|Windows)\*\* \(requested, Alerts\):$' "$INFOSEC")"
-if [ "$alerts_headings" -eq 3 ]; then
-  pass "docs/infosec.md requests every platform's rules as Alerts exclusions"
-else
-  fail "docs/infosec.md has ${alerts_headings} of 3 platform headings marked '(requested, Alerts)'"
+# with no Alerts rule. Checked per platform and only inside section 3: a whole-file count let two
+# extra macOS headings elsewhere stand in for a missing Linux and Windows one (#2550 review).
+SECTION3="$(awk '/^## 3\./{on=1; next} /^## [0-9]+\./{on=0} on' "$INFOSEC")"
+if [ "$(printf '%s\n' "$SECTION3" | grep -c .)" -lt 50 ]; then
+  fail "could not extract docs/infosec.md section 3 -- the Alerts checks below would scan nothing"
 fi
-if grep -qF '**The LDM hardlink needs its own Alerts rule**' "$INFOSEC"; then
-  pass "docs/infosec.md states the Windows LDM hardlink needs its own Alerts rule"
+for plat in macOS Linux Windows; do
+  if grep -qxF "**${plat}** (requested, Alerts):" <<< "$SECTION3"; then
+    pass "docs/infosec.md section 3 requests the ${plat} rules as Alerts exclusions"
+  else
+    fail "docs/infosec.md section 3 has no '**${plat}** (requested, Alerts):' heading -- the ${plat} rules would have no exclusion type stated"
+  fi
+done
+if grep -q '^\*\*The LDM hardlink needs its own Alerts rule\*\*' <<< "$SECTION3"; then
+  pass "docs/infosec.md section 3 states the Windows LDM hardlink needs its own Alerts rule"
 else
-  fail "docs/infosec.md no longer states the Windows LDM hardlink needs its own Alerts rule -- the binary's rule does not cover a second path"
+  fail "docs/infosec.md section 3 no longer states the Windows LDM hardlink needs its own Alerts rule -- the binary's rule does not cover a second path"
 fi
 # Decision 0006: no package-manager exclusion is requested for Liferay.
 if grep -qE '^/opt/' "$INFOSEC"; then

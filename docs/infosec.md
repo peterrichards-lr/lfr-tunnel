@@ -160,9 +160,10 @@ type InfoSec uses for detections. Two other types are not substitutes:
 `macOS-global`, `Linux-global` and `Windows-global`. Each tag applies the Alerts-based exclusions
 plus the designated file path, and nothing else. The older tags that allowed earlier tests and
 PoCs are being removed, so an endpoint that relied on one of them is covered only through the new
-tag (#2546). **Which endpoints carry the new tags is for InfoSec to confirm**: until it confirms
-the test results on LRINFOSEC-7091, this document does not describe the exclusions as applying
-company-wide.
+tag (#2546). **Which endpoints carry the new tags, and the rollout scope beyond the test
+endpoints, are open with InfoSec** (LRINFOSEC-7091).
+
+#### Rules by platform
 
 **macOS** (requested, Alerts):
 
@@ -179,8 +180,8 @@ company-wide.
 ```
 
 Linux previously had rules of another type only, which InfoSec says are not enough. The Alerts
-rules are requested *in addition*; the earlier rules stay until InfoSec confirms the test results
-(#2545).
+rules are requested *in addition*. The earlier rules are pending removal: they stay until InfoSec
+confirms the test results, and then go (#2545).
 
 **Windows** (requested, Alerts):
 
@@ -194,7 +195,7 @@ hardlink: a second path to the same file, not a pointer to the first. The EDR ma
 image executes from, so the binary's rule does not cover a run from the hardlink. It is a separate
 Alerts exclusion, the same as the binary. Interoperability is added for it only if testing shows a
 functional problem from that path. InfoSec found no EDR documentation on hardlinks, so this is
-confirmed in the test round, not assumed. On macOS and Linux the LDM link is a symlink; its rule
+still to be confirmed in the test round. On macOS and Linux the LDM link is a symlink; its rule
 stays for the reason given above, that the engines needed the link excluded as well.
 
 Only the username segment is a wildcard (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything after

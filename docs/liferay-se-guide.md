@@ -37,12 +37,12 @@ This script downloads the signed client binary straight into the install directo
 * **macOS / Linux:** `curl -fsSL https://tunnel.lfr-demo.se/install.sh | sh`
 * **Windows (PowerShell):** `irm https://tunnel.lfr-demo.se/install.ps1 | iex`
 
-**How your machine is covered.** InfoSec applies the exclusions through a per-OS endpoint tag
-(`macOS-global`, `Linux-global` or `Windows-global`), which covers the install path above and the
-LDM link, nothing else. The older tags that allowed earlier tests and PoCs are being removed. If the
-client alerts or is quarantined after installing this way, tell InfoSec (ticket LRINFOSEC-7091) with the
-path the alert names; which endpoints carry the new tags is InfoSec's to confirm
-([infosec.md §3](infosec.md#exclusion-type-alerts)).
+**Which exclusions apply.** InfoSec applies the exclusions through a per-OS endpoint tag
+(`macOS-global`, `Linux-global` or `Windows-global`). The tag applies the Alerts-based exclusions
+plus the designated file path, and nothing else. The older tags that allowed earlier tests and PoCs
+are being removed. Whether your machine carries the new tag yet is for InfoSec to confirm. If the
+client alerts or is quarantined after installing this way, tell InfoSec (ticket LRINFOSEC-7091) and
+include the path the alert names ([infosec.md §3](infosec.md#exclusion-type-alerts)).
 
 **Do not set `LFT_INSTALL_DIR` or the `LFR_TUNNEL_*_INSTALL_DIR` variables.** They move the client out of the excluded directory, and `--upgrade` keeps it there. If one is in your shell profile, remove it and reinstall.
 

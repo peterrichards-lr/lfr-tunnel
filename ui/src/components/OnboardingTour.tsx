@@ -110,17 +110,29 @@ export default function OnboardingTour({ user }: { user: any }) {
         showProgress: true,
         allowClose: true,
         steps: steps,
-        onDestroyed: () => {
-          const status = 'completed';
+        // Report what happened, as V1 does (#2535): completed only when the user got to the
+        // last step, otherwise aborted, with the 0-based step reached as step_<n>.
+        //
+        // onDestroyStarted rather than onDestroyed: driver.js calls onDestroyed only once a
+        // step's highlight has finished animating, so a tour closed straight away reported
+        // nothing, and it clears its state first, so driverObj.getActiveIndex() is undefined
+        // there. onDestroyStarted runs on every close -- the close button, Escape, the overlay
+        // and Done -- with the state intact, and leaves the destroying to us.
+        onDestroyStarted: (_element, _step, { index }) => {
+          const reached = typeof index === 'number';
           axios
             .post('/api/me/onboarding', {
-              status: status,
-              last_step: 'completed',
+              status:
+                reached && index >= steps.length - 1 ? 'completed' : 'aborted',
+              last_step: reached ? `step_${index}` : 'unknown',
+              // The rerun was counted when the tour started; counting it here too would
+              // count every rerun twice.
               is_rerun: false,
             })
             .catch((err) =>
               console.error('Failed to report onboarding completion', err),
             );
+          driverObj.destroy();
         },
       });
 

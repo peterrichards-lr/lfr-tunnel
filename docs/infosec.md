@@ -172,6 +172,11 @@ it is matched literally, so the last two directory names and the executable name
 load-bearing. No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and
 on Windows a leading `*\` would also span the drive and `Users`, not just the username.
 
+**Every rule is lowercase after its root** (`liferay`, not `Liferay`), because that is the case the
+installers create. InfoSec could not confirm whether the EDR matches macOS paths case-sensitively
+(LRINFOSEC-7091), so a rule spelled `Liferay` might match nothing there; lowercase is correct either
+way. `tests/hooks/test-install-paths.sh` fails on an uppercase letter after the root.
+
 **Package-manager rules are not requested.** An earlier version of this section listed
 `/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel` and `/opt/*/bin/lfr-tunnel`. Homebrew and Scoop
 are not supported on EDR-managed machines, so those rules can be withdrawn.
@@ -264,4 +269,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*

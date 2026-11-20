@@ -175,6 +175,21 @@ else
   fail "docs/infosec.md has an exclusion rule starting with a wildcard, which the console rejects: ${leading_wild}"
 fi
 
+# Lowercase after the root (#2542). The installers create `liferay`, and InfoSec could not confirm
+# whether the EDR matches macOS paths case-sensitively, so a rule spelled `Liferay` may match
+# nothing. The exact-line checks above cannot see this: they pass as long as the lowercase rule is
+# present, even beside a mixed-case one. So scan every rule line, not just the expected ones.
+rule_lines="$(grep -nE '^(/Users/|/home/|C:\\Users\\)' "$INFOSEC")"
+if [ "$(printf '%s\n' "$rule_lines" | grep -c .)" -lt 6 ]; then
+  fail "found fewer than 6 exclusion rule lines in docs/infosec.md -- the case check below would scan too little"
+fi
+mixed_case="$(printf '%s\n' "$rule_lines" | sed -E 's#^([0-9]+:)(/Users/|/home/|C:\\Users\\)#\1#' | grep -E '^[0-9]+:.*[A-Z]')"
+if [ -z "$mixed_case" ]; then
+  pass "every exclusion rule in docs/infosec.md is lowercase after its root"
+else
+  fail "docs/infosec.md has an exclusion rule with uppercase after its root, which may not match the lowercase path the installers create: ${mixed_case}"
+fi
+
 if ! grep -qE '/usr/local/bin/lfr-tunnel|LOCALAPPDATA' "$INFOSEC"; then
   pass "docs/infosec.md no longer states paths the installer never uses"
 else

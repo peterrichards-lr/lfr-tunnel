@@ -179,11 +179,13 @@ fi
 # whether the EDR matches macOS paths case-sensitively, so a rule spelled `Liferay` may match
 # nothing. The exact-line checks above cannot see this: they pass as long as the lowercase rule is
 # present, even beside a mixed-case one. So scan every rule line, not just the expected ones.
-rule_lines="$(grep -nE '^(/Users/|/home/|C:\\Users\\)' "$INFOSEC")"
+# Indentation is allowed, so a rule in a fenced block nested under a list item is still scanned.
+# The floor equals today's rule count: losing any rule line trips it. Raise it when adding a rule.
+rule_lines="$(grep -nE '^[[:space:]]*(/Users/|/home/|C:\\Users\\)' "$INFOSEC")"
 if [ "$(printf '%s\n' "$rule_lines" | grep -c .)" -lt 6 ]; then
   fail "found fewer than 6 exclusion rule lines in docs/infosec.md -- the case check below would scan too little"
 fi
-mixed_case="$(printf '%s\n' "$rule_lines" | sed -E 's#^([0-9]+:)(/Users/|/home/|C:\\Users\\)#\1#' | grep -E '^[0-9]+:.*[A-Z]')"
+mixed_case="$(printf '%s\n' "$rule_lines" | sed -E 's#^([0-9]+:)[[:space:]]*(/Users/|/home/|C:\\Users\\)#\1#' | grep -E '^[0-9]+:.*[A-Z]')"
 if [ -z "$mixed_case" ]; then
   pass "every exclusion rule in docs/infosec.md is lowercase after its root"
 else

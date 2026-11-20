@@ -1195,7 +1195,7 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 
 func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPassed bool) bool {
 	if len(os.Args) > 1 && os.Args[1] == "install-service" {
-		if err := client.InstallService(); err != nil {
+		if err := client.InstallService(cfg.ServerURL); err != nil {
 			log.Fatalf("[Error] Failed to install service: %v", err)
 		}
 		return true
@@ -1211,7 +1211,7 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	}
 
 	if len(os.Args) > 1 && os.Args[1] == "install-gui-service" {
-		if err := client.InstallGUIService(); err != nil {
+		if err := client.InstallGUIService(cfg.ServerURL); err != nil {
 			log.Fatalf("[Error] Failed to install GUI service: %v", err)
 		}
 		return true

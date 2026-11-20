@@ -45,8 +45,8 @@ SPECS = "tests/e2e/ui/tests/*.spec.ts"
 # reason. This is a list whose entries must go STALE LOUDLY: if one stops colliding, the check
 # fails and the entry has to be removed, so the list can only shrink (SKILL section 5b rule 5).
 #
-# All four are scoped CLICKS -- `dialog.`, `table.`, `nav.` -- not assertions about whether the
-# bundle ran, which is the distinction that matters. A click that matches the wrong button inside
+# All five are CLICKS -- scoped by `dialog.`, `table.`, `nav.` or `exact: true` -- not
+# assertions about whether the bundle ran, which is the distinction that matters. A click that matches the wrong button inside
 # a scoped container is a real hazard; it is just not the hazard this issue is about, and none of
 # them has a demonstrated failure behind it.
 ALLOWED = {
@@ -54,6 +54,7 @@ ALLOWED = {
     "Dismiss": "portal_banner_reset.spec.ts, the only dismiss button on the page",
     "Release": "portal_v2_custom_domain_release.spec.ts, scoped to the table",
     "Personal Access Tokens": "portal_v2_dashboard_jump_nav.spec.ts, scoped to the jump nav",
+    "Onboarding Tour": "v2_onboarding_tour_status.spec.ts, a click with exact: true",
 }
 
 NAME_RE = re.compile(r"getByRole\([^)]*?\{\s*name:\s*'([^']+)'", re.S)

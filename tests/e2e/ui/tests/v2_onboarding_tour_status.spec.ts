@@ -11,7 +11,14 @@ import { V2 } from './utils/portal';
  */
 const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
-type OnboardingPost = { status: string; last_step: string; is_rerun: boolean };
+type OnboardingPost = {
+  status: string;
+  last_step: string;
+  is_rerun: boolean;
+  // The gateway's answer, asserted in the test body: an expect() in the listener would throw
+  // inside the event emitter and surface only as a poll timeout.
+  httpStatus: number;
+};
 
 async function signIn(page: any) {
   await clearMailpit();
@@ -31,8 +38,7 @@ function recordOnboardingPosts(page: any): OnboardingPost[] {
   page.on('response', (res: any) => {
     const req = res.request();
     if (req.method() === 'POST' && req.url().endsWith('/api/me/onboarding')) {
-      expect(res.status()).toBe(200);
-      posts.push(req.postDataJSON());
+      posts.push({ ...req.postDataJSON(), httpStatus: res.status() });
     }
   });
   return posts;
@@ -45,7 +51,9 @@ const SLOW = { timeout: 30000 };
 async function startRerun(page: any) {
   await page.reload();
   await page.getByRole('button', { name: /What's New & Help/ }).click();
-  await page.getByRole('button', { name: 'Onboarding Tour' }).click();
+  await page
+    .getByRole('button', { name: 'Onboarding Tour', exact: true })
+    .click();
 }
 
 const popover = (page: any) => page.locator('.driver-popover');
@@ -68,11 +76,13 @@ test('the V2 onboarding tour reports how it ended', async ({ page }) => {
       status: 'in_progress',
       last_step: 'welcome',
       is_rerun: true,
+      httpStatus: 200,
     });
     expect(posts[1]).toEqual({
       status: 'aborted',
       last_step: 'step_0',
       is_rerun: false,
+      httpStatus: 200,
     });
   });
 
@@ -88,6 +98,7 @@ test('the V2 onboarding tour reports how it ended', async ({ page }) => {
       status: 'aborted',
       last_step: 'step_1',
       is_rerun: false,
+      httpStatus: 200,
     });
   });
 
@@ -112,12 +123,13 @@ test('the V2 onboarding tour reports how it ended', async ({ page }) => {
       status: 'completed',
       last_step: `step_${total - 1}`,
       is_rerun: false,
+      httpStatus: 200,
     });
   });
 
   await test.step('a first run is not a rerun', async () => {
-    // /api/me does not send onboarding_status, so the tour never starts by itself against the
-    // stack; this is the answer a pending user would get.
+    // /api/me does not send onboarding_status today, so the tour never starts by itself for
+    // anyone; this is the answer a pending user would get once it does.
     await page.route('**/api/me', async (route: any) => {
       if (route.request().method() !== 'GET') return route.continue();
       const res = await route.fetch();
@@ -138,8 +150,10 @@ test('the V2 onboarding tour reports how it ended', async ({ page }) => {
       status: 'in_progress',
       last_step: 'welcome',
       is_rerun: false,
+      httpStatus: 200,
     });
     expect(posts[1].status).toBe('aborted');
+    expect(posts[1].httpStatus).toBe(200);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 });

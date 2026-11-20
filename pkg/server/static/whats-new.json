@@ -6,7 +6,7 @@
       "The new portal is now the portal, at /portal. Old addresses, bookmarks and links in earlier emails still work: they open the matching page in the new portal. The classic portal stays available to administrators only, as a fallback.",
       "Client version floor: the CLI warns as soon as your version is below the gateway's minimum, offers to upgrade on the spot, and tells long-running tunnels and the Inspector when the deadline approaches. The portal shows a banner, and you get one email when the warning window opens.",
       "Portal: tunnel details can add and remove headers, override the rate limit, copy the URL and refresh. Header and rate-limit changes now reach tunnels served by a regional gateway too.",
-      "Portal: the dashboard has direct links to tokens, reservations and tunnels; admins get the reservations CSV, preferred domain and tour status in the user details, and Help & Resources has the Docker image and documentation links.",
+      "Portal: the dashboard has direct links to tokens, reservations and tunnels; admins get the reservations CSV, preferred domain and tour status in the user details, and the help panel links the Docker image and the documentation.",
       "Single sign-on: your name comes from the identity provider at every sign-in. If the provider does not perform MFA, the gateway asks for your authenticator code; if it does, Account Settings says so instead of offering to set one up."
     ]
   },

@@ -515,7 +515,9 @@ func TestTheMigrationPathTellsThePlannerWhatItRestarted(t *testing.T) {
 	}
 	text := string(src)
 
-	const call = `exec.Command(execPath, "install-service")`
+	// reregister wraps reregisterAutostart, which hands the child the new install directory
+	// (#2552); this was `exec.Command(execPath, "install-service")` before that.
+	const call = `reregister("install-service")`
 	at := strings.Index(text, call)
 	if at < 0 {
 		t.Fatalf("the migration path no longer calls install-service; this test is describing "+

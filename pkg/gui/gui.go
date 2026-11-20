@@ -738,7 +738,17 @@ func handleToggleLaunchOnLogin(m *trayMenu) {
 			slog.Error("Failed to uninstall GUI service", "error", err)
 		}
 	} else {
-		if err := client.InstallGUIService(); err != nil {
+		// The configured gateway is asked for its install_dir (#2552). When the config will not
+		// load, which gateway is configured is unknown too, and asking the default one would be
+		// a guess -- so nobody is asked, and the log says why.
+		cfg, cfgErr := loadUIConfig()
+		serverURL := cfg.ServerURL
+		if cfgErr != nil {
+			serverURL = ""
+			slog.Warn("Client config unreadable; Launch on Login uses the local install default without asking a gateway",
+				"error", cfgErr)
+		}
+		if err := client.InstallGUIService(serverURL); err != nil {
 			slog.Error("Failed to install GUI service", "error", err)
 		}
 	}

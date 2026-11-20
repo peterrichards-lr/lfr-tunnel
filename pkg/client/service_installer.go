@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -92,7 +93,7 @@ func convergeDarwinAutostart(home, exePath string) {
 // installedExeOrCanonical is the binary an uninstall should converge on: the resolved install
 // when there is one, otherwise the canonical path.
 func installedExeOrCanonical(home string) string {
-	if exe, err := resolveInstallExe(); err == nil {
+	if exe, err := resolveInstallExe(""); err == nil {
 		return exe
 	}
 	return filepath.Join(canonicalInstallDir(home), canonicalExeName())
@@ -127,7 +128,13 @@ func canonicalInstallDir(home string) string {
 //
 // It also used to return defaultExe after os.Stat had already proved it absent, so the caller
 // wrote a unit file pointing at nothing and printed [Success].
-func resolveInstallExe() (string, error) {
+//
+// serverDir is the gateway's install_dir for this platform (#2552), or "" when the gateway has no
+// opinion or could not be asked. Precedence: an override variable, then serverDir, then the
+// built-in default. The gateway's value outranks the default because it is how a path change
+// reaches clients without a release; the installers and --upgrade already follow it, and autostart
+// was the one place that did not.
+func resolveInstallExe(serverDir string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot resolve your home directory: %w", err)
@@ -142,10 +149,7 @@ func resolveInstallExe() (string, error) {
 	}
 
 	if envDir != "" {
-		envDir = os.ExpandEnv(envDir)
-		if len(envDir) >= 2 && (envDir[:2] == "~/" || envDir[:2] == "~\\") {
-			envDir = filepath.Join(home, envDir[2:])
-		}
+		envDir = expandInstallDir(envDir, home)
 		exe := filepath.Join(envDir, canonicalExeName())
 		if _, err := os.Stat(exe); err == nil {
 			return exe, nil
@@ -153,6 +157,21 @@ func resolveInstallExe() (string, error) {
 		// An override that does not resolve is a mistake worth naming. Falling back to the
 		// canonical path here would quietly ignore what the user asked for.
 		return "", fmt.Errorf("%s is set to %q, but no %s exists there", envName, envDir, canonicalExeName())
+	}
+
+	if serverDir != "" {
+		dir := expandInstallDir(serverDir, home)
+		exe := filepath.Join(dir, canonicalExeName())
+		if _, err := os.Stat(exe); err == nil {
+			return exe, nil
+		}
+		// Same reasoning as the override: the gateway named a directory, so a binary found at
+		// the built-in default is in the wrong place, and on an EDR-managed machine possibly
+		// outside the exclusion. Name it rather than record it.
+		return "", fmt.Errorf(
+			"the server sets the install directory for this platform to %q, but no %s exists there\n\n"+
+				"Reinstall with the installer from the server, or run `lfr-tunnel --upgrade` to move the client there",
+			dir, canonicalExeName())
 	}
 
 	// Matches the installers' default (#1591). The EDR exclusion is the wildcard
@@ -170,6 +189,33 @@ func resolveInstallExe() (string, error) {
 			"exclusion covers, which is that directory and no other.\n\n"+
 			"Either install the client there, or set %s to the directory holding it",
 		defaultExe, installDirEnvVars[len(installDirEnvVars)-2])
+}
+
+// expandInstallDir expands environment variables and a leading "~/" or "~\" the way the
+// installers do, so a value from an override variable or the gateway lands in the home folder.
+func expandInstallDir(dir, home string) string {
+	dir = os.ExpandEnv(dir)
+	if len(dir) >= 2 && (dir[:2] == "~/" || dir[:2] == "~\\") {
+		dir = filepath.Join(home, dir[2:])
+	}
+	return dir
+}
+
+// autostartServerDir asks the gateway for this platform's install_dir before an autostart entry
+// is written (#2552).
+//
+// When the gateway cannot be asked, its setting is UNKNOWN, not absent. Refusing would make
+// Launch on Login fail whenever the machine is offline, so this proceeds on the built-in default,
+// and it says so on warn rather than letting an unknown answer pass for "the server has no
+// opinion".
+func autostartServerDir(serverURL string, warn io.Writer) string {
+	dir, err := ServerInstallDir(serverURL)
+	if err != nil {
+		fmt.Fprintf(warn, "[Warning] Could not read the install directory from %s (%v).\n"+
+			"[Warning] The server's setting is unknown, so autostart uses the local default.\n", serverURL, err)
+		return ""
+	}
+	return dir
 }
 
 // assertExecutableExists refuses to write an autostart entry for a binary that is not there.
@@ -270,9 +316,10 @@ func uninstallWindows() error {
 	return nil
 }
 
-// InstallService configures lfr-tunnel to start on login automatically.
-func InstallService() error {
-	exePath, err := resolveInstallExe()
+// InstallService configures lfr-tunnel to start on login automatically. serverURL is the
+// configured gateway, asked for its install_dir; "" skips the question.
+func InstallService(serverURL string) error {
+	exePath, err := resolveInstallExe(autostartServerDir(serverURL, os.Stdout))
 	if err != nil {
 		return err
 	}
@@ -439,9 +486,10 @@ func installWindows(exePath string) error {
 	return nil
 }
 
-// InstallGUIService configures the system tray GUI wrapper to start on login.
-func InstallGUIService() error {
-	exePath, err := resolveInstallExe()
+// InstallGUIService configures the system tray GUI wrapper to start on login. serverURL is the
+// configured gateway, asked for its install_dir; "" skips the question.
+func InstallGUIService(serverURL string) error {
+	exePath, err := resolveInstallExe(autostartServerDir(serverURL, os.Stdout))
 	if err != nil {
 		return err
 	}

@@ -98,12 +98,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 					return nil
 				}
 
-				// Resolve target platform key on gateway
-				osKey := runtime.GOOS
-				if osKey == "darwin" {
-					osKey = "macos"
-				}
-				platformKey := fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
+				platformKey := gatewayPlatformKey()
 
 				if platInfo, ok := svrVer.ClientPlatforms[platformKey]; ok {
 					configuredInstallDir = platInfo.InstallDir
@@ -392,9 +387,22 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		_ = os.Remove(execPath) //nolint:errcheck
 		execPath = target       // Update execPath for restartActiveProcessesAndServices
 
-		// We need to re-register services pointing to the new path
+		// We need to re-register services pointing to the new path.
+		//
+		// The new directory is handed to the child explicitly (#2552). It used to inherit only
+		// the environment, so when the gateway's install_dir was the reason for the move and no
+		// override variable was set, the child resolved the hardcoded default, found nothing,
+		// and failed -- silently, because the error was discarded -- leaving autostart pointing
+		// at the binary removed a few lines above. LFR_TUNNEL_INSTALL_DIR cannot outrank what
+		// the user set: configuredInstallDir already IS any override variable's value.
 		fmt.Println("[Update] Re-registering background services to point to the new location...")
-		_ = exec.Command(execPath, "install-service").Run() //nolint:errcheck
+		reregister := func(sub string) {
+			if err := reregisterAutostart(execPath, configuredInstallDir, sub); err != nil {
+				fmt.Printf("[Warning] %s failed after moving the client to %s: %v\n", sub, target, err)
+				fmt.Printf("[Warning] Run `%s %s` to point autostart at the new location.\n", target, sub)
+			}
+		}
+		reregister("install-service")
 
 		// install-service does not merely rewrite the unit file: installLinux enables AND
 		// starts the systemd unit, and installDarwin loads the plist. So by this line a
@@ -406,7 +414,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			restartSystemd = true
 		}
 		if runtime.GOOS == "darwin" {
-			_ = exec.Command(execPath, "install-gui-service").Run() //nolint:errcheck
+			reregister("install-gui-service")
 			// The install commands above generate new plists, so we must reload those instead of the old ones
 			home, _ := os.UserHomeDir()
 			plistToReload = []string{
@@ -900,6 +908,51 @@ type ServerVersionInfo struct {
 	// gateway has no opinion and the client's own default applies. Advisory in both
 	// directions: the client clamps it, and a client too old to read it simply does not.
 	ClientReconnectSeconds int `json:"client_reconnect_seconds,omitempty"`
+}
+
+// runAutostartCmd runs a re-registration child. A variable so tests can see the command a
+// migration builds without executing a client.
+var runAutostartCmd = func(cmd *exec.Cmd) ([]byte, error) {
+	return cmd.CombinedOutput()
+}
+
+// reregisterAutostart runs `<exe> <sub>` (install-service or install-gui-service) after an
+// upgrade moved the client into installDir, telling the child where it now lives (#2552).
+func reregisterAutostart(exe, installDir, sub string) error {
+	cmd := exec.Command(exe, sub)
+	cmd.Env = append(os.Environ(), "LFR_TUNNEL_INSTALL_DIR="+installDir)
+	if out, err := runAutostartCmd(cmd); err != nil {
+		return fmt.Errorf("%w\n%s", err, out)
+	}
+	return nil
+}
+
+// gatewayPlatformKey is this build's key in a gateway's client_platforms map: "macos" rather
+// than Go's "darwin", then the architecture, e.g. "macos_arm64" or "windows_amd64".
+func gatewayPlatformKey() string {
+	osKey := runtime.GOOS
+	if osKey == "darwin" {
+		osKey = "macos"
+	}
+	return fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
+}
+
+// ServerInstallDir returns the install directory the gateway at serverURL sets for this
+// platform (#2552), exactly as the gateway sends it, so a leading "~" is still unexpanded.
+//
+// An empty string with a nil error means the gateway has no opinion: no entry for this platform,
+// or one with no install_dir, which is what a gateway older than the field sends. An error means
+// the gateway's setting is UNKNOWN -- unreachable, or an answer that would not decode -- and the
+// caller must not treat that as "no opinion".
+func ServerInstallDir(serverURL string) (string, error) {
+	if serverURL == "" {
+		return "", nil
+	}
+	info, err := CheckServerCompatibility(serverURL)
+	if err != nil {
+		return "", err
+	}
+	return info.ClientPlatforms[gatewayPlatformKey()].InstallDir, nil
 }
 
 func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {

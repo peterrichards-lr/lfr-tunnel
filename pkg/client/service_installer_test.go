@@ -79,7 +79,7 @@ func TestResolveInstallExeRefusesToGuess(t *testing.T) {
 	}
 
 	t.Run("no canonical binary and no override is a refusal", func(t *testing.T) {
-		got, err := resolveInstallExe()
+		got, err := resolveInstallExe("")
 		if err == nil {
 			t.Fatalf("resolved %q with nothing installed -- that is the guess this exists to stop", got)
 		}
@@ -104,7 +104,7 @@ func TestResolveInstallExeRefusesToGuess(t *testing.T) {
 		}
 		defer func() { _ = os.Remove(exe) }()
 
-		got, err := resolveInstallExe()
+		got, err := resolveInstallExe("")
 		if err != nil {
 			t.Fatalf("a canonical install did not resolve: %v", err)
 		}
@@ -117,7 +117,7 @@ func TestResolveInstallExeRefusesToGuess(t *testing.T) {
 	// this, "the canonical install resolves" would also pass against a resolver that returned
 	// that path unconditionally -- which is precisely the old behaviour at line 62.
 	t.Run("and stops resolving when the binary goes", func(t *testing.T) {
-		if got, err := resolveInstallExe(); err == nil {
+		if got, err := resolveInstallExe(""); err == nil {
 			t.Errorf("resolved %q after the binary was removed", got)
 		}
 	})
@@ -143,7 +143,7 @@ func TestResolveInstallExeRefusesAnOverrideThatDoesNotResolve(t *testing.T) {
 	}
 
 	t.Setenv("LFR_TUNNEL_INSTALL_DIR", filepath.Join(home, "nowhere"))
-	got, err := resolveInstallExe()
+	got, err := resolveInstallExe("")
 	if err == nil {
 		t.Fatalf("an unresolvable override silently resolved to %q", got)
 	}

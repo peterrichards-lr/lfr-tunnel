@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.52.10",
+    "release_date": "2026-11-20",
+    "features": [
+      "The new portal is now the portal, at /portal. Old addresses, bookmarks and links in earlier emails still work: they open the matching page in the new portal. The classic portal stays available to administrators only, as a fallback.",
+      "Client version floor: the CLI warns as soon as your version is below the gateway's minimum, offers to upgrade on the spot, and tells long-running tunnels and the Inspector when the deadline approaches. The portal shows a banner, and you get one email when the warning window opens.",
+      "Portal: tunnel details can add and remove headers, override the rate limit, copy the URL and refresh. Header and rate-limit changes now reach tunnels served by a regional gateway too.",
+      "Portal: the dashboard has direct links to tokens, reservations and tunnels; admins get the reservations CSV, preferred domain and tour status in the user details, and Help & Resources has the Docker image and documentation links.",
+      "Single sign-on: your name comes from the identity provider at every sign-in. If the provider does not perform MFA, the gateway asks for your authenticator code; if it does, Account Settings says so instead of offering to set one up."
+    ]
+  },
+  {
     "version": "v1.52.9",
     "release_date": "2026-11-18",
     "features": [
@@ -41,13 +52,6 @@
       "Admins: admin alerts can now also be sent to a Slack channel, either by email to the channel or through the Liferay Tunnel Slack app. The owner chooses which in System Settings, and every alert type is covered.",
       "Admins: unverified registrations are listed under Registrations in both portals, and only registrations waiting for a decision are counted.",
       "Security update: library updates close published security advisories. Nothing changes in how you use the tunnel."
-    ]
-  },
-  {
-    "version": "v1.52.5",
-    "release_date": "2026-10-19",
-    "features": [
-      "Security update: the web portal now uses the latest version of its HTTP library, closing published security advisories, and the gateway and client pick up routine library updates. Nothing changes in how you use the tunnel."
     ]
   }
 ]

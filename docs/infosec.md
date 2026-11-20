@@ -172,6 +172,18 @@ it is matched literally, so the last two directory names and the executable name
 load-bearing. No rule starts with a wildcard: the EDR console rejects exclusion paths that do, and
 on Windows a leading `*\` would also span the drive and `Users`, not just the username.
 
+**Every rule is lowercase after its root** (`liferay`, not `Liferay`), because that is the case the
+installers ask for. InfoSec could not confirm whether the EDR matches macOS paths case-sensitively
+(LRINFOSEC-7091), so a rule spelled `Liferay` might match nothing there.
+`tests/hooks/test-install-paths.sh` fails on an uppercase letter after the root.
+
+> [!WARNING]
+> **A pre-existing `~/Liferay` folder defeats this.** macOS and Windows file systems are
+> case-insensitive by default, so if `~/Liferay` (any casing other than `liferay`) already exists,
+> the installer reuses it and the client is stored as `~/Liferay/lfr-tunnel/lfr-tunnel`. If the
+> EDR matches case-sensitively, the lowercase rule then misses it. On an EDR-managed machine, rename
+> such a folder to `liferay` before installing, or check where `which lfr-tunnel` resolves.
+
 **Package-manager rules are not requested.** An earlier version of this section listed
 `/opt/homebrew/Cellar/lfr-tunnel/*/bin/lfr-tunnel` and `/opt/*/bin/lfr-tunnel`. Homebrew and Scoop
 are not supported on EDR-managed machines, so those rules can be withdrawn.
@@ -264,4 +276,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*

@@ -40,6 +40,7 @@ wrong failure. The prose bullets below carry each rule's reasoning; this table i
 | run a Go test, or any local binary | [`edr-constraints`](.agents/skills/edr-constraints/SKILL.md) |
 | file an issue, open a PR, delegate to another agent | [`github-workflow`](.agents/skills/github-workflow/SKILL.md) |
 | write or run a browser test | [`e2e-testing`](.agents/skills/e2e-testing/SKILL.md) |
+| verify how Liferay itself behaves behind the tunnel (Host, virtual hosts, generated links) | [`liferay-target-testing`](.agents/skills/liferay-target-testing/SKILL.md) |
 | create or edit any `.md` | [`global-docs`](.agents/skills/global-docs/SKILL.md) |
 | touch in-memory tunnel or lease state | [`edge-sync`](.agents/skills/edge-sync/SKILL.md) |
 | build, sign, deploy, or run maintenance | [`lfr-tunnel-ops`](.agents/skills/lfr-tunnel-ops/SKILL.md) |
@@ -63,6 +64,12 @@ wrong failure. The prose bullets below carry each rule's reasoning; this table i
   containerised stack. Covers the non-admin fixture (every spec used to sign in as an admin), the
   rebuild race that makes a mutation test report the opposite of the truth, and why an
   absence-only assertion passes on a blank page.
+- **Verifying Liferay as a tunnel target** — [`.agents/skills/liferay-target-testing/SKILL.md`](.agents/skills/liferay-target-testing/SKILL.md)
+  Read before checking a claim about Liferay's own behaviour (which hostname it accepts or
+  generates links for, and what fixes that) against a Liferay container. Covers the control
+  hostname every run needs, the image's pre-built database that silently ignores instance
+  properties (one run "proved" a virtual host does not fix the 500 because of it), and why
+  Liferay's 500 body cannot identify its cause (#2561).
 - **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
   Read before creating or editing any `.md` file.
   The [About page](docs/about.md) publicly commits to this rule. Changing or bypassing it requires
@@ -183,6 +190,13 @@ provides (most agent harnesses expose one); if yours doesn't, use a local
 before finishing your task. This rule is intentionally tool-agnostic — don't hardcode
 a specific tool's temp-directory convention here, since different agents use
 different ones.
+
+**Delete only what the task needs, and say why.** Don't add a "just in case" `rm` to a command,
+such as emptying a scratch directory you created moments earlier. On this machine every delete
+looks like the gate-corpus wipes in [`edr-constraints`](.agents/skills/edr-constraints/SKILL.md),
+so an unexplained one gets rejected and costs the owner an interruption (#2564). Prefer a fresh
+file or directory name over emptying an existing one, never sweep with a glob, and when a delete
+is genuinely part of the task, name its target and reason in the command's description.
 
 ## Signing and release
 
@@ -309,4 +323,4 @@ in [`github-workflow`](.agents/skills/github-workflow/SKILL.md): prose does not 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

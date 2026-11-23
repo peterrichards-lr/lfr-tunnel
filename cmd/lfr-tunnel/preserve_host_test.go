@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,46 +12,71 @@ import (
 
 // #2560: preserve_host goes on for a detected Liferay port, unless someone set it explicitly.
 
-func boolPtr(v bool) *bool { return &v }
+// The full precedence matrix, through the real loader: preserve_host in the file (absent,
+// false, true) x preserve_host_auto (unset, false) x -preserve-host (absent, on, off), with
+// Liferay detected on 8080. The decision recorded for #2560:
+//
+//	-preserve-host            -> every port
+//	-preserve-host=false      -> no port (no every-port setting, no detection)
+//	preserve_host: true       -> every port
+//	preserve_host_auto: false -> no port
+//	otherwise                 -> 8080 only; preserve_host: false in the file is "not set"
+func TestPreserveHostPrecedenceMatrix(t *testing.T) {
+	files := map[string]string{"absent": "", "false": "preserve_host: false\n", "true": "preserve_host: true\n"}
+	autos := map[string]string{"unset": "", "false": "preserve_host_auto: false\n"}
+	flags := []string{"", sourceFlagOn, sourceFlagOff}
 
-func TestPlanPreserveHost_Precedence(t *testing.T) {
-	cases := []struct {
-		name        string
-		explicit    *bool
-		source      string
-		liferayPort int
-		wantAll     bool
-		wantPorts   []int
-		wantSummary string
-	}{
-		{name: "nothing set, nothing detected", wantSummary: "off (default"},
-		{name: "nothing set, Liferay detected", liferayPort: 8080,
-			wantPorts: []int{8080}, wantSummary: "on for 8080 (Liferay detected)"},
-		{name: "discovered on a non-default host port", liferayPort: 8081,
-			wantPorts: []int{8081}, wantSummary: "on for 8081 (Liferay detected)"},
-		{name: "explicit flag off beats detection", explicit: boolPtr(false), source: "-preserve-host=false",
-			liferayPort: 8080, wantSummary: "off (-preserve-host=false), although Liferay was detected on 8080"},
-		{name: "explicit config off beats detection", explicit: boolPtr(false),
-			source: "preserve_host: false in the config file", liferayPort: 8080,
-			wantSummary: "off (preserve_host: false in the config file)"},
-		{name: "explicit on covers every port", explicit: boolPtr(true), source: "-preserve-host",
-			liferayPort: 8080, wantAll: true, wantSummary: "on for every port (-preserve-host)"},
-		{name: "explicit on without Liferay", explicit: boolPtr(true), source: "-preserve-host",
-			wantAll: true, wantSummary: "on for every port"},
+	for fileName, fileYAML := range files {
+		for autoName, autoYAML := range autos {
+			for _, flagSource := range flags {
+				name := "file=" + fileName + "/auto=" + autoName + "/flag=" + flagSource
+				t.Run(name, func(t *testing.T) {
+					resetFacts(t)
+					path := filepath.Join(t.TempDir(), "config.yaml")
+					if err := os.WriteFile(path, []byte("subdomain: demo\n"+fileYAML+autoYAML), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					cfg, err := config.LoadClientConfig(path)
+					if err != nil {
+						t.Fatalf("LoadClientConfig: %v", err)
+					}
+					facts.liferayPort = 8080
+					facts.preserveHostSource = flagSource
+
+					wantAll, wantPorts, wantReason := false, []int{8080}, "Liferay detected"
+					switch {
+					case flagSource == sourceFlagOn:
+						wantAll, wantPorts, wantReason = true, nil, sourceFlagOn
+					case flagSource == sourceFlagOff:
+						wantPorts, wantReason = nil, sourceFlagOff
+					case fileName == "true":
+						wantAll, wantPorts, wantReason = true, nil, sourceFileOn
+					case autoName == "false":
+						wantPorts, wantReason = nil, sourceFileAutoDisabled
+					}
+
+					plan := currentPreserveHostPlan(cfg)
+					if plan.all != wantAll || !sameInts(plan.ports, wantPorts) {
+						t.Errorf("all=%t ports=%v, want all=%t ports=%v (%s)", plan.all, plan.ports, wantAll, wantPorts, plan.summary)
+					}
+					if !strings.Contains(plan.summary, wantReason) {
+						t.Errorf("summary %q does not name %q as the reason", plan.summary, wantReason)
+					}
+				})
+			}
+		}
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			plan := planPreserveHost(tc.explicit, tc.source, tc.liferayPort)
-			if plan.all != tc.wantAll {
-				t.Errorf("all = %t, want %t", plan.all, tc.wantAll)
-			}
-			if !sameInts(plan.ports, tc.wantPorts) {
-				t.Errorf("ports = %v, want %v", plan.ports, tc.wantPorts)
-			}
-			if !strings.HasPrefix(plan.summary, tc.wantSummary) {
-				t.Errorf("summary = %q, want it to start %q", plan.summary, tc.wantSummary)
-			}
-		})
+}
+
+func TestPlanPreserveHost_WithoutLiferay(t *testing.T) {
+	if p := planPreserveHost(preserveHostInputs{}, 0); p.all || len(p.ports) != 0 || !strings.HasPrefix(p.summary, "off (default") {
+		t.Errorf("nothing set, nothing detected: %+v", p)
+	}
+	if p := planPreserveHost(preserveHostInputs{}, 8081); !sameInts(p.ports, []int{8081}) {
+		t.Errorf("discovered on 8081: %+v", p)
+	}
+	if p := planPreserveHost(preserveHostInputs{autoDisable: true}, 0); p.summary != "off ("+sourceFileAutoDisabled+")" {
+		t.Errorf("auto off without Liferay: %q", p.summary)
 	}
 }
 
@@ -65,8 +92,9 @@ func sameInts(a, b []int) bool {
 	return true
 }
 
-// -preserve-host=false used to override nothing (`if *preserveHost` only), so it could not
-// switch off a value from the config file -- or, now, from detection.
+// -preserve-host=false used to override nothing (`if *preserveHost` only). It now switches off
+// both the every-port setting from the file and detection, for this run only -- and leaves the
+// config untouched, so a save cannot carry the flag into the file.
 func TestOverrideConfigWithFlags_PreserveHostFalseIsExplicit(t *testing.T) {
 	resetFacts(t)
 	oldGiven, oldVal := preserveHostFlagGiven, *preserveHost
@@ -75,15 +103,17 @@ func TestOverrideConfigWithFlags_PreserveHostFalseIsExplicit(t *testing.T) {
 	preserveHostFlagGiven = func() bool { return true }
 	*preserveHost = false
 
-	cfg := &config.ClientConfig{PreserveHost: boolPtr(true)}
+	on := true
+	cfg := &config.ClientConfig{PreserveHost: &on}
 	overrideConfigWithFlags(cfg)
 
-	if cfg.PreserveHost == nil || *cfg.PreserveHost {
-		t.Fatalf("after -preserve-host=false, cfg.PreserveHost is not an explicit false (nil=%t)", cfg.PreserveHost == nil)
+	if cfg.PreserveHost == nil || !*cfg.PreserveHost || cfg.PreserveHostAuto != nil {
+		t.Errorf("the flag was written into the config struct")
 	}
 	facts.liferayPort = 8080
-	if got := preserveHostSummary(cfg); !strings.HasPrefix(got, "off (-preserve-host=false)") {
-		t.Errorf("summary = %q, want the flag named as the reason it is off", got)
+	plan := currentPreserveHostPlan(cfg)
+	if plan.all || len(plan.ports) != 0 || !strings.HasPrefix(plan.summary, "off (-preserve-host=false)") {
+		t.Errorf("after -preserve-host=false: %+v, want off everywhere with the flag named", plan)
 	}
 }
 

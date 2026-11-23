@@ -708,15 +708,15 @@ type ClientConfig struct {
 	RegionsUnavailable map[string]string `yaml:"-"`
 	Latency            time.Duration     `yaml:"latency"`
 	Bandwidth          string            `yaml:"bandwidth"`
-	// PreserveHost is three-state (#2560): nil means "not set", which lets the client turn it on
-	// for a port it identified as Liferay; true and false are explicit and beat that detection.
-	// A plain bool made an explicit `preserve_host: false` indistinguishable from an absent key,
-	// so there was no way to turn the automatic setting off.
-	//
-	// omitempty so a save never writes the unset state as false. Before this was a pointer every
-	// save from the tray or the Inspector wrote `preserve_host: false`, and such a file now reads
-	// as an explicit off; the startup summary says so when it suppresses a detected Liferay port.
-	PreserveHost       *bool  `yaml:"preserve_host,omitempty"`
+	// PreserveHost true is an explicit every-port on. FALSE IN THE FILE MEANS "NOT SET" (#2560):
+	// every tray and Inspector save before #2560 wrote `preserve_host: false` whether or not
+	// anyone chose it, so it cannot be allowed to switch off Liferay detection. That is
+	// PreserveHostAuto's job. A pointer with omitempty so a save no longer writes the false.
+	PreserveHost *bool `yaml:"preserve_host,omitempty"`
+	// PreserveHostAuto is whether preserve_host turns on by itself for a port identified as
+	// Liferay. Unset means on; `preserve_host_auto: false` is the only file setting that turns
+	// detection off. No Settings form writes it.
+	PreserveHostAuto   *bool  `yaml:"preserve_host_auto,omitempty"`
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty"`
 	Theme              string `yaml:"theme,omitempty"`
 	// LogDir is where the persistent traffic and error logs are written. Empty means
@@ -1402,20 +1402,16 @@ func (c *ClientConfig) PreserveHostOn() bool {
 // FormPreserveHost is the preserve_host a Settings form save leaves behind, given the current
 // value and the checkbox the form sent (#2560).
 //
-// The form always sends its checkbox, so an unchecked box cannot mean "explicitly off": a user
-// who saved some other field would turn off Liferay detection without knowing it. Checked is
-// explicit on. Unchecked clears an explicit on back to unset (automatic), and otherwise leaves
-// the value alone -- including an explicit false written by hand, which only the file or
-// -preserve-host=false can set.
-func FormPreserveHost(current *bool, checked bool) *bool {
+// Checked is an explicit every-port on. Unchecked is unset, which is also what a false in the
+// file means, so the stale false older saves wrote is dropped rather than carried forward.
+// Neither can switch off Liferay detection: only preserve_host_auto: false does, and no form
+// writes that key -- the save round-trips whatever the file already holds.
+func FormPreserveHost(_ *bool, checked bool) *bool {
 	if checked {
 		on := true
 		return &on
 	}
-	if current != nil && *current {
-		return nil
-	}
-	return current
+	return nil
 }
 
 // ResolveDefaultConfigPath returns the canonical path to the user's config file.

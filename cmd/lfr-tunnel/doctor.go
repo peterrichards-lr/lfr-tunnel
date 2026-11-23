@@ -67,20 +67,9 @@ func runDoctor(cfg *config.ClientConfig, sub string, args []string, out io.Write
 		in.LiferayUnknown = "The configured ports are not identified as Liferay; pass -ports <the Liferay port>."
 	}
 
-	// What a tunnel start would do. Detection does not run for named ports, so a port named
-	// with -ports is planned as undetected even though doctor treats it as Liferay.
-	detected := facts.liferayPort
-	if *ports != "" {
-		detected = 0
-	}
-	plan := planPreserveHost(cfg.PreserveHost, preserveHostSource(cfg), detected)
 	in.LiferayPort = facts.liferayPort
 	in.TargetHost = cfg.TargetHost
-	in.PreserveHostSummary = plan.summary
-	in.PreserveHostOn = plan.all || containsInt(plan.ports, facts.liferayPort)
-	if *ports != "" && cfg.PreserveHost == nil {
-		in.PreserveHostSummary = "off (ports given explicitly, so no Liferay port is detected)"
-	}
+	in.PreserveHostSummary, in.PreserveHostOn = doctorPreserveHost(cfg, *ports != "")
 
 	switch {
 	case *hostname != "":
@@ -95,6 +84,23 @@ func runDoctor(cfg *config.ClientConfig, sub string, args []string, out io.Write
 	}
 
 	return client.WriteDoctorReport(out, client.RunDoctorChecks(in))
+}
+
+// doctorPreserveHost is what a tunnel start would do with preserve_host for the Liferay port.
+// Detection does not run for named ports, so a port named with -ports is planned as undetected
+// even though doctor treats it as Liferay.
+func doctorPreserveHost(cfg *config.ClientConfig, portsNamed bool) (summary string, on bool) {
+	detected := facts.liferayPort
+	if portsNamed {
+		detected = 0
+	}
+	inputs := preserveHostInputsFor(cfg)
+	plan := planPreserveHost(inputs, detected)
+	summary = plan.summary
+	if portsNamed && inputs.flag == "" && !inputs.fileOn && !inputs.autoDisable {
+		summary = "off (ports given explicitly, so no Liferay port is detected)"
+	}
+	return summary, plan.all || containsInt(plan.ports, facts.liferayPort)
 }
 
 func containsInt(list []int, v int) bool {

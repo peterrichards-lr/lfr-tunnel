@@ -106,9 +106,9 @@ Four consequences worth knowing:
   different one.
 * **A boolean flag can only turn a setting on -- except `-preserve-host`.** `-insecure-skip-verify`
   sets `true`, and there is no flag spelling that forces `false` back over a `true` in the file.
-  `-preserve-host=false` is the exception: it is explicit, and beats both `preserve_host: true`
-  in the file and the automatic setting for a detected Liferay port. See
-  [`preserve_host` and Liferay](#preserve_host-and-liferay).
+  `-preserve-host=false` is the exception: for that run it beats `preserve_host: true` in the
+  file and also switches off the automatic setting for a detected Liferay port, as
+  `preserve_host_auto: false` would. See [`preserve_host` and Liferay](#preserve_host-and-liferay).
 
 ### Flag and environment equivalents
 
@@ -131,6 +131,7 @@ Settings not listed here can only be set in the config file.
 | `rate_limit` | `-rate-limit` | — |
 | `basic_auth` | `-basic-auth` | — |
 | `preserve_host` | `-preserve-host`, `-preserve-host=false` | — |
+| `preserve_host_auto` | `-preserve-host=false` (turns it off for the run) | — |
 | `insecure_skip_verify` | `-insecure-skip-verify` | — |
 | `theme` | `-theme` | — |
 | `log_dir` | `-log-dir` | `LFT_LOG_DIR` |
@@ -236,7 +237,8 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 | --- | --- | --- | --- |
 | `ports` | list of int | *unset* — discovered, see below | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
 | `target_host` | string | *unset* — discovered, then `127.0.0.1`; see below | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
-| `preserve_host` | bool | *unset* — on for a detected Liferay port only, see below | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for, which Liferay does. `true` turns it on for every port; `false` turns it off everywhere, including a detected Liferay port. |
+| `preserve_host` | bool | *unset* — on for a detected Liferay port only, see below | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for, which Liferay does. `true` turns it on for every port. **`false` means the same as unset**: older tray and Inspector saves wrote it for everyone, so it does not switch off detection. Use `preserve_host_auto` for that. |
+| `preserve_host_auto` | bool | *unset* — on | Whether `preserve_host` turns on by itself for a port identified as Liferay. `false` switches that off, so every port gets the rewritten `Host` unless `preserve_host: true`. |
 | `insecure_skip_verify` | bool | `false` | Skip TLS verification when the **local** target serves HTTPS with a self-signed certificate. It has no effect on the connection to the gateway. |
 
 #### Leaving `ports` unset
@@ -314,15 +316,25 @@ The startup summary says which applies and why, for example:
 
 ```text
   preserve_host  on for 8080 (Liferay detected)
-  preserve_host  off (preserve_host: false in the config file), although Liferay was detected on 8080 -- ...
+  preserve_host  off (preserve_host_auto: false in the config file), although Liferay was detected on 8080 -- ...
 ```
 
-**To switch it off**, set `preserve_host: false` in the config file or pass
-`-preserve-host=false`; both beat detection. Leaving the key out, or empty, is what lets
-detection apply. A config file saved by the tray or the Inspector before this change carries
-`preserve_host: false` without anyone having chosen it -- delete that line to get detection.
-The Settings checkbox now never writes `false`: checking it is an explicit `true`, and
-unchecking it returns the key to unset.
+Precedence, highest first:
+
+| Setting | Result |
+| --- | --- |
+| `-preserve-host` | every port, for this run |
+| `-preserve-host=false` | no port, for this run: neither the every-port setting nor detection |
+| `preserve_host: true` | every port |
+| `preserve_host_auto: false` | no port |
+| anything else, including `preserve_host: false` | the detected Liferay port, if there is one |
+
+**To switch detection off**, set `preserve_host_auto: false` in the config file, or pass
+`-preserve-host=false` for one run. `preserve_host: false` does **not** switch it off: the tray
+and the Inspector wrote that line into every config they saved before this feature existed, so
+it carries no decision. The Settings checkbox maps to `preserve_host` only -- checked is `true`,
+unchecked leaves the key unset -- and neither form shows or writes `preserve_host_auto`, so a
+save never switches detection off.
 
 Liferay must also **accept** the public hostname, or it answers every request with HTTP 500 and
 logs `Invalid host name`. Preserving the `Host` is what lets Liferay see that hostname at all.
@@ -469,8 +481,10 @@ ports:
   - 8080
   - 3000
 target_host: "127.0.0.1"
-# Leave unset to turn it on for a detected Liferay port only; true = every port, false = none.
+# Leave unset to turn it on for a detected Liferay port only; true = every port.
 # preserve_host: true
+# Stop the client turning it on by itself for a detected Liferay port.
+# preserve_host_auto: false
 insecure_skip_verify: false
 
 # --- Who may reach it. passcode and whitelist_ips combine as OR ---

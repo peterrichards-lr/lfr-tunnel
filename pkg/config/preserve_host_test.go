@@ -79,7 +79,7 @@ func TestFormPreserveHost(t *testing.T) {
 		{"checked from unset is explicit on", nil, true, "true"},
 		{"unchecked from unset stays unset", nil, false, "unset"},
 		{"unchecked from explicit on returns to unset", &on, false, "unset"},
-		{"unchecked keeps a hand-written false", &off, false, "false"},
+		{"unchecked drops a stale false (it meant unset anyway)", &off, false, "unset"},
 		{"checked overrides a hand-written false", &off, true, "true"},
 	}
 	for _, tc := range cases {

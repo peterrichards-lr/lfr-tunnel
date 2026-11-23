@@ -205,7 +205,8 @@ func doctorPreserveHostCheck(in DoctorInput) DoctorCheck {
 	}
 	c.Status = DoctorFail
 	c.Detail = append(c.Detail, fmt.Sprintf("Liferay on %d is sent the local address as Host, so it generates "+
-		"links for that address. Remove preserve_host: false from the config file, or pass -preserve-host.", in.LiferayPort))
+		"links for that address. If the reason above is preserve_host_auto: false, remove it from the config file; if it is "+
+		"-preserve-host=false, drop the flag; otherwise pass -preserve-host.", in.LiferayPort))
 	return c
 }
 

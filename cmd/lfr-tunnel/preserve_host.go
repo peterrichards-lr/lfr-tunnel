@@ -20,17 +20,28 @@ import (
 // non-Liferay target keeps the rewrite it has always had (-target-host behind an nginx virtual
 // host depends on it).
 //
-// Precedence, highest first: -preserve-host / -preserve-host=false, then preserve_host: in the
-// config file, then detection, then off.
+// Precedence, highest first:
+//
+//	-preserve-host            every port, this run
+//	-preserve-host=false      no port, this run: no every-port setting AND no detection
+//	preserve_host: true       every port
+//	preserve_host_auto: false no detection
+//	(otherwise)               the detected Liferay port, if any
+//
+// `preserve_host: false` in the file is deliberately NOT on that list. Every tray and Inspector
+// save before #2560 wrote it whether or not anyone chose it, so it means "not set" -- switching
+// detection off is preserve_host_auto's job. The flag is different: nobody types
+// -preserve-host=false by accident, and "do not preserve the Host" read literally includes the
+// Liferay port, so it covers both keys for the run.
+
+// flagPreserveHost is the flag's name, shared with doctor's own flag set.
+const flagPreserveHost = "preserve-host"
 
 // preserveHostFlagGiven reports whether -preserve-host appeared on the command line in either
 // form. The bool alone cannot say: false is both its default and an explicit off.
 //
 // A variable for the same reason as portsFlagGiven: the flag package cannot forget that a flag
 // was set, so setting it for real in one test would leak into every later one.
-// flagPreserveHost is the flag's name, shared with doctor's own flag set.
-const flagPreserveHost = "preserve-host"
-
 var preserveHostFlagGiven = func() bool {
 	given := false
 	flag.Visit(func(f *flag.Flag) {
@@ -41,16 +52,39 @@ var preserveHostFlagGiven = func() bool {
 	return given
 }
 
-// applyPreserveHostFlag records an explicit -preserve-host on cfg, and which form it took.
-func applyPreserveHostFlag(cfg *config.ClientConfig, on bool) {
-	cfg.PreserveHost = &on
-	facts.preserveHostSource = "-preserve-host=false"
+const (
+	sourceFlagOn           = "-preserve-host"
+	sourceFlagOff          = "-preserve-host=false"
+	sourceFileOn           = "preserve_host: true in the config file"
+	sourceFileAutoDisabled = "preserve_host_auto: false in the config file"
+)
+
+// applyPreserveHostFlag records an explicit -preserve-host for this run. It does not touch cfg,
+// so the flag can never reach the config file through a save.
+func applyPreserveHostFlag(_ *config.ClientConfig, on bool) {
+	facts.preserveHostSource = sourceFlagOff
 	if on {
-		facts.preserveHostSource = "-preserve-host"
+		facts.preserveHostSource = sourceFlagOn
 		// Kept from before #2560: NewInterceptorEngine still reads it.
 		if err := os.Setenv("LFT_PRESERVE_HOST", "true"); err != nil {
 			slog.Debug(fmt.Sprintf("[Client] Could not export LFT_PRESERVE_HOST: %v", err))
 		}
+	}
+}
+
+// preserveHostInputs are the settings that decide preserve_host, already reduced to what they
+// mean.
+type preserveHostInputs struct {
+	flag        string // sourceFlagOn, sourceFlagOff, or "" when the flag was not given
+	fileOn      bool   // preserve_host: true
+	autoDisable bool   // preserve_host_auto: false
+}
+
+func preserveHostInputsFor(cfg *config.ClientConfig) preserveHostInputs {
+	return preserveHostInputs{
+		flag:        facts.preserveHostSource,
+		fileOn:      cfg.PreserveHostOn(),
+		autoDisable: cfg.PreserveHostAuto != nil && !*cfg.PreserveHostAuto,
 	}
 }
 
@@ -64,20 +98,25 @@ type preserveHostPlan struct {
 	summary string
 }
 
-// planPreserveHost resolves preserve_host from the explicit setting (nil when nobody set one),
-// where that setting came from, and the port identified as Liferay (0 when none was).
-func planPreserveHost(explicit *bool, source string, liferayPort int) preserveHostPlan {
+// planPreserveHost resolves preserve_host for the port identified as Liferay (0 when none was).
+func planPreserveHost(in preserveHostInputs, liferayPort int) preserveHostPlan {
+	off := func(reason string) preserveHostPlan {
+		if liferayPort > 0 {
+			return preserveHostPlan{summary: fmt.Sprintf(
+				"off (%s), although Liferay was detected on %d -- it will generate links for the local address",
+				reason, liferayPort)}
+		}
+		return preserveHostPlan{summary: fmt.Sprintf("off (%s)", reason)}
+	}
 	switch {
-	case explicit != nil && *explicit:
-		return preserveHostPlan{all: true, summary: fmt.Sprintf("on for every port (%s)", source)}
-	case explicit != nil && liferayPort > 0:
-		// Said out loud: a config file saved by an older tray or Inspector carries
-		// preserve_host: false without anyone having chosen it, and this is where it shows.
-		return preserveHostPlan{summary: fmt.Sprintf(
-			"off (%s), although Liferay was detected on %d -- it will generate links for the local address",
-			source, liferayPort)}
-	case explicit != nil:
-		return preserveHostPlan{summary: fmt.Sprintf("off (%s)", source)}
+	case in.flag == sourceFlagOn:
+		return preserveHostPlan{all: true, summary: "on for every port (" + sourceFlagOn + ")"}
+	case in.flag == sourceFlagOff:
+		return off(sourceFlagOff)
+	case in.fileOn:
+		return preserveHostPlan{all: true, summary: "on for every port (" + sourceFileOn + ")"}
+	case in.autoDisable:
+		return off(sourceFileAutoDisabled)
 	case liferayPort > 0:
 		return preserveHostPlan{ports: []int{liferayPort},
 			summary: fmt.Sprintf("on for %d (Liferay detected)", liferayPort)}
@@ -86,19 +125,8 @@ func planPreserveHost(explicit *bool, source string, liferayPort int) preserveHo
 	}
 }
 
-// preserveHostSource names where cfg's explicit preserve_host came from.
-func preserveHostSource(cfg *config.ClientConfig) string {
-	if facts.preserveHostSource != "" {
-		return facts.preserveHostSource
-	}
-	if cfg.PreserveHost != nil {
-		return fmt.Sprintf("preserve_host: %t in the config file", *cfg.PreserveHost)
-	}
-	return ""
-}
-
 func currentPreserveHostPlan(cfg *config.ClientConfig) preserveHostPlan {
-	return planPreserveHost(cfg.PreserveHost, preserveHostSource(cfg), facts.liferayPort)
+	return planPreserveHost(preserveHostInputsFor(cfg), facts.liferayPort)
 }
 
 // preserveHostSummary is the startup-summary line's value.

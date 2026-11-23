@@ -405,6 +405,10 @@ To configure the headless background tunnel daemon to launch on login:
   lfr-tunnel install-service
   ```
 
+* **Which binary it starts**: the installed client, found in this order: a
+  `LFR_TUNNEL_*_INSTALL_DIR` / `LFT_INSTALL_DIR` override, then the install directory your
+  server sets, then `~/liferay/lfr-tunnel`. If the server cannot be reached, it says so and uses
+  the last of these.
 * **System Details**:
   * **macOS**: Creates a LaunchAgent plist at `~/Library/LaunchAgents/com.liferay.tunnel.plist`.
   * **Windows**: Installs a hidden script at `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\lfr-tunnel.vbs`.
@@ -592,4 +596,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*

@@ -42,7 +42,10 @@ set -euo pipefail
 # test checks that the lease it terminates was really registered -- in both cases the
 # suppressed error was the difference between the assertion meaning something and meaning
 # nothing.
-CEILING="${LFT_NOLINT_CEILING:-725}"
+# 725 -> 723 by #2552: the upgrade migration discarded both autostart re-registrations, which is
+# how a gateway-driven move left autostart pointing at the binary it had just removed. Both
+# errors are now reported, with the child's output.
+CEILING="${LFT_NOLINT_CEILING:-723}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

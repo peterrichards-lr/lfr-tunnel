@@ -348,6 +348,11 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		}
 		target = filepath.Join(configuredInstallDir, canonicalExeName())
 	}
+	// execPath is resolved above, so target has to be too before they are compared (#2553). A
+	// symlinked home or install directory, or a case difference on macOS or Windows, made the
+	// same file look like a different one: the "move" then wrote the new binary over the current
+	// one and removed the result as the old binary, leaving no client at all.
+	target = resolveMoveTarget(target, execPath)
 	migrating := target != execPath
 	if migrating {
 		fmt.Printf("[Update] Binary is currently running from %s, but server policy requires %s.\n", execPath, target)
@@ -380,12 +385,27 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	fmt.Println("[Update] Binary integrity verified successfully.")
 
 	// Stop what runs the binary, so it restarts on the new one.
-	plistToReload, restartSystemd, relaunch := stopActiveProcessesAndServices()
+	plistToReload, restartSystemd, relaunch := stopForUpgrade()
+
+	// The LDM link, after EVERY upgrade (#2553): on Windows it is a hardlink, which kept naming the
+	// replaced binary's content after an in-place upgrade too, so LDM ran the previous version.
+	// After the stop above, so a client LDM started from the link is not holding it open.
+	home, _ := os.UserHomeDir()
+	linkErr := repointLDMLinkForPlatform(home, execPath, target)
+	if linkErr != nil {
+		fmt.Printf("[Warning] %v\n", linkErr)
+	}
 
 	if migrating {
-		fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
-		_ = os.Remove(execPath) //nolint:errcheck
-		execPath = target       // Update execPath for restartActiveProcessesAndServices
+		oldExe := execPath
+		execPath = target // Update execPath for restartActiveProcessesAndServices
+
+		// The processes stopped above are relaunched from the argv captured from them, whose
+		// argv[0] is the binary they ran: the old one (#2553). Relaunched as captured, a
+		// -background tunnel or a tray no service covers would start from a path about to be
+		// removed -- and fail -- or, if it is kept, run the previous version, which an
+		// auto-upgrade would then move again.
+		relaunch = retargetRelaunch(relaunch, oldExe, target)
 
 		// We need to re-register services pointing to the new path.
 		//
@@ -404,7 +424,18 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			}
 			return true
 		}
-		daemonOK := reregister("install-service")
+		// Only what the user has is re-registered (#2553). install-service used to run on every
+		// move, installing and starting a service the user never set up; and the GUI autostart was
+		// re-registered on macOS only, so on Linux and Windows the login entry kept naming the old
+		// binary -- which was then removed.
+		hadDaemon, hadGUI := isServiceInstalled(), isGUIServiceInstalled()
+		daemonOK, guiOK := false, false
+		if hadDaemon {
+			daemonOK = reregister("install-service")
+		}
+		if hadGUI {
+			guiOK = reregister("install-gui-service")
+		}
 
 		// install-service does not merely rewrite the unit file: installLinux enables AND
 		// starts the systemd unit, and installDarwin loads the plist. So by this line a
@@ -413,26 +444,51 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		// (#2194). On macOS the plists below say so; on Linux nothing did, because
 		// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
 		//
-		// Only for a re-registration that SUCCEEDED (#2552). A failed one left the old unit or
-		// plist running the binary removed above, so it starts nothing -- and telling the planner
-		// it does makes the planner skip the relaunch, leaving the user with no client at all.
+		// A failed re-registration leaves the old unit or plist naming the OLD binary (#2552). That
+		// binary is kept below whenever anything failed (#2553), so what the stop above unloaded
+		// is restarted as it was: the planner is told exactly what was running before. Only a
+		// re-registration that SUCCEEDED changes the plan.
+		allOK := (!hadDaemon || daemonOK) && (!hadGUI || guiOK)
 		if runtime.GOOS == "linux" {
-			restartSystemd = false
 			if daemonOK {
 				restartSystemd = true
 			}
 		}
 		if runtime.GOOS == "darwin" {
-			guiOK := reregister("install-gui-service")
-			// The install commands above generate new plists, so we must reload those instead of the old ones
-			home, _ := os.UserHomeDir()
+			// A re-registration that succeeded generated and loaded a new plist, under the same
+			// name; one that failed left the old plist, which is reloaded only if it was loaded.
+			daemonPlist := filepath.Join(home, "Library", "LaunchAgents", daemonPlistName)
+			guiPlist := filepath.Join(home, "Library", "LaunchAgents", guiPlistName)
+			wasLoaded := plistToReload
 			plistToReload = nil
-			if daemonOK {
-				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", daemonPlistName))
+			if daemonOK || slices.Contains(wasLoaded, daemonPlist) {
+				plistToReload = append(plistToReload, daemonPlist)
 			}
-			if guiOK {
-				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", guiPlistName))
+			if guiOK || slices.Contains(wasLoaded, guiPlist) {
+				plistToReload = append(plistToReload, guiPlist)
 			}
+		}
+
+		envErr := repointInstallEnv(home, oldExe, target)
+		if envErr != nil {
+			fmt.Printf("[Warning] %v\n", envErr)
+		}
+
+		// The old binary goes LAST, and only once nothing still names it (#2553). Removing it
+		// first, as this used to, left a failed re-registration, a dangling LDM link or an LDM
+		// variable pointing at nothing. Kept, every one of them still runs a working client
+		// from a path that is still excluded. Nothing retries it: --upgrade stops early once the
+		// new binary is current, so the user is told what is left to do by hand.
+		if keepOldBinary(allOK, linkErr, envErr) {
+			fmt.Printf("[Warning] Kept %s, because something above still points at it. "+
+				"Fix the warning above, then delete %s yourself.\n", oldExe, oldExe)
+		} else if err := os.Remove(oldExe); err != nil {
+			// On Windows this is the normal case, not a fault: the running upgrader IS oldExe, and
+			// Windows will not delete a running image.
+			fmt.Printf("[Notice] The client moved to %s, but %s could not be removed (%v). Delete it "+
+				"once this upgrade has finished; nothing uses it any more.\n", target, oldExe, err)
+		} else {
+			fmt.Printf("[Update] Moved to %s; removed %s.\n", target, oldExe)
 		}
 	}
 	removeUpgradeBackup(backup)
@@ -449,8 +505,71 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	// Post-upgrade: restart previously active processes and services
-	restartActiveProcessesAndServices(plistToReload, restartSystemd, relaunch)
+	restartAfterUpgrade(plistToReload, restartSystemd, relaunch)
 	return nil
+}
+
+// The service stop and restart around an upgrade. Variables so a test can run a whole upgrade,
+// a move included, without stopping or starting a real service on the machine running it.
+var (
+	stopForUpgrade      = stopActiveProcessesAndServices
+	restartAfterUpgrade = restartActiveProcessesAndServices
+)
+
+// keepOldBinary reports whether a move must keep the binary it moved from (#2553): when autostart
+// was not re-registered, or the LDM link or the installers' environment still names it.
+func keepOldBinary(autostartOK bool, linkErr, envErr error) bool {
+	return !autostartOK || linkErr != nil || envErr != nil
+}
+
+// resolveMoveTarget puts target in the same form as the resolved execPath, so "is this a move?"
+// compares like with like (#2553): the same file if it is the same file, however it is spelled,
+// and otherwise the target with its directory's symlinks resolved.
+func resolveMoveTarget(target, execPath string) string {
+	if ti, err := os.Stat(target); err == nil {
+		if ei, err := os.Stat(execPath); err == nil && os.SameFile(ti, ei) {
+			return execPath
+		}
+	}
+	if dir, err := filepath.EvalSymlinks(filepath.Dir(target)); err == nil {
+		return filepath.Join(dir, filepath.Base(target))
+	}
+	return target
+}
+
+// retargetRelaunch points every captured command line that ran oldExe at target, keeping its
+// arguments (#2553). A command line that ran something else is left as it was.
+func retargetRelaunch(relaunch [][]string, oldExe, target string) [][]string {
+	out := make([][]string, 0, len(relaunch))
+	for _, argv := range relaunch {
+		if len(argv) > 0 && namesExecutable(argv[0], oldExe) {
+			argv = append([]string{target}, argv[1:]...)
+		}
+		out = append(out, argv)
+	}
+	return out
+}
+
+// namesExecutable reports whether arg0, as a process was started with it, is exe: by path once
+// resolved through PATH and symlinks, or as the same file.
+func namesExecutable(arg0, exe string) bool {
+	p := arg0
+	if !filepath.IsAbs(p) {
+		lp, err := exec.LookPath(p)
+		if err != nil {
+			return false
+		}
+		p = lp
+	}
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		p = r
+	}
+	if p == exe {
+		return true
+	}
+	a, errA := os.Stat(p)
+	b, errB := os.Stat(exe)
+	return errA == nil && errB == nil && os.SameFile(a, b)
 }
 
 // createExecutable creates a new client binary at path. A variable so tests can record every path

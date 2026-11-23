@@ -521,27 +521,46 @@ func InstallGUIService(serverURL string) error {
 
 // IsGUIServiceInstalled checks if the GUI autostart configuration exists.
 func IsGUIServiceInstalled() bool {
-	homeDir, err := os.UserHomeDir()
+	return autostartExists(func(_, gui string) string { return gui })
+}
+
+// autostartPaths returns where install-service and install-gui-service write their autostart
+// entry on this OS, or "" where there is none.
+func autostartPaths(home string) (daemon, gui string) {
+	switch runtime.GOOS {
+	case "darwin":
+		agents := filepath.Join(home, "Library", "LaunchAgents")
+		return filepath.Join(agents, daemonPlistName), filepath.Join(agents, guiPlistName)
+	case "linux":
+		return filepath.Join(home, ".config", "systemd", "user", systemdUnitName),
+			filepath.Join(home, ".config", "autostart", "lfr-tunnel-gui.desktop")
+	case "windows":
+		startup := filepath.Join(home, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+		return filepath.Join(startup, "lfr-tunnel.vbs"), filepath.Join(startup, "lfr-tunnel-gui.vbs")
+	}
+	return "", ""
+}
+
+// autostartExists reports whether the autostart entry pick chooses from autostartPaths exists.
+func autostartExists(pick func(daemon, gui string) string) bool {
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
-	switch runtime.GOOS {
-	case "darwin":
-		plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
-		_, err := os.Stat(plistPath)
-		return err == nil
-	case "linux":
-		desktopPath := filepath.Join(homeDir, ".config", "autostart", "lfr-tunnel-gui.desktop")
-		_, err := os.Stat(desktopPath)
-		return err == nil
-	case "windows":
-		vbsPath := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "lfr-tunnel-gui.vbs")
-		_, err := os.Stat(vbsPath)
-		return err == nil
-	default:
+	p := pick(autostartPaths(home))
+	if p == "" {
 		return false
 	}
+	_, err = os.Stat(p)
+	return err == nil
 }
+
+// Whether the CLI and GUI autostart entries exist, which decides what a move re-registers
+// (#2553). Variables so a test of the move can say what the machine has.
+var (
+	isServiceInstalled    = func() bool { return autostartExists(func(daemon, _ string) string { return daemon }) }
+	isGUIServiceInstalled = IsGUIServiceInstalled
+)
 
 // UninstallGUIService removes the GUI autostart configuration.
 func UninstallGUIService() error {

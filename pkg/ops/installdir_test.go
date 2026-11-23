@@ -227,7 +227,7 @@ func TestDefaultInstallDirsMatchTheGatewayFallbacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for key, dir := range defaultInstallDirs {
-		want := fmt.Sprintf("%q: %s,", key, "\""+dir+"\"")
+		want := fmt.Sprintf("%q: %q,", key, dir)
 		if strings.Contains(dir, `\`) {
 			want = fmt.Sprintf("%q: `%s`,", key, dir)
 		}

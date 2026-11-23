@@ -827,6 +827,71 @@ ownership that a `sudo cp` backup inherits.
 
 ---
 
+## 6d. Changing where clients are installed (`install_dir`)
+
+Clients follow the `client_platforms.<platform>.install_dir` their gateway publishes on
+`/api/version` (#2552). That makes an EDR path change a config change, and it also means a wrong
+value moves clients **outside** the exclusion. Each gateway has its own config, and a client asks
+the gateway it is configured for, which may be an edge.
+
+### The check
+
+```bash
+./bin/lfr-tunnel-ops check-install-dir
+```
+
+Read-only. It asks central and every edge in the DNS spec for `/api/version` and compares what
+each serves per platform. A platform a gateway does not list counts as the default, because that
+is what its clients and installers use. It fails if:
+
+- two gateways disagree, or
+- a value is not covered by a rule under the per-platform **Alerts** headings in
+  [`docs/infosec.md` §3](../../../docs/infosec.md#3-standard-execution-paths--edr-exclusions).
+  Matching is case-sensitive, and `*` matches one folder.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | every gateway answered, they agree, every path is covered |
+| 1 | a disagreement or an uncovered path: **stop** |
+| 2 | nothing wrong was seen, but a gateway could not be asked: **not verified** |
+
+**Unknown is not agreement.** The edges power off overnight (§5), so a run outside their hours
+exits 2 and names them. Start them, or run it in their hours, before calling the change verified.
+`-gateways url,url` asks a given list instead of the DNS spec's.
+
+### The runbook
+
+Do these in order. **Do not reorder them.** Every reordering leaves some clients on a path that
+is not excluded, or deletes the rule for a path that clients still run from.
+
+1. **InfoSec adds the rule for the new path** (both the binary and the LDM link, as Alerts
+   exclusions), and confirms it is applied. Until then, nothing else changes.
+2. **Update §3** of `docs/infosec.md` with the new rule, keeping the old one, and merge. The check
+   reads §3 from your checkout, so it can only pass once the new rule is there.
+3. **Set the same `install_dir` on every gateway**: central and each edge, in its
+   `/etc/lfr-tunneld/server-config.yaml`. Validate each file with `lfr-tunneld -check-config` (§6c),
+   then restart it.
+4. **Run `check-install-dir` until it exits 0.** Exit 2 is not a pass.
+5. **Clients move.** New installs use the new path straight away. **Existing installs move only
+   when they upgrade to a different version.** `--upgrade` stops at "already running the latest
+   version" before it reads `install_dir`. So publish a client release after step 4, then raise
+   `min_client_version` to it. **Some clients still do not move:**
+   - a platform whose `recommended` is `brew`, `scoop` or `cmd` (the upgrade only prints that
+     command);
+   - an upgrade made while the gateway's `/api/version` was failing (it falls back to GitHub and
+     upgrades in place);
+   - a machine with an install-dir override variable set (it keeps its own path);
+   - a client that never upgrades. Past the floor's grace period it is refused, not moved.
+6. **InfoSec removes the old rule last.** Nothing reports where a client runs from, so "no client
+   is left on the old path" cannot be measured. Wait until the `min_client_version` grace period
+   has passed, and accept that a client in the list above loses its exclusion and has to
+   reinstall. Then remove the old rule from §3.
+
+Before the first real path change, #2553 has to land: until then the LDM link and the Windows
+hardlink are not re-pointed when a client moves.
+
+---
+
 ## 7. VPS Diagnostics
 
 Run remote diagnostic checks on the VPS (system uptime/load, systemd service status, Nginx config test, UFW firewall rules, Let's Encrypt certificate status, and recent `lfr-tunneld` error logs):
@@ -992,4 +1057,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-19* | *Last Reviewed: 2026-11-19*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

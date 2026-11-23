@@ -967,6 +967,12 @@ export default function AdminAnalytics() {
                           {t('node_placement_unverifiable', 'Not assessable')}
                         </th>
                         <th className="th-col">
+                          {t(
+                            'node_placement_unreachable_at_probe',
+                            'Region did not answer probe',
+                          )}
+                        </th>
+                        <th className="th-col">
                           {t('node_placement_worst_miss', 'Worst miss')}
                         </th>
                       </tr>
@@ -987,6 +993,12 @@ export default function AdminAnalytics() {
                             {n.suboptimal}
                           </td>
                           <td className="p-md text-muted">{n.unverifiable}</td>
+                          {/* A subset of not-assessable (#2567), muted for the same
+                              reason: the region was probed and did not answer, then the
+                              tunnel ran there anyway. Not a fault and not an unknown node. */}
+                          <td className="p-md text-muted">
+                            {n.unreachable_at_probe ?? 0}
+                          </td>
                           <td className="p-md text-muted">
                             {n.worst_miss_ms ? `${n.worst_miss_ms}ms` : '--'}
                           </td>
@@ -1002,6 +1014,20 @@ export default function AdminAnalytics() {
                       'Sessions ran on a node matching no probed region',
                     )}
                     : {nodePlacement.unknown_nodes.join(', ')}
+                  </p>
+                )}
+                {/* Kept apart from unknown_nodes (#2567): that warning means the node name
+                    matches no region (a rename or missing alias, #1919). This one is a
+                    placement fact, so it is muted rather than a warning. */}
+                {(nodePlacement.unreachable_at_probe ?? 0) > 0 && (
+                  <p className="text-muted text-sm mt-md mb-0">
+                    {t(
+                      'node_placement_unreachable_note',
+                      "{0} not-assessable session(s) ran on a region that did not answer that user's probe that day. The node is recognised; the region was simply unreachable when measured.",
+                    ).replace(
+                      '{0}',
+                      String(nodePlacement.unreachable_at_probe),
+                    )}
                   </p>
                 )}
                 {/* How clients chose their gateway (#1922). A pinned client runs no probe,

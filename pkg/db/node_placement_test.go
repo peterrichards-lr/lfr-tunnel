@@ -299,3 +299,88 @@ func TestSamplesOfOneSessionAreScoredOnce(t *testing.T) {
 		}
 	}
 }
+
+// #2567. The region was probed and DID NOT ANSWER (rtt NULL), and the tunnel later ran on that
+// region's node anyway. That is a placement fact, not a vocabulary problem: "edge-us" maps to
+// "us" perfectly well. Naming it in UnknownNodes is how the 2026-11-10 export came to say
+// "Sessions ran on a node matching no probed region: control, edge-us".
+//
+// The fixture is a state production writes: RecordRegionProbes stores a nil RTTMs as NULL
+// under the short region name the client keeps ("us"), and the edge's node id is "edge-us".
+func TestAnUnreachableProbeIsNotAnUnknownNode(t *testing.T) {
+	d := setupTestDB(t)
+	day := today()
+	seedProbe(t, d, "u1", day, "in", ms(20))
+	seedProbe(t, d, "u1", day, "us", nil) // probed, no answer
+	seedSession(t, d, "u1", "edge-us", day+" 10:00:00")
+
+	rep, err := d.GetNodePlacement(30)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if len(rep.UnknownNodes) != 0 {
+		t.Errorf("a node whose region was probed but did not answer was named as matching no "+
+			"probed region: %v", rep.UnknownNodes)
+	}
+	if rep.Unverifiable != 1 || rep.Optimal != 0 || rep.Suboptimal != 0 {
+		t.Errorf("the session cannot be scored without an RTT and must stay unverifiable: %+v", rep)
+	}
+	if rep.UnreachableAtProbe != 1 {
+		t.Errorf("unreachable_at_probe = %d, want 1", rep.UnreachableAtProbe)
+	}
+	if len(rep.Nodes) != 1 || rep.Nodes[0].UnreachableAtProbe != 1 {
+		t.Errorf("per-node unreachable_at_probe not counted: %+v", rep.Nodes)
+	}
+	joined := fmt.Sprint(rep.Caveats)
+	if strings.Contains(joined, "matches no probed region") {
+		t.Errorf("the caveats still call it an unknown node: %v", rep.Caveats)
+	}
+	if !strings.Contains(joined, "did not answer") {
+		t.Errorf("the caveats do not explain the unreachable-at-probe count: %v", rep.Caveats)
+	}
+}
+
+// Both cases in one user-day: the unreachable region must not be named, and a genuinely
+// unknown node name must STILL be -- the fix must narrow UnknownNodes to vocabulary
+// mismatches, not silence it.
+func TestAGenuinelyUnknownNodeIsStillNamedBesideAnUnreachableOne(t *testing.T) {
+	d := setupTestDB(t)
+	day := today()
+	seedProbe(t, d, "u1", day, "in", ms(20))
+	seedProbe(t, d, "u1", day, "us", nil)
+	seedSession(t, d, "u1", "edge-us", day+" 10:00:00")
+	seedSession(t, d, "u1", "edge-atlantis", day+" 11:00:00")
+
+	rep, err := d.GetNodePlacement(30)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if len(rep.UnknownNodes) != 1 || rep.UnknownNodes[0] != "edge-atlantis" {
+		t.Errorf("unknown_nodes = %v, want exactly [edge-atlantis]", rep.UnknownNodes)
+	}
+	if rep.UnreachableAtProbe != 1 || rep.Unverifiable != 2 {
+		t.Errorf("unreachable_at_probe = %d (want 1), unverifiable = %d (want 2)",
+			rep.UnreachableAtProbe, rep.Unverifiable)
+	}
+	if !strings.Contains(fmt.Sprint(rep.Caveats), "edge-atlantis") {
+		t.Errorf("the caveats no longer name the unknown node: %v", rep.Caveats)
+	}
+}
+
+// A user whose ONLY probe that day failed has an empty RTT set, which reads as "no probe that
+// day". It was a probe, and the session ran on the region that did not answer it.
+func TestAnUnreachableProbeCountsEvenWithNoOtherAnswer(t *testing.T) {
+	d := setupTestDB(t)
+	day := today()
+	seedProbe(t, d, "u1", day, "us", nil)
+	seedSession(t, d, "u1", "edge-us", day+" 10:00:00")
+
+	rep, err := d.GetNodePlacement(30)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if rep.Unverifiable != 1 || rep.UnreachableAtProbe != 1 || len(rep.UnknownNodes) != 0 {
+		t.Errorf("unverifiable=%d unreachable_at_probe=%d unknown=%v, want 1/1/[]",
+			rep.Unverifiable, rep.UnreachableAtProbe, rep.UnknownNodes)
+	}
+}

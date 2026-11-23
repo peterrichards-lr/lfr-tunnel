@@ -5,7 +5,45 @@
 > [!IMPORTANT]
 > **The client CLI binary is of no use on its own.** It cannot establish a tunnel without connecting to a running gateway server, and it requires a valid **Personal Access Token (PAT)** to authenticate.
 
-This guide walks you through installing the client, registering for access, claiming your token, and running your first tunnel.
+This guide walks you through installing the client, getting a token from your gateway, and running your first tunnel.
+
+> [!TIP]
+> **Liferay employees:** use the hosted gateway `tunnel.lfr-demo.se` and sign in with
+> **Liferay SSO (Okta)**. There is no registration or approval step: install, run
+> `lfr-tunnel login`, sign in, and you are ready. Follow the [SE guide](liferay-se-guide.md),
+> which covers the hosted gateway's domains, install path and Liferay configuration.
+
+---
+
+## How You Get Access Depends on Your Gateway
+
+Every gateway authenticates the client with a Personal Access Token, but how you get your first
+token depends on how that gateway is configured. There are two supported modes:
+
+| Mode | How you get a token | Typical gateway |
+|---|---|---|
+| **SSO** | Sign in through the gateway's identity provider. Your account is created on first sign-in, with no approval step. | A gateway with an identity provider configured (Okta, Entra ID, Google, ...). |
+| **Email sign-up and admin approval** | Request access by email, verify the address, wait for an administrator to approve, then claim your token. | A gateway without an identity provider. Running one costs money that a self-hosted deployment may not have. |
+
+A gateway can offer both. One set to SSO only refuses email sign-up altogether.
+
+**To find out which mode your gateway uses**, open its portal: the sign-in page shows an SSO
+button when SSO is configured. Or ask the gateway directly:
+
+```bash
+curl -s https://<your-gateway>/api/auth/providers
+```
+
+An SSO gateway lists its providers and reports `"sso_enabled":true`; `"disable_email_login":true`
+means email sign-up is refused and SSO is the only way in. The hosted Liferay gateway, for
+example, answers:
+
+```json
+{"disable_email_login":true,"providers":[{"id":"liferay","name":"Liferay SSO","icon":""}],"sso_enabled":true}
+```
+
+Operators setting up SSO on their own gateway should read the
+[Cloud SSO & OIDC Setup Guide](server/sso_cloud_guide.md).
 
 ---
 
@@ -15,26 +53,35 @@ This guide walks you through installing the client, registering for access, clai
 [ Developer Laptop ]                                         [ Gateway Server ]
    (lfr-tunnel CLI)                                            (lfr-tunneld)
          │                                                           │
-         │ 1. Submit Registration ───────────────────────────────────►
-         │    (Provides email & requested subdomain)                 │
+         │ 1. Install the client                                     │
          │                                                           │
-         │                        2. Admin Approves                  │
-         │                           (Validates request)             │
+         │ ── A. Gateway with SSO ────────────────────────────────── │
          │                                                           │
-         │ 3. Claim PAT Token ◄──────────────────────────────────────┘
-         │    (Via approval email link)
-         │
-         │ 4. Store Token
-         │    (Saved in ~/.lfr-tunnel/token)
-         │
-         │ 5. Connect Tunnel ────────────────────────────────────────► Exposes local ports
+         │ 2A. lfr-tunnel login ─────────────────────────────────────►
+         │     (browser opens: sign in with SSO;                     │
+         │      account created on first sign-in)                    │
+         │ ◄──────────────────────── Token handed back to the CLI ───┤
+         │ 3.  Token saved to ~/.lfr-tunnel/token                    │
+         │                                                           │
+         │ ── B. Gateway without SSO ─────────────────────────────── │
+         │                                                           │
+         │ 2B. Submit Registration ──────────────────────────────────►
+         │     (email & requested subdomain)                         │
+         │                                Verify email,              │
+         │                                Admin Approves             │
+         │ ◄──────────────── Claim PAT Token (via approval email) ───┤
+         │ 3.  Store Token in ~/.lfr-tunnel/token                    │
+         │                                                           │
+         │ ── Both ───────────────────────────────────────────────── │
+         │                                                           │
+         │ 4. Connect Tunnel ────────────────────────────────────────► Exposes local ports
 ```
 
 ---
 
 ## Step 1: Install the Client
 
-Before registering, install the `lfr-tunnel` client for your operating system.
+First, install the `lfr-tunnel` client for your operating system.
 
 > [!IMPORTANT]
 > **On an EDR-managed machine, including every Liferay machine, use the native installer below,
@@ -83,44 +130,58 @@ lfr-tunnel -version
 
 ---
 
-## Step 2: Register for Access
+## Step 2: Get Access
 
-Access to the gateway server is authenticated via a Personal Access Token (PAT) associated with your user account. 
+Access to the gateway server is authenticated via a Personal Access Token (PAT) associated with
+your user account. Follow **2A** if your gateway has SSO, or **2B** if it does not (see
+[How You Get Access Depends on Your Gateway](#how-you-get-access-depends-on-your-gateway)).
 
-### 1. Submit a Registration Request
-To request access, send a registration request to the gateway server. 
+### 2A. Gateways with SSO: sign in and you are done
 
-* **For Liferay Sales Engineering Team (connecting to the hosted SE gateway):**
-  Submit a request using the hosted server:
-  ```bash
-  curl -s -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"email": "your.name@liferay.com", "requested_subdomain": "your-name-se"}' \
-    https://tunnel.lfr-demo.se/api/register-request
-  ```
-  *(Replace `your.name@liferay.com` with your official email, and `your-name-se` with your desired default subdomain).*
+1. Run:
+   ```bash
+   lfr-tunnel login
+   ```
+2. Your browser opens the gateway's portal. **Sign in with SSO.** If this is your first sign-in,
+   your account is created now, with no request or approval, unless the gateway's operator has
+   closed new sign-ups (`disable_new_registrations`). A gateway whose identity provider does not
+   vouch for your email address may also email you a one-time link to confirm it.
+3. Click **Generate Token** in the dialog the portal opens. The token is handed back to your
+   terminal, checked with the gateway, and saved to `~/.lfr-tunnel/token`.
 
-* **For Self-Hosted Gateways:**
-  Replace `https://tunnel.lfr-demo.se` with your own gateway's URL:
-  ```bash
-  curl -s -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"email": "admin@example.com", "requested_subdomain": "my-subdomain"}' \
-    https://tunnel.yourdomain.com/api/register-request
-  ```
+That is the whole setup: go to [Step 4](#step-4-run-your-first-tunnel). Step 3 explains what the
+handoff checks and how to store the token somewhere else.
+
+### 2B. Gateways without SSO: email sign-up and admin approval
+
+On a gateway without an identity provider, you request access by email and an administrator
+approves it. A gateway set to SSO only refuses this request with HTTP 403.
+
+#### 1. Submit a Registration Request
+Send a registration request to your gateway, replacing `https://tunnel.yourdomain.com` with its
+URL:
+
+```bash
+curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "requested_subdomain": "my-subdomain"}' \
+  https://tunnel.yourdomain.com/api/register-request
+```
+
+*(Replace `you@example.com` with your email address, and `my-subdomain` with your desired default subdomain.)*
 
 You will receive a terminal output confirming your request has been successfully submitted and is pending admin approval.
 
-### 2. Verify Your Email & Wait for Approval
+#### 2. Verify Your Email & Wait for Approval
 1. Check your inbox for a **Verification Email** from the gateway. Click the link inside to verify that you own the email address.
 2. Once verified, the gateway administrator receives a notification.
 3. Once the administrator approves your request, you will receive an **Approval Email** containing a link to claim your token.
 
-### 3. Claim Your Token
+#### 3. Claim Your Token
 Click the link in your approval email, or run the following `curl` command using the claim token found in the email:
 
 ```bash
-curl -s "https://tunnel.lfr-demo.se/api/claim?token=<claim-token-from-email>"
+curl -s "https://tunnel.yourdomain.com/api/claim?token=<claim-token-from-email>"
 ```
 
 The gateway will respond with your **Personal Access Token (PAT)** (e.g., `lfr_pat_abc123...`). 
@@ -128,13 +189,20 @@ The gateway will respond with your **Personal Access Token (PAT)** (e.g., `lfr_p
 > [!WARNING]
 > **This token is shown only once.** Copy it immediately and store it securely.
 
+Then save it as described in Step 3. Once approved you can also sign in to the portal with your
+email and a magic link, and use `lfr-tunnel login` (Option A) instead of copying the token by
+hand.
+
 ---
 
 ## Step 3: Authenticate and Store Your Token
 
 To make using `lfr-tunnel` seamless, the client CLI looks for a stored PAT in your home directory (`~/.lfr-tunnel/token` or `%USERPROFILE%\.lfr-tunnel\token`). Once saved, the client will automatically load it on every run without needing any `-token` flags.
 
-There are two ways to generate, claim, and save your token:
+If you ran `lfr-tunnel login` in Step 2A, your token is already saved; Option A below describes
+what that login did.
+
+There are several ways to generate and save your token:
 
 ### Option A: Automatic Browser Login (Highly Recommended)
 
@@ -145,7 +213,7 @@ The client includes an interactive **Magic Handoff** flow that automatically com
    lfr-tunnel login
    ```
 2. Your default web browser will open to the gateway's **User Portal**.
-3. Sign in to the portal (with Liferay SSO, or your approved email and magic link). If you are already signed in with an email magic link, this step is skipped; with SSO you may be asked to click the SSO button once more.
+3. Sign in to the portal: with SSO if your gateway has it (Liferay SSO on the hosted Liferay gateway), otherwise with your approved email and a magic link. If you are already signed in with an email magic link, this step is skipped; with SSO you may be asked to click the SSO button once more.
 4. The portal opens the **Generate New Token** dialog for you, already named `lfr-tunnel login <date>`. Click **Generate Token** (**Generate** in the new portal): the new token is sent straight to your waiting terminal. (Only a token you create now can be sent; the portal never stores existing tokens in readable form.)
 5. The CLI checks the token with the gateway, then saves it:
    ```
@@ -161,7 +229,7 @@ The client includes an interactive **Magic Handoff** flow that automatically com
 
 ### Option B: Manual Clipboard Configuration
 
-If you claimed your token manually via `curl` or generated one in the User Portal web interface, you can save it to the default path yourself:
+If you claimed your token from an approval email (Step 2B) or generated one in the User Portal web interface, you can save it to the default path yourself:
 
 #### macOS / Linux
 ```bash
@@ -596,4 +664,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

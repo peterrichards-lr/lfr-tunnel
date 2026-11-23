@@ -1050,16 +1050,19 @@ client_platforms:
 **`install_dir`** (per platform, optional) is where the client lives. Unset, it defaults to
 `~/liferay/lfr-tunnel` (`~\liferay\lfr-tunnel` on Windows). The gateway writes it into the
 `install.sh` / `install.ps1` it serves and publishes it on `/api/version`, and the client follows
-it in three places: the installers, `--upgrade` (which moves an install that is elsewhere), and the
+it in three places: the installers, `--upgrade` (which moves an install that is elsewhere, when it upgrades to a newer version), and the
 autostart entries `install-service`, `install-gui-service` and the tray's **Launch on Login** write
 (#2552). A user's `LFR_TUNNEL_*_INSTALL_DIR` / `LFT_INSTALL_DIR` variable still overrides it.
 
 > [!WARNING]
-> **Changing `install_dir` moves clients.** Each one moves on its next upgrade, so on machines
-> with an EDR the new path must already be excluded
-> ([infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions)). Every gateway
-> serves its own `/api/version` and clients ask the one they are configured for, so set the
-> same value on **every** gateway.
+> **Changing `install_dir` moves clients.** New installs use it at once. An existing client
+> moves only when it upgrades to a **newer** version: `--upgrade` stops before reading
+> `install_dir` when the client is already current. On machines with an EDR the new path must be
+> excluded first ([infosec.md §3](../infosec.md#3-standard-execution-paths--edr-exclusions)).
+> Every gateway serves its own `/api/version` and clients ask the one they are configured for,
+> so set the same value on **every** gateway, and confirm with
+> `lfr-tunnel-ops check-install-dir`. The ordered steps are in the ops skill,
+> [§6d](../../.agents/skills/lfr-tunnel-ops/SKILL.md#6d-changing-where-clients-are-installed-install_dir).
 
 #### Step 3: Customizing the Docker Workaround Panel Visibility
 If your users still encounter local EDR restrictions running CLI binaries natively, you can display a secondary, Docker-based client setup panel.
@@ -2108,4 +2111,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

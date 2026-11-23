@@ -23,6 +23,7 @@ func printUsage() {
 	fmt.Println("  maintenance Enable or disable maintenance mode on the VPS")
 	fmt.Println("  render-edge-nodes Print central's edge_nodes block, urls derived from the DNS spec")
 	fmt.Println("  check-config    Report drift between a live gateway config and this repo (read-only)")
+	fmt.Println("  check-install-dir Check every gateway serves the same install_dir, covered by docs/infosec.md §3")
 	fmt.Println("  diagnose    Run diagnostic checks on the gateway VPS")
 	fmt.Println("  dns         Reconcile DNS records (Cloudflare or Route53) against a YAML spec")
 	fmt.Println("  help        Print this help message")
@@ -61,6 +62,8 @@ func main() {
 		ops.RenderEdgeNodesCommand(os.Args[2:])
 	case "check-config":
 		ops.CheckConfigCommand(os.Args[2:])
+	case "check-install-dir":
+		ops.CheckInstallDirCommand(os.Args[2:])
 	case "diagnose":
 		ops.DiagnoseCommand(args)
 	case "dns":

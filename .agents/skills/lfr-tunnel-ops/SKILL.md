@@ -872,12 +872,20 @@ is not excluded, or deletes the rule for a path that clients still run from.
    `/etc/lfr-tunneld/server-config.yaml`. Validate each file with `lfr-tunneld -check-config` (§6c),
    then restart it.
 4. **Run `check-install-dir` until it exits 0.** Exit 2 is not a pass.
-5. **Clients move.** New installs use the new path straight away. **Existing installs move only on
-   an upgrade to a newer version.** `--upgrade` stops at "already running the latest version"
-   before it reads `install_dir`. So publish a client release after step 4, and then raise
-   `min_client_version` to it to make every client move.
-6. **InfoSec removes the old rule**, only once no client runs from the old path. Then remove it
-   from §3.
+5. **Clients move.** New installs use the new path straight away. **Existing installs move only
+   when they upgrade to a different version.** `--upgrade` stops at "already running the latest
+   version" before it reads `install_dir`. So publish a client release after step 4, then raise
+   `min_client_version` to it. **Some clients still do not move:**
+   - a platform whose `recommended` is `brew`, `scoop` or `cmd` (the upgrade only prints that
+     command);
+   - an upgrade made while the gateway's `/api/version` was failing (it falls back to GitHub and
+     upgrades in place);
+   - a machine with an install-dir override variable set (it keeps its own path);
+   - a client that never upgrades. Past the floor's grace period it is refused, not moved.
+6. **InfoSec removes the old rule last.** Nothing reports where a client runs from, so "no client
+   is left on the old path" cannot be measured. Wait until the `min_client_version` grace period
+   has passed, and accept that a client in the list above loses its exclusion and has to
+   reinstall. Then remove the old rule from §3.
 
 Before the first real path change, #2553 has to land: until then the LDM link and the Windows
 hardlink are not re-pointed when a client moves.

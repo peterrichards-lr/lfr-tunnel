@@ -172,8 +172,19 @@ func executableRuleForm(dir, osName string) string {
 
 // coveredBy reports the §3 rule that covers a platform's install_dir, or "" if none does. `*`
 // matches one path segment, which is the narrow reading: §3 notes the Windows `*` may span more.
+//
+// path.Match lets `*` match any segment text, so a value is refused outright when the client would
+// not install it at the literal path compared here: a `.` or `..` segment (the client's
+// filepath.Join resolves it elsewhere), or a `$`, `%` or `*` (the client expands variables first,
+// and an unset one vanishes).
 func coveredBy(dir, osName string, rules map[string][]string) string {
+	if strings.ContainsAny(dir, "$%*") {
+		return ""
+	}
 	exe := executableRuleForm(dir, osName)
+	if path.Clean(exe) != exe {
+		return ""
+	}
 	for _, rule := range rules[osName] {
 		pattern := rule
 		if osName == osWindows {
@@ -228,7 +239,9 @@ func evaluateInstallDirs(answers []installDirAnswer, rules map[string][]string) 
 }
 
 // servedInstallDirs maps each effective install_dir for one platform to the reachable gateways
-// serving it. A gateway that lists nothing for the platform serves the default.
+// serving it. A gateway that lists nothing for the platform serves the default. For a platform
+// with no default (one the installers do not template), a gateway that lists nothing has no
+// opinion and is left out.
 func servedInstallDirs(answers []installDirAnswer, key string) map[string][]string {
 	served := map[string][]string{}
 	for _, a := range answers {
@@ -237,7 +250,11 @@ func servedInstallDirs(answers []installDirAnswer, key string) map[string][]stri
 		}
 		dir, ok := a.Dirs[key]
 		if !ok {
-			dir = defaultInstallDirs[key]
+			def, known := defaultInstallDirs[key]
+			if !known {
+				continue
+			}
+			dir = def
 		}
 		served[dir] = append(served[dir], a.Gateway)
 	}
@@ -260,25 +277,25 @@ func checkPlatformInstallDir(key string, served map[string][]string, rules map[s
 			lines = append(lines, fmt.Sprintf("          %s <- %s", displayDir(v), strings.Join(served[v], ", ")))
 		}
 	}
+	if _, known := defaultInstallDirs[key]; !known && len(values) > 0 {
+		lines = append(lines, fmt.Sprintf("[WARNING] %s: the installers do not template this platform, so a new install "+
+			"ignores this value and uses the default; only --upgrade follows it", key))
+	}
 
 	osName := platformOS(key)
 	for _, v := range values {
-		switch {
-		case v == "":
-			errs++
-			lines = append(lines, fmt.Sprintf("[ERROR] %s: no install_dir and no default for this platform", key))
-		case osName == "":
+		if osName == "" {
 			errs++
 			lines = append(lines, fmt.Sprintf("[ERROR] %s: %s -- no §3 rules exist for this platform", key, displayDir(v)))
-		default:
-			rule := coveredBy(v, osName, rules)
-			if rule == "" {
-				errs++
-				lines = append(lines, fmt.Sprintf("[ERROR] %s: %s installs %s, which no %s rule in §3 covers",
-					key, displayDir(v), executableRuleForm(v, osName), osName))
-			} else if len(values) == 1 {
-				lines = append(lines, fmt.Sprintf("[OK] %s: %s on every reachable gateway, covered by %s", key, displayDir(v), rule))
-			}
+			continue
+		}
+		rule := coveredBy(v, osName, rules)
+		if rule == "" {
+			errs++
+			lines = append(lines, fmt.Sprintf("[ERROR] %s: %s installs %s, which no %s rule in §3 covers",
+				key, displayDir(v), executableRuleForm(v, osName), osName))
+		} else if len(values) == 1 {
+			lines = append(lines, fmt.Sprintf("[OK] %s: %s on every reachable gateway, covered by requested rule %s", key, displayDir(v), rule))
 		}
 	}
 	return lines, errs
@@ -289,14 +306,17 @@ func displayDir(dir string) string {
 	return `"` + dir + `"`
 }
 
-// gatewaysFromSpec lists every gateway a client may be configured for: central under each zone's
-// `tunnel` name, and every edge the DNS spec declares.
+// gatewaysFromSpec lists every gateway a client may be configured for: central once, under the
+// first zone's `tunnel` name, and every edge the DNS spec declares. Central's other zones name the
+// same box, so asking them too would only report one outage twice.
 func gatewaysFromSpec(spec DNSSpec) []string {
 	seen := map[string]bool{}
+central:
 	for _, d := range spec.Domains {
 		for _, r := range d.Records {
 			if r.Type == "A" && strings.EqualFold(r.Name, "tunnel") && r.Value == centralPlaceholder {
 				seen["https://"+strings.ToLower(r.Name+"."+d.Zone)] = true
+				break central
 			}
 		}
 	}
@@ -315,7 +335,8 @@ func gatewaysFromSpec(spec DNSSpec) []string {
 // §3. Exit 1 on a disagreement or an uncovered path, 2 when nothing is wrong but a gateway could
 // not be asked.
 func CheckInstallDirCommand(args []string) {
-	fs := flag.NewFlagSet("check-install-dir", flag.ExitOnError)
+	// ContinueOnError: ExitOnError exits 2 on a bad flag, which would read as NOT VERIFIED.
+	fs := flag.NewFlagSet("check-install-dir", flag.ContinueOnError)
 	specPath := fs.String("dns-spec", defaultDNSSpecPath, "committed DNS spec the gateway list is derived from")
 	infosecPath := fs.String("infosec", defaultInfosecPath, "the doc whose §3 holds the requested exclusion rules")
 	gatewaysFlag := fs.String("gateways", "", "comma-separated gateway URLs to ask instead of the DNS spec's")
@@ -373,14 +394,27 @@ func CheckInstallDirCommand(args []string) {
 		fmt.Println(l)
 	}
 	fmt.Println()
-	if report.Errors > 0 {
+	code := installDirExitCode(report)
+	switch code {
+	case 1:
 		fmt.Printf("FAILED: %d error(s). Do not change install_dir until this is clean.\n", report.Errors)
-		os.Exit(1)
-	}
-	if len(report.NotVerified) > 0 {
+	case 2:
 		fmt.Printf("NOT VERIFIED: %d gateway(s) could not be asked (%s). No reachable gateway is wrong; these are unknown.\n",
 			len(report.NotVerified), strings.Join(report.NotVerified, ", "))
-		os.Exit(2)
+	default:
+		fmt.Println("All gateways agree, and every path is covered by §3.")
 	}
-	fmt.Println("All gateways agree, and every path is covered by §3.")
+	os.Exit(code)
+}
+
+// installDirExitCode maps a report to the exit code: an error outranks an unknown gateway, and
+// only a report with neither is 0.
+func installDirExitCode(r installDirReport) int {
+	switch {
+	case r.Errors > 0:
+		return 1
+	case len(r.NotVerified) > 0:
+		return 2
+	}
+	return 0
 }

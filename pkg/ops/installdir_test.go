@@ -96,6 +96,13 @@ func TestCoveredByRefusesPathsOutsideTheRules(t *testing.T) {
 		{"~/liferay/lfr-tunnel/sub", "Linux"},    // one level too deep
 		{`~\liferay\tunnel`, "Windows"},          // last folder name is load-bearing
 		{"/Users/*/liferay/lfr-tunnel", "Linux"}, // another OS's root
+		// `*` must not match a segment the client resolves elsewhere: filepath.Join cleans dot
+		// segments, and os.ExpandEnv turns an unset variable into nothing.
+		{"/Users/../liferay/lfr-tunnel", "macOS"},
+		{"/home/./liferay/lfr-tunnel", "Linux"},
+		{`C:\Users\..\liferay\lfr-tunnel`, "Windows"},
+		{"/home/$X/liferay/lfr-tunnel", "Linux"},
+		{`C:\Users\%USERNAME%\liferay\lfr-tunnel`, "Windows"},
 	} {
 		if rule := coveredBy(tc.dir, tc.osName, rules); rule != "" {
 			t.Errorf("%s on %s should be uncovered, matched %s", tc.dir, tc.osName, rule)
@@ -159,14 +166,74 @@ func TestCheckInstallDirUnreachableIsNotVerified(t *testing.T) {
 	dead.Close()
 	// A non-200 with a body that would decode cleanly is unknown too.
 	unavailable := versionServer(t, http.StatusServiceUnavailable, `{"linux_amd64": {"install_dir": "~/liferay/lfr-tunnel"}}`)
+	// So is a 200 that is not the API: a maintenance or nginx page.
+	html := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "<html><body>%s</body></html>", "maintenance")
+	}))
+	t.Cleanup(html.Close)
 
-	r := evaluateInstallDirs(askAll(t, a, deadURL, unavailable), rules)
-	if len(r.NotVerified) != 2 {
-		t.Fatalf("expected both the dead and the 503 gateway NOT VERIFIED, got %v:\n%s",
+	r := evaluateInstallDirs(askAll(t, a, deadURL, unavailable, html.URL), rules)
+	if len(r.NotVerified) != 3 {
+		t.Fatalf("expected the dead, the 503 and the HTML gateway NOT VERIFIED, got %v:\n%s",
 			r.NotVerified, strings.Join(r.Lines, "\n"))
 	}
 	if r.Errors != 0 {
 		t.Errorf("an unknown gateway is not an error by itself, got %d", r.Errors)
+	}
+	if got := installDirExitCode(r); got != 2 {
+		t.Errorf("exit code for an unknown gateway = %d, want 2", got)
+	}
+}
+
+func TestInstallDirExitCode(t *testing.T) {
+	for _, tc := range []struct {
+		r    installDirReport
+		want int
+	}{
+		{installDirReport{}, 0},
+		{installDirReport{NotVerified: []string{"g"}}, 2},
+		{installDirReport{Errors: 1}, 1},
+		// An error outranks an unknown: a known-wrong gateway must not read as "edges asleep".
+		{installDirReport{Errors: 1, NotVerified: []string{"g"}}, 1},
+	} {
+		if got := installDirExitCode(tc.r); got != tc.want {
+			t.Errorf("installDirExitCode(%+v) = %d, want %d", tc.r, got, tc.want)
+		}
+	}
+}
+
+// A platform the installers do not template has no default: a gateway that lists nothing for it
+// has no opinion, rather than disagreeing with one that does.
+func TestCheckInstallDirUnknownPlatformIsNotADisagreement(t *testing.T) {
+	rules := realSection3Rules(t)
+	a := versionServer(t, http.StatusOK, `{"linux_arm64": {"install_dir": "~/liferay/lfr-tunnel"}}`)
+	b := versionServer(t, http.StatusOK, `{}`)
+
+	r := evaluateInstallDirs(askAll(t, a, b), rules)
+	out := strings.Join(r.Lines, "\n")
+	if r.Errors != 0 {
+		t.Fatalf("expected no errors, got %d:\n%s", r.Errors, out)
+	}
+	if !strings.Contains(out, "linux_arm64: the installers do not template this platform") {
+		t.Errorf("missing the warning that installers ignore this key:\n%s", out)
+	}
+}
+
+// defaultInstallDirs copies the gateway's fallbacks. Pinned to the source so the two cannot drift:
+// a check that assumed a different default would pass a gateway its clients disagree with.
+func TestDefaultInstallDirsMatchTheGatewayFallbacks(t *testing.T) {
+	src, err := os.ReadFile("../../pkg/server/server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, dir := range defaultInstallDirs {
+		want := fmt.Sprintf("%q: %s,", key, "\""+dir+"\"")
+		if strings.Contains(dir, `\`) {
+			want = fmt.Sprintf("%q: `%s`,", key, dir)
+		}
+		if !strings.Contains(strings.Join(strings.Fields(string(src)), " "), want) {
+			t.Errorf("pkg/server/server.go has no fallback %s", want)
+		}
 	}
 }
 
@@ -187,5 +254,9 @@ func TestGatewaysFromSpecNamesCentralAndEveryEdge(t *testing.T) {
 	}
 	if strings.Contains(got, "portal.") || strings.Contains(got, "*.") {
 		t.Errorf("gateway list %q names a host that is not a gateway", got)
+	}
+	// Central once: its other zone's name is the same box, and would report one outage twice.
+	if n := strings.Count(got, "https://tunnel."); n != 1 {
+		t.Errorf("gateway list %q names central %d times, want 1", got, n)
 	}
 }

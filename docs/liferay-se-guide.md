@@ -111,14 +111,17 @@ If something goes wrong (`401 unauthorized`, `no access token configured`, an ex
 
 ## Step 4: Check Available Subdomains
 
-Before picking a subdomain, you can check availability:
+Before picking a subdomain, check it with the client. It uses the token you just saved, so
+nothing secret goes on the command line:
 
 ```bash
-curl -s -H "Authorization: Bearer lfr_pat_your-token-here" \
-  "https://tunnel.lfr-demo.se/api/check-subdomain?subdomain=your-name-se&domain=lfr-demo.se"
+lfr-tunnel check-subdomain your-name-se
 ```
 
-If the subdomain is taken, the server will suggest alternatives.
+Each of the gateway's domains is listed as `available` or `unavailable`, with suggestions for any
+domain where the name is taken. The exit status is `0` if the name is free on at least one domain,
+`1` if it is free on none, and `2` if the check itself failed. See
+[Checking a subdomain before you use it](client_configuration.md#checking-a-subdomain-before-you-use-it).
 
 ---
 

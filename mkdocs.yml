@@ -167,7 +167,7 @@ nav:
     - Getting started: getting_started.md
   - How-to guides:
     - Client:
-      - Liferay SE guide: liferay-se-guide.md
+      - Liferay employee guide: liferay-se-guide.md
       - MCP guide: mcp.md
       - Exposing any local HTTP service: exposing-any-http-service.md
       - Using your own domain: custom_domains.md

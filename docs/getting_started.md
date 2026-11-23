@@ -10,7 +10,7 @@ This guide walks you through installing the client, getting a token from your ga
 > [!TIP]
 > **Liferay employees:** use the hosted gateway `tunnel.lfr-demo.se` and sign in with
 > **Liferay SSO (Okta)**. There is no registration or approval step: install, run
-> `lfr-tunnel login`, sign in, and you are ready. Follow the [SE guide](liferay-se-guide.md),
+> `lfr-tunnel login`, sign in, and you are ready. Follow the [Liferay Employee Quick-Start Guide](liferay-se-guide.md),
 > which covers the hosted gateway's domains, install path and Liferay configuration.
 
 ---
@@ -88,7 +88,7 @@ First, install the `lfr-tunnel` client for your operating system.
 > not Homebrew or Scoop.** It installs to the one path the EDR exclusions cover; a package
 > manager installs somewhere they do not, and the endpoint agent can quarantine the client. The
 > paths and rules are in [infosec.md §3](infosec.md#3-standard-execution-paths--edr-exclusions),
-> and Liferay staff should follow the [SE guide](liferay-se-guide.md).
+> and Liferay staff should follow the [Liferay Employee Quick-Start Guide](liferay-se-guide.md).
 
 ### Native Installer
 
@@ -662,7 +662,7 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
   * `no access token configured`: the client found no token, so it did not contact the gateway. Run `lfr-tunnel login`, or pass a token from the User Portal with `-token`.
   * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag. `lfr-tunnel check-subdomain <name>` checks a name on every gateway domain and suggests free alternatives ([details](client_configuration.md#checking-a-subdomain-before-you-use-it)).
 * **Detailed Guides:**
-  * For advanced setup and Liferay virtual host configurations, see the [Liferay SE Guide](liferay-se-guide.md).
+  * For advanced setup and Liferay virtual host configurations, see the [Liferay Employee Quick-Start Guide](liferay-se-guide.md).
   * For details on self-hosting your own gateway, see the [Server Setup Guide](server/setup_guide.md).
 
 

@@ -266,35 +266,7 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 		node.Sessions++
 
 		key := measurementKey{user, day}
-		rtts := measured[key]
-		verdict, miss := scoreSession(rtts, nodeID)
-		switch verdict {
-		case PlacementOptimal:
-			report.Optimal++
-			node.Optimal++
-		case PlacementSuboptimal:
-			report.Suboptimal++
-			node.Suboptimal++
-			if miss > node.WorstMissMs {
-				node.WorstMissMs = miss
-			}
-		default:
-			// Unverifiable, for one of three reasons, and only one of them names the node:
-			//   - the served region was probed that day and did not answer (#2567): a
-			//     placement fact, counted apart, NOT a vocabulary problem;
-			//   - the user had no probe that day: a cached or pinned choice, nothing to say;
-			//   - the user probed, but no probed region matches this node: a rename or a
-			//     missing alias, the vocabulary mismatch UnknownNodes exists for (#1919).
-			switch {
-			case servedRegionUnreachable(rtts, unreachable[key], nodeID):
-				report.UnreachableAtProbe++
-				node.UnreachableAtProbe++
-			case len(rtts) > 0:
-				unknown[nodeID] = true
-			}
-			report.Unverifiable++
-			node.Unverifiable++
-		}
+		tallySession(report, node, unknown, measured[key], unreachable[key], nodeID)
 	}
 	if err := sessionRows.Err(); err != nil {
 		return nil, fmt.Errorf("node placement (sessions): %w", err)
@@ -313,6 +285,41 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 
 	report.Caveats = placementCaveats(report)
 	return report, nil
+}
+
+// tallySession scores one session against what its user measured that day and adds it to the
+// report and to its node's record. Split out of GetNodePlacement only to keep that function
+// within funlen; the logic is unchanged.
+func tallySession(report *NodePlacementReport, node *NodePlacementNode, unknown map[string]bool,
+	rtts map[string]int, unreachable map[string]bool, nodeID string) {
+	verdict, miss := scoreSession(rtts, nodeID)
+	switch verdict {
+	case PlacementOptimal:
+		report.Optimal++
+		node.Optimal++
+	case PlacementSuboptimal:
+		report.Suboptimal++
+		node.Suboptimal++
+		if miss > node.WorstMissMs {
+			node.WorstMissMs = miss
+		}
+	default:
+		// Unverifiable, for one of three reasons, and only one of them names the node:
+		//   - the served region was probed that day and did not answer (#2567): a
+		//     placement fact, counted apart, NOT a vocabulary problem;
+		//   - the user had no probe that day: a cached or pinned choice, nothing to say;
+		//   - the user probed, but no probed region matches this node: a rename or a
+		//     missing alias, the vocabulary mismatch UnknownNodes exists for (#1919).
+		switch {
+		case servedRegionUnreachable(rtts, unreachable, nodeID):
+			report.UnreachableAtProbe++
+			node.UnreachableAtProbe++
+		case len(rtts) > 0:
+			unknown[nodeID] = true
+		}
+		report.Unverifiable++
+		node.Unverifiable++
+	}
 }
 
 // placementCaveats states what the numbers cannot mean. Carried in the payload rather than left

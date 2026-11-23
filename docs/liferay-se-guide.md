@@ -211,13 +211,21 @@ on the portal home page:
 | default (`preserve_host` off) | the local target | 33 x `http://<target>:8080` |
 | **`-preserve-host`** | the public hostname | 33 x `http://<subdomain>.lfr-demo.se` |
 
-So the fix is one flag:
+**The client turns this on for you when it detects Liferay:** a Liferay workspace's port 8080, or
+a discovered Liferay/LDM container's portal port. Only that port keeps the public `Host`;
+client-extension ports published beside it are unaffected. The startup summary says so:
+`preserve_host  on for 8080 (Liferay detected)`.
+
+When you name the ports yourself, nothing is detected, so pass the flag:
 
 ```bash
 lfr-tunnel -subdomain dev-tomcat -ports 8080 -preserve-host
 ```
 
-or, permanently, `preserve_host: true` in your client config file.
+or, permanently, `preserve_host: true` in your client config file. To stop the client turning it
+on by itself, set `preserve_host_auto: false`. A `preserve_host: false` line, which older Settings
+saves wrote, no longer switches detection off. See
+[`preserve_host` and Liferay](client_configuration.md#preserve_host-and-liferay).
 
 **Liferay must also accept the hostname.** Until it does, it refuses the request with HTTP 500.
 That is not a dead page: the 500 page refreshes to `/c`, which fails the same way and sends the
@@ -243,7 +251,14 @@ Either of these fixes it:
   Hosts). This covers **exactly one hostname**, so it has to be redone whenever the tunnel's
   subdomain changes.
 
-**That is the whole configuration.** `-preserve-host`, plus the hostname accepted by Liferay.
+The client watches for this. When the Liferay port answers 500 for the public hostname but not for
+the local one, it prints the fix once per hostname. To check before a demo instead of during one,
+run `lfr-tunnel doctor`. It reports your token, install path, `preserve_host`, and whether
+Liferay accepts the tunnel hostname, and changes nothing. See
+[Checking your setup: `doctor`](client_configuration.md#checking-your-setup-doctor).
+
+**That is the whole configuration.** `preserve_host` on for the Liferay port, plus the hostname
+accepted by Liferay.
 Nothing else was required to get correct links and a working sign-in.
 
 #### Properties you do not need

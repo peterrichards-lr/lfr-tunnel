@@ -652,11 +652,15 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 ## Need Help?
 
+* **Check your setup first:** `lfr-tunnel doctor` is read-only and reports `PASS`, `FAIL` or
+  `UNKNOWN` for your token, your install path and, for a Liferay target, `preserve_host` and
+  whether Liferay accepts the tunnel hostname. See
+  [Checking your setup](client_configuration.md#checking-your-setup-doctor).
 * **Common Errors:**
   * `gateway error (401): unauthorized`: the gateway did not accept your token. It may have expired or been revoked, it may have been copied incorrectly, or your account may not be active. The gateway deliberately gives the same answer for all of these, so that nobody can use it to find out whether a token exists. The client prints where it read the token from. If that was `~/.lfr-tunnel/token` or LDM's credentials file, run `lfr-tunnel login` to replace it. If it came from `-token`, an environment variable, `LFT_TOKEN_FILE` or your config file, create a new token in the User Portal and put it in that same place: `login` writes only `~/.lfr-tunnel/token`, which those sources take priority over.
   * `[Warning] Your access token expires in N days`: replace it before then, the same way as for a `401` above. You should also receive one email about it, if the gateway sends email. How far ahead this starts is set by the gateway (`token_expiry_warning_days`, 7 by default).
   * `no access token configured`: the client found no token, so it did not contact the gateway. Run `lfr-tunnel login`, or pass a token from the User Portal with `-token`.
-  * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag.
+  * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag. `lfr-tunnel check-subdomain <name>` checks a name on every gateway domain and suggests free alternatives ([details](client_configuration.md#checking-a-subdomain-before-you-use-it)).
 * **Detailed Guides:**
   * For advanced setup and Liferay virtual host configurations, see the [Liferay SE Guide](liferay-se-guide.md).
   * For details on self-hosting your own gateway, see the [Server Setup Guide](server/setup_guide.md).

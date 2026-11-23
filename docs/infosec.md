@@ -136,7 +136,21 @@ staged in `/tmp`, `/private/tmp` or `%TEMP%` (#2505). Autostart runs the executa
 every OS, never a copy or a renamed link (#2504).
 
 The LDM link exists so LDM finds this client instead of downloading an unexcluded copy of its own
-(#1311).
+(#1311). Every upgrade re-points it at the upgraded binary (#2553). On Windows that matters even
+when the binary stays where it is: a hardlink is a second name for a file's content, so after an
+upgrade replaced the file it kept naming the previous version.
+
+When the gateway's `install_dir` moves the client, an upgrade:
+1. writes the new binary at the new path;
+2. re-points the LDM link;
+3. re-registers autostart;
+4. updates what the installer wrote naming the old path: `LDM_LFR_TUNNEL_BIN`, and on Windows the
+   user PATH entry;
+5. removes the old binary last.
+
+If any step fails, the old binary is kept, because something still names it. It is still at the
+old, excluded path, so nothing runs from an unexcluded one. The ordered procedure for changing
+the path is in the ops skill, `.agents/skills/lfr-tunnel-ops/SKILL.md` §6d.
 
 ### EDR exclusion rules (Liferay)
 
@@ -311,4 +325,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

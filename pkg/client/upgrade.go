@@ -380,12 +380,20 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	fmt.Println("[Update] Binary integrity verified successfully.")
 
 	// Stop what runs the binary, so it restarts on the new one.
-	plistToReload, restartSystemd, relaunch := stopActiveProcessesAndServices()
+	plistToReload, restartSystemd, relaunch := stopForUpgrade()
+
+	// The LDM link, after EVERY upgrade (#2553): on Windows it is a hardlink, which kept naming the
+	// replaced binary's content after an in-place upgrade too, so LDM ran the previous version.
+	// After the stop above, so a client LDM started from the link is not holding it open.
+	home, _ := os.UserHomeDir()
+	linkErr := repointLDMLinkForPlatform(home, target)
+	if linkErr != nil {
+		fmt.Printf("[Warning] %v\n", linkErr)
+	}
 
 	if migrating {
-		fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
-		_ = os.Remove(execPath) //nolint:errcheck
-		execPath = target       // Update execPath for restartActiveProcessesAndServices
+		oldExe := execPath
+		execPath = target // Update execPath for restartActiveProcessesAndServices
 
 		// We need to re-register services pointing to the new path.
 		//
@@ -413,26 +421,50 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		// (#2194). On macOS the plists below say so; on Linux nothing did, because
 		// restartSystemd was decided from whether the unit was active BEFORE the upgrade.
 		//
-		// Only for a re-registration that SUCCEEDED (#2552). A failed one left the old unit or
-		// plist running the binary removed above, so it starts nothing -- and telling the planner
-		// it does makes the planner skip the relaunch, leaving the user with no client at all.
+		// A failed re-registration leaves the old unit or plist naming the OLD binary (#2552). That
+		// binary is kept below whenever anything failed (#2553), so what the stop above unloaded
+		// is restarted as it was: the planner is told exactly what was running before. Only a
+		// re-registration that SUCCEEDED changes the plan.
+		allOK := daemonOK
 		if runtime.GOOS == "linux" {
-			restartSystemd = false
 			if daemonOK {
 				restartSystemd = true
 			}
 		}
 		if runtime.GOOS == "darwin" {
 			guiOK := reregister("install-gui-service")
-			// The install commands above generate new plists, so we must reload those instead of the old ones
-			home, _ := os.UserHomeDir()
+			allOK = allOK && guiOK
+			// A re-registration that succeeded generated and loaded a new plist, under the same
+			// name; one that failed left the old plist, which is reloaded only if it was loaded.
+			daemonPlist := filepath.Join(home, "Library", "LaunchAgents", daemonPlistName)
+			guiPlist := filepath.Join(home, "Library", "LaunchAgents", guiPlistName)
+			wasLoaded := plistToReload
 			plistToReload = nil
-			if daemonOK {
-				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", daemonPlistName))
+			if daemonOK || slices.Contains(wasLoaded, daemonPlist) {
+				plistToReload = append(plistToReload, daemonPlist)
 			}
-			if guiOK {
-				plistToReload = append(plistToReload, filepath.Join(home, "Library", "LaunchAgents", guiPlistName))
+			if guiOK || slices.Contains(wasLoaded, guiPlist) {
+				plistToReload = append(plistToReload, guiPlist)
 			}
+		}
+
+		envErr := repointInstallEnv(home, oldExe, target)
+		if envErr != nil {
+			fmt.Printf("[Warning] %v\n", envErr)
+		}
+
+		// The old binary goes LAST, and only once nothing still names it (#2553). Removing it
+		// first, as this used to, left a failed re-registration, a dangling LDM link or an LDM
+		// variable pointing at nothing. Kept, every one of them still runs a working client
+		// from a path that is still excluded. Nothing retries it: --upgrade stops early once the
+		// new binary is current, so the user is told what is left to do by hand.
+		if keepOldBinary(allOK, linkErr, envErr) {
+			fmt.Printf("[Warning] Kept %s, because something above still points at it. "+
+				"Fix the warning above, then delete %s yourself.\n", oldExe, oldExe)
+		} else if err := os.Remove(oldExe); err != nil {
+			fmt.Printf("[Warning] The client moved to %s, but %s could not be removed: %v\n", target, oldExe, err)
+		} else {
+			fmt.Printf("[Update] Moved to %s; removed %s.\n", target, oldExe)
 		}
 	}
 	removeUpgradeBackup(backup)
@@ -449,8 +481,21 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	// Post-upgrade: restart previously active processes and services
-	restartActiveProcessesAndServices(plistToReload, restartSystemd, relaunch)
+	restartAfterUpgrade(plistToReload, restartSystemd, relaunch)
 	return nil
+}
+
+// The service stop and restart around an upgrade. Variables so a test can run a whole upgrade,
+// a move included, without stopping or starting a real service on the machine running it.
+var (
+	stopForUpgrade      = stopActiveProcessesAndServices
+	restartAfterUpgrade = restartActiveProcessesAndServices
+)
+
+// keepOldBinary reports whether a move must keep the binary it moved from (#2553): when autostart
+// was not re-registered, or the LDM link or the installers' environment still names it.
+func keepOldBinary(autostartOK bool, linkErr, envErr error) bool {
+	return !autostartOK || linkErr != nil || envErr != nil
 }
 
 // createExecutable creates a new client binary at path. A variable so tests can record every path

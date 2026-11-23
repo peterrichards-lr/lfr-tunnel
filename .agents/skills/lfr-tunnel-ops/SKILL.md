@@ -887,8 +887,11 @@ is not excluded, or deletes the rule for a path that clients still run from.
    has passed, and accept that a client in the list above loses its exclusion and has to
    reinstall. Then remove the old rule from §3.
 
-Before the first real path change, #2553 has to land: until then the LDM link and the Windows
-hardlink are not re-pointed when a client moves.
+A move re-points the LDM link (re-creating the Windows hardlink), re-registers autostart, and
+updates `LDM_LFR_TUNNEL_BIN` and the Windows user PATH; the old binary is removed last (#2553). If
+any of those fails, the client **keeps the old binary** and says so. It still runs from the old,
+excluded path, which is one more reason the old rule is removed last (step 6). Nothing retries a
+kept binary: the user has to fix the warning and delete it by hand.
 
 ---
 

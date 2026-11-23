@@ -555,10 +555,14 @@ func TestTheMigrationPathTellsThePlannerWhatItRestarted(t *testing.T) {
 		}
 		return block
 	}
+	//
+	// On macOS a failed re-registration still reloads the plist that was loaded before: the old
+	// binary is kept whenever a step fails (#2553), so that plist starts a working client. Hence
+	// `||` there; TestAFailedReregistrationRestartsWhatWasRunning checks the behaviour itself.
 	for _, c := range []struct{ goos, guard string }{
 		{"linux", "if daemonOK {"},
-		{"darwin", "if daemonOK {"},
-		{"darwin", "if guiOK {"},
+		{"darwin", "if daemonOK || "},
+		{"darwin", "if guiOK || "},
 	} {
 		block := osBlock(c.goos)
 		if block == "" {

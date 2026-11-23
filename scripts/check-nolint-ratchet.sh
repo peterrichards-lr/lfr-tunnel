@@ -45,7 +45,9 @@ set -euo pipefail
 # 725 -> 723 by #2552: the upgrade migration discarded both autostart re-registrations, which is
 # how a gateway-driven move left autostart pointing at the binary it had just removed. Both
 # errors are now reported, with the child's output.
-CEILING="${LFT_NOLINT_CEILING:-723}"
+# 723 -> 722 by #2553: the migration removed the old binary first and discarded the result. It
+# is now removed last, only once nothing names it, and a failure to remove it is reported.
+CEILING="${LFT_NOLINT_CEILING:-722}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

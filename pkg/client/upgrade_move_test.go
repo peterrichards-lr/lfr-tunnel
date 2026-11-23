@@ -53,8 +53,9 @@ type moveRig struct {
 	linkedTo  []string    // targets the LDM link was re-pointed at
 	envMoves  [][2]string // (old, new) pairs handed to repointInstallEnv
 	restart   struct {
-		plists  []string
-		systemd bool
+		plists   []string
+		systemd  bool
+		relaunch [][]string
 	}
 }
 
@@ -62,10 +63,17 @@ type moveFaults struct {
 	autostart, link, env error
 	// moveTo is the install_dir the gateway publishes; empty publishes none (an in-place upgrade).
 	moveTo bool
-	// wasRunning is what the stop found running before the upgrade.
+	// installDirIsOldDirViaSymlink publishes an install_dir that is a symlink to the directory the
+	// client already runs from: the same place, spelled differently.
+	installDirIsOldDirViaSymlink bool
+	// noAutostart: the machine has neither autostart entry installed.
+	noAutostart bool
+	// wasRunning is what the stop found running before the upgrade. relaunchArgs, if set, is a
+	// process it killed, started as the old binary with these arguments.
 	wasRunning struct {
-		plists  []string
-		systemd bool
+		plists       []string
+		systemd      bool
+		relaunchArgs []string
 	}
 }
 
@@ -93,6 +101,12 @@ func runMoveUpgrade(t *testing.T, f moveFaults) *moveRig {
 	if f.moveTo {
 		installDir = newDir
 		rig.target = filepath.Join(newDir, canonicalExeName())
+	}
+	if f.installDirIsOldDirViaSymlink {
+		installDir = filepath.Join(tmp, "via-link")
+		if err := os.Symlink(oldDir, installDir); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	const asset = "lfr-tunnel-move-test"
@@ -131,22 +145,30 @@ func runMoveUpgrade(t *testing.T, f moveFaults) *moveRig {
 
 	origExec, origStop, origRestart := targetExecPath, stopForUpgrade, restartAfterUpgrade
 	origAutostart, origLink, origEnv := runAutostartCmd, repointLDMLinkForPlatform, repointInstallEnv
+	origSvc, origGUI := isServiceInstalled, isGUIServiceInstalled
 	t.Cleanup(func() {
 		targetExecPath, stopForUpgrade, restartAfterUpgrade = origExec, origStop, origRestart
 		runAutostartCmd, repointLDMLinkForPlatform, repointInstallEnv = origAutostart, origLink, origEnv
+		isServiceInstalled, isGUIServiceInstalled = origSvc, origGUI
 	})
+	isServiceInstalled = func() bool { return !f.noAutostart }
+	isGUIServiceInstalled = func() bool { return !f.noAutostart }
 	targetExecPath = rig.oldExe
 	stopForUpgrade = func() ([]string, bool, [][]string) {
-		return slices.Clone(f.wasRunning.plists), f.wasRunning.systemd, nil
+		var relaunch [][]string
+		if f.wasRunning.relaunchArgs != nil {
+			relaunch = [][]string{append([]string{rig.oldExe}, f.wasRunning.relaunchArgs...)}
+		}
+		return slices.Clone(f.wasRunning.plists), f.wasRunning.systemd, relaunch
 	}
-	restartAfterUpgrade = func(plists []string, systemd bool, _ [][]string) {
-		rig.restart.plists, rig.restart.systemd = plists, systemd
+	restartAfterUpgrade = func(plists []string, systemd bool, relaunch [][]string) {
+		rig.restart.plists, rig.restart.systemd, rig.restart.relaunch = plists, systemd, relaunch
 	}
 	runAutostartCmd = func(cmd *exec.Cmd) ([]byte, error) {
 		rig.autostart = append(rig.autostart, cmd.Args[len(cmd.Args)-1])
 		return nil, f.autostart
 	}
-	repointLDMLinkForPlatform = func(_, target string) error {
+	repointLDMLinkForPlatform = func(_, _, target string) error {
 		rig.linkedTo = append(rig.linkedTo, target)
 		return f.link
 	}
@@ -279,5 +301,67 @@ func TestAnInPlaceUpgradeRepointsTheLDMLink(t *testing.T) {
 	}
 	if got, err := os.ReadFile(rig.oldExe); err != nil || string(got) != "new-binary" { //nolint:gosec // test path
 		t.Errorf("the in-place upgrade left %q (%v)", got, err)
+	}
+}
+
+// A process the upgrade killed is relaunched from the NEW binary after a move, with its own
+// arguments. Relaunched as captured it would start from the old path, which is removed (#2553
+// review): every -background tunnel down after a clean move.
+func TestAMoveRelaunchesKilledProcessesFromTheNewBinary(t *testing.T) {
+	var f moveFaults
+	f.moveTo = true
+	f.wasRunning.relaunchArgs = []string{"-background", "-port", "8080"}
+	rig := runMoveUpgrade(t, f)
+	if rig.err != nil {
+		t.Fatalf("SelfUpgrade: %v", rig.err)
+	}
+	want := []string{rig.target, "-background", "-port", "8080"}
+	if len(rig.restart.relaunch) != 1 || !slices.Equal(rig.restart.relaunch[0], want) {
+		t.Errorf("relaunched %v, want [%v]", rig.restart.relaunch, want)
+	}
+}
+
+// Only the autostart entries the user has are re-registered (#2553 review). install-service used
+// to run on every move, installing and starting a service nobody had set up.
+func TestAMoveReregistersOnlyWhatIsInstalled(t *testing.T) {
+	rig := runMoveUpgrade(t, moveFaults{moveTo: true, noAutostart: true})
+	if rig.err != nil {
+		t.Fatalf("SelfUpgrade: %v", rig.err)
+	}
+	if len(rig.autostart) != 0 {
+		t.Errorf("re-registered %v on a machine with no autostart installed", rig.autostart)
+	}
+	if exists(t, rig.oldExe) {
+		t.Error("with nothing to re-register and nothing failing, the old binary should be gone")
+	}
+
+	// And with both installed, both are re-registered on every OS -- the GUI entry included,
+	// which used to be macOS only.
+	rig = runMoveUpgrade(t, moveFaults{moveTo: true})
+	if !slices.Equal(rig.autostart, []string{"install-service", "install-gui-service"}) {
+		t.Errorf("re-registered %v, want install-service then install-gui-service", rig.autostart)
+	}
+}
+
+// An install_dir that names the directory the client already runs from, through a symlink, is
+// not a move (#2553 review). Treated as one, the new binary was written over the current one and
+// then removed as "the old binary", leaving no client at all.
+func TestTheSameDirectoryThroughASymlinkIsNotAMove(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need a privilege Windows runners do not grant")
+	}
+	rig := runMoveUpgrade(t, moveFaults{installDirIsOldDirViaSymlink: true})
+	if rig.err != nil {
+		t.Fatalf("SelfUpgrade: %v", rig.err)
+	}
+	got, err := os.ReadFile(rig.oldExe) //nolint:gosec // test path
+	if err != nil {
+		t.Fatalf("the client is gone: %v", err)
+	}
+	if string(got) != "new-binary" {
+		t.Errorf("the client holds %q, want the upgraded binary", got)
+	}
+	if len(rig.autostart) != 0 || len(rig.envMoves) != 0 {
+		t.Errorf("treated as a move: autostart %v, environment %v", rig.autostart, rig.envMoves)
 	}
 }

@@ -30,8 +30,29 @@ func ldmRCLine(exe string) string {
 	return `export ` + ldmBinEnvVar + `="` + exe + `"`
 }
 
-// repointRCLine replaces install.sh's LDM_LFR_TUNNEL_BIN line for oldExe in rc with one for
-// newExe. A file without that exact line is left untouched, so a line the user edited is theirs.
+// ldmRCValue returns the path in a line of exactly install.sh's form, and whether it is one.
+func ldmRCValue(line string) (string, bool) {
+	const prefix = `export ` + ldmBinEnvVar + `="`
+	if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, `"`) || len(line) <= len(prefix) {
+		return "", false
+	}
+	return line[len(prefix) : len(line)-1], true
+}
+
+// namesFile reports whether path is exe: equal, or the same once symlinks are resolved. install.sh
+// writes the path as it was given, while the upgrade knows the binary by its resolved path, so a
+// symlinked home or install directory spells them differently (#2553 review).
+func namesFile(path, exe string) bool {
+	if path == exe {
+		return true
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	return err == nil && resolved == exe
+}
+
+// repointRCLine replaces install.sh's LDM_LFR_TUNNEL_BIN line naming oldExe in rc with one for
+// newExe. Only a line in install.sh's exact form whose path is oldExe (directly or through a
+// symlink) is changed; any other line, including one the user edited, is theirs.
 //
 // The rc file may be a symlink into a dotfiles repository, so the file it resolves to is
 // rewritten, through a temporary file beside it and a rename, keeping its mode.
@@ -47,12 +68,13 @@ func repointRCLine(rc, oldExe, newExe string) error {
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", rc, err)
 	}
-	oldLine, newLine := ldmRCLine(oldExe), ldmRCLine(newExe)
+	newLine := ldmRCLine(newExe)
 	lines := strings.Split(string(data), "\n")
 	changed := false
 	for i, l := range lines {
-		if strings.TrimRight(l, "\r") == oldLine {
-			lines[i] = newLine + l[len(oldLine):]
+		body := strings.TrimRight(l, "\r")
+		if value, ok := ldmRCValue(body); ok && namesFile(value, oldExe) {
+			lines[i] = newLine + l[len(body):]
 			changed = true
 		}
 	}

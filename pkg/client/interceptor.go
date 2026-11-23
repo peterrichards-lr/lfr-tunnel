@@ -71,6 +71,14 @@ type InterceptorEngine struct {
 	PreserveHost       bool
 	InsecureSkipVerify bool
 
+	// PreserveHost above is preserve_host on for EVERY port, explicitly (-preserve-host or the
+	// config file). preserveHostPorts is the automatic, per-port form (#2560): the Liferay port
+	// alone, so a client-extension dev server published beside it still gets its own Host.
+	preserveHostPorts map[int]bool
+	// liferayPorts are the local ports identified as Liferay, whether or not preserve_host is on
+	// for them.
+	liferayPorts map[int]bool
+
 	// Connection status and statistics
 	ConnState         string // "disconnected", "connecting", "connected", "reconnecting"
 	UptimeStart       time.Time
@@ -1423,8 +1431,9 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		pr.SetURL(targetURL)
 		pr.Out.Host = inboundHost
 
-		// Rewrite Host header if PreserveHost is unchecked
-		if !e.PreserveHost {
+		// Rewrite Host header unless preserve_host is on for this port: for every port, or for
+		// the detected Liferay port alone (#2560).
+		if !e.PreservesHostFor(targetPort) {
 			pr.Out.Host = getHostHeaderValue(e.TargetHost, targetPort)
 		}
 

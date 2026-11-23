@@ -708,9 +708,17 @@ type ClientConfig struct {
 	RegionsUnavailable map[string]string `yaml:"-"`
 	Latency            time.Duration     `yaml:"latency"`
 	Bandwidth          string            `yaml:"bandwidth"`
-	PreserveHost       bool              `yaml:"preserve_host"`
-	InsecureSkipVerify bool              `yaml:"insecure_skip_verify,omitempty"`
-	Theme              string            `yaml:"theme,omitempty"`
+	// PreserveHost is three-state (#2560): nil means "not set", which lets the client turn it on
+	// for a port it identified as Liferay; true and false are explicit and beat that detection.
+	// A plain bool made an explicit `preserve_host: false` indistinguishable from an absent key,
+	// so there was no way to turn the automatic setting off.
+	//
+	// omitempty so a save never writes the unset state as false. Before this was a pointer every
+	// save from the tray or the Inspector wrote `preserve_host: false`, and such a file now reads
+	// as an explicit off; the startup summary says so when it suppresses a detected Liferay port.
+	PreserveHost       *bool  `yaml:"preserve_host,omitempty"`
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty"`
+	Theme              string `yaml:"theme,omitempty"`
 	// LogDir is where the persistent traffic and error logs are written. Empty means
 	// ~/.lfr-tunnel/logs (#1223). A leading ~ is expanded, since this is a value people
 	// type by hand.
@@ -1382,6 +1390,32 @@ func clientTokenBelongsInConfigFile(cfg *ClientConfig) bool {
 func (c *ClientConfig) SetInlineAuthToken(token string) {
 	c.AuthToken = token
 	c.TokenSource = TokenSourceConfigFile
+}
+
+// PreserveHostOn reports whether preserve_host is explicitly on. Unset reads as off, which is
+// what the Settings forms show: their checkbox has two states and the third (automatic) is not
+// "checked" (#2560).
+func (c *ClientConfig) PreserveHostOn() bool {
+	return c.PreserveHost != nil && *c.PreserveHost
+}
+
+// FormPreserveHost is the preserve_host a Settings form save leaves behind, given the current
+// value and the checkbox the form sent (#2560).
+//
+// The form always sends its checkbox, so an unchecked box cannot mean "explicitly off": a user
+// who saved some other field would turn off Liferay detection without knowing it. Checked is
+// explicit on. Unchecked clears an explicit on back to unset (automatic), and otherwise leaves
+// the value alone -- including an explicit false written by hand, which only the file or
+// -preserve-host=false can set.
+func FormPreserveHost(current *bool, checked bool) *bool {
+	if checked {
+		on := true
+		return &on
+	}
+	if current != nil && *current {
+		return nil
+	}
+	return current
 }
 
 // ResolveDefaultConfigPath returns the canonical path to the user's config file.

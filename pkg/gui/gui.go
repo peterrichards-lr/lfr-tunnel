@@ -327,7 +327,7 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 		"target_host":          cfg.TargetHost,
 		"dest_port":            destPort,
 		"subdomain":            cfg.Subdomain,
-		"preserve_host":        cfg.PreserveHost,
+		"preserve_host":        cfg.PreserveHostOn(),
 		"insecure_skip_verify": cfg.InsecureSkipVerify,
 		"passcode":             cfg.Passcode,
 		"rate_limit":           cfg.RateLimit,
@@ -394,8 +394,10 @@ func (q *settingsFormRequest) applyTo(cfg *config.ClientConfig) {
 	if q.Subdomain != nil {
 		cfg.Subdomain = *q.Subdomain
 	}
+	// Through FormPreserveHost: the form always sends its checkbox, and an unchecked box must
+	// not become an explicit off that silently disables Liferay detection (#2560).
 	if q.PreserveHost != nil {
-		cfg.PreserveHost = *q.PreserveHost
+		cfg.PreserveHost = config.FormPreserveHost(cfg.PreserveHost, *q.PreserveHost)
 	}
 	if q.InsecureSkipVerify != nil {
 		cfg.InsecureSkipVerify = *q.InsecureSkipVerify

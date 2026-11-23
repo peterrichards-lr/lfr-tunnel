@@ -483,7 +483,7 @@ func main() {
 	}
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
-	engine.PreserveHost = cfg.PreserveHost
+	applyPreserveHost(engine, cfg)
 	engine.ClientSubdomain = sub
 	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
 	// Deliberately NOT a default here any more. It used to be the literal "or", which the
@@ -1165,9 +1165,9 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 	if *targetHost != "" {
 		cfg.TargetHost = *targetHost
 	}
-	if *preserveHost {
-		_ = os.Setenv("LFT_PRESERVE_HOST", "true") //nolint:errcheck
-		cfg.PreserveHost = true
+	// Explicit in both directions (#2560): -preserve-host=false must beat Liferay detection.
+	if preserveHostFlagGiven() {
+		applyPreserveHostFlag(cfg, *preserveHost)
 	}
 	if *insecureSkipVerify {
 		cfg.InsecureSkipVerify = true
@@ -1377,6 +1377,7 @@ func validateRequestedPorts(cfg *config.ClientConfig) error {
 }
 
 func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, error) {
+	facts.liferayPort = 0 // set below only where a path identifies the portal (#2560)
 	var ports []int
 	var err error
 	// A malformed list is an error, never a fall-through to discovery (#2477). The parser
@@ -1436,6 +1437,8 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, er
 				facts.portOrigin = "default, workspace scan failed"
 				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
+			// DetectWorkspacePorts puts the portal's 8080 first; the rest are client extensions.
+			facts.liferayPort = portMappings[0].LocalPort
 		} else {
 			slog.Info("[Client] No explicit ports provided. Auto-discovering Liferay / LDM instances...")
 			discoveryResult, err := autoDiscoverTarget()
@@ -1456,6 +1459,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, er
 				}
 				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", what, discoveryResult.Host)
 				facts.portOrigin = "auto-discovered"
+				facts.liferayPort = discoveryResult.LiferayPort
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s on host '%s' with ports: %v", what, discoveryResult.Host, discoveryResult.Ports))
 
 				// Discovery is the lowest-priority source of the target host: it fills the
@@ -2804,6 +2808,10 @@ type startupFacts struct {
 	portSource   string
 	// portOrigin is portSource in the few words the TUI has room for ("from -ports").
 	portOrigin string
+	// liferayPort is the local port identified as the Liferay portal, or 0 (#2560).
+	liferayPort int
+	// preserveHostSource names the flag that set preserve_host, when one did.
+	preserveHostSource string
 }
 
 var facts startupFacts
@@ -3311,6 +3319,7 @@ func logStartupConfiguration(cfg *config.ClientConfig, mappings []client.PortMap
 		fmt.Sprintf("  region source  %s", source),
 		fmt.Sprintf("  pinned         %s", pinned),
 		fmt.Sprintf("  ports          %s%s", portList, facts.portSource),
+		fmt.Sprintf("  preserve_host  %s", preserveHostSummary(cfg)),
 		fmt.Sprintf("  subdomain      %s", subdomainOrNone(cfg.Subdomain)),
 		fmt.Sprintf("  config file    %s", configFile),
 		// The source, never the value (#1758). Which of five places supplied the token is

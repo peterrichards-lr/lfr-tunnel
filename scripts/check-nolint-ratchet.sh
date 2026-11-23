@@ -47,7 +47,9 @@ set -euo pipefail
 # errors are now reported, with the child's output.
 # 723 -> 722 by #2553: the migration removed the old binary first and discarded the result. It
 # is now removed last, only once nothing names it, and a failure to remove it is reported.
-CEILING="${LFT_NOLINT_CEILING:-722}"
+# 722 -> 721 by #2560: -preserve-host's LFT_PRESERVE_HOST export moved out of main.go and now
+# logs a failure instead of discarding it.
+CEILING="${LFT_NOLINT_CEILING:-721}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

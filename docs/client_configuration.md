@@ -104,8 +104,11 @@ Four consequences worth knowing:
   `LFT_SUBDOMAIN=""` does not clear a `subdomain:` from the file, and `-rate-limit 0` cannot put
   `0` back over a `rate_limit: 100` in the file. Edit the file, or point `-config` at a
   different one.
-* **A boolean flag can only turn a setting on.** `-preserve-host` and `-insecure-skip-verify`
-  set `true`; there is no flag spelling that forces `false` back over a `true` in the file.
+* **A boolean flag can only turn a setting on -- except `-preserve-host`.** `-insecure-skip-verify`
+  sets `true`, and there is no flag spelling that forces `false` back over a `true` in the file.
+  `-preserve-host=false` is the exception: it is explicit, and beats both `preserve_host: true`
+  in the file and the automatic setting for a detected Liferay port. See
+  [`preserve_host` and Liferay](#preserve_host-and-liferay).
 
 ### Flag and environment equivalents
 
@@ -127,7 +130,7 @@ Settings not listed here can only be set in the config file.
 | `bandwidth` | `-bandwidth` | `LFT_CLIENT_BANDWIDTH`, `LFT_BANDWIDTH` |
 | `rate_limit` | `-rate-limit` | — |
 | `basic_auth` | `-basic-auth` | — |
-| `preserve_host` | `-preserve-host` | — |
+| `preserve_host` | `-preserve-host`, `-preserve-host=false` | — |
 | `insecure_skip_verify` | `-insecure-skip-verify` | — |
 | `theme` | `-theme` | — |
 | `log_dir` | `-log-dir` | `LFT_LOG_DIR` |
@@ -233,7 +236,7 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 | --- | --- | --- | --- |
 | `ports` | list of int | *unset* — discovered, see below | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
 | `target_host` | string | *unset* — discovered, then `127.0.0.1`; see below | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
-| `preserve_host` | bool | `false` | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for. |
+| `preserve_host` | bool | *unset* — on for a detected Liferay port only, see below | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for, which Liferay does. `true` turns it on for every port; `false` turns it off everywhere, including a detected Liferay port. |
 | `insecure_skip_verify` | bool | `false` | Skip TLS verification when the **local** target serves HTTPS with a self-signed certificate. It has no effect on the connection to the gateway. |
 
 #### Leaving `ports` unset
@@ -288,6 +291,41 @@ Worth knowing:
 - The dashboard shows what was decided: one `Local:` line per published port, the primary
   saying where its list came from — `(Primary, from -ports)`, `(Primary, auto-discovered)` and
   so on. The Inspector's `/api/healthz` and `/api/info` check those same ports.
+
+#### `preserve_host` and Liferay
+
+Liferay builds every absolute link from the `Host` it is asked for. With the rewrite, it is asked
+for the local target, so a tunnelled portal links to `http://127.0.0.1:8080` -- localhost links,
+or a sign-in redirect loop. So when the client has **identified the target as Liferay** and
+nobody set `preserve_host`, it turns it on **for the Liferay port only**:
+
+| How the target was found | The port treated as Liferay |
+| --- | --- |
+| A Liferay workspace in the current directory | `8080`, the first port the workspace scan publishes. The client-extension ports it finds keep the rewrite: their dev servers can refuse a `Host` they do not know. |
+| A discovered Liferay or LDM container | The host port in front of the container's own `8080`, e.g. `8081` for a second LDM project. |
+| A local port that merely answered (no container, no workspace) | None. An open port is not an identified Liferay. |
+| `ports:`, `-ports` or `LFT_CLIENT_PORTS` | None. Pass `-preserve-host` yourself. |
+
+Everything else keeps the rewrite, as before: a non-Liferay target, and `-target-host
+my-project.local` behind an nginx virtual host, which relies on it to reach the right server
+block.
+
+The startup summary says which applies and why, for example:
+
+```text
+  preserve_host  on for 8080 (Liferay detected)
+  preserve_host  off (preserve_host: false in the config file), although Liferay was detected on 8080 -- ...
+```
+
+**To switch it off**, set `preserve_host: false` in the config file or pass
+`-preserve-host=false`; both beat detection. Leaving the key out, or empty, is what lets
+detection apply. A config file saved by the tray or the Inspector before this change carries
+`preserve_host: false` without anyone having chosen it -- delete that line to get detection.
+The Settings checkbox now never writes `false`: checking it is an explicit `true`, and
+unchecking it returns the key to unset.
+
+Liferay must also **accept** the public hostname, or it answers every request with HTTP 500 and
+logs `Invalid host name`. Preserving the `Host` is what lets Liferay see that hostname at all.
 
 #### Leaving `target_host` unset
 
@@ -424,7 +462,8 @@ ports:
   - 8080
   - 3000
 target_host: "127.0.0.1"
-preserve_host: false
+# Leave unset to turn it on for a detected Liferay port only; true = every port, false = none.
+# preserve_host: true
 insecure_skip_verify: false
 
 # --- Who may reach it. passcode and whitelist_ips combine as OR ---

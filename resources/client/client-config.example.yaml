@@ -75,7 +75,11 @@ ports:
 target_host: ""
 
 # Send the visitor's Host header through unchanged instead of rewriting it to target_host.
-preserve_host: false
+# Left empty, it is on for a port the client identifies as Liferay (a workspace's 8080, or a
+# discovered Liferay/LDM container's portal port) and off everywhere else. true turns it on for
+# every port; false turns it off everywhere, including a detected Liferay port.
+# See docs/client_configuration.md, "preserve_host and Liferay".
+preserve_host:
 
 # Skip TLS verification when the LOCAL target serves HTTPS with a self-signed certificate.
 insecure_skip_verify: false

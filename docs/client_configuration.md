@@ -680,7 +680,7 @@ any is `UNKNOWN`.
 
 * [Getting Started Guide](getting_started.md) — installing, registering, claiming a token, and
   the flags you are most likely to use.
-* [Liferay SE Guide](liferay-se-guide.md) — team-specific setup, LDM, and EDR path exclusions.
+* [Liferay Employee Quick-Start Guide](liferay-se-guide.md) — the hosted gateway for Liferay employees: SSO sign-in, LDM, and EDR path exclusions.
 * [Control Plane Setup](server/setup_guide.md) — the *server* configuration file, which is a
   different file with different keys.
 

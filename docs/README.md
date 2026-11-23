@@ -11,7 +11,7 @@ Liferay Tunnel (`lfr-tunnel`) securely exposes a local Liferay environment — a
 |---|---|
 | Share my local Liferay with someone, for the first time | [Getting Started](getting_started.md) |
 | Set my client up once and stop passing flags | [Client configuration file](client_configuration.md) |
-| Get set up as a Liferay Sales Engineer | [Liferay SE Guide](liferay-se-guide.md) |
+| Get set up as a Liferay employee | [Liferay Employee Quick-Start Guide](liferay-se-guide.md) |
 | Drive the tunnel from an AI assistant | [MCP Guide](mcp.md) |
 | Expose something other than Liferay | [Exposing Any Local HTTP Service](exposing-any-http-service.md) |
 | Use my own domain instead of a gateway subdomain | [Using Your Own Domain](custom_domains.md) |
@@ -27,7 +27,7 @@ Liferay Tunnel (`lfr-tunnel`) securely exposes a local Liferay environment — a
 
 - **[Getting Started Guide](getting_started.md)**: Learn the basic concepts, registration flow, and how to start your first tunnel.
 - **[Client configuration file](client_configuration.md)**: Complete key reference for `~/.lfr-tunnel/config.yaml` — every setting, its flag and environment equivalents, which of the three wins, and why `server_url:` is not the same as `-pin`.
-- **[Liferay SE Guide](liferay-se-guide.md)**: Team-specific instructions for Liferay Sales Engineering (LDM setup, codesigning path exclusions, dynamic configurations).
+- **[Liferay Employee Quick-Start Guide](liferay-se-guide.md)**: For Liferay employees using the hosted gateway: Liferay SSO sign-in, the EDR install path, LDM, and Liferay configuration.
 - **[MCP Guide](mcp.md)**: Learn how to set up the Model Context Protocol (MCP) server to use the tunnel with AI assistants.
 - **[Exposing Any Local HTTP Service](exposing-any-http-service.md)**: Addendum — the tunnel does not inspect what is listening on the port it publishes, so a client extension in dev mode, a Node service or any other local HTTP server works with `-ports`. Naming a port switches the Liferay auto-discovery off.
 - **[Using Your Own Domain](custom_domains.md)**: Serve a tunnel at a domain you own rather than a subdomain of the gateway. Point it with a `CNAME`, register it in the portal, connect with `-domain`; the gateway obtains and renews the TLS certificate itself.
@@ -65,4 +65,4 @@ Three community tools from the same maintainer. None is an official Liferay prod
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-15* | *Last Reviewed: 2026-10-15*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

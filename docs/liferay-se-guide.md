@@ -1,8 +1,11 @@
-# Liferay SE Team — Quick-Start Guide
+# Liferay Employee Quick-Start Guide
 
 [![Better Stack Badge](https://uptime.betterstack.com/status-badges/v2/monitor/2q3sj.svg)](https://uptime.betterstack.com/?utm_source=status_badge)
 
-This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
+This guide is for **Liferay employees** using the shared, Liferay-operated `lfr-tunnel` gateway:
+Sales Engineering, consultants, developers, or anyone with an `@liferay.com` account who needs
+to share a local Liferay environment. It covers installation, signing in, and examples using the
+gateway's real domains.
 
 > [!TIP]
 > **Sign in with Liferay SSO. No registration or approval.** Install the client, run
@@ -340,7 +343,7 @@ This fetches the latest release from GitHub, verifies the SHA256 checksum, and r
 
 ## Alternative Sharing Providers (ngrok, cloudflared)
 
-If you need to share your local environment using an alternative provider, Liferay SEs have a choice of using **ngrok** or **Cloudflare Tunnels (cloudflared)** alongside `lfr-tunnel`.
+If you need to share your local environment using an alternative provider, Liferay employees can also use **ngrok** or **Cloudflare Tunnels (cloudflared)** alongside `lfr-tunnel`.
 
 Below are usage examples for both options:
 

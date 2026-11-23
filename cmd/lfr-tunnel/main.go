@@ -97,7 +97,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "  install-gui-service    Install background GUI tray autostart service\n")
 		fmt.Fprintf(os.Stderr, "  uninstall-gui-service  Uninstall background GUI tray autostart service\n")
 		fmt.Fprintf(os.Stderr, "  login                  Authenticate via browser handoff / OIDC\n")
-		fmt.Fprintf(os.Stderr, "  mcp                    Run the Model Context Protocol server on stdio\n\n")
+		fmt.Fprintf(os.Stderr, "  mcp                    Run the Model Context Protocol server on stdio\n")
+		fmt.Fprintf(os.Stderr, "  check-subdomain        Check whether a subdomain is free on each of the gateway's domains\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		oldUsage()
 	}
@@ -116,6 +117,7 @@ var knownSubcommands = []string{
 	"uninstall-gui-service",
 	"login",
 	"mcp",
+	"check-subdomain",
 }
 
 // checkBareArgs refuses an argument that is neither a flag nor a dispatched subcommand.
@@ -1246,6 +1248,10 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
 		mcp.StartMCPServer()
 		return true
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "check-subdomain" {
+		os.Exit(runCheckSubdomain(os.Args[2:], cfg, os.Stdout, os.Stderr))
 	}
 
 	if *checkVersionFlag {

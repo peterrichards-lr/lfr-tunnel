@@ -529,6 +529,58 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 ---
 
+## Checking a subdomain before you use it
+
+`lfr-tunnel check-subdomain <name>` asks the gateway whether `<name>` is free, on every domain the
+gateway issues tunnels on, using the token and gateway this file and the steps under
+[Precedence](#precedence) resolve. No token is typed on the command line.
+
+```text
+$ lfr-tunnel check-subdomain acme-poc
+acme-poc.lfr-demo.se      unavailable -- subdomain is already taken
+acme-poc.lfr-demo.online  available
+Suggestions on lfr-demo.se: acme-poc-dev, acme-poc-app, acme-poc-tunnel
+```
+
+A name is unavailable when a tunnel on any region holds it, when another user has reserved it
+(or held it within the quarantine window after their reservation expired), or when it breaks the
+naming rules: 3 to 63 letters, digits and hyphens, not starting or ending with a hyphen, and not
+a reserved word. Your own reservation
+does not count against you. Suggestions are names the gateway has checked the same way.
+
+`check-subdomain` must be the first argument. Its own flags go after it, before or after the
+name:
+
+* `-token <token>` uses that token instead of the resolved one. Prefer the token file.
+* `-config <path>` reads a different config file.
+
+The exit status is meant for scripts:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Every domain answered, and the name is available on at least one. |
+| `1` | Every domain answered, and the name is available on none. |
+| `2` | Anything else: no gateway or token configured, the token not accepted, the gateway unreachable, or any one domain that could not be checked. |
+
+A domain that could not be checked is printed as `unknown`, never as `available`, and makes the
+exit status `2` even when another domain is available.
+
+When the token is not accepted, the client prints where it read it from, and what will replace
+it, exactly as it does when a tunnel's registration is refused. A regional edge cannot answer
+this question, so pointing the client at one (`LFT_SERVER_URL`) prints the control plane's
+address instead.
+
+Availability is a snapshot. Whether **you** may then use the name is decided when the tunnel
+registers. Your gateway may require a reservation made in the portal first, and your
+reservation quota applies. `check-subdomain` checks neither.
+
+An older gateway ignores the domain it is asked about and checks only the one it would assign
+you. The client prints that answer without a domain and says so. Such a gateway also misses
+tunnels on other regions and other users' reservations, so treat `available` from it as
+provisional.
+
+---
+
 ## See also
 
 * [Getting Started Guide](getting_started.md) — installing, registering, claiming a token, and
@@ -539,4 +591,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

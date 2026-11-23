@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -67,9 +68,21 @@ func runDoctor(cfg *config.ClientConfig, sub string, args []string, out io.Write
 		in.LiferayUnknown = "The configured ports are not identified as Liferay; pass -ports <the Liferay port>."
 	}
 
+	// Ask the port itself, as a tunnel start's watch does (#2571): the header identifies Liferay
+	// for named ports and a native bundle, and withdraws the workspace-folder guess.
+	probe := identifyLiferayForDoctor(cfg, *ports != "")
+	if probe.identified > 0 {
+		facts.liferayPort = probe.identified
+		in.LiferaySource = fmt.Sprintf("identified by its Liferay-Portal header (%s)", probe.header)
+		in.LiferayUnknown = ""
+	} else if probe.withdrawn > 0 {
+		facts.liferayPort = 0
+		in.LiferayUnknown = fmt.Sprintf("Port %d answered without Liferay's Liferay-Portal header, so it is not treated as Liferay; pass -ports <the Liferay port>.", probe.withdrawn)
+	}
+
 	in.LiferayPort = facts.liferayPort
 	in.TargetHost = cfg.TargetHost
-	in.PreserveHostSummary, in.PreserveHostOn = doctorPreserveHost(cfg, *ports != "")
+	in.PreserveHostSummary, in.PreserveHostOn = doctorPreserveHost(cfg, *ports != "", probe)
 
 	switch {
 	case *hostname != "":
@@ -86,19 +99,72 @@ func runDoctor(cfg *config.ClientConfig, sub string, args []string, out io.Write
 	return client.WriteDoctorReport(out, client.RunDoctorChecks(in))
 }
 
+// doctorLiferayProbe is what asking the candidate ports for Liferay's header found.
+type doctorLiferayProbe struct {
+	identified int    // the first port that answered with the header, or 0
+	header     string // its value
+	withdrawn  int    // a workspace-guessed port that answered without it, or 0
+	verdict    client.LiferayIdentity
+}
+
+// identifyLiferayForDoctor asks once -- doctor reports the state now, it does not wait for a
+// booting Liferay. A port named with -ports is asked too: doctor treats it as Liferay, and the
+// answer says whether a tunnel start would.
+func identifyLiferayForDoctor(cfg *config.ClientConfig, portsNamed bool) doctorLiferayProbe {
+	var candidates []int
+	switch {
+	case portsNamed:
+		candidates = []int{facts.liferayPort}
+	case facts.liferayPort == 0 || facts.liferayWeak:
+		candidates = facts.liferayCandidates
+	}
+	host := cfg.TargetHost
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	var r doctorLiferayProbe
+	for _, p := range candidates {
+		verdict, header := probeLiferay(context.Background(), nil, host, p)
+		if p == facts.liferayPort {
+			r.verdict = verdict
+		}
+		if verdict == client.LiferayIdentified && r.identified == 0 {
+			r.identified, r.header, r.verdict = p, header, verdict
+		}
+		if verdict == client.LiferayNotIdentified && facts.liferayWeak && p == facts.liferayPort && !portsNamed {
+			r.withdrawn = p
+		}
+	}
+	if r.identified > 0 {
+		r.withdrawn = 0
+	}
+	return r
+}
+
+// probeLiferay is client.ProbeLiferay, swappable in tests.
+var probeLiferay = client.ProbeLiferay
+
 // doctorPreserveHost is what a tunnel start would do with preserve_host for the Liferay port.
-// Detection does not run for named ports, so a port named with -ports is planned as undetected
-// even though doctor treats it as Liferay.
-func doctorPreserveHost(cfg *config.ClientConfig, portsNamed bool) (summary string, on bool) {
+// Since #2571 a tunnel start identifies a port by its Liferay-Portal header, named ports
+// included, so the plan follows what the port answered rather than how it was chosen.
+func doctorPreserveHost(cfg *config.ClientConfig, portsNamed bool, probe doctorLiferayProbe) (summary string, on bool) {
 	detected := facts.liferayPort
-	if portsNamed {
-		detected = 0
+	if portsNamed && probe.identified == 0 {
+		detected = 0 // named, but not (yet) answering as Liferay: a tunnel start would not identify it now
 	}
 	inputs := preserveHostInputsFor(cfg)
 	plan := planPreserveHost(inputs, detected)
 	summary = plan.summary
-	if portsNamed && inputs.flag == "" && !inputs.fileOn && !inputs.autoDisable {
-		summary = "off (ports given explicitly, so no Liferay port is detected)"
+	if probe.identified > 0 {
+		summary = strings.Replace(summary, "(Liferay detected)", "(Liferay identified by its Liferay-Portal header)", 1)
+	}
+	if detected == 0 && facts.liferayPort > 0 && inputs.flag == "" && !inputs.fileOn && !inputs.autoDisable {
+		switch probe.verdict {
+		case client.LiferayNotIdentified:
+			summary = fmt.Sprintf("off (port %d answered without Liferay's Liferay-Portal header; pass -preserve-host if it is Liferay with the header switched off)", facts.liferayPort)
+		default:
+			summary = fmt.Sprintf("off until Liferay answers on %d: a tunnel start watches for its Liferay-Portal header and turns it on then", facts.liferayPort)
+		}
 	}
 	return summary, plan.all || containsInt(plan.ports, facts.liferayPort)
 }

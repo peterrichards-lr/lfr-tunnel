@@ -301,12 +301,31 @@ for the local target, so a tunnelled portal links to `http://127.0.0.1:8080` -- 
 or a sign-in redirect loop. So when the client has **identified the target as Liferay** and
 nobody set `preserve_host`, it turns it on **for the Liferay port only**:
 
+**Liferay identifies itself.** Every portal page it serves carries a `Liferay-Portal` response
+header (for example `Liferay-Portal: Liferay Digital Experience Platform`). So the client asks
+each local port once with a `GET /`, sent with the *local* `Host`, and treats a port that
+answers with that header as Liferay. That works however the port was chosen:
+
 | How the target was found | The port treated as Liferay |
 | --- | --- |
-| A Liferay workspace in the current directory | `8080`, the first port the workspace scan publishes. The client-extension ports it finds keep the rewrite: their dev servers can refuse a `Host` they do not know. |
-| A discovered Liferay or LDM container | The host port in front of the container's own `8080`, e.g. `8081` for a second LDM project. |
-| A local port that merely answered (no container, no workspace) | None. An open port is not an identified Liferay. |
-| `ports:`, `-ports` or `LFT_CLIENT_PORTS` | None. Pass `-preserve-host` yourself. |
+| `ports:`, `-ports` or `LFT_CLIENT_PORTS` | Any of them that answers with the `Liferay-Portal` header. |
+| A local port that answered (no container, no workspace), such as a Tomcat bundle | The same: the port that answers with the header. |
+| A Liferay workspace in the current directory | `8080`, the first port the workspace scan publishes, straight away. A workspace folder is only a guess (any Gradle project has `gradlew`), so if `8080` then answers **without** the header the client stops treating it as Liferay. The client-extension ports keep the rewrite: their dev servers can refuse a `Host` they do not know. |
+| A discovered Liferay or LDM container | The host port in front of the container's own `8080` (for example `8081` for a second LDM project), identified from the image or LDM's label. It is not asked again, so it still works with the header switched off. |
+
+**A Liferay that is still starting is caught when it comes up.** A tunnel is often started next to
+a portal that takes minutes to boot, and until then it refuses connections. The client keeps
+asking in the background, every 5 seconds for up to 15 minutes, and turns `preserve_host` on for
+the port as soon as the header appears. From then on every request keeps its public `Host`,
+without reconnecting:
+
+```text
+[Client] Liferay identified on port 8080 (Liferay-Portal: Liferay Digital Experience Platform): preserve_host is now on for it, ...
+```
+
+The header can be switched off with `http.header.version.verbosity=off` in
+`portal-ext.properties`. A Liferay set up like that is not identified this way, so pass
+`-preserve-host` (or set `preserve_host: true`) yourself.
 
 Everything else keeps the rewrite, as before: a non-Liferay target, and `-target-host
 my-project.local` behind an nginx virtual host, which relies on it to reach the right server
@@ -316,6 +335,8 @@ The startup summary says which applies and why, for example:
 
 ```text
   preserve_host  on for 8080 (Liferay detected)
+  preserve_host  off until Liferay is identified: watching 8080 for its Liferay-Portal header
+  preserve_host  on for 8080 (Liferay workspace; confirmed or withdrawn by the port's Liferay-Portal header)
   preserve_host  off (preserve_host_auto: false in the config file), although Liferay was detected on 8080 -- ...
 ```
 

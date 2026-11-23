@@ -214,18 +214,20 @@ on the portal home page:
 | default (`preserve_host` off) | the local target | 33 x `http://<target>:8080` |
 | **`-preserve-host`** | the public hostname | 33 x `http://<subdomain>.lfr-demo.se` |
 
-**The client turns this on for you when it detects Liferay:** a Liferay workspace's port 8080, or
-a discovered Liferay/LDM container's portal port. Only that port keeps the public `Host`;
-client-extension ports published beside it are unaffected. The startup summary says so:
-`preserve_host  on for 8080 (Liferay detected)`.
+**The client turns this on for you when it finds Liferay.** Liferay names itself in a
+`Liferay-Portal` response header, so the client asks each local port and turns `preserve_host` on
+for the one that answers with it. That covers a Tomcat bundle, a container, a workspace and ports
+you name with `-ports`. Client-extension ports published alongside it are unaffected. If Liferay is
+still starting, the client keeps asking for up to 15 minutes and turns it on when the portal comes
+up. You'll see `[Client] Liferay identified on port 8080 ... preserve_host is now on for it`.
 
-When you name the ports yourself, nothing is detected, so pass the flag:
+If you've switched the header off (`http.header.version.verbosity=off`), pass the flag yourself:
 
 ```bash
 lfr-tunnel -subdomain dev-tomcat -ports 8080 -preserve-host
 ```
 
-or, permanently, `preserve_host: true` in your client config file. To stop the client turning it
+or, permanently, set `preserve_host: true` in your client config file. To stop the client turning it
 on by itself, set `preserve_host_auto: false`. A `preserve_host: false` line, which older Settings
 saves wrote, no longer switches detection off. See
 [`preserve_host` and Liferay](client_configuration.md#preserve_host-and-liferay).

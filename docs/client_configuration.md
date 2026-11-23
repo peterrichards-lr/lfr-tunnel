@@ -326,6 +326,13 @@ unchecking it returns the key to unset.
 
 Liferay must also **accept** the public hostname, or it answers every request with HTTP 500 and
 logs `Invalid host name`. Preserving the `Host` is what lets Liferay see that hostname at all.
+The 500 page is Liferay's generic error page, so the client does not read it. Instead, the first
+time a preserved hostname gets a 500 it repeats that `GET` once, in the background, with the
+local `Host`. If that one is not a 500, the hostname is what Liferay refused, and the client
+prints one hint per hostname naming both fixes: a Virtual Host (Control Panel > Instance
+Settings > Virtual Hosts), or `virtual.hosts.valid.hosts` in `portal-ext.properties`, where a
+wildcard such as `*.lfr-demo.se` covers every subdomain. The visitor's response is not changed.
+[`doctor`](#checking-your-setup-doctor) runs the same check on demand.
 
 #### Leaving `target_host` unset
 
@@ -617,6 +624,41 @@ An older gateway ignores the domain it is asked about and checks only the one it
 you. The client prints that answer without a domain and says so. Such a gateway also misses
 tunnels on other regions and other users' reservations, so treat `available` from it as
 provisional.
+
+---
+
+## Checking your setup: `doctor`
+
+`lfr-tunnel doctor` checks the things that otherwise surface as a failure in front of a customer.
+It changes nothing and opens no tunnel. Each check reports `PASS`, `FAIL` or `UNKNOWN`, and
+`UNKNOWN` means the check could not run, never that it passed:
+
+| Check | PASS | FAIL | UNKNOWN |
+| --- | --- | --- | --- |
+| **Token** -- where it was read from, and whether the gateway accepts it | accepted | no token anywhere, or refused | gateway unreachable, a regional edge, or an older gateway |
+| **Install path** -- whether this binary is where the installers put it (`~/liferay/lfr-tunnel`, or the gateway's `install_dir`). Any `LFR_TUNNEL_*_INSTALL_DIR` or `LFT_INSTALL_DIR` that is set is listed | in that directory | somewhere else | the gateway's `install_dir` could not be read |
+| **preserve_host** for the Liferay port | on | off | no Liferay port found |
+| **Liferay accepts the tunnel hostname** -- the differential probe described in [`preserve_host` and Liferay](#preserve_host-and-liferay), with the fix if it fails | accepted | refused | no Liferay port or hostname, Liferay unreachable, or a 500 for the local `Host` too |
+
+The install-path check looks at the path only. The client cannot see whether an EDR exclusion is
+applied; see [InfoSec](infosec.md), section 3.
+
+Its flags come **after** the word `doctor`:
+
+```bash
+lfr-tunnel doctor -ports 8080 -hostname dev-tomcat.lfr-demo.se
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `-ports` | The Liferay port to check. Without it, the port is found the way a tunnel start finds it (workspace or discovery). |
+| `-target-host` | The host that port is reached on. |
+| `-subdomain` | Your subdomain. With the gateway's domain it gives the hostname to check, which is a guess and says so. |
+| `-hostname` | The full public hostname to check. Use it when the guess is wrong, or for a custom domain. |
+| `-preserve-host`, `-preserve-host=false` | As for a tunnel start. |
+
+The exit status is `0` when every check passed, `1` when any failed, and `2` when none failed but
+any is `UNKNOWN`.
 
 ---
 

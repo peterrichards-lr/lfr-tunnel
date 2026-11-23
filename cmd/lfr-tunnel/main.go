@@ -60,7 +60,7 @@ var (
 	addHeaders         arrayFlags
 	rateLimit          = flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
 	targetHost         = flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
-	preserveHost       = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
+	preserveHost       = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host, on every port. Unset, it is on for a detected Liferay port only; -preserve-host=false turns that off too")
 	insecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Allow insecure local SSL (Skip TLS Verification)")
 	themePref          = flag.String("theme", "", "Local UI theme preference (light, dark, system, time)")
 	background         = flag.Bool("background", false, "Run client in background")
@@ -98,7 +98,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "  uninstall-gui-service  Uninstall background GUI tray autostart service\n")
 		fmt.Fprintf(os.Stderr, "  login                  Authenticate via browser handoff / OIDC\n")
 		fmt.Fprintf(os.Stderr, "  mcp                    Run the Model Context Protocol server on stdio\n")
-		fmt.Fprintf(os.Stderr, "  check-subdomain        Check whether a subdomain is free on each of the gateway's domains\n\n")
+		fmt.Fprintf(os.Stderr, "  check-subdomain        Check whether a subdomain is free on each of the gateway's domains\n")
+		fmt.Fprintf(os.Stderr, "  doctor                 Check the token, install path and Liferay setup (read-only)\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		oldUsage()
 	}
@@ -118,6 +119,7 @@ var knownSubcommands = []string{
 	"login",
 	"mcp",
 	"check-subdomain",
+	"doctor",
 }
 
 // checkBareArgs refuses an argument that is neither a flag nor a dispatched subcommand.
@@ -1252,6 +1254,10 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 
 	if len(os.Args) > 1 && os.Args[1] == "check-subdomain" {
 		os.Exit(runCheckSubdomain(os.Args[2:], cfg, os.Stdout, os.Stderr))
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		os.Exit(runDoctor(cfg, sub, os.Args[2:], os.Stdout)) // #2561; exit 1 = a FAIL, 2 = an UNKNOWN
 	}
 
 	if *checkVersionFlag {

@@ -78,6 +78,9 @@ type InterceptorEngine struct {
 	// liferayPorts are the local ports identified as Liferay, whether or not preserve_host is on
 	// for them.
 	liferayPorts map[int]bool
+	// hostProbes records each public hostname the Invalid-host-name probe has run for, so it
+	// runs once per hostname and never per request (#2561).
+	hostProbes sync.Map
 
 	// Connection status and statistics
 	ConnState         string // "disconnected", "connecting", "connected", "reconnecting"
@@ -1614,6 +1617,12 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		time.Sleep(t.engine.Latency / 2)
 	}
 	duration := time.Since(startTime).Milliseconds()
+
+	if err == nil && res != nil && res.StatusCode == http.StatusInternalServerError {
+		// Liferay answers a hostname it has not accepted with a generic 500 (#2561). Checked
+		// off the request path, once per hostname; the visitor's response is not touched.
+		t.engine.maybeProbeHostRejection(t.transport, req, t.targetPort)
+	}
 
 	if err == nil && res != nil {
 		// 1. Rewrite Location redirect header if absolute and points to the target host/port

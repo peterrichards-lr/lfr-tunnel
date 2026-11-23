@@ -28,10 +28,13 @@ import (
 //
 // A variable for the same reason as portsFlagGiven: the flag package cannot forget that a flag
 // was set, so setting it for real in one test would leak into every later one.
+// flagPreserveHost is the flag's name, shared with doctor's own flag set.
+const flagPreserveHost = "preserve-host"
+
 var preserveHostFlagGiven = func() bool {
 	given := false
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "preserve-host" {
+		if f.Name == flagPreserveHost {
 			given = true
 		}
 	})

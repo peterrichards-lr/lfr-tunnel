@@ -191,8 +191,25 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 		return nil, err
 	}
 
+	// One row per SESSION, not per sample (#2566). A tunnel_metrics row is a five-minute sample:
+	// MetricsCollector, and the edge reporter on central's behalf, write one per lease per
+	// interval with bytes. Scoring rows reported 1,845 "sessions" on EDGE-US where the gateway
+	// table on the same page counted 62, and weighted the closest percentage by how long each
+	// tunnel stayed busy -- one long session placed badly outweighed many short ones placed well.
+	//
+	// (full_host, connected_at) identifies one session across its samples, the same key the
+	// gateway table counts (metrics.go): connected_at is the lease's CreatedAt and is stable for
+	// its life. The day is derived from connected_at, so a session belongs to the day it started,
+	// which is the day whose probes it is judged against.
+	//
+	// node_id is in the DISTINCT as well, but it cannot split a session: a lease lives on one
+	// gateway, every sample of it is stamped by that gateway (or by central with the edge's
+	// authenticated identity, edgeMetricRows), and a reconnect elsewhere is a new lease with a
+	// new connected_at. Should two nodes ever report the same host and second, they are two
+	// sessions -- which is also how the gateway table, grouped by node, would count them.
 	sessionRows, err := repo.conn.Query(`
-		SELECT user_id, COALESCE(NULLIF(node_id, ''), 'control'), date(connected_at)
+		SELECT DISTINCT user_id, COALESCE(NULLIF(node_id, ''), 'control'), full_host, connected_at,
+		       date(connected_at)
 		FROM tunnel_metrics WHERE connected_at >= ?`, since)
 	if err != nil {
 		return nil, fmt.Errorf("node placement (sessions): %w", err)
@@ -204,8 +221,8 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 	unknown := map[string]bool{}
 
 	for sessionRows.Next() {
-		var user, nodeID, day string
-		if err := sessionRows.Scan(&user, &nodeID, &day); err != nil {
+		var user, nodeID, fullHost, connectedAt, day string
+		if err := sessionRows.Scan(&user, &nodeID, &fullHost, &connectedAt, &day); err != nil {
 			return nil, fmt.Errorf("node placement (session scan): %w", err)
 		}
 		report.Sessions++

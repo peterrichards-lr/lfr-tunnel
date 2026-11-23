@@ -249,3 +249,53 @@ func TestNodeIDPrefixesAreStripped(t *testing.T) {
 		}
 	}
 }
+
+// seedSample writes one five-minute tunnel_metrics sample, the shape MetricsCollector and the
+// edge reporter actually write: one row per lease per interval with bytes, all carrying the
+// lease's own connected_at and differing only in recorded_at and the byte delta.
+func seedSample(t *testing.T, d *DB, user, nodeID, fullHost, connectedAt, recordedAt string) {
+	t.Helper()
+	if _, err := d.conn.Exec(
+		`INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at, node_id)
+		 VALUES (?,?,?,100,100,?,?,?)`,
+		user, strings.SplitN(fullHost, ".", 2)[0], fullHost, connectedAt, recordedAt, nodeID); err != nil {
+		t.Fatalf("seeding sample: %v", err)
+	}
+}
+
+// #2566. A tunnel_metrics row is a five-minute SAMPLE, not a session. Scoring every row made
+// "sessions" an order of magnitude too high (1,845 against the gateway table's 62 for EDGE-US)
+// and weighted the closest percentage by how long a tunnel stayed busy: here one long session
+// placed well would read as 5 of 6 optimal, when it is one of two.
+func TestSamplesOfOneSessionAreScoredOnce(t *testing.T) {
+	d := setupTestDB(t)
+	day := today()
+	seedProbe(t, d, "u1", day, "in", ms(20))
+	seedProbe(t, d, "u1", day, "us", ms(200))
+
+	// One long session on edge-in: five samples, one connected_at.
+	connected := day + " 10:00:00"
+	for i := 0; i < 5; i++ {
+		seedSample(t, d, "u1", "edge-in", "long.example.se", connected,
+			fmt.Sprintf("%s 10:%02d:00", day, 5*(i+1)))
+	}
+	// One short session on the slower edge-us: a single sample.
+	seedSample(t, d, "u1", "edge-us", "short.example.se", day+" 11:00:00", day+" 11:05:00")
+
+	rep, err := d.GetNodePlacement(30)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if rep.Sessions != 2 {
+		t.Fatalf("sessions = %d, want 2 -- samples are being counted as sessions: %+v", rep.Sessions, rep)
+	}
+	if rep.Optimal != 1 || rep.Suboptimal != 1 || rep.Unverifiable != 0 {
+		t.Errorf("verdicts = optimal %d / suboptimal %d / unverifiable %d, want 1/1/0 -- each "+
+			"session must be scored once, not once per sample", rep.Optimal, rep.Suboptimal, rep.Unverifiable)
+	}
+	for _, n := range rep.Nodes {
+		if n.Sessions != 1 {
+			t.Errorf("node %s sessions = %d, want 1", n.NodeID, n.Sessions)
+		}
+	}
+}

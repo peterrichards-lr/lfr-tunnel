@@ -392,7 +392,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"target_host":          cfg.TargetHost,
 				"dest_port":            destPort,
 				"subdomain":            cfg.Subdomain,
-				"preserve_host":        cfg.PreserveHost,
+				"preserve_host":        cfg.PreserveHostOn(),
 				"insecure_skip_verify": cfg.InsecureSkipVerify,
 				"passcode":             cfg.Passcode,
 				"rate_limit":           cfg.RateLimit,
@@ -432,6 +432,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"dest_port":     engine.DestPort,
 				"subdomain":     effSubdomain,
 				"preserve_host": engine.PreserveHost,
+				// The automatic, per-port form (#2560): preserve_host above is the every-port
+				// setting, and reads false while the detected Liferay port has it on.
+				"preserve_host_ports": engine.preserveHostPortsLocked(),
 			}
 			// Which settings were claimed at launch, and by what (#2088). The panel renders
 			// these read-only: a restart reuses the same argv, so a flag or exported variable
@@ -540,8 +543,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			if req.Subdomain != nil {
 				cfg.Subdomain = *req.Subdomain
 			}
+			// See FormPreserveHost: an unchecked box is not an explicit off (#2560).
 			if req.PreserveHost != nil {
-				cfg.PreserveHost = *req.PreserveHost
+				cfg.PreserveHost = config.FormPreserveHost(cfg.PreserveHost, *req.PreserveHost)
 			}
 			if req.InsecureSkipVerify != nil {
 				cfg.InsecureSkipVerify = *req.InsecureSkipVerify

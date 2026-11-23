@@ -18,6 +18,11 @@ type AutoDiscoverResult struct {
 	// Container names the container the ports belong to, so the log can say what is being
 	// published (#2462). Empty for a native service.
 	Container string
+	// LiferayPort is the host port in front of the container's own 8080 -- Liferay's HTTP
+	// connector -- and so the one port in Ports that is the portal itself (#2560). Zero when
+	// no published port maps to 8080, and always zero for the native probe, which only knows a
+	// port accepted a TCP connection, not what answered it.
+	LiferayPort int
 }
 
 // DiscoveredContainer is one container that looked like a Liferay instance.
@@ -123,6 +128,7 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var candidates []DiscoveredContainer
 	var types []string
+	var liferayPorts []int
 
 	for _, line := range lines {
 		parts := strings.Split(line, "||")
@@ -158,6 +164,7 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 		// filtering on the host port alone hid it, so two projects looked like one (#2462).
 		// Once each: Docker lists a port for IPv4 and IPv6 alike.
 		var ports []int
+		liferayPort := 0
 		seen := map[int]bool{}
 		for _, match := range publishedPortRegex.FindAllStringSubmatch(portMap, -1) {
 			p, err := strconv.Atoi(match[1])
@@ -168,10 +175,14 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 				seen[p] = true
 				ports = append(ports, p)
 			}
+			if match[2] == "8080" && liferayPort == 0 {
+				liferayPort = p
+			}
 		}
 		if len(ports) > 0 {
 			candidates = append(candidates, DiscoveredContainer{Name: name, Ports: ports})
 			types = append(types, containerType)
+			liferayPorts = append(liferayPorts, liferayPort)
 		}
 	}
 
@@ -180,10 +191,11 @@ func discoverDocker() (*AutoDiscoverResult, error) {
 		return nil, nil
 	case 1:
 		return &AutoDiscoverResult{
-			Host:      "localhost",
-			Ports:     candidates[0].Ports,
-			Type:      types[0],
-			Container: candidates[0].Name,
+			Host:        "localhost",
+			Ports:       candidates[0].Ports,
+			Type:        types[0],
+			Container:   candidates[0].Name,
+			LiferayPort: liferayPorts[0],
 		}, nil
 	default:
 		return nil, &AmbiguousDiscoveryError{Candidates: candidates}

@@ -104,8 +104,11 @@ Four consequences worth knowing:
   `LFT_SUBDOMAIN=""` does not clear a `subdomain:` from the file, and `-rate-limit 0` cannot put
   `0` back over a `rate_limit: 100` in the file. Edit the file, or point `-config` at a
   different one.
-* **A boolean flag can only turn a setting on.** `-preserve-host` and `-insecure-skip-verify`
-  set `true`; there is no flag spelling that forces `false` back over a `true` in the file.
+* **A boolean flag can only turn a setting on -- except `-preserve-host`.** `-insecure-skip-verify`
+  sets `true`, and there is no flag spelling that forces `false` back over a `true` in the file.
+  `-preserve-host=false` is the exception: for that run it beats `preserve_host: true` in the
+  file and also switches off the automatic setting for a detected Liferay port, as
+  `preserve_host_auto: false` would. See [`preserve_host` and Liferay](#preserve_host-and-liferay).
 
 ### Flag and environment equivalents
 
@@ -127,7 +130,8 @@ Settings not listed here can only be set in the config file.
 | `bandwidth` | `-bandwidth` | `LFT_CLIENT_BANDWIDTH`, `LFT_BANDWIDTH` |
 | `rate_limit` | `-rate-limit` | — |
 | `basic_auth` | `-basic-auth` | — |
-| `preserve_host` | `-preserve-host` | — |
+| `preserve_host` | `-preserve-host`, `-preserve-host=false` | — |
+| `preserve_host_auto` | `-preserve-host=false` (turns it off for the run) | — |
 | `insecure_skip_verify` | `-insecure-skip-verify` | — |
 | `theme` | `-theme` | — |
 | `log_dir` | `-log-dir` | `LFT_LOG_DIR` |
@@ -233,7 +237,8 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 | --- | --- | --- | --- |
 | `ports` | list of int | *unset* — discovered, see below | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
 | `target_host` | string | *unset* — discovered, then `127.0.0.1`; see below | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
-| `preserve_host` | bool | `false` | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for. |
+| `preserve_host` | bool | *unset* — on for a detected Liferay port only, see below | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for, which Liferay does. `true` turns it on for every port. **`false` means the same as unset**: older tray and Inspector saves wrote it for everyone, so it does not switch off detection. Use `preserve_host_auto` for that. |
+| `preserve_host_auto` | bool | *unset* — on | Whether `preserve_host` turns on by itself for a port identified as Liferay. `false` switches that off, so every port gets the rewritten `Host` unless `preserve_host: true`. |
 | `insecure_skip_verify` | bool | `false` | Skip TLS verification when the **local** target serves HTTPS with a self-signed certificate. It has no effect on the connection to the gateway. |
 
 #### Leaving `ports` unset
@@ -288,6 +293,58 @@ Worth knowing:
 - The dashboard shows what was decided: one `Local:` line per published port, the primary
   saying where its list came from — `(Primary, from -ports)`, `(Primary, auto-discovered)` and
   so on. The Inspector's `/api/healthz` and `/api/info` check those same ports.
+
+#### `preserve_host` and Liferay
+
+Liferay builds every absolute link from the `Host` it is asked for. With the rewrite, it is asked
+for the local target, so a tunnelled portal links to `http://127.0.0.1:8080` -- localhost links,
+or a sign-in redirect loop. So when the client has **identified the target as Liferay** and
+nobody set `preserve_host`, it turns it on **for the Liferay port only**:
+
+| How the target was found | The port treated as Liferay |
+| --- | --- |
+| A Liferay workspace in the current directory | `8080`, the first port the workspace scan publishes. The client-extension ports it finds keep the rewrite: their dev servers can refuse a `Host` they do not know. |
+| A discovered Liferay or LDM container | The host port in front of the container's own `8080`, e.g. `8081` for a second LDM project. |
+| A local port that merely answered (no container, no workspace) | None. An open port is not an identified Liferay. |
+| `ports:`, `-ports` or `LFT_CLIENT_PORTS` | None. Pass `-preserve-host` yourself. |
+
+Everything else keeps the rewrite, as before: a non-Liferay target, and `-target-host
+my-project.local` behind an nginx virtual host, which relies on it to reach the right server
+block.
+
+The startup summary says which applies and why, for example:
+
+```text
+  preserve_host  on for 8080 (Liferay detected)
+  preserve_host  off (preserve_host_auto: false in the config file), although Liferay was detected on 8080 -- ...
+```
+
+Precedence, highest first:
+
+| Setting | Result |
+| --- | --- |
+| `-preserve-host` | every port, for this run |
+| `-preserve-host=false` | no port, for this run: neither the every-port setting nor detection |
+| `preserve_host: true` | every port |
+| `preserve_host_auto: false` | no port |
+| anything else, including `preserve_host: false` | the detected Liferay port, if there is one |
+
+**To switch detection off**, set `preserve_host_auto: false` in the config file, or pass
+`-preserve-host=false` for one run. `preserve_host: false` does **not** switch it off: the tray
+and the Inspector wrote that line into every config they saved before this feature existed, so
+it carries no decision. The Settings checkbox maps to `preserve_host` only -- checked is `true`,
+unchecked leaves the key unset -- and neither form shows or writes `preserve_host_auto`, so a
+save never switches detection off.
+
+Liferay must also **accept** the public hostname, or it answers every request with HTTP 500 and
+logs `Invalid host name`. Preserving the `Host` is what lets Liferay see that hostname at all.
+The 500 page is Liferay's generic error page, so the client does not read it. Instead, the first
+time a preserved hostname gets a 500 it repeats that `GET` once, in the background, with the
+local `Host`. If that one is not a 500, the hostname is what Liferay refused, and the client
+prints one hint per hostname naming both fixes: a Virtual Host (Control Panel > Instance
+Settings > Virtual Hosts), or `virtual.hosts.valid.hosts` in `portal-ext.properties`, where a
+wildcard such as `*.lfr-demo.se` covers every subdomain. The visitor's response is not changed.
+[`doctor`](#checking-your-setup-doctor) runs the same check on demand.
 
 #### Leaving `target_host` unset
 
@@ -424,7 +481,10 @@ ports:
   - 8080
   - 3000
 target_host: "127.0.0.1"
-preserve_host: false
+# Leave unset to turn it on for a detected Liferay port only; true = every port.
+# preserve_host: true
+# Stop the client turning it on by itself for a detected Liferay port.
+# preserve_host_auto: false
 insecure_skip_verify: false
 
 # --- Who may reach it. passcode and whitelist_ips combine as OR ---
@@ -529,6 +589,93 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 ---
 
+## Checking a subdomain before you use it
+
+`lfr-tunnel check-subdomain <name>` asks the gateway whether `<name>` is free, on every domain the
+gateway issues tunnels on, using the token and gateway this file and the steps under
+[Precedence](#precedence) resolve. No token is typed on the command line.
+
+```text
+$ lfr-tunnel check-subdomain acme-poc
+acme-poc.lfr-demo.se      unavailable -- subdomain is already taken
+acme-poc.lfr-demo.online  available
+Suggestions on lfr-demo.se: acme-poc-dev, acme-poc-app, acme-poc-tunnel
+```
+
+A name is unavailable when a tunnel on any region holds it, when another user has reserved it
+(or held it within the quarantine window after their reservation expired), or when it breaks the
+naming rules: 3 to 63 letters, digits and hyphens, not starting or ending with a hyphen, and not
+a reserved word. Your own reservation
+does not count against you. Suggestions are names the gateway has checked the same way.
+
+`check-subdomain` must be the first argument. Its own flags go after it, before or after the
+name:
+
+* `-token <token>` uses that token instead of the resolved one. Prefer the token file.
+* `-config <path>` reads a different config file.
+
+The exit status is meant for scripts:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Every domain answered, and the name is available on at least one. |
+| `1` | Every domain answered, and the name is available on none. |
+| `2` | Anything else: no gateway or token configured, the token not accepted, the gateway unreachable, or any one domain that could not be checked. |
+
+A domain that could not be checked is printed as `unknown`, never as `available`, and makes the
+exit status `2` even when another domain is available.
+
+When the token is not accepted, the client prints where it read it from, and what will replace
+it, exactly as it does when a tunnel's registration is refused. A regional edge cannot answer
+this question, so pointing the client at one (`LFT_SERVER_URL`) prints the control plane's
+address instead.
+
+Availability is a snapshot. Whether **you** may then use the name is decided when the tunnel
+registers. Your gateway may require a reservation made in the portal first, and your
+reservation quota applies. `check-subdomain` checks neither.
+
+An older gateway ignores the domain it is asked about and checks only the one it would assign
+you. The client prints that answer without a domain and says so. Such a gateway also misses
+tunnels on other regions and other users' reservations, so treat `available` from it as
+provisional.
+
+---
+
+## Checking your setup: `doctor`
+
+`lfr-tunnel doctor` checks the things that otherwise surface as a failure in front of a customer.
+It changes nothing and opens no tunnel. Each check reports `PASS`, `FAIL` or `UNKNOWN`, and
+`UNKNOWN` means the check could not run, never that it passed:
+
+| Check | PASS | FAIL | UNKNOWN |
+| --- | --- | --- | --- |
+| **Token** -- where it was read from, and whether the gateway accepts it | accepted | no token anywhere, or refused | gateway unreachable, a regional edge, or an older gateway |
+| **Install path** -- whether this binary is where the installers put it (`~/liferay/lfr-tunnel`, or the gateway's `install_dir`). Any `LFR_TUNNEL_*_INSTALL_DIR` or `LFT_INSTALL_DIR` that is set is listed | in that directory | somewhere else | the gateway's `install_dir` could not be read |
+| **preserve_host** for the Liferay port | on | off | no Liferay port found |
+| **Liferay accepts the tunnel hostname** -- the differential probe described in [`preserve_host` and Liferay](#preserve_host-and-liferay), with the fix if it fails | accepted | refused | no Liferay port or hostname, Liferay unreachable, or a 500 for the local `Host` too |
+
+The install-path check looks at the path only. The client cannot see whether an EDR exclusion is
+applied; see [InfoSec](infosec.md), section 3.
+
+Its flags come **after** the word `doctor`:
+
+```bash
+lfr-tunnel doctor -ports 8080 -hostname dev-tomcat.lfr-demo.se
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `-ports` | The Liferay port to check. Without it, the port is found the way a tunnel start finds it (workspace or discovery). |
+| `-target-host` | The host that port is reached on. |
+| `-subdomain` | Your subdomain. With the gateway's domain it gives the hostname to check, which is a guess and says so. |
+| `-hostname` | The full public hostname to check. Use it when the guess is wrong, or for a custom domain. |
+| `-preserve-host`, `-preserve-host=false` | As for a tunnel start. |
+
+The exit status is `0` when every check passed, `1` when any failed, and `2` when none failed but
+any is `UNKNOWN`.
+
+---
+
 ## See also
 
 * [Getting Started Guide](getting_started.md) — installing, registering, claiming a token, and
@@ -539,4 +686,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

@@ -54,16 +54,25 @@ type NodePlacementNode struct {
 	// WorstMissMs is the largest RTT gap seen on this node: how much faster the region the
 	// user should have landed on was. Zero when nothing was suboptimal.
 	WorstMissMs int `json:"worst_miss_ms"`
+	// UnreachableAtProbe is the subset of Unverifiable whose node's region was probed that day
+	// and did not answer (#2567). See the report field of the same name.
+	UnreachableAtProbe int `json:"unreachable_at_probe"`
 }
 
 // NodePlacementReport answers "are tunnels starting on the closest node".
 type NodePlacementReport struct {
-	Days         int                 `json:"days"`
-	Sessions     int                 `json:"sessions"`
-	Optimal      int                 `json:"optimal"`
-	Suboptimal   int                 `json:"suboptimal"`
-	Unverifiable int                 `json:"unverifiable"`
-	Nodes        []NodePlacementNode `json:"nodes"`
+	Days         int `json:"days"`
+	Sessions     int `json:"sessions"`
+	Optimal      int `json:"optimal"`
+	Suboptimal   int `json:"suboptimal"`
+	Unverifiable int `json:"unverifiable"`
+	// UnreachableAtProbe counts sessions, already included in Unverifiable, that ran on a node
+	// whose region the user probed that day and got no answer from (#2567). The tunnel later
+	// landed there anyway, so there is no RTT to score it against -- but the node name is
+	// perfectly recognisable, so it is NOT an unknown node. Counted apart so UnknownNodes stays
+	// a pure vocabulary-mismatch signal (#1919).
+	UnreachableAtProbe int                 `json:"unreachable_at_probe"`
+	Nodes              []NodePlacementNode `json:"nodes"`
 	// UnknownNodes are node_id values that matched no region any user probed. Surfaced rather
 	// than folded into the counts: this is the shape of a rename or a new edge, and it makes
 	// the report wrong in a way nothing else would reveal.
@@ -116,39 +125,62 @@ type measurementKey struct{ user, day string }
 // Keyed by day as well as user because a session is judged against what that user measured on
 // the day it started, not against a fleet average -- someone on a hotel network should not be
 // scored against the office.
-func (repo *SQLiteRegionProbeRepo) loadMeasurements(since string) (map[measurementKey]map[string]int, error) {
+//
+// It also returns, per user and day, the regions that were probed and DID NOT ANSWER (#2567).
+// Those cannot be "the fastest", so they stay out of the RTT comparison -- but a session that
+// later ran on one of them must not be mistaken for a node matching no probed region. The
+// region is in the vocabulary; it was just down, or unreachable from that network, at probe
+// time.
+func (repo *SQLiteRegionProbeRepo) loadMeasurements(since string) (
+	measured map[measurementKey]map[string]int, unreachable map[measurementKey]map[string]bool, err error) {
 	rows, err := repo.conn.Query(`
 		SELECT user_id, day, region, rtt_ms FROM region_probes WHERE day >= ?`, since)
 	if err != nil {
-		return nil, fmt.Errorf("node placement (probes): %w", err)
+		return nil, nil, fmt.Errorf("node placement (probes): %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	measured := map[measurementKey]map[string]int{}
+	measured = map[measurementKey]map[string]int{}
+	unreachable = map[measurementKey]map[string]bool{}
 	for rows.Next() {
 		var user, day, region string
 		var rtt sql.NullInt64
 		if err := rows.Scan(&user, &day, &region, &rtt); err != nil {
-			return nil, fmt.Errorf("node placement (probe scan): %w", err)
+			return nil, nil, fmt.Errorf("node placement (probe scan): %w", err)
 		}
+		k := measurementKey{user, day}
+		region = strings.ToLower(strings.TrimSpace(region))
 		if !rtt.Valid {
 			// The region did not answer. Recorded by #1151 as a placement fact, but it
 			// cannot be "the fastest", so it does not belong in this comparison.
+			if unreachable[k] == nil {
+				unreachable[k] = map[string]bool{}
+			}
+			unreachable[k][region] = true
 			continue
 		}
-		k := measurementKey{user, day}
 		if measured[k] == nil {
 			measured[k] = map[string]int{}
 		}
-		region = strings.ToLower(strings.TrimSpace(region))
 		if prev, seen := measured[k][region]; !seen || int(rtt.Int64) < prev {
 			measured[k][region] = int(rtt.Int64)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("node placement (probes): %w", err)
+		return nil, nil, fmt.Errorf("node placement (probes): %w", err)
 	}
-	return measured, nil
+	return measured, unreachable, nil
+}
+
+// servedRegionUnreachable reports whether the node that served a session is a region the user
+// probed that day and got no answer from. Checked only when the node has no RTT: an answer
+// always wins, since region_probes keeps one row per region per day and the latest write is it.
+func servedRegionUnreachable(rtts map[string]int, unreachable map[string]bool, nodeID string) bool {
+	region := normaliseNodeID(nodeID)
+	if _, answered := rtts[region]; answered {
+		return false
+	}
+	return unreachable[region]
 }
 
 // scoreSession decides how one session counts. Returns the verdict and, for a miss, how much
@@ -186,13 +218,30 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 	since := analyticsFloor(days)
 	sinceDay := analyticsDayFloor(days)
 
-	measured, err := repo.loadMeasurements(sinceDay)
+	measured, unreachable, err := repo.loadMeasurements(sinceDay)
 	if err != nil {
 		return nil, err
 	}
 
+	// One row per SESSION, not per sample (#2566). A tunnel_metrics row is a five-minute sample:
+	// MetricsCollector, and the edge reporter on central's behalf, write one per lease per
+	// interval with bytes. Scoring rows reported 1,845 "sessions" on EDGE-US where the gateway
+	// table on the same page counted 62, and weighted the closest percentage by how long each
+	// tunnel stayed busy -- one long session placed badly outweighed many short ones placed well.
+	//
+	// (full_host, connected_at) identifies one session across its samples, the same key the
+	// gateway table counts (metrics.go): connected_at is the lease's CreatedAt and is stable for
+	// its life. The day is derived from connected_at, so a session belongs to the day it started,
+	// which is the day whose probes it is judged against.
+	//
+	// node_id is in the DISTINCT as well, but it cannot split a session: a lease lives on one
+	// gateway, every sample of it is stamped by that gateway (or by central with the edge's
+	// authenticated identity, edgeMetricRows), and a reconnect elsewhere is a new lease with a
+	// new connected_at. Should two nodes ever report the same host and second, they are two
+	// sessions -- which is also how the gateway table, grouped by node, would count them.
 	sessionRows, err := repo.conn.Query(`
-		SELECT user_id, COALESCE(NULLIF(node_id, ''), 'control'), date(connected_at)
+		SELECT DISTINCT user_id, COALESCE(NULLIF(node_id, ''), 'control'), full_host, connected_at,
+		       date(connected_at)
 		FROM tunnel_metrics WHERE connected_at >= ?`, since)
 	if err != nil {
 		return nil, fmt.Errorf("node placement (sessions): %w", err)
@@ -204,8 +253,8 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 	unknown := map[string]bool{}
 
 	for sessionRows.Next() {
-		var user, nodeID, day string
-		if err := sessionRows.Scan(&user, &nodeID, &day); err != nil {
+		var user, nodeID, fullHost, connectedAt, day string
+		if err := sessionRows.Scan(&user, &nodeID, &fullHost, &connectedAt, &day); err != nil {
 			return nil, fmt.Errorf("node placement (session scan): %w", err)
 		}
 		report.Sessions++
@@ -216,27 +265,8 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 		}
 		node.Sessions++
 
-		rtts := measured[measurementKey{user, day}]
-		verdict, miss := scoreSession(rtts, nodeID)
-		switch verdict {
-		case PlacementOptimal:
-			report.Optimal++
-			node.Optimal++
-		case PlacementSuboptimal:
-			report.Suboptimal++
-			node.Suboptimal++
-			if miss > node.WorstMissMs {
-				node.WorstMissMs = miss
-			}
-		default:
-			// Unverifiable. Name the node when it was the node we could not place, rather
-			// than when the user simply had no probe that day.
-			if len(rtts) > 0 {
-				unknown[nodeID] = true
-			}
-			report.Unverifiable++
-			node.Unverifiable++
-		}
+		key := measurementKey{user, day}
+		tallySession(report, node, unknown, measured[key], unreachable[key], nodeID)
 	}
 	if err := sessionRows.Err(); err != nil {
 		return nil, fmt.Errorf("node placement (sessions): %w", err)
@@ -257,6 +287,41 @@ func (repo *SQLiteRegionProbeRepo) GetNodePlacement(days int) (*NodePlacementRep
 	return report, nil
 }
 
+// tallySession scores one session against what its user measured that day and adds it to the
+// report and to its node's record. Split out of GetNodePlacement only to keep that function
+// within funlen; the logic is unchanged.
+func tallySession(report *NodePlacementReport, node *NodePlacementNode, unknown map[string]bool,
+	rtts map[string]int, unreachable map[string]bool, nodeID string) {
+	verdict, miss := scoreSession(rtts, nodeID)
+	switch verdict {
+	case PlacementOptimal:
+		report.Optimal++
+		node.Optimal++
+	case PlacementSuboptimal:
+		report.Suboptimal++
+		node.Suboptimal++
+		if miss > node.WorstMissMs {
+			node.WorstMissMs = miss
+		}
+	default:
+		// Unverifiable, for one of three reasons, and only one of them names the node:
+		//   - the served region was probed that day and did not answer (#2567): a
+		//     placement fact, counted apart, NOT a vocabulary problem;
+		//   - the user had no probe that day: a cached or pinned choice, nothing to say;
+		//   - the user probed, but no probed region matches this node: a rename or a
+		//     missing alias, the vocabulary mismatch UnknownNodes exists for (#1919).
+		switch {
+		case servedRegionUnreachable(rtts, unreachable, nodeID):
+			report.UnreachableAtProbe++
+			node.UnreachableAtProbe++
+		case len(rtts) > 0:
+			unknown[nodeID] = true
+		}
+		report.Unverifiable++
+		node.Unverifiable++
+	}
+}
+
 // placementCaveats states what the numbers cannot mean. Carried in the payload rather than left
 // to whoever renders it, because the failure this report invites is being read as a score.
 func placementCaveats(r *NodePlacementReport) []string {
@@ -269,6 +334,11 @@ func placementCaveats(r *NodePlacementReport) []string {
 	if len(r.UnknownNodes) > 0 {
 		c = append(c, "Some sessions ran on a node that matches no probed region: "+
 			strings.Join(r.UnknownNodes, ", ")+". Those are counted unverifiable, not suboptimal.")
+	}
+	if r.UnreachableAtProbe > 0 {
+		c = append(c, fmt.Sprintf("%d session(s) ran on a region that did not answer that user's probe that day, "+
+			"so there is no RTT to score them against. They are counted unverifiable; the node is "+
+			"recognised, so it is not listed as matching no probed region.", r.UnreachableAtProbe))
 	}
 	return c
 }

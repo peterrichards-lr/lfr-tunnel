@@ -169,8 +169,11 @@ type RegisterResponse struct {
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
 type CheckSubdomainResponse struct {
-	Available   bool     `json:"available"`
-	Subdomain   string   `json:"subdomain"`
+	Available bool   `json:"available"`
+	Subdomain string `json:"subdomain"`
+	// Domain is the domain the answer is about, when it is about exactly one (#2562). Absent
+	// from gateways older than that, which also ignored the `domain` parameter.
+	Domain      string   `json:"domain,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	Suggestions []string `json:"suggestions,omitempty"`
 }
@@ -2533,6 +2536,13 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 
 // handleCheckSubdomain verifies if a subdomain prefix is available and generates suggestions if not.
 func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
+	// A node with no control-plane data cannot check a token, fleet-wide leases or reservations,
+	// and must say so rather than answer 401 about a credential it never examined (#2123). The
+	// route is dispatched before ServeHTTP's own misdirect guard, so it is checked here (#2562).
+	if s.holdsNoControlPlaneData() {
+		s.respondMisdirected(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 
 	// Validate auth token
@@ -2572,15 +2582,37 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
-	// Determine active domains to check dynamically based on request Host
+	// Determine active domains to check dynamically based on request Host, unless the caller
+	// named one (#2562). A named domain must be one this gateway issues tunnels on: answering
+	// for any other would be a guess about a name nothing here can hand out.
 	activeDomains := s.getActiveDomainsForRequest(r, userRec)
+	if requested := r.URL.Query().Get("domain"); requested != "" {
+		served, ok := s.servedTunnelDomain(requested)
+		if !ok {
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(map[string]string{"error": "this gateway does not issue tunnels on domain " + strings.TrimSpace(requested)}); err != nil {
+				slog.Info(fmt.Sprintf("[Server] Failed to encode unknown domain response: %v", err))
+			}
+			return
+		}
+		activeDomains = []string{served}
+	}
 
 	var available bool
 	var reason string
 	var pickedDomain string
 
 	for _, d := range activeDomains {
-		avail, rsn := s.registry.CheckSubdomain(subdomain, []string{d})
+		avail, rsn, err := s.subdomainAvailability(subdomain, d, user.ID)
+		if err != nil {
+			// Unknown is not absent: a name whose reservations could not be read is not free.
+			slog.Error(fmt.Sprintf("[Server] Subdomain check could not read reservations: %v", err))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if encErr := json.NewEncoder(w).Encode(map[string]string{"error": errReservationsUnreadable.Error()}); encErr != nil {
+				slog.Info(fmt.Sprintf("[Server] Failed to encode reservations-unreadable response: %v", encErr))
+			}
+			return
+		}
 		if avail {
 			available = true
 			pickedDomain = d
@@ -2597,9 +2629,14 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		Subdomain: subdomain,
 		Reason:    reason,
 	}
+	// Echoed only when the answer is about exactly one domain, so a caller can tell an answer
+	// for the domain it asked about from an older gateway's answer for whichever one it chose.
+	if len(activeDomains) == 1 {
+		resp.Domain = activeDomains[0]
+	}
 
 	if !available {
-		resp.Suggestions = s.registry.GenerateSuggestions(subdomain, activeDomains)
+		resp.Suggestions = s.availableSuggestions(s.registry.GenerateSuggestions(subdomain, activeDomains), activeDomains, user.ID)
 	}
 
 	w.WriteHeader(http.StatusOK)

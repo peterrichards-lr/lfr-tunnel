@@ -4,6 +4,11 @@
 
 This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
 
+> [!TIP]
+> **Sign in with Liferay SSO. No registration or approval.** Install the client, run
+> `lfr-tunnel login`, sign in with your `@liferay.com` account through Okta, and start a tunnel.
+> It takes minutes.
+
 For general architecture, self-hosting instructions, and configuration reference, see the main [README](https://github.com/peterrichards-lr/lfr-tunnel#readme) and [Architecture Guide](architecture.md).
 
 ---
@@ -15,7 +20,7 @@ For general architecture, self-hosting instructions, and configuration reference
 | **Gateway URL** | `https://tunnel.lfr-demo.se` |
 | **Primary Domain** | `lfr-demo.se` |
 | **Secondary Domain** | `lfr-demo.online` |
-| **Registration** | Self-service with admin approval (see below) |
+| **Sign-in** | Liferay SSO (Okta), `@liferay.com` accounts only. Your account is created on first sign-in, with no registration or approval. |
 
 Your tunnel will be reachable at:
 - `https://<your-subdomain>.lfr-demo.se`
@@ -62,73 +67,61 @@ docker run -d --name lfr-tunnel \
 
 ---
 
-## Step 2: Register for Access
+## Step 2: Sign In with Liferay SSO
 
-Access to the shared gateway is controlled by a **Personal Access Token (PAT)**. To get one:
+The client authenticates with a **Personal Access Token (PAT)**. On the hosted gateway you get one
+by signing in; there is nothing to request and nobody to wait for.
 
-1. **Submit a registration request** to the gateway:
-   ```bash
-   curl -s -X POST \
-     -H "Content-Type: application/json" \
-     -d '{"email": "your.name@liferay.com", "requested_subdomain": "your-name-se"}' \
-     https://tunnel.lfr-demo.se/api/register-request
-   ```
-   You will receive a confirmation that your request is pending admin approval.
-
-2. **Wait for an approval email** sent to your `@liferay.com` address. The Liferay SE gateway administrator will review and approve your request.
-
-3. **Claim your Personal Access Token** using the link in the approval email, or run:
-   ```bash
-   curl -s "https://tunnel.lfr-demo.se/api/claim?token=<claim-token-from-email>"
-   ```
-   This returns a PAT in the format `lfr_pat_...`. **Copy it now** — it is only shown once.
-
----
-
-## Step 3: Authenticate and Store Your Token
-
-Save your PAT securely so the client loads it automatically on every run without needing any `-token` flags. There are two ways to do this:
-
-### Option A: Automatic Browser Login (Highly Recommended)
-The client includes an interactive **Magic Handoff** flow that automatically completes token generation and saves it to your configuration directory with zero manual copying:
-
-1. In your terminal, run the login command:
+1. In your terminal, run:
    ```bash
    lfr-tunnel login
    ```
-2. Your default web browser will open to the gateway's **User Portal**.
-3. Authenticate on the portal (using your `@liferay.com` email and magic link).
-4. Upon logging in, the portal will securely hand off a newly generated token back to your local client terminal session and save it automatically:
-   ```
-   ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token
-   ```
+2. Your browser opens the gateway's portal. **Sign in with Liferay SSO** using your
+   `@liferay.com` account (Okta). Your account is created the first time you sign in.
+3. Click **Generate Token** in the dialog the portal opens. The token is handed back to your
+   terminal and saved to `~/.lfr-tunnel/token`, and the client loads it automatically from then
+   on.
 
-### Option B: Manual Clipboard Configuration
-If you prefer to save your claimed token manually:
+You are ready to run a tunnel: pick a subdomain (Step 4) and use one of the examples in Step 5,
+for instance `lfr-tunnel -subdomain your-name-se -ports 8080`.
 
-```bash
-mkdir -p ~/.lfr-tunnel
-echo "lfr_pat_your-token-here" > ~/.lfr-tunnel/token
-chmod 600 ~/.lfr-tunnel/token
-```
+What the handoff checks, what happens when the gateway cannot verify the token, how long `login`
+waits, and what you can paste at its prompt are the same on every gateway, and are described in
+[Getting Started, Step 3 Option A](getting_started.md#option-a-automatic-browser-login-highly-recommended).
 
-The client will now authenticate with this token automatically.
+---
+
+## Step 3: Using the Token Elsewhere
+
+`lfr-tunnel login` covers the native client. For anything else, sign in to the portal at
+`https://tunnel.lfr-demo.se` with Liferay SSO and generate a token there:
+
+* **Docker (Method B, and the Docker examples below):** pass the token as `LFT_CLIENT_TOKEN`.
+* **Storing it somewhere other than `~/.lfr-tunnel/token`** (a secrets file, a password-manager
+  mount, `token_file:` in your config): see
+  [Getting Started, Step 3](getting_started.md#step-3-authenticate-and-store-your-token).
 
 > [!CAUTION]
 > **Never commit your PAT to source control.** The `.env` file (used by the Docker wrapper) is git-ignored, and `~/.lfr-tunnel/token` is outside your workspace. Keep it there.
+
+If something goes wrong (`401 unauthorized`, `no access token configured`, an expiry warning), see
+[Getting Started, Need Help?](getting_started.md#need-help).
 
 ---
 
 ## Step 4: Check Available Subdomains
 
-Before picking a subdomain, you can check availability:
+Before picking a subdomain, check it with the client. It uses the token you just saved, so
+nothing secret goes on the command line:
 
 ```bash
-curl -s -H "Authorization: Bearer lfr_pat_your-token-here" \
-  "https://tunnel.lfr-demo.se/api/check-subdomain?subdomain=your-name-se&domain=lfr-demo.se"
+lfr-tunnel check-subdomain your-name-se
 ```
 
-If the subdomain is taken, the server will suggest alternatives.
+Each of the gateway's domains is listed as `available` or `unavailable`, with suggestions for any
+domain where the name is taken. The exit status is `0` if the name is free on at least one domain,
+`1` if it is free on none, and `2` if the check itself failed. See
+[Checking a subdomain before you use it](client_configuration.md#checking-a-subdomain-before-you-use-it).
 
 ---
 
@@ -218,28 +211,54 @@ on the portal home page:
 | default (`preserve_host` off) | the local target | 33 x `http://<target>:8080` |
 | **`-preserve-host`** | the public hostname | 33 x `http://<subdomain>.lfr-demo.se` |
 
-So the fix is one flag:
+**The client turns this on for you when it detects Liferay:** a Liferay workspace's port 8080, or
+a discovered Liferay/LDM container's portal port. Only that port keeps the public `Host`;
+client-extension ports published beside it are unaffected. The startup summary says so:
+`preserve_host  on for 8080 (Liferay detected)`.
+
+When you name the ports yourself, nothing is detected, so pass the flag:
 
 ```bash
 lfr-tunnel -subdomain dev-tomcat -ports 8080 -preserve-host
 ```
 
-or, permanently, `preserve_host: true` in your client config file.
+or, permanently, `preserve_host: true` in your client config file. To stop the client turning it
+on by itself, set `preserve_host_auto: false`. A `preserve_host: false` line, which older Settings
+saves wrote, no longer switches detection off. See
+[`preserve_host` and Liferay](client_configuration.md#preserve_host-and-liferay).
 
-**Liferay must also accept the hostname.** Until it does, it refuses the request outright with
-HTTP 500 and logs `java.lang.RuntimeException: Invalid host name <host>` — not a localhost URL, a
-dead page. Either way round:
+**Liferay must also accept the hostname.** Until it does, it refuses the request with HTTP 500.
+That is not a dead page: the 500 page refreshes to `/c`, which fails the same way and sends the
+visitor's browser to **`http://localhost/web/guest`**, their own machine. So the first thing a
+customer sees from a misconfigured demo link is their browser trying to reach `localhost`. The
+page says nothing about the cause; it appears only in Liferay's log, as
+`java.lang.RuntimeException: Invalid host name <host>`. (Measured on Liferay DXP 2026.Q1,
+2026-11-23.)
 
-* set the Virtual Host as in the step above (Control Panel -> Instance Settings -> Virtual
-  Hosts), which is the normal route; or
-* add the hostname to `virtual.hosts.valid.hosts` in `portal-ext.properties`, which is what a
-  container image without an interactive setup step needs:
+Either of these fixes it:
+
+* **Recommended:** add the gateway's domains to `virtual.hosts.valid.hosts` in
+  `portal-ext.properties`. The property accepts wildcards, so one entry per gateway domain covers
+  every subdomain, and keeps working when your tunnel's subdomain changes:
 
   ```properties
-  virtual.hosts.valid.hosts=localhost,127.0.0.1,dev-tomcat.lfr-demo.se
+  virtual.hosts.valid.hosts=localhost,127.0.0.1,*.lfr-demo.se,*.lfr-demo.online
   ```
 
-**That is the whole configuration.** `-preserve-host`, plus the hostname accepted by Liferay.
+  In a Liferay container, set it with the environment variable
+  `LIFERAY_VIRTUAL_PERIOD_HOSTS_PERIOD_VALID_PERIOD_HOSTS`.
+* set the Virtual Host as in the step above (Control Panel -> Instance Settings -> Virtual
+  Hosts). This covers **exactly one hostname**, so it has to be redone whenever the tunnel's
+  subdomain changes.
+
+The client watches for this. When the Liferay port answers 500 for the public hostname but not for
+the local one, it prints the fix once per hostname. To check before a demo instead of during one,
+run `lfr-tunnel doctor`. It reports your token, install path, `preserve_host`, and whether
+Liferay accepts the tunnel hostname, and changes nothing. See
+[Checking your setup: `doctor`](client_configuration.md#checking-your-setup-doctor).
+
+**That is the whole configuration.** `preserve_host` on for the Liferay port, plus the hostname
+accepted by Liferay.
 Nothing else was required to get correct links and a working sign-in.
 
 #### Properties you do not need
@@ -408,4 +427,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-20* | *Last Reviewed: 2026-11-20*
+*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*

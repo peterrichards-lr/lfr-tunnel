@@ -110,7 +110,8 @@ Install paths and EDR exclusion rules are kept in one place:
 **[docs/infosec.md §3](docs/infosec.md#3-standard-execution-paths--edr-exclusions)**.
 
 In short, the native installers put the client at `<home>/liferay/lfr-tunnel/lfr-tunnel` (`.exe`
-on Windows) on every OS, plus an LDM link in `<home>/.ldm/bin/`, and those are the paths to exclude.
+on Windows) on every OS, and that is the one path to exclude per platform. The `<home>/.ldm/bin/`
+link earlier installers made is retired and removed (#2579), so it needs no rule.
 Homebrew and Scoop installs land where the package manager decides; on a machine with an EDR,
 use the native installer, or exclude those paths yourself.
 
@@ -138,4 +139,4 @@ Always run `lfr-tunnel -upgrade` to ensure you are on the latest version.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-18* | *Last Reviewed: 2026-11-18*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

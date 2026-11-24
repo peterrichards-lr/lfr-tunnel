@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-// Besides the LDM link, the installers write the client's location into the user's environment
-// (#1311): LDM_LFR_TUNNEL_BIN, in the shell rc files on macOS and Linux and as a user variable on
-// Windows, where the install directory is also added to the user PATH. After a move to the
-// gateway's install_dir (#2553) each of these names the old location, so LDM would look for a
-// binary that is gone and fall back to downloading an unexcluded copy of its own.
+// The installers write the client's location into the user's environment (#1311):
+// LDM_LFR_TUNNEL_BIN, in the shell rc files on macOS and Linux and as a user variable on Windows,
+// where the install directory is also added to the user PATH. Since the ~/.ldm/bin link was retired
+// (#2579) this is how LDM finds the client. After a move to the gateway's install_dir (#2553) each
+// of these names the old location, so LDM would look for a binary that is gone.
 
 // ldmBinEnvVar is the variable LDM reads for this client's location.
 const ldmBinEnvVar = "LDM_LFR_TUNNEL_BIN"

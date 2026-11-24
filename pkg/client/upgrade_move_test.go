@@ -50,7 +50,7 @@ type moveRig struct {
 	err            error
 
 	autostart []string    // install-service / install-gui-service, in order
-	linkedTo  []string    // targets the LDM link was re-pointed at
+	linkedTo  []string    // targets of the upgrades that retired the LDM link
 	envMoves  [][2]string // (old, new) pairs handed to repointInstallEnv
 	restart   struct {
 		plists   []string
@@ -144,11 +144,11 @@ func runMoveUpgrade(t *testing.T, f moveFaults) *moveRig {
 	t.Cleanup(srv.Close)
 
 	origExec, origStop, origRestart := targetExecPath, stopForUpgrade, restartAfterUpgrade
-	origAutostart, origLink, origEnv := runAutostartCmd, repointLDMLinkForPlatform, repointInstallEnv
+	origAutostart, origLink, origEnv := runAutostartCmd, retireLDMLinkForPlatform, repointInstallEnv
 	origSvc, origGUI := isServiceInstalled, isGUIServiceInstalled
 	t.Cleanup(func() {
 		targetExecPath, stopForUpgrade, restartAfterUpgrade = origExec, origStop, origRestart
-		runAutostartCmd, repointLDMLinkForPlatform, repointInstallEnv = origAutostart, origLink, origEnv
+		runAutostartCmd, retireLDMLinkForPlatform, repointInstallEnv = origAutostart, origLink, origEnv
 		isServiceInstalled, isGUIServiceInstalled = origSvc, origGUI
 	})
 	isServiceInstalled = func() bool { return !f.noAutostart }
@@ -168,7 +168,7 @@ func runMoveUpgrade(t *testing.T, f moveFaults) *moveRig {
 		rig.autostart = append(rig.autostart, cmd.Args[len(cmd.Args)-1])
 		return nil, f.autostart
 	}
-	repointLDMLinkForPlatform = func(_, _, target string) error {
+	retireLDMLinkForPlatform = func(_, _, target string) error {
 		rig.linkedTo = append(rig.linkedTo, target)
 		return f.link
 	}
@@ -190,8 +190,8 @@ func exists(t *testing.T, path string) bool {
 	return err == nil
 }
 
-// A move with every step succeeding ends with the client at the new path, the LDM link and the
-// installers' environment naming it, and the old binary gone -- removed last.
+// A move with every step succeeding ends with the client at the new path, the retired LDM link
+// removed, the installers' environment naming the client, and the old binary gone -- removed last.
 func TestAMoveRepointsEverythingThenRemovesTheOldBinary(t *testing.T) {
 	rig := runMoveUpgrade(t, moveFaults{moveTo: true})
 	if rig.err != nil {
@@ -204,7 +204,7 @@ func TestAMoveRepointsEverythingThenRemovesTheOldBinary(t *testing.T) {
 		t.Errorf("the old binary %s is still there after a clean move", rig.oldExe)
 	}
 	if !slices.Equal(rig.linkedTo, []string{rig.target}) {
-		t.Errorf("LDM link re-pointed at %v, want [%s]", rig.linkedTo, rig.target)
+		t.Errorf("LDM link retired for %v, want [%s]", rig.linkedTo, rig.target)
 	}
 	if len(rig.envMoves) != 1 || rig.envMoves[0] != [2]string{rig.oldExe, rig.target} {
 		t.Errorf("installers' environment moved %v, want [%s -> %s]", rig.envMoves, rig.oldExe, rig.target)
@@ -286,15 +286,15 @@ func TestASuccessfulReregistrationIsToldToThePlanner(t *testing.T) {
 	}
 }
 
-// The LDM link is re-pointed after an in-place upgrade too: on Windows it is a hardlink, which
-// kept naming the replaced binary's content, so LDM ran the previous version (#2553).
-func TestAnInPlaceUpgradeRepointsTheLDMLink(t *testing.T) {
+// The retired LDM link is removed after an in-place upgrade too (#2579): on Windows the hardlink
+// kept naming the replaced binary's content, a stale executable outside the excluded path.
+func TestAnInPlaceUpgradeRetiresTheLDMLink(t *testing.T) {
 	rig := runMoveUpgrade(t, moveFaults{})
 	if rig.err != nil {
 		t.Fatalf("SelfUpgrade: %v", rig.err)
 	}
 	if !slices.Equal(rig.linkedTo, []string{rig.oldExe}) {
-		t.Errorf("LDM link re-pointed at %v, want [%s]", rig.linkedTo, rig.oldExe)
+		t.Errorf("LDM link retired for %v, want [%s]", rig.linkedTo, rig.oldExe)
 	}
 	if len(rig.envMoves) != 0 || len(rig.autostart) != 0 {
 		t.Errorf("an in-place upgrade moved the environment (%v) or re-registered autostart (%v)", rig.envMoves, rig.autostart)

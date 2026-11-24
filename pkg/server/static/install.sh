@@ -120,9 +120,16 @@ else
 fi
 echo "lfr-tunnel installed to ${INSTALL_PATH}"
 
-# LDM (liferay-docker-manager) auto-discovery integration (#1311)
-mkdir -p "${HOME}/.ldm/bin" 2>/dev/null || true
-ln -sf "$INSTALL_PATH" "${HOME}/.ldm/bin/lfr-tunnel" 2>/dev/null || true
+# The ~/.ldm/bin link is retired (#2579): LDM 2.25.0 and later find the client through
+# LDM_LFR_TUNNEL_BIN below or the install path itself, and the link only cost a second EDR rule.
+# The link an earlier install made is removed: a symlink naming this install, or naming nothing.
+# Anything else there is the user's and is left alone.
+LDM_LINK="${HOME}/.ldm/bin/lfr-tunnel"
+if [ -L "$LDM_LINK" ]; then
+  if [ "$(readlink "$LDM_LINK")" = "$INSTALL_PATH" ] || [ ! -e "$LDM_LINK" ]; then
+    rm -f "$LDM_LINK" 2>/dev/null && echo "Removed the retired LDM link ${LDM_LINK}."
+  fi
+fi
 
 # Persist LDM_LFR_TUNNEL_BIN environment variable for LDM auto-discovery (#1311)
 for rc in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.bash_profile"; do

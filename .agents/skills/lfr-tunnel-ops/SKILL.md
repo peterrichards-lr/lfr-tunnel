@@ -864,8 +864,8 @@ exits 2 and names them. Start them, or run it in their hours, before calling the
 Do these in order. **Do not reorder them.** Every reordering leaves some clients on a path that
 is not excluded, or deletes the rule for a path that clients still run from.
 
-1. **InfoSec adds the rule for the new path** (both the binary and the LDM link, as Alerts
-   exclusions), and confirms it is applied. Until then, nothing else changes.
+1. **InfoSec adds the rule for the new path** (the binary, as an Alerts exclusion; the
+   `~/.ldm/bin` link is retired and has no rule, #2579), and confirms it is applied. Until then, nothing else changes.
 2. **Update §3** of `docs/infosec.md` with the new rule, keeping the old one, and merge. The check
    reads §3 from your checkout, so it can only pass once the new rule is there.
 3. **Set the same `install_dir` on every gateway**: central and each edge, in its
@@ -888,7 +888,7 @@ is not excluded, or deletes the rule for a path that clients still run from.
    reinstall. Then remove the old rule from §3.
 
 A move does several things (#2553):
-- re-points the LDM link, re-creating the Windows hardlink;
+- removes the retired LDM link an earlier install made (#2579);
 - re-registers the autostart entries the user has;
 - relaunches stopped processes from the new binary;
 - updates `LDM_LFR_TUNNEL_BIN` and the Windows user PATH;
@@ -1068,4 +1068,4 @@ fix after the release that carries it, not before.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

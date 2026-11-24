@@ -67,7 +67,7 @@ For environments where local native binary execution is completely restricted, r
 docker run -d --name lfr-tunnel \
   -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
   peterjrichards/lfr-tunnel:latest \
-  -pin https://tunnel.lfr-demo.se \
+  -bootstrap https://tunnel.lfr-demo.se \
   -subdomain your-name-se \
   -ports 8080
 ```
@@ -198,7 +198,7 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
       -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
       -e LFT_TARGET_HOST="host.docker.internal" \
       peterjrichards/lfr-tunnel:latest \
-      -pin https://tunnel.lfr-demo.se \
+      -bootstrap https://tunnel.lfr-demo.se \
       -subdomain dev-tomcat \
       -ports 8080
     ```
@@ -209,7 +209,7 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
       -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
       -e LFT_TARGET_HOST="host.docker.internal" \
       peterjrichards/lfr-tunnel:latest \
-      -pin https://tunnel.lfr-demo.se \
+      -bootstrap https://tunnel.lfr-demo.se \
       -subdomain dev-tomcat \
       -ports 8080
     ```
@@ -328,7 +328,7 @@ Use these configurations if Liferay itself is running as a Docker container.
     tunnel:
       image: peterjrichards/lfr-tunnel:latest
       environment:
-        - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
+        - LFT_CLIENT_BOOTSTRAP=https://tunnel.lfr-demo.se
         - LFT_CLIENT_TOKEN=lfr_pat_your-token
         - LFT_CLIENT_SUBDOMAIN=my-liferay-demo
         - LFT_TARGET_HOST=liferay  # Resolves to the liferay service container

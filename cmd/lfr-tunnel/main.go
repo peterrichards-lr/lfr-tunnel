@@ -304,12 +304,15 @@ func main() {
 	//
 	// Contradictory intents rather than a precedence rule: quietly honouring one of the two is
 	// how the original confusion started, so passing both is refused.
-	if *gatewayURL != "" && *serverURL != "" {
-		log.Fatalf("[Error] -bootstrap and -pin contradict each other: -bootstrap picks the closest " +
-			"region and fails over, -pin fixes this client to one gateway. Pass whichever you meant, not both.")
+	//
+	// LFT_CLIENT_BOOTSTRAP is the same choice for a container, which is configured through its
+	// environment (#2586); see resolveBootstrap.
+	bootURL, _, bootErr := resolveBootstrap(*gatewayURL, *serverURL, os.Getenv)
+	if bootErr != nil {
+		log.Fatalf("[Error] %v.", bootErr)
 	}
-	if *gatewayURL != "" {
-		cfg.ServerURL = *gatewayURL
+	if bootURL != "" {
+		cfg.ServerURL = bootURL
 	}
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
@@ -346,6 +349,7 @@ func main() {
 		log.Fatalf("[Error] No tunnel server configured.\n\n" +
 			"  Recommended: -bootstrap https://your-gateway.example.com\n" +
 			"  The client fetches the gateway list from there, picks the closest, and fails over.\n\n" +
+			"  In a container, the same thing as an environment variable: LFT_CLIENT_BOOTSTRAP=<url>\n\n" +
 			"  To persist it, add the same thing to your client config file --\n" +
 			"      server_url: \"https://your-gateway.example.com\"\n\n" +
 			"  Alternatively: -pin <url> (or LFT_SERVER_URL) FIXES this client to that one\n" +
@@ -3303,9 +3307,9 @@ func printAndCollectPublicURLs(cfg *config.ClientConfig, regResp *client.Registe
 // tell a US user why they never left the control plane.
 func pinnedBy(serverFlag string) string {
 	if serverFlag != "" {
-		return "-server flag"
+		return "-pin flag"
 	}
-	for _, name := range []string{"LFT_CLIENT_SERVER", "LFT_SERVER_URL", "LFT_SERVER"} {
+	for _, name := range pinEnvVars {
 		if os.Getenv(name) != "" {
 			return name + " environment variable"
 		}

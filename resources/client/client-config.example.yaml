@@ -20,9 +20,9 @@
 # --- Which gateway to talk to ---
 
 # A starting gateway, WITHOUT pinning: the client still fetches the region list from it, elects
-# the closest region, and fails over. This is not the same as `-server <url>` or LFT_SERVER_URL,
+# the closest region, and fails over. This is not the same as `-pin <url>` or LFT_SERVER_URL,
 # both of which PIN the client to one gateway -- no region election, no failover (#1691). The
-# `-gateway <url>` flag is the command-line equivalent of this key.
+# `-bootstrap <url>` flag and the LFT_CLIENT_BOOTSTRAP variable are the equivalents of this key.
 server_url: "https://tunnel.example.com"
 
 # Force one region and SKIP the latency election entirely. Leave empty to let the client probe

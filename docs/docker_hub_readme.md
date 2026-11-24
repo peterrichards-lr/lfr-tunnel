@@ -32,7 +32,7 @@ docker run -d \
   --name lfr-tunnel \
   --network liferay-network \
   -p 4040:4040 \
-  -e LFT_CLIENT_SERVER="https://tunnel.lfr-demo.se" \
+  -e LFT_CLIENT_BOOTSTRAP="https://tunnel.lfr-demo.se" \
   -e LFT_CLIENT_TOKEN="your-secure-access-token" \
   -e LFT_CLIENT_SUBDOMAIN="your-subdomain" \
   -e LFT_TARGET_HOST="liferay-dxp" \
@@ -62,7 +62,7 @@ services:
     depends_on:
       - liferay
     environment:
-      - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
+      - LFT_CLIENT_BOOTSTRAP=https://tunnel.lfr-demo.se
       - LFT_CLIENT_TOKEN=your-secure-access-token
       - LFT_CLIENT_SUBDOMAIN=your-subdomain
       - LFT_TARGET_HOST=liferay-dxp
@@ -83,7 +83,8 @@ Configure the runtime execution using these environment variables:
 
 | Environment Variable | Canonical | Fallbacks | Description | Default / Example |
 | :--- | :--- | :--- | :--- | :--- |
-| **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | The public-facing gateway server managing the external entrypoint. | *Required* (e.g., `https://tunnel.lfr-demo.se`) |
+| **Gateway** | `LFT_CLIENT_BOOTSTRAP` | `LFT_BOOTSTRAP` | The gateway to start from. The client fetches the region list there, moves to the closest region and fails over if that gateway goes away. Use this one. | *Required: this or a pin* (e.g., `https://tunnel.lfr-demo.se`) |
+| **Pinned gateway** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | **Pins** the client to this one gateway: no region election and no failover. Only for when one specific gateway is what you want. Setting it together with `LFT_CLIENT_BOOTSTRAP` is refused. | — |
 | **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | The authentication secret used to register the secure connection with the gateway. | *Required* (e.g., `lfr_pat_...`) |
 | **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix for your public endpoint. | `your-subdomain` |
 | **Target Host** | `LFT_TARGET_HOST` | — | The internal address/IP of your target Liferay instance (e.g., `127.0.0.1` or `container_name`). Parsed as a URL and reduced to its hostname, so `http://liferay:8080` becomes `liferay`. Leave it unset and the client uses the host its auto-discovery pass found, then `127.0.0.1`. | auto-discovered, else `127.0.0.1` |
@@ -101,4 +102,4 @@ The code for this agent is open source. You can view the implementation, report 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

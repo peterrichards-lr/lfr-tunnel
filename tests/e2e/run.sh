@@ -464,6 +464,36 @@ fi
 docker-compose exec -T lfr-tunnel ./lfr-tunnel -stop -subdomain "$LR_SUB" >/dev/null 2>&1 || true
 echo "✅ A valid token: -background exits 0 once registered, prints the URL, and the URL serves."
 
+# 7d. LFT_CLIENT_BOOTSTRAP: a container names its gateway WITHOUT pinning (#2586).
+#
+# The Docker image has no built-in gateway, and before #2586 every environment variable that
+# named one (LFT_CLIENT_SERVER, LFT_SERVER_URL, LFT_SERVER) pinned the client: no region election,
+# no failover. This client is given ONLY LFT_CLIENT_BOOTSTRAP. A client that ignored the variable
+# has no gateway at all and never registers, so the routing check below is its own control; the
+# log check then shows it was not pinned.
+echo "=== LFT_CLIENT_BOOTSTRAP names the gateway without pinning ==="
+BOOT_ID=$(docker-compose run -d --no-deps \
+    --entrypoint "./lfr-tunnel" \
+    -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
+    -e LFT_CLIENT_BOOTSTRAP=http://tunnel.lfr-demo.local \
+    lfr-tunnel \
+    -subdomain "$LR_SUB" \
+    -ports 80)
+BOOT_ROUTED=""
+for _ in {1..30}; do
+    BOOT_ROUTED=$(curl -s -H "Host: $LR_SUB.lfr-demo.local" "http://localhost:$E2E_PROXY_PORT/" || true)
+    echo "$BOOT_ROUTED" | grep -q "Mock Liferay Instance" && break
+    sleep 1
+done
+if ! echo "$BOOT_ROUTED" | grep -q "Mock Liferay Instance"; then
+    liferay_fail "A client given only LFT_CLIENT_BOOTSTRAP never served $LR_SUB: the variable did not name its gateway." "$LR_SUB" "$BOOT_ID"
+fi
+if docker logs "$BOOT_ID" 2>&1 | grep -q "failover are OFF"; then
+    liferay_fail "A client given only LFT_CLIENT_BOOTSTRAP reports itself pinned (failover OFF)." "$LR_SUB" "$BOOT_ID"
+fi
+stop_tunnel_container "$BOOT_ID"
+echo "✅ LFT_CLIENT_BOOTSTRAP alone: the client registered, serves, and is not pinned."
+
 # 8. Start a real tunnel through the MCP server (#2341).
 #
 # start_tunnel could never report success for ~36 releases (#2336): it compared the PID of the

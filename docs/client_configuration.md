@@ -76,7 +76,8 @@ Resolved in this order, each step overriding the one before it:
    `~/.config/lfr/secrets.ps1`.
 5. **Environment variables** — `LFT_CLIENT_*` is checked first, then the shorter `LFT_*` alias.
 6. **Command-line flags.**
-7. **`-bootstrap <url>`**, which replaces the gateway after everything above — see below.
+7. **`-bootstrap <url>`** or **`LFT_CLIENT_BOOTSTRAP`**, which replaces the gateway after everything
+   above — see below.
 8. **Region election**, which replaces the gateway again with the closest region's, unless the
    client is pinned or `region:` is set.
 
@@ -116,7 +117,7 @@ Settings not listed here can only be set in the config file.
 
 | Key | Flag | Environment |
 | --- | --- | --- |
-| `server_url` | `-bootstrap <url>` (no pinning), `-pin <url>` (**pins**) | `LFT_CLIENT_SERVER`, `LFT_SERVER_URL`, `LFT_SERVER` (all **pin**) |
+| `server_url` | `-bootstrap <url>` (no pinning), `-pin <url>` (**pins**) | `LFT_CLIENT_BOOTSTRAP`, `LFT_BOOTSTRAP` (no pinning); `LFT_CLIENT_SERVER`, `LFT_SERVER_URL`, `LFT_SERVER` (all **pin**) |
 | `auth_token` | `-token` | `LFT_CLIENT_TOKEN`, `LFT_TOKEN` |
 | `token_file` | — | `LFT_TOKEN_FILE` (**moves** the path this key names) |
 | `subdomain` | `-subdomain` | `LFT_CLIENT_SUBDOMAIN`, `LFT_SUBDOMAIN` |
@@ -149,14 +150,21 @@ wrong continent and stops when that one gateway stops.
 | --- | --- | --- |
 | `server_url:` in this file | ✅ | ✅ |
 | `-bootstrap <url>` | ✅ | ✅ |
+| `LFT_CLIENT_BOOTSTRAP` / `LFT_BOOTSTRAP` | ✅ | ✅ |
 | `-pin <url>` | ❌ pinned | ❌ |
 | `LFT_SERVER_URL` / `LFT_CLIENT_SERVER` / `LFT_SERVER` | ❌ pinned | ❌ |
 
 `server_url:` is a **starting point**: the client asks that gateway for the region list, probes
 each region, moves to whichever answers fastest, and re-registers elsewhere if its gateway goes
 away. Pinning is intended behaviour for `-pin` — sometimes one specific gateway is exactly
-what you want — but it is a different intent, so passing `-bootstrap` and `-pin` together is
-refused rather than resolved by a precedence rule.
+what you want — but it is a different intent, so a bootstrap and a pin together (`-bootstrap`
+or `LFT_CLIENT_BOOTSTRAP` with `-pin` or any pinning variable) are refused rather than resolved
+by a precedence rule.
+
+**In a container, use `LFT_CLIENT_BOOTSTRAP`** (#2586). The Docker image has no built-in gateway,
+so a container always has to name one. Before this variable existed, the only environment
+variables for that pinned it, so every Docker client stayed on one gateway and dropped when that
+gateway restarted.
 
 The client prints a notice when it is pinned and more than one region exists. If you see it, and
 you meant "start here", move the URL into this file.
@@ -707,4 +715,4 @@ any is `UNKNOWN`.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

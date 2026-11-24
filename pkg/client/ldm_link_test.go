@@ -272,6 +272,9 @@ func TestReplacePathEntry(t *testing.T) {
 // exactly what install.sh writes (tests/hooks/test-install-ldm-link.sh asserts the installer side),
 // so the two cannot drift apart silently. A PATH line the user wrote in another form is theirs.
 func TestRepointRCLineRepointsTheInstallersPathLine(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("install.sh's rc files are a macOS and Linux concern; the rewrite is built only for !windows")
+	}
 	dir := t.TempDir()
 	oldExe, newExe := "/home/u/liferay/lfr-tunnel/lfr-tunnel", "/home/u/elsewhere/lfr-tunnel"
 	rc := filepath.Join(dir, ".bashrc")

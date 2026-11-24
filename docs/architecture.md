@@ -520,9 +520,9 @@ Properties worth knowing when reading these figures:
 ### Key Credibility & Reliability Guarantees
 1. **Zero Domain Modification**: All public domain wildcards (`*.lfr-demo.se`, `*.lfr-demo.online`) are registered without regional distinction. The public URL (`https://my-sub.lfr-demo.se`) remains identical before and after failover.
 2. **Zero Session Loss**: Because Liferay Tomcat runs locally on the developer's machine and the public domain origin does not change, browser `JSESSIONID` cookies, OAuth redirect tokens, and `localStorage` states are **100% preserved**. Developers experience zero forced re-logins or session purges.
-3. **Local State Protection**: LDM and third-party tools receive `warning_received`, `stopping`, and `started` lifecycle hooks, allowing local syncs to pause gracefully before transit drops and resume automatically once failover completes.
+3. **Local State Protection**: the client runs the `warning_received`, `stopping` and `started` lifecycle hooks registered in its `config.yaml`, so a wrapper can pause local syncs before transit drops and resume them once failover completes. LDM registers its hooks on the first `ldm share start` from v2.26.16 (LDM-#2507). Earlier LDM versions shipped the handler but never registered it, so they received no hooks.
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-17* | *Last Reviewed: 2026-11-17*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

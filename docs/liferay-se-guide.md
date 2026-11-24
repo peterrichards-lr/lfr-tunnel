@@ -63,14 +63,22 @@ the folder to your user `PATH`. To verify your installation, open a new terminal
 ### Method B: Standalone Docker Container (EDR Immune)
 For environments where local native binary execution is completely restricted, run our pre-built, multi-architecture client container directly from Docker Hub. This requires **zero local installation, zero compilation, and is 100% immune to EDR host-level blocks**:
 
+The container must be told where Liferay is. Inside a container, `localhost` is the container
+itself, so for a Liferay running on your machine use `host.docker.internal`:
+
 ```bash
 docker run -d --name lfr-tunnel \
   -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
+  -e LFT_TARGET_HOST="host.docker.internal" \
   peterjrichards/lfr-tunnel:latest \
   -bootstrap https://tunnel.lfr-demo.se \
   -subdomain your-name-se \
   -ports 8080
 ```
+
+On Linux, add `--add-host=host.docker.internal:host-gateway` after `docker run -d`, since Docker
+Desktop's `host.docker.internal` name does not exist there by default. For Liferay running in another
+container, see [Exposing a Liferay Docker Container](#3-exposing-a-liferay-docker-container-or-custom-image).
 
 ---
 

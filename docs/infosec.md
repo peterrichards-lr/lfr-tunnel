@@ -167,12 +167,22 @@ On Liferay's EDR-managed machines the native installer is the only supported ins
 (`.agents/decisions/0006-liferay-installs-natively-homebrew-and-scoop-are-for-everyone-else.md`),
 so these are the only paths to exclude: **one rule per platform**, the installed binary.
 
-**The LDM link rules are withdrawn (#2579).** The request previously had a second rule per platform
-for `~/.ldm/bin/lfr-tunnel` (`C:\Users\*\.ldm\bin\lfr-tunnel.exe` on Windows, #2544). InfoSec had
-found that the behavioural and machine-learning engines were not satisfied by the binary's rule
-alone while that link existed and could be executed. The link is now retired and removed, so
-nothing runs from that path. **To confirm in the test round (#2547):** an LDM share raises no
-alert with only the binary's rule in place.
+**Agreed with InfoSec on 2026-11-24** (LRINFOSEC-7091): the three binary rules below, as Alerts
+exclusions, and nothing else for lfr-tunnel.
+
+**The LDM link rules are withdrawn (#2579)**, which InfoSec confirmed. The request previously had a
+second rule per platform for `~/.ldm/bin/lfr-tunnel` (`C:\Users\*\.ldm\bin\lfr-tunnel.exe` on Windows,
+#2544). InfoSec had found that the behavioural and machine-learning engines were not satisfied by the
+binary's rule alone while that link existed and could be executed. The link is now retired and
+removed, so nothing runs from that path. **To confirm in the test round (#2547):** an LDM share
+raises no alert with only the binary's rule in place.
+
+**Why one path rule is enough for lfr-tunnel.** InfoSec explained that a path rule covers file-based
+(Static AI) detections, while a behavioural detection is tied to the path the *process* runs from.
+lfr-tunnel is one static binary, and the process runs from that excluded file (the tray, autostart
+and `-background` included), so both kinds are covered. A tool whose process is an interpreter
+outside its own folder (`python3` running a script) is not covered by a rule on its folder; that is
+LDM's case, handled in its own repository.
 
 #### Exclusion type: Alerts
 
@@ -188,8 +198,9 @@ type InfoSec uses for detections. Two other types are not substitutes:
 `macOS-global`, `Linux-global` and `Windows-global`. Each tag applies the Alerts-based exclusions
 plus the designated file path, and nothing else. The older tags that allowed earlier tests and
 PoCs are being removed, so an endpoint that relied on one of them is covered only through the new
-tag (#2546). **Which endpoints carry the new tags, and the rollout scope beyond the test
-endpoints, are open with InfoSec** (LRINFOSEC-7091).
+tag (#2546). InfoSec has said the rules will be available globally rather than on test
+endpoints only, and was configuring them on 2026-11-24 (LRINFOSEC-7091). **Which endpoints carry
+the tags, and when, is for InfoSec to confirm.**
 
 #### Rules by platform
 

@@ -349,6 +349,7 @@ func main() {
 		log.Fatalf("[Error] No tunnel server configured.\n\n" +
 			"  Recommended: -bootstrap https://your-gateway.example.com\n" +
 			"  The client fetches the gateway list from there, picks the closest, and fails over.\n\n" +
+			"  In a container, the same thing as an environment variable: LFT_CLIENT_BOOTSTRAP=<url>\n\n" +
 			"  To persist it, add the same thing to your client config file --\n" +
 			"      server_url: \"https://your-gateway.example.com\"\n\n" +
 			"  Alternatively: -pin <url> (or LFT_SERVER_URL) FIXES this client to that one\n" +

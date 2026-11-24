@@ -123,11 +123,11 @@ func TestStartupConfigurationReportsHowTheGatewayWasChosen(t *testing.T) {
 // -server and the env vars pin while server_url: in the config file does not.
 func TestStartupConfigurationNamesWhatPinnedTheClient(t *testing.T) {
 	resetFacts(t)
-	facts.pinnedBy = "-server flag"
+	facts.pinnedBy = "-pin flag"
 
 	lines := captureStartupLog(t, &config.ClientConfig{ServerURL: "https://tunnel.lfr-demo.se"}, nil)
 
-	if !strings.Contains(lines, "-server flag") {
+	if !strings.Contains(lines, "-pin flag") {
 		t.Error("the block does not name the mechanism that pinned the client")
 	}
 	if !strings.Contains(lines, "failover are OFF") {
@@ -177,7 +177,7 @@ func TestPinnedBy(t *testing.T) {
 		want       string
 	}{
 		{name: "nothing pins", want: ""},
-		{name: "the flag pins", serverFlag: "https://x", want: "-server flag"},
+		{name: "the flag pins", serverFlag: "https://x", want: "-pin flag"},
 		{name: "LFT_SERVER_URL pins", env: map[string]string{"LFT_SERVER_URL": "https://x"}, want: "LFT_SERVER_URL environment variable"},
 		{name: "LFT_CLIENT_SERVER pins", env: map[string]string{"LFT_CLIENT_SERVER": "https://x"}, want: "LFT_CLIENT_SERVER environment variable"},
 		{name: "LFT_SERVER pins", env: map[string]string{"LFT_SERVER": "https://x"}, want: "LFT_SERVER environment variable"},
@@ -186,7 +186,7 @@ func TestPinnedBy(t *testing.T) {
 			name:       "the flag wins over the environment",
 			serverFlag: "https://x",
 			env:        map[string]string{"LFT_SERVER_URL": "https://y"},
-			want:       "-server flag",
+			want:       "-pin flag",
 		},
 	}
 

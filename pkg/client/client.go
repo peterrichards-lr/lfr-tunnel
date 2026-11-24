@@ -265,10 +265,10 @@ func PinnedRoutingNotice(isExplicitServer bool, regionCount int) string {
 	return fmt.Sprintf(
 		"This client is pinned to the gateway you named, so it will not pick the closest of the "+
 			"%d available and will not fail over if that gateway goes away. To keep both, remove "+
-			"-server (and LFT_SERVER_URL / LFT_CLIENT_SERVER / LFT_SERVER) and put "+
-			"`server_url: \"<url>\"` in your client config file instead -- that supplies a "+
-			"starting point without pinning. Use -region <name> to prefer one region while "+
-			"keeping failover.",
+			"-pin (and LFT_CLIENT_SERVER / LFT_SERVER_URL / LFT_SERVER) and name the gateway as a "+
+			"starting point instead: -bootstrap <url>, LFT_CLIENT_BOOTSTRAP=<url> (for a container), "+
+			"or `server_url: \"<url>\"` in your client config file. Use -prefer-region <name> to "+
+			"prefer one region while keeping failover.",
 		regionCount)
 }
 

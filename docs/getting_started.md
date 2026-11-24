@@ -376,6 +376,7 @@ If you do need to name one, **the flag you choose changes the behaviour**:
 | How you supply it | Picks the closest | Fails over |
 |---|---|---|
 | `-bootstrap <url>` | ✅ | ✅ |
+| `LFT_CLIENT_BOOTSTRAP` (for a container) | ✅ | ✅ |
 | `server_url:` in your client config file | ✅ | ✅ |
 | `-pin <url>` | ❌ pinned to that gateway | ❌ |
 | `LFT_SERVER_URL` / `LFT_CLIENT_SERVER` / `LFT_SERVER` | ❌ pinned | ❌ |

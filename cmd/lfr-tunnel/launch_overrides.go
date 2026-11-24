@@ -43,7 +43,7 @@ type settingSource struct {
 // detected here would silently re-open the bug this file exists to close.
 var settingSources = []settingSource{
 	{Key: "server_url", Flags: []string{"pin", "server", "bootstrap", "gateway"},
-		EnvVars: []string{"LFT_CLIENT_SERVER", "LFT_SERVER_URL", "LFT_SERVER"}},
+		EnvVars: []string{"LFT_CLIENT_SERVER", "LFT_SERVER_URL", "LFT_SERVER", "LFT_CLIENT_BOOTSTRAP", "LFT_BOOTSTRAP"}},
 	{Key: "auth_token", Flags: []string{"token"},
 		EnvVars: []string{"LFT_CLIENT_TOKEN", "LFT_TOKEN"}},
 	{Key: "target_host", Flags: []string{"target-host"},

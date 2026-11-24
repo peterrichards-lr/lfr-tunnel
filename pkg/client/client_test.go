@@ -220,7 +220,7 @@ func TestPinnedRoutingNotice(t *testing.T) {
 	if notice == "" {
 		t.Fatal("a pinned client with 4 regions was told nothing")
 	}
-	for _, want := range []string{"server_url", "-region", "fail over"} {
+	for _, want := range []string{"server_url", "-bootstrap", "LFT_CLIENT_BOOTSTRAP", "-prefer-region", "fail over"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("the notice does not mention %q, so it does not say how to fix it:\n%s", want, notice)
 		}
@@ -265,17 +265,21 @@ func TestGatewayFlagDoesNotPin(t *testing.T) {
 	if strings.Contains(line, "gatewayURL") {
 		t.Errorf("-gateway feeds isExplicitServer, so it pins like -server:\n%s", line)
 	}
+	// Nor may LFT_CLIENT_BOOTSTRAP, the same choice for a container (#2586).
+	if strings.Contains(line, "BOOTSTRAP") || strings.Contains(line, "bootURL") {
+		t.Errorf("LFT_CLIENT_BOOTSTRAP feeds isExplicitServer, so it pins:\n%s", line)
+	}
 	if !strings.Contains(line, "serverURL") {
 		t.Errorf("-server no longer feeds isExplicitServer, so pinning is broken:\n%s", line)
 	}
 
-	// It still has to supply a bootstrap URL, or it does nothing at all.
-	if !strings.Contains(body, "cfg.ServerURL = *gatewayURL") {
-		t.Error("-gateway never sets cfg.ServerURL, so it cannot bootstrap the region fetch")
+	// It still has to supply a bootstrap URL, or it does nothing at all. Since #2586 the flag and
+	// LFT_CLIENT_BOOTSTRAP are resolved together by resolveBootstrap, which also refuses a
+	// bootstrap beside a pin (cmd/lfr-tunnel's TestResolveBootstrap covers every combination).
+	if !strings.Contains(body, "resolveBootstrap(*gatewayURL, *serverURL, os.Getenv)") {
+		t.Error("-bootstrap is no longer resolved through resolveBootstrap, so it may neither bootstrap nor be refused beside -pin")
 	}
-
-	// Both together are contradictory and must be refused rather than silently ranked.
-	if !strings.Contains(body, `*gatewayURL != "" && *serverURL != ""`) {
-		t.Error("passing -gateway and -server together is not refused; a silent precedence rule is how the original confusion started")
+	if !strings.Contains(body, "cfg.ServerURL = bootURL") {
+		t.Error("the resolved bootstrap URL never sets cfg.ServerURL, so it cannot bootstrap the region fetch")
 	}
 }

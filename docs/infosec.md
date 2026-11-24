@@ -199,8 +199,8 @@ type InfoSec uses for detections. Two other types are not substitutes:
 plus the designated file path, and nothing else. The older tags that allowed earlier tests and
 PoCs are being removed, so an endpoint that relied on one of them is covered only through the new
 tag (#2546). InfoSec has said the rules will be available globally rather than on test
-endpoints only, and was configuring them on 2026-11-24 (LRINFOSEC-7091). **Which endpoints carry
-the tags, and when, is for InfoSec to confirm.**
+endpoints only, and configured them on 2026-11-24 (LRINFOSEC-7091). **Which endpoints carry
+the tags is for InfoSec to confirm**; the #2547 test round checks the result on real machines.
 
 #### Rules by platform
 

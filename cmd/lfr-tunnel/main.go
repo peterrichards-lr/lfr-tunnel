@@ -486,6 +486,7 @@ func main() {
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	applyPreserveHost(engine, cfg)
+	startLiferayWatch(context.Background(), engine, cfg)
 	engine.ClientSubdomain = sub
 	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
 	// Deliberately NOT a default here any more. It used to be the literal "or", which the
@@ -1384,6 +1385,8 @@ func validateRequestedPorts(cfg *config.ClientConfig) error {
 
 func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, error) {
 	facts.liferayPort = 0 // set below only where a path identifies the portal (#2560)
+	facts.liferayWeak = false
+	facts.liferayCandidates = nil
 	var ports []int
 	var err error
 	// A malformed list is an error, never a fall-through to discovery (#2477). The parser
@@ -1445,6 +1448,9 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, er
 			}
 			// DetectWorkspacePorts puts the portal's 8080 first; the rest are client extensions.
 			facts.liferayPort = portMappings[0].LocalPort
+			// A workspace folder is a weak signal -- any Gradle project has gradlew -- so the port's
+			// own Liferay-Portal header confirms or withdraws it once it answers (#2571).
+			facts.liferayWeak = true
 		} else {
 			slog.Info("[Client] No explicit ports provided. Auto-discovering Liferay / LDM instances...")
 			discoveryResult, err := autoDiscoverTarget()
@@ -1508,6 +1514,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) ([]client.PortMapping, er
 			}
 		}
 	}
+	facts.liferayCandidates = liferayWatchCandidates(portMappings)
 	return portMappings, nil
 }
 
@@ -2816,6 +2823,10 @@ type startupFacts struct {
 	portOrigin string
 	// liferayPort is the local port identified as the Liferay portal, or 0 (#2560).
 	liferayPort int
+	// liferayWeak is true when liferayPort rests only on the workspace-folder guess (#2571).
+	liferayWeak bool
+	// liferayCandidates are the local ports asked for their Liferay-Portal header (#2571).
+	liferayCandidates []int
 	// preserveHostSource names the flag that set preserve_host, when one did.
 	preserveHostSource string
 }

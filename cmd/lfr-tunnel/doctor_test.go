@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -91,5 +93,59 @@ func TestRunDoctor_NoLiferayIsUnknown(t *testing.T) {
 	}
 	if code == 0 {
 		t.Errorf("exit 0 although checks could not run:\n%s", report)
+	}
+}
+
+// #2571: doctor asks a named port for Liferay's header, as a tunnel start's watch does. A port
+// that answers with it gets preserve_host PASS with no -preserve-host -- before #2571 doctor
+// reported "off (ports given explicitly ...)" for every named port.
+func TestRunDoctor_NamedPortIdentifiedByItsHeader(t *testing.T) {
+	resetFacts(t)
+	stubPortDiscovery(t)
+	port := headerServer(t, true)
+
+	cfg := &config.ClientConfig{ServerURL: "http://127.0.0.1:1"}
+	var out bytes.Buffer
+	runDoctor(cfg, "demo", []string{"-ports", strconv.Itoa(port), "-hostname", "demo.lfr-demo.se"}, &out)
+	report := out.String()
+	for _, want := range []string{"[PASS   ] preserve_host", "Liferay-Portal header"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report does not contain %q:\n%s", want, report)
+		}
+	}
+}
+
+// A named port that answers without the header: preserve_host is reported off, and why.
+func TestRunDoctor_NamedPortWithoutTheHeader(t *testing.T) {
+	resetFacts(t)
+	stubPortDiscovery(t)
+	port := headerServer(t, false)
+
+	cfg := &config.ClientConfig{ServerURL: "http://127.0.0.1:1"}
+	var out bytes.Buffer
+	runDoctor(cfg, "demo", []string{"-ports", strconv.Itoa(port), "-hostname", "demo.lfr-demo.se"}, &out)
+	if report := out.String(); !strings.Contains(report, "answered without Liferay's Liferay-Portal header") {
+		t.Errorf("report does not explain the missing header:\n%s", report)
+	}
+}
+
+// A named port nothing answers on yet: not a verdict -- a tunnel start would keep watching.
+func TestRunDoctor_NamedPortNotAnsweringYet(t *testing.T) {
+	resetFacts(t)
+	stubPortDiscovery(t)
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := l.Addr().(*net.TCPAddr).Port
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.ClientConfig{ServerURL: "http://127.0.0.1:1"}
+	var out bytes.Buffer
+	runDoctor(cfg, "demo", []string{"-ports", strconv.Itoa(closed), "-hostname", "demo.lfr-demo.se"}, &out)
+	if report := out.String(); !strings.Contains(report, "a tunnel start watches for its Liferay-Portal header") {
+		t.Errorf("report does not say a tunnel start would keep watching:\n%s", report)
 	}
 }

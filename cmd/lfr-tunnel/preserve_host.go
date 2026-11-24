@@ -131,7 +131,7 @@ func currentPreserveHostPlan(cfg *config.ClientConfig) preserveHostPlan {
 
 // preserveHostSummary is the startup-summary line's value.
 func preserveHostSummary(cfg *config.ClientConfig) string {
-	return currentPreserveHostPlan(cfg).summary
+	return liferayWatchSummary(cfg, currentPreserveHostPlan(cfg).summary)
 }
 
 // applyPreserveHost hands the resolved setting to the engine.

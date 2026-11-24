@@ -334,6 +334,7 @@ test-hooks:
 	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-install-ldm-link.sh
+	@./tests/hooks/test-install-rc-path.sh
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-status-vocabulary.sh

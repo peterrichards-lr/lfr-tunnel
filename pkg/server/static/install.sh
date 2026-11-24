@@ -131,28 +131,48 @@ if [ -L "$LDM_LINK" ]; then
   fi
 fi
 
-# Persist LDM_LFR_TUNNEL_BIN environment variable for LDM auto-discovery (#1311)
+# zsh is macOS's default shell, and a new Mac has no ~/.zshrc. Without one the loop below would
+# write nothing anywhere zsh reads, and `lfr-tunnel` would be "command not found" (#2584).
+if [ "$OS" = "darwin" ] && [ ! -e "${HOME}/.zshrc" ]; then
+  touch "${HOME}/.zshrc" 2>/dev/null || true
+fi
+
+# Whether the install directory is already on this shell's PATH (set some other way).
+case ":${PATH}:" in
+  *":${INSTALL_DIR}:"*) ON_PATH=1 ;;
+  *) ON_PATH=0 ;;
+esac
+
+# Persist LDM_LFR_TUNNEL_BIN for LDM auto-discovery (#1311), and put the client on PATH (#2584).
+# The PATH line is written in exactly this form so an upgrade that moves the client can find and
+# re-point it (pkg/client/install_env.go). It is skipped when the directory is already on PATH, and
+# never written twice.
+PATH_LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
+PATH_RCS=""
 for rc in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.bash_profile"; do
   if [ -f "$rc" ] && [ -w "$rc" ]; then
     if ! grep -q "LDM_LFR_TUNNEL_BIN" "$rc" 2>/dev/null; then
       echo "export LDM_LFR_TUNNEL_BIN=\"$INSTALL_PATH\"" >> "$rc"
     fi
+    if [ "$ON_PATH" = 0 ] && ! grep -qxF "$PATH_LINE" "$rc" 2>/dev/null; then
+      echo "$PATH_LINE" >> "$rc"
+      PATH_RCS="${PATH_RCS} ${rc}"
+    fi
   fi
 done
 export LDM_LFR_TUNNEL_BIN="$INSTALL_PATH"
 
-# Advise on PATH if the target directory is not already present
-case ":${PATH}:" in
-  *":${INSTALL_DIR}:"*)
-    ;;
-  *)
-    echo ""
-    echo "  NOTE: ${INSTALL_DIR} is not yet in your PATH."
-    echo "  Add the following line to your shell profile (~/.zshrc, ~/.bashrc, etc.):"
-    echo ""
-    echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
-    echo ""
-    echo "  Then run: source ~/.zshrc  (or open a new terminal)"
-    ;;
-esac
+if [ "$ON_PATH" = 0 ]; then
+  echo ""
+  if [ -n "$PATH_RCS" ]; then
+    echo "  Added ${INSTALL_DIR} to your PATH in:${PATH_RCS}"
+    echo "  New terminals pick it up. To use lfr-tunnel in THIS terminal now, run:"
+  else
+    echo "  NOTE: ${INSTALL_DIR} is not yet in your PATH, and no shell profile could be updated."
+    echo "  Add this line to your shell profile, and run it now:"
+  fi
+  echo ""
+  echo "    ${PATH_LINE}"
+  echo ""
+fi
 

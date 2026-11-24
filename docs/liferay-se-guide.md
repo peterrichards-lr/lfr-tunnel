@@ -54,7 +54,11 @@ include the path the alert names ([infosec.md §3](infosec.md#exclusion-type-ale
 
 **Do not set `LFT_INSTALL_DIR` or the `LFR_TUNNEL_*_INSTALL_DIR` variables.** They move the client out of the excluded directory, and `--upgrade` keeps it there. If one is in your shell profile, remove it and reinstall.
 
-To verify your installation, open a new terminal window and run: `lfr-tunnel -version`
+The installer puts the client on your `PATH`. On macOS and Linux it adds one line to your shell
+profile (`~/.zshrc`, `~/.bashrc`), so it takes effect in **new** terminals; to use it in the
+terminal you installed from, run the `export PATH=...` line the installer prints. On Windows it adds
+the folder to your user `PATH`. To verify your installation, open a new terminal window and run:
+`lfr-tunnel -version`
 
 ### Method B: Standalone Docker Container (EDR Immune)
 For environments where local native binary execution is completely restricted, run our pre-built, multi-architecture client container directly from Docker Hub. This requires **zero local installation, zero compilation, and is 100% immune to EDR host-level blocks**:

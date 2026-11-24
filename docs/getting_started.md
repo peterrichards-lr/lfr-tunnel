@@ -433,6 +433,17 @@ You can launch and manage the client in the background directly from your termin
   ```bash
   lfr-tunnel -background -subdomain your-name-se
   ```
+  It waits up to 20 seconds for the gateway's answer before returning, so a script or a wrapper
+  such as LDM can rely on its exit code:
+
+  | Exit | Meaning | Printed |
+  |---|---|---|
+  | `0` | registered | the public URL(s) |
+  | `0` | still registering after 20s (slow network); it keeps trying on its own | a `-status` hint |
+  | `1` | refused, e.g. an invalid token, a client below the gateway's minimum version, a taken subdomain, or local startup errors | on stderr, the reason and advice quoted from the tunnel's log, plus the log's path |
+
+  Before #2573 it returned as soon as the process started, so a refusal only ever reached the
+  log.
 * **Check Status**: Verifies if the daemon is active and prints the running PID and leased public URLs:
   ```bash
   lfr-tunnel -status
@@ -668,4 +679,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

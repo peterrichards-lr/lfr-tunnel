@@ -74,6 +74,40 @@ func WriteState(subdomain string, state *ClientState) error {
 	return os.WriteFile(path, data, 0600)
 }
 
+// FindStateByPID returns the state file written by the tunnel process pid, or nil if that process
+// has not written one. A tunnel writes its state only after the gateway accepted its registration,
+// so a match means "registered". Matched by PID rather than by file name because the name is keyed
+// on the subdomain the GATEWAY assigned, which can differ from the one requested (#2573).
+func FindStateByPID(pid int) *ClientState {
+	if pid <= 0 {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	for _, f := range files {
+		if f.IsDir() || !strings.HasPrefix(f.Name(), "lfr-tunnel-") || !strings.HasSuffix(f.Name(), ".state") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil {
+			continue
+		}
+		var cs ClientState
+		if json.Unmarshal(data, &cs) != nil || cs.PID != pid {
+			continue
+		}
+		return &cs
+	}
+	return nil
+}
+
 // DeleteState deletes the subdomain-specific state file.
 func DeleteState(subdomain string) {
 	path, err := GetStateFilePath(subdomain)

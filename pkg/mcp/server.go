@@ -449,9 +449,11 @@ func startTunnel(subdomain, ports, targetHost string) (interface{}, error) {
 
 	// WAIT for the intermediate, and capture what it says.
 	//
-	// `-background` returns almost immediately: handleBackground spawns the real tunnel, writes
-	// its pidfile, logs, and exits. It hands the grandchild a real *os.File for stdout and
-	// stderr, so nothing inherits this pipe and CombinedOutput cannot block on the tunnel.
+	// `-background` spawns the real tunnel, writes its pidfile, then waits for the gateway's
+	// answer (bounded, #2573) and exits: 0 once registered or still pending, 1 with the
+	// gateway's reason when the tunnel was refused. It hands the grandchild a real *os.File for
+	// stdout and stderr, so nothing inherits this pipe and CombinedOutput cannot block on the
+	// tunnel itself.
 	//
 	// Not waiting was the deeper half of #2336. Two things are thrown away by `Start()` alone:
 	//

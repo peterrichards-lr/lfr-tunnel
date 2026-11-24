@@ -66,7 +66,7 @@ echo "=== Spinning up Docker environment ==="
 "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts/common/pull-images-with-retry.sh" \
     "$(dirname -- "${BASH_SOURCE[0]}")/docker-compose.yml" || true
 
-docker-compose up --build -d mock-target mailpit lfr-tunneld nginx-proxy lfr-tunnel
+docker-compose up --build -d mock-target mock-liferay mailpit lfr-tunneld nginx-proxy lfr-tunnel
 
 echo "WAITING_HEALTHY" > "$SIGNAL_FILE"
 
@@ -337,6 +337,132 @@ if ! echo "$RESPONSE" | grep -q "Mock Liferay Instance"; then
     exit 1
 fi
 echo "✅ Registration, approval and tunnel routing work."
+
+# 7b. preserve_host follows Liferay's own header, through a real tunnel (#2571).
+#
+# The unit tests prove the probe and the watch against httptest stand-ins; nothing showed the HOST a
+# request actually reaches the target with once the client has decided. mock-liferay answers with
+# the Host it received: on :80 it sends Liferay-Portal, on :81 it does not (the control). A client
+# that never looked at the header fails the first half; one that turned preserve_host on for every
+# named port fails the second. Both are named with -ports, which before #2571 never got
+# preserve_host at all.
+liferay_fail() {
+    echo "❌ $1"
+    echo "=== client log ($2) ==="
+    docker logs "$3" 2>&1 | tail -40 || true
+    echo "=== lfr-tunneld logs (tail) ==="
+    docker-compose logs --tail=40 lfr-tunneld || true
+    exit 1
+}
+
+# Starts a foreground tunnel to mock-liferay:<port> under <subdomain>; prints the container ID.
+start_liferay_tunnel() {
+    docker-compose run -d --no-deps \
+        --entrypoint "./lfr-tunnel" \
+        -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
+        -e LFT_TARGET_HOST=mock-liferay \
+        lfr-tunnel \
+        -server http://tunnel.lfr-demo.local \
+        -subdomain "$1" \
+        -ports "$2"
+}
+
+# The Host mock-liferay saw for a request to <subdomain> through the proxy ("" if no answer).
+host_seen() {
+    curl -s -H "Host: $1.lfr-demo.local" "http://localhost:$E2E_PROXY_PORT/" | sed -n 's/^host=//p' | tr -d '\r'
+}
+
+# ONE subdomain for every tunnel below, each stopped before the next: every distinct subdomain a
+# user registers becomes a reservation, the default quota is 3, and peter-dev and the MCP step's
+# mcp-dev hold two. A fourth name is refused with 403 "quota limit reached" (measured).
+LR_SUB="lr-test"
+
+# Stops a foreground tunnel container gracefully (SIGTERM: the client deregisters, freeing the
+# lease for the next step), then removes it.
+stop_tunnel_container() {
+    docker stop -t 15 "$1" >/dev/null 2>&1 || true
+    docker rm "$1" >/dev/null 2>&1 || true
+}
+
+echo "=== preserve_host: a port that answers with Liferay-Portal ==="
+LR_ID=$(start_liferay_tunnel "$LR_SUB" 80)
+LR_SEEN=""
+for _ in {1..30}; do
+    LR_SEEN=$(host_seen "$LR_SUB")
+    [ "$LR_SEEN" = "$LR_SUB.lfr-demo.local" ] && break
+    sleep 1
+done
+if [ "$LR_SEEN" != "$LR_SUB.lfr-demo.local" ]; then
+    liferay_fail "Liferay (Liferay-Portal on :80) received Host '$LR_SEEN', not the public $LR_SUB.lfr-demo.local: preserve_host was not turned on." "$LR_SUB" "$LR_ID"
+fi
+if ! docker logs "$LR_ID" 2>&1 | grep -q "Liferay identified on port 80"; then
+    liferay_fail "The public Host arrived, but the client never logged identifying Liferay on port 80 -- something other than the header turned preserve_host on." "$LR_SUB" "$LR_ID"
+fi
+echo "✅ Liferay-Portal on :80 -> the target received the public Host ($LR_SEEN)."
+stop_tunnel_container "$LR_ID"
+
+echo "=== preserve_host: the same server WITHOUT the header (control) ==="
+NOLR_ID=$(start_liferay_tunnel "$LR_SUB" 81)
+NOLR_SEEN=""
+for _ in {1..30}; do
+    NOLR_SEEN=$(host_seen "$LR_SUB")
+    [ -n "$NOLR_SEEN" ] && break
+    sleep 1
+done
+if [ -z "$NOLR_SEEN" ]; then
+    liferay_fail "The control tunnel ($LR_SUB -> :81) never answered." "$LR_SUB" "$NOLR_ID"
+fi
+# Past two watch intervals (5s each), so a late decision would have been made by now.
+sleep 12
+NOLR_SEEN=$(host_seen "$LR_SUB")
+if [ "$NOLR_SEEN" = "$LR_SUB.lfr-demo.local" ]; then
+    liferay_fail "A server WITHOUT Liferay-Portal received the public Host: preserve_host was turned on for a port that is not Liferay." "$LR_SUB" "$NOLR_ID"
+fi
+echo "✅ No header on :81 -> the target received the local Host ($NOLR_SEEN), not the public one."
+stop_tunnel_container "$NOLR_ID"
+
+# 7c. -background reports the gateway's answer (#2573).
+#
+# Before #2573 -background exited 0 the moment the tunnel process started, so a refused token
+# reached only the log and a wrapper such as LDM saw a timeout. Both outcomes, against the real
+# gateway, in the long-running client container. `timeout` bounds each call: the wait is 20s.
+echo "=== -background with a token the gateway refuses ==="
+# `|| BG_CODE=$?`, not set +e: this script traps ERR into cleanup(), which runs `docker-compose
+# down` -- a command expected to fail must be the left side of a ||, where ERR does not fire.
+BG_CODE=0
+BG_OUT=$(docker-compose exec -T -e LFT_CLIENT_TOKEN="lft_not_a_real_token" lfr-tunnel \
+    timeout 60 ./lfr-tunnel -background -server http://tunnel.lfr-demo.local -subdomain bg-refused -ports 80 2>&1) || BG_CODE=$?
+echo "$BG_OUT"
+if [ "$BG_CODE" != "1" ]; then
+    echo "❌ -background with a refused token exited $BG_CODE, want 1."
+    exit 1
+fi
+case "$BG_OUT" in
+    *"did not start"*"did not accept this access token"*) ;;
+    *) echo "❌ -background exited 1 but did not say why (want the gateway's token refusal)."; exit 1 ;;
+esac
+echo "✅ A refused token: -background exits 1 and prints the gateway's reason."
+
+echo "=== -background with a valid token ==="
+BG_CODE=0
+BG_OUT=$(docker-compose exec -T -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" lfr-tunnel \
+    timeout 60 ./lfr-tunnel -background -server http://tunnel.lfr-demo.local -subdomain "$LR_SUB" -ports 80 2>&1) || BG_CODE=$?
+echo "$BG_OUT"
+if [ "$BG_CODE" != "0" ]; then
+    echo "❌ -background with a valid token exited $BG_CODE, want 0."
+    exit 1
+fi
+case "$BG_OUT" in
+    *"Registered: "*"$LR_SUB"*) ;;
+    *) echo "❌ -background exited 0 without printing the registered URL for $LR_SUB."; exit 1 ;;
+esac
+BG_ROUTED=$(curl -s -H "Host: $LR_SUB.lfr-demo.local" "http://localhost:$E2E_PROXY_PORT/")
+if ! echo "$BG_ROUTED" | grep -q "Mock Liferay Instance"; then
+    echo "❌ -background reported $LR_SUB registered, but it does not serve the mock target: $BG_ROUTED"
+    exit 1
+fi
+docker-compose exec -T lfr-tunnel ./lfr-tunnel -stop -subdomain "$LR_SUB" >/dev/null 2>&1 || true
+echo "✅ A valid token: -background exits 0 once registered, prints the URL, and the URL serves."
 
 # 8. Start a real tunnel through the MCP server (#2341).
 #

@@ -71,6 +71,16 @@ services:
     expose:
       - "8090"
 
+  # 5b. Liferay stand-in for the preserve_host step (#2571): answers with the Host it received, on
+  # :80 with Liferay's Liferay-Portal header and on :81 without it (the control).
+  mock-liferay:
+    image: nginx:alpine
+    volumes:
+      - ./mock-liferay.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+      - "81"
+
   # 6. Client CLI Container
   lfr-tunnel:
     build:

@@ -267,3 +267,31 @@ func TestReplacePathEntry(t *testing.T) {
 		t.Errorf("an empty entry was disturbed: %q, %v", got, ok)
 	}
 }
+
+// A move re-points install.sh's PATH line as well as LDM_LFR_TUNNEL_BIN (#2584). The literal below is
+// exactly what install.sh writes (tests/hooks/test-install-ldm-link.sh asserts the installer side),
+// so the two cannot drift apart silently. A PATH line the user wrote in another form is theirs.
+func TestRepointRCLineRepointsTheInstallersPathLine(t *testing.T) {
+	dir := t.TempDir()
+	oldExe, newExe := "/home/u/liferay/lfr-tunnel/lfr-tunnel", "/home/u/elsewhere/lfr-tunnel"
+	rc := filepath.Join(dir, ".bashrc")
+	installers := `export PATH="/home/u/liferay/lfr-tunnel:$PATH"`
+	users := `export PATH="$PATH:/home/u/liferay/lfr-tunnel"`
+	if installers != pathRCLine("/home/u/liferay/lfr-tunnel") {
+		t.Fatalf("pathRCLine = %q, want install.sh's form %q", pathRCLine("/home/u/liferay/lfr-tunnel"), installers)
+	}
+	if err := os.WriteFile(rc, []byte(installers+"\n"+users+"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := repointRCLine(rc, oldExe, newExe); err != nil {
+		t.Fatalf("repointRCLine: %v", err)
+	}
+	got, err := os.ReadFile(rc) //nolint:gosec // test path
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `export PATH="/home/u/elsewhere:$PATH"` + "\n" + users + "\n"
+	if string(got) != want {
+		t.Errorf("rc file =\n%s\nwant\n%s", got, want)
+	}
+}

@@ -39,6 +39,21 @@ func ldmRCValue(line string) (string, bool) {
 	return line[len(prefix) : len(line)-1], true
 }
 
+// pathRCLine is the PATH line install.sh appends to a shell rc file (#2584). $PATH is literal.
+func pathRCLine(dir string) string {
+	return `export PATH="` + dir + `:$PATH"`
+}
+
+// pathRCValue returns the directory in a line of exactly install.sh's PATH form, and whether it is
+// one. Any other PATH line is the user's.
+func pathRCValue(line string) (string, bool) {
+	const prefix, suffix = `export PATH="`, `:$PATH"`
+	if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, suffix) || len(line) <= len(prefix)+len(suffix) {
+		return "", false
+	}
+	return line[len(prefix) : len(line)-len(suffix)], true
+}
+
 // namesFile reports whether path is exe: equal, or the same once symlinks are resolved. install.sh
 // writes the path as it was given, while the upgrade knows the binary by its resolved path, so a
 // symlinked home or install directory spells them differently (#2553 review).
@@ -50,9 +65,10 @@ func namesFile(path, exe string) bool {
 	return err == nil && resolved == exe
 }
 
-// repointRCLine replaces install.sh's LDM_LFR_TUNNEL_BIN line naming oldExe in rc with one for
-// newExe. Only a line in install.sh's exact form whose path is oldExe (directly or through a
-// symlink) is changed; any other line, including one the user edited, is theirs.
+// repointRCLine replaces install.sh's lines naming the old location in rc: the LDM_LFR_TUNNEL_BIN
+// line naming oldExe, and the PATH line naming oldExe's directory (#2584). Only lines in
+// install.sh's exact form whose path is the old one (directly or through a symlink) are changed;
+// any other line, including one the user edited, is theirs.
 //
 // The rc file may be a symlink into a dotfiles repository, so the file it resolves to is
 // rewritten, through a temporary file beside it and a rename, keeping its mode.
@@ -69,16 +85,20 @@ func repointRCLine(rc, oldExe, newExe string) error {
 		return fmt.Errorf("reading %s: %w", rc, err)
 	}
 	newLine := ldmRCLine(newExe)
+	oldDir, newPathLine := filepath.Dir(oldExe), pathRCLine(filepath.Dir(newExe))
 	lines := strings.Split(string(data), "\n")
-	changed := false
+	var ldmChanged, pathChanged bool
 	for i, l := range lines {
 		body := strings.TrimRight(l, "\r")
 		if value, ok := ldmRCValue(body); ok && namesFile(value, oldExe) {
 			lines[i] = newLine + l[len(body):]
-			changed = true
+			ldmChanged = true
+		} else if dir, ok := pathRCValue(body); ok && namesFile(strings.TrimRight(dir, "/"), oldDir) {
+			lines[i] = newPathLine + l[len(body):]
+			pathChanged = true
 		}
 	}
-	if !changed {
+	if !ldmChanged && !pathChanged {
 		return nil
 	}
 	info, err := os.Stat(path)
@@ -95,7 +115,12 @@ func repointRCLine(rc, oldExe, newExe string) error {
 		}
 		return fmt.Errorf("rewriting %s: %w", rc, err)
 	}
-	fmt.Printf("[Update] %s in %s now names %s.\n", ldmBinEnvVar, rc, newExe)
+	if ldmChanged {
+		fmt.Printf("[Update] %s in %s now names %s.\n", ldmBinEnvVar, rc, newExe)
+	}
+	if pathChanged {
+		fmt.Printf("[Update] PATH in %s now names %s.\n", rc, filepath.Dir(newExe))
+	}
 	return nil
 }
 

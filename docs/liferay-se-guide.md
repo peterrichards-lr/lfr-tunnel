@@ -135,17 +135,31 @@ Depending on how you run Liferay and client extensions locally, use the appropri
 ### 1. LDM (Liferay Development Manager) & Workspace Client Extensions
 If you are developing Liferay Client Extensions (CX) in a Liferay Workspace, the tunnel automatically scans `client-extension.yaml` files, maps ports (e.g., `8080` for portal and `3001` for assets), and prints clickable public URLs.
 
-* **Using the Native Client:**
-  Navigate to your Liferay Workspace root and run:
+* **Without LDM:** from your Liferay Workspace root, run:
   ```bash
   lfr-tunnel -subdomain your-name-se
   ```
-* **Using the Docker Client:**
-  Configure LDM to invoke the Docker client container by setting the runtime variable:
+* **With LDM, using the native client** (the default): LDM runs your installed client for the
+  project.
   ```bash
-  LDM_TUNNEL_RUNTIME=docker ldm tunnel -subdomain your-name-se
+  ldm share start my-project --subdomain your-name-se
+  # or start the project and share it in one step:
+  ldm run my-project --share --share-subdomain your-name-se
   ```
-  *(Note: LDM coordinates the container bindings automatically, scanning your workspace files and mounting paths as needed).*
+  LDM does the Liferay setup for you: it adds the tunnel's domains to
+  `virtual.hosts.valid.hosts` and passes `-preserve-host`, so links and sign-in use the public
+  address with no manual configuration. LDM does not install the client; install it first
+  ([Step 1](#step-1-install-the-client)), and LDM finds it at the approved install path.
+* **With LDM, using the Docker client:** LDM runs the client as a sidecar container next to the
+  project instead.
+  ```bash
+  ldm share start my-project --provider lfr-tunnel-docker --subdomain your-name-se
+  # with ldm run, the flag is --share-provider lfr-tunnel-docker
+  ```
+
+  See LDM's
+  [Sharing tunnels](https://github.com/peterrichards-lr/liferay-docker-manager/blob/master/docs/how-to/sharing_tunnels.md)
+  guide for its other options.
 
 #### Client Extension Naming & Routing Convention (For LDM Configuration)
 When client extensions are exposed via the tunnel, the gateway assigns them URLs using a **hyphenated prefix format**:
@@ -432,4 +446,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

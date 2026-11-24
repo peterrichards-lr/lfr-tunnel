@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.52.11",
+    "release_date": "2026-11-24",
+    "features": [
+      "Liferay links and sign-in use the public address automatically: the client recognises a Liferay portal by the Liferay-Portal header it sends, so a Tomcat bundle or any port you name with -ports gets preserve_host without configuration. A portal that is still starting is picked up when it comes up.",
+      "New lfr-tunnel doctor checks your token, install path and whether Liferay will accept the public hostname, and explains Liferay's \"Invalid host name\" error when it happens.",
+      "New lfr-tunnel check-subdomain tells you whether a name is free on each of the gateway's domains before you use it.",
+      "lfr-tunnel -background now waits for the gateway's answer: it prints your public URL once registered, or exits with the gateway's reason (an invalid token, a client below the minimum version, a taken subdomain) instead of failing silently. LDM and scripts see the error.",
+      "Upgrades follow the gateway's install folder, re-register autostart, and remove the old ~/.ldm/bin link, which LDM no longer needs. Security: an updated WebSocket library (GO-2026-6278)."
+    ]
+  },
+  {
     "version": "v1.52.10",
     "release_date": "2026-11-20",
     "features": [
@@ -42,16 +53,6 @@
       "Security update: SSO sign-in now uses PKCE and a nonce, and only accepts an email address the identity provider has verified.",
       "Analytics: Export PDF prints the wide sections (gateways, sessions, latency, node placement) on landscape pages, and charts are redrawn at their printed size instead of shrunk from the screen. Tested in Chrome.",
       "Analytics: Personal Usage now says when you have no tunnel traffic in the period, instead of showing an empty section."
-    ]
-  },
-  {
-    "version": "v1.52.6",
-    "release_date": "2026-11-10",
-    "features": [
-      "Admins: the sidebar now shows a count beside every approval queue -- pending registrations, extension requests and token permanence requests -- and it updates as soon as a request is decided.",
-      "Admins: admin alerts can now also be sent to a Slack channel, either by email to the channel or through the Liferay Tunnel Slack app. The owner chooses which in System Settings, and every alert type is covered.",
-      "Admins: unverified registrations are listed under Registrations in both portals, and only registrations waiting for a decision are counted.",
-      "Security update: library updates close published security advisories. Nothing changes in how you use the tunnel."
     ]
   }
 ]

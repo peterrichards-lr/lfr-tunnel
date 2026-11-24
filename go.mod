@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.339.0
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.71.0
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.27.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.52.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/gogpu/systray v0.3.0
 	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4

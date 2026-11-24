@@ -387,11 +387,13 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	// Stop what runs the binary, so it restarts on the new one.
 	plistToReload, restartSystemd, relaunch := stopForUpgrade()
 
-	// The LDM link, after EVERY upgrade (#2553): on Windows it is a hardlink, which kept naming the
-	// replaced binary's content after an in-place upgrade too, so LDM ran the previous version.
-	// After the stop above, so a client LDM started from the link is not holding it open.
+	// The retired LDM link (#2579), removed after EVERY upgrade, not only a move: on Windows the
+	// hardlink kept naming the replaced binary's content, so a stale executable would otherwise sit
+	// outside the excluded path. After the stop above, so a client an older LDM started from the
+	// link is not holding it open. A link that could not be removed still names the old binary, so
+	// a move keeps that binary (keepOldBinary).
 	home, _ := os.UserHomeDir()
-	linkErr := repointLDMLinkForPlatform(home, execPath, target)
+	linkErr := retireLDMLinkForPlatform(home, execPath, target)
 	if linkErr != nil {
 		fmt.Printf("[Warning] %v\n", linkErr)
 	}

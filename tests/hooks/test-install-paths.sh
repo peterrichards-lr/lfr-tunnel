@@ -182,9 +182,10 @@ fi
 # present, even beside a mixed-case one. So scan every rule line, not just the expected ones.
 # Indentation is allowed, so a rule in a fenced block nested under a list item is still scanned.
 # The floor equals today's rule count: losing any rule line trips it. Raise it when adding a rule.
+# Lowered from 6 to 3 when the ~/.ldm/bin link rules were withdrawn (#2579): one rule per platform.
 rule_lines="$(grep -nE '^[[:space:]]*(/Users/|/home/|C:\\Users\\)' "$INFOSEC")"
-if [ "$(printf '%s\n' "$rule_lines" | grep -c .)" -lt 6 ]; then
-  fail "found fewer than 6 exclusion rule lines in docs/infosec.md -- the case check below would scan too little"
+if [ "$(printf '%s\n' "$rule_lines" | grep -c .)" -lt 3 ]; then
+  fail "found fewer than 3 exclusion rule lines in docs/infosec.md -- the case check below would scan too little"
 fi
 mixed_case="$(printf '%s\n' "$rule_lines" | sed -E 's#^([0-9]+:)[[:space:]]*(/Users/|/home/|C:\\Users\\)#\1#' | grep -E '^[0-9]+:.*[A-Z]')"
 if [ -z "$mixed_case" ]; then
@@ -202,21 +203,19 @@ fi
 # 9. One table (#2507). docs/infosec.md section 3 is the single source; the installers must create
 #    what it lists, and SECURITY.md and the SE guide must point at it rather than restate paths.
 #    Each source disagreeing with the others is the failure this file exists for.
-for row in '`~/liferay/lfr-tunnel/lfr-tunnel`' '`%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe`' \
-           '`~/.ldm/bin/lfr-tunnel`' '`%USERPROFILE%\.ldm\bin\lfr-tunnel.exe`'; do
+for row in '`~/liferay/lfr-tunnel/lfr-tunnel`' '`%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe`'; do
   if grep -qF "$row" "$INFOSEC"; then
     pass "docs/infosec.md's install table lists ${row}"
   else
     fail "docs/infosec.md's install table does not list ${row}"
   fi
 done
-for rule in '/Users/*/.ldm/bin/lfr-tunnel' '/home/*/.ldm/bin/lfr-tunnel' 'C:\Users\*\.ldm\bin\lfr-tunnel.exe'; do
-  if grep -qxF "$rule" "$INFOSEC"; then
-    pass "docs/infosec.md excludes the LDM link: ${rule}"
-  else
-    fail "docs/infosec.md has no exclusion rule for the LDM link ${rule} -- the engines need it as well as the binary"
-  fi
-done
+# The ~/.ldm/bin link is retired (#2579): nothing creates it, so no rule may be requested for it.
+if grep -qE '\.ldm[/\\]bin[/\\]lfr-tunnel' <<< "$(grep -E '^(/Users/|/home/|C:\\)' "$INFOSEC")"; then
+  fail "docs/infosec.md still requests an exclusion rule for the retired ~/.ldm/bin link (#2579)"
+else
+  pass "docs/infosec.md requests no rule for the retired ~/.ldm/bin link"
+fi
 # The exclusion type (#2544, #2545). InfoSec uses Alerts exclusions for detections; an
 # Interoperability-only or Performance Focus rule is not enough. A platform heading that loses
 # "Alerts" would leave InfoSec configuring a path with no type stated, which is how Linux ended up
@@ -233,28 +232,24 @@ for plat in macOS Linux Windows; do
     fail "docs/infosec.md section 3 has no '**${plat}** (requested, Alerts):' heading -- the ${plat} rules would have no exclusion type stated"
   fi
 done
-if grep -q '^\*\*The LDM hardlink needs its own Alerts rule\*\*' <<< "$SECTION3"; then
-  pass "docs/infosec.md section 3 states the Windows LDM hardlink needs its own Alerts rule"
-else
-  fail "docs/infosec.md section 3 no longer states the Windows LDM hardlink needs its own Alerts rule -- the binary's rule does not cover a second path"
-fi
 # Decision 0006: no package-manager exclusion is requested for Liferay.
 if grep -qE '^/opt/' "$INFOSEC"; then
   fail "docs/infosec.md still lists a package-manager exclusion rule (decision 0006 drops them)"
 else
   pass "docs/infosec.md lists no package-manager exclusion rule"
 fi
-# What the installers create must be what the table lists.
-if grep -qF 'ln -sf "$INSTALL_PATH" "${HOME}/.ldm/bin/lfr-tunnel"' "${REPO_ROOT}/pkg/server/static/install.sh"; then
-  pass "install.sh creates the LDM link the table lists"
+# The installers must not create the retired LDM link (#2579), and must remove the one they made.
+if grep -qE 'ln -s.*\.ldm/bin' "${REPO_ROOT}/pkg/server/static/install.sh" ||
+   grep -qF 'ItemType HardLink' "${REPO_ROOT}/pkg/server/static/install.ps1"; then
+  fail "an installer still creates the retired ~/.ldm/bin link (#2579)"
 else
-  fail "install.sh no longer creates ~/.ldm/bin/lfr-tunnel, which the table and the exclusions name"
+  pass "neither installer creates the retired ~/.ldm/bin link"
 fi
-if grep -qF '$LdmBinDir = "$Home\.ldm\bin"' "${REPO_ROOT}/pkg/server/static/install.ps1" &&
-   grep -qF '$LdmTarget = "$LdmBinDir\lfr-tunnel.exe"' "${REPO_ROOT}/pkg/server/static/install.ps1"; then
-  pass "install.ps1 creates the LDM link the table lists"
+if grep -qF 'LDM_LINK="${HOME}/.ldm/bin/lfr-tunnel"' "${REPO_ROOT}/pkg/server/static/install.sh" &&
+   grep -qF '$LdmTarget = "$Home\.ldm\bin\lfr-tunnel.exe"' "${REPO_ROOT}/pkg/server/static/install.ps1"; then
+  pass "both installers remove the link an earlier install made"
 else
-  fail "install.ps1 no longer creates %USERPROFILE%\\.ldm\\bin\\lfr-tunnel.exe, which the table and the exclusions name"
+  fail "an installer no longer removes the retired ~/.ldm/bin link an earlier install made"
 fi
 SECURITY_MD="${REPO_ROOT}/SECURITY.md"
 if grep -qE '/usr/local/bin/lfr-tunnel|LOCALAPPDATA|gh attestation verify' "$SECURITY_MD"; then

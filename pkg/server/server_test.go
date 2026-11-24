@@ -2205,8 +2205,9 @@ func TestServer_InstallerEndpoints(t *testing.T) {
 	req2, _ := http.NewRequest("GET", "http://example.com/install.sh", nil)
 	rec2 := httptest.NewRecorder()
 	srv.ServeHTTP(rec2, req2)
-	if !strings.Contains(rec2.Body.String(), "LDM_LFR_TUNNEL_BIN") || !strings.Contains(rec2.Body.String(), ".ldm/bin") {
-		t.Error("expected /install.sh to contain LDM auto-discovery integration (.ldm/bin and LDM_LFR_TUNNEL_BIN)")
+	// LDM finds the client through LDM_LFR_TUNNEL_BIN; the ~/.ldm/bin link is retired (#2579).
+	if !strings.Contains(rec2.Body.String(), "LDM_LFR_TUNNEL_BIN") {
+		t.Error("expected /install.sh to set LDM_LFR_TUNNEL_BIN for LDM's auto-discovery")
 	}
 
 	// 3. Check /install.ps1 endpoint

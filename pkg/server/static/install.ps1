@@ -104,14 +104,20 @@ if ($UserPath -notlike "*$InstallDir*") {
 # Configure LDM (liferay-docker-manager) auto-discovery to prevent un-whitelisted auto-downloads (#1311)
 [Environment]::SetEnvironmentVariable("LDM_LFR_TUNNEL_BIN", $DestPath, "User")
 $env:LDM_LFR_TUNNEL_BIN = $DestPath
-$LdmBinDir = "$Home\.ldm\bin"
-if (!(Test-Path $LdmBinDir)) { New-Item -ItemType Directory -Force -Path $LdmBinDir | Out-Null }
-$LdmTarget = "$LdmBinDir\lfr-tunnel.exe"
-if (Test-Path $LdmTarget) { Remove-Item -Force $LdmTarget -ErrorAction SilentlyContinue }
-try {
-    New-Item -ItemType HardLink -Path $LdmTarget -Target $DestPath -ErrorAction Stop | Out-Null
-} catch {
-    Copy-Item -Force -Path $DestPath -Destination $LdmTarget -ErrorAction SilentlyContinue | Out-Null
+# The .ldm\bin link is retired (#2579): LDM 2.25.0 and later find the client through
+# LDM_LFR_TUNNEL_BIN above or the install path itself. An earlier install put a hardlink (or a
+# copy) of the client there: an executable outside the EDR-excluded path, so it is removed. That
+# name was always the installer's own; this installer used to replace it unconditionally.
+$LdmTarget = "$Home\.ldm\bin\lfr-tunnel.exe"
+foreach ($Retired in @($LdmTarget, "$LdmTarget.old")) {
+    if (Test-Path $Retired) {
+        Remove-Item -Force $Retired -ErrorAction SilentlyContinue
+        if (Test-Path $Retired) {
+            Write-Host "Could not remove the retired LDM link $Retired (in use); lfr-tunnel removes it at its next upgrade."
+        } else {
+            Write-Host "Removed the retired LDM link $Retired."
+        }
+    }
 }
 
 Write-Host "lfr-tunnel installed successfully to $DestPath"

@@ -1,6 +1,8 @@
 package client
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,7 +20,22 @@ func writeExe(t *testing.T, path, content string) {
 	}
 }
 
-func TestRepointLDMLinkSymlink(t *testing.T) {
+func mkLinkDir(t *testing.T, link string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func gone(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Lstat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// The installer's symlink, naming the binary an upgrade replaced or the one it installed, is
+// removed; the binaries are untouched (#2579).
+func TestRetireLDMLinkRemovesTheInstallersSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlinks need a privilege Windows runners do not grant; Windows uses the hardlink form")
 	}
@@ -26,172 +43,128 @@ func TestRepointLDMLinkSymlink(t *testing.T) {
 	oldExe, newExe := filepath.Join(dir, "old", "lfr-tunnel"), filepath.Join(dir, "new", "lfr-tunnel")
 	writeExe(t, oldExe, "old")
 	writeExe(t, newExe, "new")
-	link := filepath.Join(dir, ".ldm", "bin", "lfr-tunnel")
-	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
-		t.Fatal(err)
+	for name, points := range map[string]string{"names the old binary": oldExe, "names the new binary": newExe} {
+		link := filepath.Join(dir, name, ".ldm", "bin", "lfr-tunnel")
+		mkLinkDir(t, link)
+		if err := os.Symlink(points, link); err != nil {
+			t.Fatal(err)
+		}
+		if err := retireLDMLink(link, oldExe, newExe, false); err != nil {
+			t.Fatalf("%s: retireLDMLink: %v", name, err)
+		}
+		if !gone(t, link) {
+			t.Errorf("a link that %s was left in place", name)
+		}
 	}
-	if err := os.Symlink(oldExe, link); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repointLDMLink(link, oldExe, newExe, false); err != nil {
-		t.Fatalf("repointLDMLink: %v", err)
-	}
-	if got, err := os.Readlink(link); err != nil || got != newExe {
-		t.Errorf("link names %q (%v), want %q", got, err, newExe)
-	}
-	if _, err := os.Lstat(link + ".new"); err == nil {
-		t.Error("the temporary link was left behind")
+	if gone(t, oldExe) || gone(t, newExe) {
+		t.Error("retiring the link removed a binary")
 	}
 }
 
-// The Windows form: a hardlink to the old binary's content is replaced by one to the new binary,
-// which is what the installer would make. Runs on every OS, since os.Link makes hardlinks
-// everywhere.
-func TestRepointLDMLinkHardlink(t *testing.T) {
+// A link that names nothing is broken whoever made it, so it goes too.
+func TestRetireLDMLinkRemovesADanglingSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need a privilege Windows runners do not grant")
+	}
 	dir := t.TempDir()
-	oldExe, newExe := filepath.Join(dir, "old", "lfr-tunnel.exe"), filepath.Join(dir, "new", "lfr-tunnel.exe")
+	link := filepath.Join(dir, ".ldm", "bin", "lfr-tunnel")
+	mkLinkDir(t, link)
+	if err := os.Symlink(filepath.Join(dir, "gone", "lfr-tunnel"), link); err != nil {
+		t.Fatal(err)
+	}
+	if err := retireLDMLink(link, filepath.Join(dir, "a"), filepath.Join(dir, "b"), false); err != nil {
+		t.Fatal(err)
+	}
+	if !gone(t, link) {
+		t.Error("a dangling LDM link was left in place")
+	}
+}
+
+// What the installers did not make is the user's: a symlink to their own build and a regular file
+// both stay, and an absent link is not an error.
+func TestRetireLDMLinkLeavesWhatTheInstallerDidNotMake(t *testing.T) {
+	dir := t.TempDir()
+	oldExe, newExe := filepath.Join(dir, "old", "lfr-tunnel"), filepath.Join(dir, "new", "lfr-tunnel")
 	writeExe(t, oldExe, "old")
 	writeExe(t, newExe, "new")
-	link := filepath.Join(dir, ".ldm", "bin", "lfr-tunnel.exe")
-	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Link(oldExe, link); err != nil {
-		t.Fatal(err)
+
+	if err := retireLDMLink(filepath.Join(dir, "absent", "lfr-tunnel"), oldExe, newExe, false); err != nil {
+		t.Errorf("an absent link: %v", err)
 	}
 
-	if err := repointLDMLink(link, oldExe, newExe, true); err != nil {
-		t.Fatalf("repointLDMLink: %v", err)
-	}
-	li, err := os.Stat(link)
-	if err != nil {
+	plain := filepath.Join(dir, "plain", "lfr-tunnel")
+	writeExe(t, plain, "users-own")
+	if err := retireLDMLink(plain, oldExe, newExe, false); err != nil {
 		t.Fatal(err)
 	}
-	ni, err := os.Stat(newExe)
-	if err != nil {
+	if got, err := os.ReadFile(plain); err != nil || string(got) != "users-own" { //nolint:gosec // test path
+		t.Errorf("a regular file at the LDM link was removed or changed: %q (%v)", got, err)
+	}
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+	mine := filepath.Join(dir, "src", "lfr-tunnel")
+	writeExe(t, mine, "mine")
+	users := filepath.Join(dir, "users", "lfr-tunnel")
+	mkLinkDir(t, users)
+	if err := os.Symlink(mine, users); err != nil {
 		t.Fatal(err)
 	}
-	if !os.SameFile(li, ni) {
-		got, err := os.ReadFile(link) //nolint:gosec // test path
-		t.Errorf("the LDM link is not the new binary; it holds %q (%v)", got, err)
+	if err := retireLDMLink(users, oldExe, newExe, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.Readlink(users); err != nil || got != mine {
+		t.Errorf("a link to the user's own build was removed or changed: %q (%v)", got, err)
 	}
 }
 
-// The in-place case on Windows: the upgrade renamed the binary aside and wrote a new file at the
-// same path, so the hardlink still holds the previous version's content.
-func TestRepointLDMLinkHardlinkAfterAnInPlaceUpgrade(t *testing.T) {
+// The Windows form: the hardlink, and the copy the installer fell back to, are both removed, even
+// stale (the in-place case, where the hardlink still holds the previous version). Runs on every
+// OS, since os.Link makes hardlinks everywhere.
+func TestRetireLDMLinkRemovesTheWindowsHardlinkOrCopy(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "lfr-tunnel.exe")
 	writeExe(t, exe, "old")
-	link := filepath.Join(dir, ".ldm", "bin", "lfr-tunnel.exe")
-	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
+
+	hard := filepath.Join(dir, "hard", ".ldm", "bin", "lfr-tunnel.exe")
+	mkLinkDir(t, hard)
+	if err := os.Link(exe, hard); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(exe, link); err != nil {
-		t.Fatal(err)
-	}
+	// The in-place upgrade: the binary renamed aside and a new file written at the same path.
 	if err := os.Rename(exe, exe+".old"); err != nil {
 		t.Fatal(err)
 	}
 	writeExe(t, exe, "new")
-	if err := os.Remove(exe + ".old"); err != nil {
-		t.Fatal(err)
-	}
 
-	if err := repointLDMLink(link, exe, exe, true); err != nil {
-		t.Fatalf("repointLDMLink: %v", err)
-	}
-	if got, err := os.ReadFile(link); err != nil || string(got) != "new" { //nolint:gosec // test path
-		t.Errorf("the LDM link holds %q (%v), want the upgraded binary", got, err)
-	}
-}
+	copied := filepath.Join(dir, "copy", ".ldm", "bin", "lfr-tunnel.exe")
+	writeExe(t, copied, "old")
 
-func TestRepointLDMLinkLeavesWhatTheInstallerDidNotMake(t *testing.T) {
-	dir := t.TempDir()
-	newExe := filepath.Join(dir, "new", "lfr-tunnel")
-	writeExe(t, newExe, "new")
-
-	// No link: not created. The installer makes it; a user who removed it chose to.
-	absent := filepath.Join(dir, "absent", "lfr-tunnel")
-	if err := repointLDMLink(absent, newExe, newExe, false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Lstat(absent); err == nil {
-		t.Error("an absent LDM link was created")
-	}
-
-	// A regular file on Unix is not the installer's symlink: left as it is.
-	plain := filepath.Join(dir, "plain", "lfr-tunnel")
-	writeExe(t, plain, "users-own")
-	if err := repointLDMLink(plain, newExe, newExe, false); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := os.ReadFile(plain); err != nil || string(got) != "users-own" { //nolint:gosec // test path
-		t.Errorf("a regular file at the LDM link was replaced: %q (%v)", got, err)
-	}
-}
-
-// A symlink the user pointed at a different binary is theirs, and one that names nothing is
-// broken: only the second is re-pointed.
-func TestRepointLDMLinkOnlyTouchesTheOldBinarysLink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks need a privilege Windows runners do not grant; Windows uses the hardlink form")
-	}
-	dir := t.TempDir()
-	oldExe, newExe := filepath.Join(dir, "old", "lfr-tunnel"), filepath.Join(dir, "new", "lfr-tunnel")
-	mine := filepath.Join(dir, "src", "lfr-tunnel")
-	writeExe(t, oldExe, "old")
-	writeExe(t, newExe, "new")
-	writeExe(t, mine, "mine")
-	if err := os.MkdirAll(filepath.Join(dir, "l"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-
-	users := filepath.Join(dir, "l", "users")
-	if err := os.Symlink(mine, users); err != nil {
-		t.Fatal(err)
-	}
-	if err := repointLDMLink(users, oldExe, newExe, false); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := os.Readlink(users); err != nil || got != mine {
-		t.Errorf("a link to the user's own build was re-pointed to %q (%v)", got, err)
-	}
-
-	dangling := filepath.Join(dir, "l", "dangling")
-	if err := os.Symlink(filepath.Join(dir, "gone", "lfr-tunnel"), dangling); err != nil {
-		t.Fatal(err)
-	}
-	if err := repointLDMLink(dangling, oldExe, newExe, false); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := os.Readlink(dangling); err != nil || got != newExe {
-		t.Errorf("a dangling link was left naming %q (%v), want %q", got, err, newExe)
-	}
-}
-
-// The Windows replacement moves the old name aside first, because Windows will not replace a name
-// of a running image; nothing named .old or .new is left behind when the aside copy is free.
-func TestReplaceHardlinkLeavesNothingBehind(t *testing.T) {
-	dir := t.TempDir()
-	oldExe, newExe := filepath.Join(dir, "old.exe"), filepath.Join(dir, "new.exe")
-	writeExe(t, oldExe, "old")
-	writeExe(t, newExe, "new")
-	link := filepath.Join(dir, "link.exe")
-	if err := os.Link(oldExe, link); err != nil {
-		t.Fatal(err)
-	}
-	if err := repointLDMLink(link, oldExe, newExe, true); err != nil {
-		t.Fatal(err)
-	}
-	for _, leftover := range []string{link + ".old", link + ".new"} {
-		if _, err := os.Lstat(leftover); err == nil {
-			t.Errorf("%s was left behind", leftover)
+	for _, link := range []string{hard, copied} {
+		if err := retireLDMLink(link, exe, exe, true); err != nil {
+			t.Fatalf("retireLDMLink(%s): %v", link, err)
+		}
+		if !gone(t, link) || !gone(t, link+".old") {
+			t.Errorf("%s (or its aside copy) was left behind", link)
 		}
 	}
-	if got, err := os.ReadFile(link); err != nil || string(got) != "new" { //nolint:gosec // test path
-		t.Errorf("link holds %q (%v)", got, err)
+	if got, err := os.ReadFile(exe); err != nil || string(got) != "new" { //nolint:gosec // test path
+		t.Errorf("the installed binary was touched: %q (%v)", got, err)
+	}
+}
+
+// An aside copy a previous run could not delete (a running image) is cleared by the next one,
+// even once the link itself is gone.
+func TestRetireLDMLinkClearsALeftoverAsideCopy(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, ".ldm", "bin", "lfr-tunnel.exe")
+	writeExe(t, link+".old", "stale")
+	if err := retireLDMLink(link, "x", "y", true); err != nil {
+		t.Fatal(err)
+	}
+	if !gone(t, link+".old") {
+		t.Error("the leftover aside copy was not cleared")
 	}
 }
 

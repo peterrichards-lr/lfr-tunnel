@@ -126,7 +126,6 @@ One executable name, one path and one install mechanism on every OS (#2508):
 | | macOS | Linux | Windows |
 |---|---|---|---|
 | Executable | `~/liferay/lfr-tunnel/lfr-tunnel` | `~/liferay/lfr-tunnel/lfr-tunnel` | `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe` |
-| LDM link | `~/.ldm/bin/lfr-tunnel` (symlink) | `~/.ldm/bin/lfr-tunnel` (symlink) | `%USERPROFILE%\.ldm\bin\lfr-tunnel.exe` (hardlink) |
 | Install and upgrade | rename to `.old`, download in place | same | same |
 | Autostart runs | the executable above | the executable above | the executable above |
 
@@ -135,14 +134,17 @@ Install and upgrade write the binary straight to that path: the current binary i
 staged in `/tmp`, `/private/tmp` or `%TEMP%` (#2505). Autostart runs the executable itself on
 every OS, never a copy or a renamed link (#2504).
 
-The LDM link exists so LDM finds this client instead of downloading an unexcluded copy of its own
-(#1311). Every upgrade re-points it at the upgraded binary (#2553). On Windows that matters even
-when the binary stays where it is: a hardlink is a second name for a file's content, so after an
-upgrade replaced the file it kept naming the previous version.
+**The `~/.ldm/bin` link is retired (#2579).** The installers used to create a second name for the
+client at `~/.ldm/bin/lfr-tunnel` (a hardlink at `%USERPROFILE%\.ldm\bin\lfr-tunnel.exe` on Windows),
+so that LDM (liferay-docker-manager) ran this client instead of downloading an unexcluded copy of
+its own (#1311). LDM 2.25.0 and later find the client through `LDM_LFR_TUNNEL_BIN`, which the
+installers set, or through the install path itself, both ahead of `~/.ldm/bin`, and LDM no longer
+downloads a client. The installers no longer create the link, and they and every upgrade remove
+the one an earlier install made. LDM older than 2.25.0 is not supported.
 
 When the gateway's `install_dir` moves the client, an upgrade:
 1. writes the new binary at the new path;
-2. re-points the LDM link;
+2. removes the retired LDM link, if an earlier install left one;
 3. re-registers the autostart entries the user has (the background service and the tray), and
    restarts the processes it stopped from the new binary;
 4. updates what the installer wrote naming the old path: `LDM_LFR_TUNNEL_BIN`, and on Windows the
@@ -155,17 +157,22 @@ path, which is still excluded, so autostart and LDM still find a client there. T
 procedure for changing the path is in the ops skill, `.agents/skills/lfr-tunnel-ops/SKILL.md` §6d.
 
 > [!NOTE]
-> **To confirm in the test round (#2547):** on Windows, re-creating the hardlink while the old
-> binary is running, and what SentinelOne does when a binary is written to a new path. Both are
+> **To confirm in the test round (#2547):** on Windows, removing the old LDM hardlink while the
+> client is running, and what SentinelOne does when a binary is written to a new path. Both are
 > built from the documented Windows behaviour and have not been run on a real machine.
 
 ### EDR exclusion rules (Liferay)
 
 On Liferay's EDR-managed machines the native installer is the only supported install route
 (`.agents/decisions/0006-liferay-installs-natively-homebrew-and-scoop-are-for-everyone-else.md`),
-so these are the only paths to exclude. **Two rules per platform**: InfoSec confirmed that the
-behavioural and machine-learning engines were not satisfied by a binary exclusion alone, and
-the LDM link had to be excluded as well.
+so these are the only paths to exclude: **one rule per platform**, the installed binary.
+
+**The LDM link rules are withdrawn (#2579).** The request previously had a second rule per platform
+for `~/.ldm/bin/lfr-tunnel` (`C:\Users\*\.ldm\bin\lfr-tunnel.exe` on Windows, #2544). InfoSec had
+found that the behavioural and machine-learning engines were not satisfied by the binary's rule
+alone while that link existed and could be executed. The link is now retired and removed, so
+nothing runs from that path. **To confirm in the test round (#2547):** an LDM share raises no
+alert with only the binary's rule in place.
 
 #### Exclusion type: Alerts
 
@@ -190,14 +197,12 @@ endpoints, are open with InfoSec** (LRINFOSEC-7091).
 
 ```
 /Users/*/liferay/lfr-tunnel/lfr-tunnel
-/Users/*/.ldm/bin/lfr-tunnel
 ```
 
 **Linux** (requested, Alerts):
 
 ```
 /home/*/liferay/lfr-tunnel/lfr-tunnel
-/home/*/.ldm/bin/lfr-tunnel
 ```
 
 Linux previously had rules of another type only, which InfoSec says are not enough. The Alerts
@@ -208,16 +213,7 @@ confirms the test results, and then go (#2545).
 
 ```
 C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
-C:\Users\*\.ldm\bin\lfr-tunnel.exe
 ```
-
-**The LDM hardlink needs its own Alerts rule** (#2544). On Windows, `.ldm\bin\lfr-tunnel.exe` is a
-hardlink: a second path to the same file, not a pointer to the first. The EDR matches the path an
-image executes from, so the binary's rule does not cover a run from the hardlink. It is a separate
-Alerts exclusion, the same as the binary. Interoperability is added for it only if testing shows a
-functional problem from that path. InfoSec found no EDR documentation on hardlinks, so this is
-still to be confirmed in the test round. On macOS and Linux the LDM link is a symlink; its rule
-stays for the reason given above, that the engines needed the link excluded as well.
 
 The only wildcard is in the username position (`/Users/*/`, `/home/*/`, `C:\Users\*\`); everything
 after it is matched literally, so the last two directory names and the executable name are all
@@ -253,11 +249,9 @@ and `%USERPROFILE%\scoop\apps\lfr-tunnel\current\lfr-tunnel.exe`. A machine with
 installs this way needs its own exclusions for those paths.
 
 > [!IMPORTANT]
-> **Installing anywhere else defeats both rules, including the LDM one.** The installers
-> honour `LFT_INSTALL_DIR` (and the per-platform `LFR_TUNNEL_*_INSTALL_DIR` variables), so a
-> developer who sets one installs outside the exclusion — and the `.ldm/bin` link then *resolves*
-> to that unexcluded target, so being on a covered path does not help it. **Do not set these on
-> an EDR-managed machine.**
+> **Installing anywhere else defeats the rule.** The installers honour `LFT_INSTALL_DIR` (and
+> the per-platform `LFR_TUNNEL_*_INSTALL_DIR` variables), so a developer who sets one installs
+> outside the exclusion. **Do not set these on an EDR-managed machine.**
 >
 > Observed in practice: a workstation with `LFT_INSTALL_DIR="$HOME/runningpoc/bin"` in its shell
 > profile had every install and every `--upgrade` redirected there for months. `--upgrade` replaces
@@ -325,11 +319,11 @@ This namespacing guarantees that environment variables exported in shell profile
 To authorize the tool with minimal impact on local endpoint alerts, we recommend the following steps:
 
 1. **Verify Binary Authenticity:** Check the downloaded executable against the release's `checksums.txt`, and that file against its minisign signature (section 2).
-2. **Apply Wildcard Path Exclusions as Alerts exclusions:** Add **both** rules per platform from section 3: the installed binary and the `.ldm/bin` link. A binary-only exclusion is not sufficient: the behavioural and ML engines required the link as well. Use the Alerts type, not Performance Focus; add Interoperability only where testing shows a functional problem, and never as a path's only rule. On Windows the `.ldm\bin` link is a hardlink and needs its own Alerts rule. No package-manager rule is needed.
+2. **Apply Wildcard Path Exclusions as Alerts exclusions:** Add the one rule per platform from section 3, the installed binary. The `.ldm/bin` link rules requested earlier are withdrawn: the link is retired (#2579). Use the Alerts type, not Performance Focus; add Interoperability only where testing shows a functional problem, and never as a path's only rule. No package-manager rule is needed.
 3. **Do not add signer exclusions.** The signing identities in section 2 are self-signed or project-held keys, not a CA-issued publisher, so trusting them would trust whoever holds the key rather than an organisation.
 4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the public image **`peterjrichards/lfr-tunnel`** hosted on Docker Hub.
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-23* | *Last Reviewed: 2026-11-23*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

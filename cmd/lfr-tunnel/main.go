@@ -2265,7 +2265,36 @@ func handleBackground(sub string) {
 		slog.Info(fmt.Sprintf("[Warning] Failed to write PID file: %v\n", err))
 	}
 
-	slog.Info(fmt.Sprintf("[Client] Tunnel started in background for subdomain '%s' (PID: %d).\n", sub, cmd.Process.Pid))
+	// "(PID: n)" is parsed by the MCP server's start_tunnel (backgroundPIDPattern): keep it.
+	slog.Info(fmt.Sprintf("[Client] Tunnel started in background for subdomain '%s' (PID: %d); waiting up to %s for the gateway to accept it...\n", sub, cmd.Process.Pid, backgroundRegistrationWait))
+
+	// Wait for the gateway's answer rather than returning on spawn (#2573). Stdout and stderr are
+	// real files, so Wait has no output to copy and returns as soon as the tunnel exits.
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	res := backgroundStart{
+		pid:       cmd.Process.Pid,
+		exited:    exited,
+		findState: client.FindStateByPID,
+		wait:      backgroundRegistrationWait,
+		interval:  backgroundPollInterval,
+	}.awaitRegistration()
+
+	switch res.outcome {
+	case backgroundRefused:
+		removePIDFileIfOwned(sub, cmd.Process.Pid)
+		reportBackgroundRefusal(os.Stderr, sub, logPath, res.exitErr)
+		if cerr := logFile.Close(); cerr != nil {
+			slog.Debug("could not close the log", "error", cerr)
+		}
+		os.Exit(1)
+	case backgroundRegistered:
+		for _, u := range res.state.PublicURLs {
+			slog.Info(fmt.Sprintf("[Client] Registered: %s\n", u))
+		}
+	case backgroundPending:
+		slog.Info(fmt.Sprintf("[Client] Not registered yet after %s; the tunnel keeps trying in the background. Check it with: lfr-tunnel -status -subdomain %s\n", backgroundRegistrationWait, sub))
+	}
 	slog.Info(fmt.Sprintf("[Client] Logs: %s\n", logPath))
 	slog.Info(fmt.Sprintf("[Client] To stop this tunnel, run: lfr-tunnel -stop -subdomain %s\n", sub))
 }

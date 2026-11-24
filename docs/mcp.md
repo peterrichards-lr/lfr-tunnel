@@ -158,7 +158,9 @@ calls with no `subdomain` derive the same one — the tool returns an error carr
 message. It does not report a tunnel that was never started.
 
 `pending` therefore means only that the spawn succeeded and registration had not finished inside
-2s. Call `get_tunnel_status` to see how it settled. **`pending` carries no `pid`**, deliberately:
+2s. Since #2573 `-background` itself waits for the gateway's answer (up to 20s) before it exits,
+so a refused tunnel comes back as an error carrying the gateway's reason, and `pending` is left for
+a slow network. Call `get_tunnel_status` to see how it settled. **`pending` carries no `pid`**, deliberately:
 the only PID in hand at that point belongs to an intermediate process that has already exited, and
 a dead number presented as the tunnel's is worse than none.
 
@@ -284,4 +286,4 @@ report success). It is fixed; the behaviour above is the fixed behaviour.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-10-01* | *Last Reviewed: 2026-10-01*
+*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*

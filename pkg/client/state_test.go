@@ -138,3 +138,25 @@ func TestQueryStatusJSON(t *testing.T) {
 		t.Errorf("expected state file to be deleted for non-running process")
 	}
 }
+
+// The gateway can assign a subdomain other than the one requested, so a spawned tunnel's state
+// is found by its PID, not by the name it was asked for (#2573).
+func TestFindStateByPID(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	if err := WriteState("other", &ClientState{PID: 7, Subdomain: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteState("assigned-prefix", &ClientState{PID: 42, Subdomain: "assigned-prefix"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := FindStateByPID(42); got == nil || got.Subdomain != "assigned-prefix" {
+		t.Fatalf("FindStateByPID(42) = %+v; want the assigned-prefix state", got)
+	}
+	if got := FindStateByPID(99); got != nil {
+		t.Fatalf("FindStateByPID(99) = %+v; want nil before that tunnel registers", got)
+	}
+	if got := FindStateByPID(0); got != nil {
+		t.Fatalf("FindStateByPID(0) = %+v; want nil", got)
+	}
+}

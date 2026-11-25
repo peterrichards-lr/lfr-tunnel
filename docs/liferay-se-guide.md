@@ -47,10 +47,27 @@ This script downloads the signed client binary straight into the install directo
 
 **Which exclusions apply.** InfoSec applies the exclusions through a per-OS endpoint tag
 (`macOS-global`, `Linux-global` or `Windows-global`). The tag applies the Alerts-based exclusions
-plus the designated file path, and nothing else. The older tags that allowed earlier tests and PoCs
-are being removed. Whether your machine carries the new tag yet is for InfoSec to confirm. If the
-client alerts or is quarantined after installing this way, tell InfoSec (ticket LRINFOSEC-7091) and
-include the path the alert names ([infosec.md §3](infosec.md#exclusion-type-alerts)).
+plus the designated file path, and nothing else. Since 2026-11-25 every Liferay machine has it, and
+the older tags that allowed earlier tests and PoCs are gone. If the client alerts or is quarantined
+after installing this way, tell InfoSec (ticket LRINFOSEC-7091) and include the path the alert names
+and the threat name ([infosec.md §3](infosec.md#exclusion-type-alerts)).
+
+**A copy anywhere else is now blocked.** Only the folder above is excluded, so SentinelOne blocks or
+quarantines a client in an old `runningpoc\bin` folder (the default before v1.48.11), in
+`~/.ldm/bin`, or from Homebrew or Scoop, whatever its version. To move:
+
+1. Stop any running tunnel (`lfr-tunnel -stop`) and quit the tray.
+2. Reinstall with the command above, open a new terminal, and run `lfr-tunnel doctor`: it checks
+   the install path. Your settings and token in `~/.lfr-tunnel` are kept.
+3. Remove the old copy: delete `~/.ldm/bin/lfr-tunnel` if the installer left it, uninstall a
+   Homebrew or Scoop copy, or delete an old `runningpoc\bin` folder **and remove it from your
+   `PATH`**. If SentinelOne has already quarantined the old copy, leave it.
+4. Re-register start-at-login from the new install: start the tray with `lfr-tunnel -gui` and turn
+   **Launch on Login** off and on again, and run `lfr-tunnel install-service` if you use the
+   background service. Entries made by an older version may still point at the old copy.
+
+During an install or upgrade SentinelOne may flag `lfr-tunnel.old`, the short-lived backup of the
+previous version. The new client is not affected ([infosec.md §3](infosec.md#exclusion-type-alerts)).
 
 **Do not set `LFT_INSTALL_DIR` or the `LFR_TUNNEL_*_INSTALL_DIR` variables.** They move the client out of the excluded directory, and `--upgrade` keeps it there. If one is in your shell profile, remove it and reinstall.
 
@@ -466,4 +483,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*
+*Last Updated: 2026-11-25* | *Last Reviewed: 2026-11-25*

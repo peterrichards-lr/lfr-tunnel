@@ -170,12 +170,26 @@ so these are the only paths to exclude: **one rule per platform**, the installed
 **Agreed with InfoSec on 2026-11-24** (LRINFOSEC-7091): the three binary rules below, as Alerts
 exclusions, and nothing else for lfr-tunnel.
 
+**Applied company-wide on 2026-11-25** (LRINFOSEC-7091). InfoSec rolled the rules out to every
+endpoint, not only the test machines, and removed the earlier test and PoC rules and tags. A client
+installed anywhere else is therefore no longer covered, whatever its version: in the test round a
+legacy copy under `%USERPROFILE%\runningpoc\bin\` (the default install folder before v1.48.11)
+was blocked and quarantined (#2547).
+
+**Requested on 2026-11-25, not yet agreed: folder rules.** The install and `--upgrade` rename the
+current binary to `lfr-tunnel.old` while the new one is put in place, then delete it. The exact-file
+rule does not match that name, and SentinelOne quarantined it during the macOS test (#2547). The
+request is to replace the three binary rules with folder rules, subfolders included, the same form
+InfoSec uses for LDM: `/Users/*/liferay/lfr-tunnel/`, `/home/*/liferay/lfr-tunnel/` and
+`C:\Users\*\liferay\lfr-tunnel\`. Until InfoSec agrees, the binary rules below are what applies,
+and a flagged `lfr-tunnel.old` is expected and harmless: the new client is not affected.
+
 **The LDM link rules are withdrawn (#2579)**, which InfoSec confirmed. The request previously had a
 second rule per platform for `~/.ldm/bin/lfr-tunnel` (`C:\Users\*\.ldm\bin\lfr-tunnel.exe` on Windows,
 #2544). InfoSec had found that the behavioural and machine-learning engines were not satisfied by the
 binary's rule alone while that link existed and could be executed. The link is now retired and
-removed, so nothing runs from that path. **To confirm in the test round (#2547):** an LDM share
-raises no alert with only the binary's rule in place.
+removed, so nothing runs from that path. **Confirmed in the test round (#2547):** an LDM share
+raised no alert with only the binary's rule in place, on macOS, on Linux and inside WSL.
 
 **Why one path rule is enough for lfr-tunnel.** InfoSec explained that a path rule covers file-based
 (Static AI) detections, while a behavioural detection is tied to the path the *process* runs from.
@@ -186,7 +200,7 @@ LDM's case, handled in its own repository.
 
 #### Exclusion type: Alerts
 
-**Every rule below is requested as an Alerts exclusion** (LRINFOSEC-7091). That is the exclusion
+**Every rule below is an Alerts exclusion** (LRINFOSEC-7091). That is the exclusion
 type InfoSec uses for detections. Two other types are not substitutes:
 
 - **Performance Focus** is not for detections, and it costs InfoSec visibility. It is not requested.
@@ -196,31 +210,34 @@ type InfoSec uses for detections. Two other types are not substitutes:
 
 **How the rules are applied.** InfoSec applies these through per-OS endpoint tags,
 `macOS-global`, `Linux-global` and `Windows-global`. Each tag applies the Alerts-based exclusions
-plus the designated file path, and nothing else. The older tags that allowed earlier tests and
-PoCs are being removed, so an endpoint that relied on one of them is covered only through the new
-tag (#2546). InfoSec has said the rules will be available globally rather than on test
-endpoints only, and configured them on 2026-11-24 (LRINFOSEC-7091). **Which endpoints carry
-the tags is for InfoSec to confirm**; the #2547 test round checks the result on real machines.
+plus the designated file path, and nothing else. InfoSec configured them on 2026-11-24 and rolled
+them out to every endpoint on 2026-11-25; the older tags that allowed earlier tests and PoCs are
+gone (#2546, LRINFOSEC-7091). The #2547 test round ran on macOS, Linux and Windows with no alert
+from the excluded path, including the tray's Launch on Login across a sign-out on Windows.
+
+**WSL.** On a Windows machine, a client installed inside WSL with the Linux installer
+(`/home/<user>/liferay/lfr-tunnel/`) ran, and served an LDM share, with no alert (#2547). It is a
+separate install from the Windows one, with its own settings and its own upgrades.
 
 #### Rules by platform
 
-**macOS** (requested, Alerts):
+**macOS** (applied, Alerts):
 
 ```
 /Users/*/liferay/lfr-tunnel/lfr-tunnel
 ```
 
-**Linux** (requested, Alerts):
+**Linux** (applied, Alerts):
 
 ```
 /home/*/liferay/lfr-tunnel/lfr-tunnel
 ```
 
 Linux previously had rules of another type only, which InfoSec says are not enough. The Alerts
-rules are requested *in addition*. The earlier rules are pending removal: they stay until InfoSec
-confirms the test results, and then go (#2545).
+rules were added, and InfoSec reported on 2026-11-25 that the earlier test and PoC rules have been
+removed (#2545).
 
-**Windows** (requested, Alerts):
+**Windows** (applied, Alerts):
 
 ```
 C:\Users\*\liferay\lfr-tunnel\lfr-tunnel.exe
@@ -337,4 +354,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-11-24* | *Last Reviewed: 2026-11-24*
+*Last Updated: 2026-11-25* | *Last Reviewed: 2026-11-25*

@@ -226,10 +226,10 @@ if [ "$(printf '%s\n' "$SECTION3" | grep -c .)" -lt 50 ]; then
   fail "could not extract docs/infosec.md section 3 -- the Alerts checks below would scan nothing"
 fi
 for plat in macOS Linux Windows; do
-  if grep -qxF "**${plat}** (requested, Alerts):" <<< "$SECTION3"; then
-    pass "docs/infosec.md section 3 requests the ${plat} rules as Alerts exclusions"
+  if grep -qxF "**${plat}** (applied, Alerts):" <<< "$SECTION3"; then
+    pass "docs/infosec.md section 3 states the ${plat} rules as Alerts exclusions"
   else
-    fail "docs/infosec.md section 3 has no '**${plat}** (requested, Alerts):' heading -- the ${plat} rules would have no exclusion type stated"
+    fail "docs/infosec.md section 3 has no '**${plat}** (applied, Alerts):' heading -- the ${plat} rules would have no exclusion type stated"
   fi
 done
 # Decision 0006: no package-manager exclusion is requested for Liferay.

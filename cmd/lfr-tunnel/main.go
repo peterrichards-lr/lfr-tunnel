@@ -2034,12 +2034,9 @@ func unauthorizedFailure(cfg *config.ClientConfig, err error, portalURL string) 
 }
 
 // loginReplacesToken reports whether `lfr-tunnel login` would replace a token read from source.
-// Login writes ~/.lfr-tunnel/token, which is read only when nothing above it in the loader's
-// ladder supplied a token -- so it replaces the token it was read from, and LDM's credentials
-// file, which is consulted only after it. Everything else outranks it.
+// The rule is config.LoginReplacesToken, shared with `doctor` (#2593).
 func loginReplacesToken(source string) bool {
-	return strings.HasPrefix(source, config.TokenSourceDefaultFile+" (") ||
-		strings.HasPrefix(source, config.TokenSourceLDMFile+" (")
+	return config.LoginReplacesToken(source)
 }
 
 // missingTokenFailure is the refusal for a client with no token at all, decided without

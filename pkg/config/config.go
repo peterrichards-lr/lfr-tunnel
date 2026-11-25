@@ -1847,3 +1847,13 @@ const allowUnknownKeysEnv = "LFT_ALLOW_UNKNOWN_CONFIG_KEYS"
 func allowUnknownConfigKeys() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(allowUnknownKeysEnv)), "true")
 }
+
+// LoginReplacesToken reports whether `lfr-tunnel login` would replace a token read from source.
+// Login writes ~/.lfr-tunnel/token, which is read only when nothing above it in the loader's
+// ladder supplied a token -- so it replaces the token it was read from, and LDM's credentials
+// file, which is consulted only after it. Everything else outranks it. One definition, used by
+// both the tunnel's 401 advice and `doctor`, so the two cannot disagree (#2593).
+func LoginReplacesToken(source string) bool {
+	return strings.HasPrefix(source, TokenSourceDefaultFile+" (") ||
+		strings.HasPrefix(source, TokenSourceLDMFile+" (")
+}

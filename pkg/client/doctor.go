@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"lfr-tunnel/pkg/config"
 )
 
 // `lfr-tunnel doctor` (#2561): one read-only pass over the setup problems that are otherwise
@@ -110,7 +112,7 @@ func doctorTokenCheck(in DoctorInput) DoctorCheck {
 		c.Detail = append(c.Detail, "Accepted by "+in.ServerURL+".")
 	case loginTokenRefused:
 		c.Status = DoctorFail
-		c.Detail = append(c.Detail, in.ServerURL+" refused it. Create a new token in the portal, or run `lfr-tunnel login`.")
+		c.Detail = append(c.Detail, in.ServerURL+" refused it. "+refusedTokenAdvice(in.TokenSource))
 	default:
 		c.Status = DoctorUnknown
 		c.Detail = append(c.Detail, "Not checked: "+reason+".")
@@ -291,4 +293,17 @@ func WriteDoctorReport(w io.Writer, checks []DoctorCheck) int {
 	default:
 		return 0
 	}
+}
+
+// refusedTokenAdvice says how to replace a refused token from where it was actually read. Advising
+// `lfr-tunnel login` for a token from LFT_CLIENT_TOKEN, the config file or -token changed nothing:
+// login saves ~/.lfr-tunnel/token, which those outrank, so doctor failed the same way after the
+// user followed it (#2593). The rule is the one the tunnel's own refusal uses.
+func refusedTokenAdvice(source string) string {
+	if config.LoginReplacesToken(source) {
+		return "Create a new token in the portal, or run `lfr-tunnel login`."
+	}
+	return "Create a new token in the portal and put it in " + source + " in place of this one, " +
+		"or remove it from there so the token `lfr-tunnel login` saves is used. " +
+		"Running login alone will not help: " + source + " outranks the file it saves."
 }

@@ -2464,8 +2464,7 @@ func handleStatus(sub string, targetSpecific bool) {
 		}
 		if isPIDRunning(pid) {
 			slog.Info(fmt.Sprintf("[Client] Background tunnel for subdomain '%s' is active (PID: %d).\n", s, pid))
-			home, _ := os.UserHomeDir()
-			slog.Info(fmt.Sprintf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", s))))
+			slog.Info(fmt.Sprintf("[Client] Logs: %s\n", statusLogPath(s)))
 		} else {
 			slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s))
 			pidPath, _err := getPIDFilePath(s)
@@ -3423,4 +3422,15 @@ func tunnelStateName(requested, customDomain, assignedPrefix string) string {
 		return assignedPrefix
 	}
 	return requested
+}
+
+// statusLogPath is the log `-status` points a user at: the file the tunnel writes, which is the
+// one `-background` printed. It used to rebuild the pre-#2128 path by hand, so `-status` named
+// ~/.lfr-tunnel/client-<sub>.log while the tunnel wrote ~/.lfr-tunnel/logs/ (#2594). The legacy
+// file is named only when it is the one that exists, as everywhere else that resolves the log.
+func statusLogPath(sub string) string {
+	if p, err := client.ResolveClientLogPath(sub); err == nil {
+		return p
+	}
+	return "(unknown: home directory not found)"
 }

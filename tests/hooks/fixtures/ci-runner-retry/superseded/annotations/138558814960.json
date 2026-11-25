@@ -1,0 +1,10 @@
+[
+  {
+    "annotation_level": "failure",
+    "message": "Canceling since a higher priority waiting request for CI-refs/heads/master exists"
+  },
+  {
+    "annotation_level": "notice",
+    "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+  }
+]

@@ -1,0 +1,49 @@
+# Re-runs a CI run once when GitHub never gave one of its jobs a runner (#2603).
+#
+# The macOS leg of the required "Test Suite" matrix is sometimes never acquired when GitHub's
+# macOS pool is short: GitHub cancels it after ~15 minutes, the PR is blocked, and nothing was
+# tested. Dependabot PRs sat blocked that way because nobody is watching them.
+# scripts/ci-runner-retry.sh decides; its header says why the "not acquired" annotation, and not
+# "cancelled with no runner", is the signal.
+#
+# Once only (run_attempt 1): a pool that is still short on the retry is left for a person, so
+# this cannot loop. Real failures are never re-run: the script skips any run that has one.
+name: CI Runner Retry
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+# workflow_run always runs this file from the default branch, never the PR's copy, so a PR
+# cannot change what holds this token.
+permissions:
+  actions: write # gh run rerun
+  checks: read # the jobs' annotations
+  contents: read
+
+jobs:
+  retry:
+    name: Re-run jobs GitHub never started
+    if: >-
+      github.event.workflow_run.run_attempt == 1
+      && (github.event.workflow_run.conclusion == 'failure'
+          || github.event.workflow_run.conclusion == 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Decide and re-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          decision=$(scripts/ci-runner-retry.sh "$RUN_ID")
+          echo "$decision"
+          echo "Run $RUN_ID: $decision" >> "$GITHUB_STEP_SUMMARY"
+          case "$decision" in
+            rerun:*) gh run rerun "$RUN_ID" --failed ;;
+          esac

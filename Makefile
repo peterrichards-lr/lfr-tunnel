@@ -356,6 +356,7 @@ test-hooks:
 	@./tests/hooks/test-ci-docs-gate.sh
 	@./tests/hooks/test-mkdocs-nav.sh
 	@./tests/hooks/test-ci-platform-matrix.sh
+	@./tests/hooks/test-ci-runner-retry.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
 	@./tests/hooks/test-install-in-place.sh

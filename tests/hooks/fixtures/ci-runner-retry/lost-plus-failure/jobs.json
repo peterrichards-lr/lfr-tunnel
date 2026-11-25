@@ -1,0 +1,148 @@
+{
+  "jobs": [
+    {
+      "id": 138626145812,
+      "name": "Lint & Format Check",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147350,
+      "runner_name": "GitHub Actions 1000147350",
+      "steps": []
+    },
+    {
+      "id": 138626146446,
+      "name": "Documentation Review Check",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147351,
+      "runner_name": "GitHub Actions 1000147351",
+      "steps": []
+    },
+    {
+      "id": 138626146480,
+      "name": "Detect Changed Paths",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147353,
+      "runner_name": "GitHub Actions 1000147353",
+      "steps": []
+    },
+    {
+      "id": 138626146555,
+      "name": "Test Coverage Signal",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147352,
+      "runner_name": "GitHub Actions 1000147352",
+      "steps": []
+    },
+    {
+      "id": 138626285807,
+      "name": "E2E Multi-Region Edge Test",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147364,
+      "runner_name": "GitHub Actions 1000147364",
+      "steps": []
+    },
+    {
+      "id": 138626285845,
+      "name": "Vulnerability Scan",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147369,
+      "runner_name": "GitHub Actions 1000147369",
+      "steps": []
+    },
+    {
+      "id": 138626285851,
+      "name": "E2E Playwright UI Test",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147363,
+      "runner_name": "GitHub Actions 1000147363",
+      "steps": []
+    },
+    {
+      "id": 138626285929,
+      "name": "Hook Tests",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147371,
+      "runner_name": "GitHub Actions 1000147371",
+      "steps": []
+    },
+    {
+      "id": 138626285941,
+      "name": "Test Suite (windows-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147367,
+      "runner_name": "GitHub Actions 1000147367",
+      "steps": []
+    },
+    {
+      "id": 138626285967,
+      "name": "Test Suite (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "failure",
+      "runner_id": 1000147383,
+      "runner_name": "GitHub Actions 1000147383",
+      "steps": []
+    },
+    {
+      "id": 138626285971,
+      "name": "Race Detector",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147374,
+      "runner_name": "GitHub Actions 1000147374",
+      "steps": []
+    },
+    {
+      "id": 138626285976,
+      "name": "E2E Docker Integration Test",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000147384,
+      "runner_name": "GitHub Actions 1000147384",
+      "steps": []
+    },
+    {
+      "id": 138626286077,
+      "name": "Test Suite (macos-latest)",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "runner_id": 0,
+      "runner_name": "",
+      "steps": []
+    },
+    {
+      "id": 138626287825,
+      "name": "Documentation Build",
+      "status": "completed",
+      "conclusion": "skipped",
+      "runner_id": null,
+      "runner_name": null,
+      "steps": []
+    },
+    {
+      "id": 138626288760,
+      "name": "Shell Lint",
+      "status": "completed",
+      "conclusion": "skipped",
+      "runner_id": null,
+      "runner_name": null,
+      "steps": []
+    },
+    {
+      "id": 138638167619,
+      "name": "CI Gate",
+      "status": "completed",
+      "conclusion": "failure",
+      "runner_id": 1000147437,
+      "runner_name": "GitHub Actions 1000147437",
+      "steps": []
+    }
+  ]
+}

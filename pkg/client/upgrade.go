@@ -63,8 +63,7 @@ func CheckForUpdate(currentVersion string) (string, error) {
 	latest := strings.TrimSpace(rel.TagName)
 	current := strings.TrimSpace(currentVersion)
 
-	if latest != "" && latest != current {
-		// Simple helper to check if latest version is indeed different
+	if isNewerRelease(latest, current) {
 		return latest, nil
 	}
 
@@ -92,8 +91,8 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			var svrVer ServerVersionInfo
 			if err := json.NewDecoder(resp.Body).Decode(&svrVer); err == nil {
 				latest = strings.TrimSpace(svrVer.LatestVersion)
-				if latest == currentVersion {
-					fmt.Printf("[Update] You are already running the latest version (%s).\n", currentVersion)
+				if latest != "" && !isNewerRelease(latest, currentVersion) {
+					reportNotNewer(currentVersion, latest, "the gateway")
 					resp.Body.Close() //nolint:errcheck
 					return nil
 				}
@@ -180,8 +179,8 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		}
 
 		latest = strings.TrimSpace(rel.TagName)
-		if latest == currentVersion {
-			fmt.Printf("[Update] You are already running the latest version (%s).\n", currentVersion)
+		if !isNewerRelease(latest, currentVersion) {
+			reportNotNewer(currentVersion, latest, "GitHub")
 			return nil
 		}
 
@@ -1113,4 +1112,26 @@ func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {
 // exact same rules the client does; this stays as the name every existing caller uses.
 func CompareVersions(v1, v2 string) int {
 	return config.CompareVersions(v1, v2)
+}
+
+// isNewerRelease reports whether latest is a release worth upgrading TO from current: strictly
+// newer, never merely different. Comparing "different" made `-upgrade` install whatever version a
+// gateway advertised, so a gateway lagging the fleet downgraded a client pinned to it through the
+// full verified-replace path, services and all (#2606). The automatic upgrade always compared
+// properly (ShouldAutoUpgrade); this brings the manual one and CheckForUpdate into line.
+//
+// A development build ("dev", or anything unversioned) compares as 0.0.0, so it still upgrades to
+// any release, as before.
+func isNewerRelease(latest, current string) bool {
+	latest = strings.TrimSpace(latest)
+	return latest != "" && config.CompareVersions(latest, strings.TrimSpace(current)) > 0
+}
+
+// reportNotNewer says why nothing was installed: already current, or ahead of what source offers.
+func reportNotNewer(current, latest, source string) {
+	if latest == "" || config.CompareVersions(latest, current) == 0 {
+		fmt.Printf("[Update] You are already running the latest version (%s).\n", current)
+		return
+	}
+	fmt.Printf("[Update] This client (%s) is newer than the latest version %s offers (%s); not downgrading.\n", current, source, latest)
 }

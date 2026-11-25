@@ -196,7 +196,10 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
   ```bash
   lfr-tunnel -subdomain dev-tomcat -ports 8080
   ```
-  *Then, configure Liferay Virtual Host: Log in to `http://localhost:8080` → **Control Panel → Instance Settings → Virtual Hosts** and set Virtual Host to: `dev-tomcat.lfr-demo.se`.*
+  *Then let Liferay accept the tunnel's hostname: add the gateway's domains to
+  `virtual.hosts.valid.hosts` in `portal-ext.properties` and restart Liferay (see
+  [2b](#2b-why-liferay-generates-localhost-urls-and-how-to-stop-it)). Without it, Liferay answers the
+  public address with HTTP 500.*
 
 * **Using the Docker Client:**
   To route traffic from the Docker container back out to the host loopback port `8080`, utilize **`host.docker.internal`**:
@@ -278,8 +281,8 @@ Either of these fixes it:
 
   In a Liferay container, set it with the environment variable
   `LIFERAY_VIRTUAL_PERIOD_HOSTS_PERIOD_VALID_PERIOD_HOSTS`.
-* set the Virtual Host as in the step above (Control Panel -> Instance Settings -> Virtual
-  Hosts). This covers **exactly one hostname**, so it has to be redone whenever the tunnel's
+* set your Liferay instance's Virtual Host to the tunnel's hostname (e.g. `dev-tomcat.lfr-demo.se`).
+  This covers **exactly one hostname**, so it has to be redone whenever the tunnel's
   subdomain changes.
 
 The client watches for this. When the Liferay port answers 500 for the public hostname but not for
@@ -329,8 +332,11 @@ Use these configurations if Liferay itself is running as a Docker container.
   services:
     # Your Liferay service container
     liferay:
-      image: liferay/portal:7.4.3.112-ga112
+      image: liferay/dxp:2026.q1.14-lts
       # Ports do not need to be published on the host!
+      environment:
+        # Accept the tunnel's hostnames, or Liferay answers them with HTTP 500 (see 2b)
+        - LIFERAY_VIRTUAL_PERIOD_HOSTS_PERIOD_VALID_PERIOD_HOSTS=localhost,127.0.0.1,*.lfr-demo.se,*.lfr-demo.online
 
     # Tunnel client service container
     tunnel:
@@ -365,7 +371,9 @@ lfr-tunnel -stop
 ```bash
 lfr-tunnel -upgrade
 ```
-This fetches the latest release from GitHub, verifies the SHA256 checksum, and replaces the binary in place.
+This asks the gateway for the latest version and downloads its signed binary, checks it against the
+gateway's minisign-signed checksum list, and replaces the client in place. It falls back to GitHub
+Releases only when the gateway cannot be reached.
 
 ---
 
@@ -404,7 +412,7 @@ Cloudflare Tunnels are free, highly reliable, and generally EDR-compliant since 
     ```yaml
     services:
       liferay:
-        image: liferay/portal:7.4.3.112-ga112
+        image: liferay/dxp:2026.q1.14-lts
       tunnel:
         image: cloudflare/cloudflared:latest
         command: tunnel --url http://liferay:8080
@@ -439,7 +447,7 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
     ```yaml
     services:
       liferay:
-        image: liferay/portal:7.4.3.112-ga112
+        image: liferay/dxp:2026.q1.14-lts
       tunnel:
         image: ngrok/ngrok:latest
         environment:
@@ -453,7 +461,7 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 - **Architecture & self-hosting**: [Architecture Guide](architecture.md)
 - **GitHub Issues**: [github.com/peterrichards-lr/lfr-tunnel/issues](https://github.com/peterrichards-lr/lfr-tunnel/issues)
-- **Slack**: Reach out in the Liferay SE Slack channel for token issues or gateway access problems.
+- **Slack**: ask in **#se-tools-support** for token issues or gateway access problems.
 
 
 <!-- markdownlint-disable MD049 -->

@@ -87,7 +87,7 @@ func fetchInstallDirs(client *http.Client, gatewayURL string) (dirs map[string]s
 
 // alertsHeading matches the per-platform headings in §3, which tests/hooks/test-install-paths.sh
 // already pins, so a rewording that would blind this check fails there first.
-var alertsHeading = regexp.MustCompile(`^\*\*(macOS|Linux|Windows)\*\* \(requested, Alerts\):`)
+var alertsHeading = regexp.MustCompile(`^\*\*(macOS|Linux|Windows)\*\* \(applied, Alerts\):`)
 
 // parseSection3Rules reads the requested rules per OS from docs/infosec.md §3: the fenced block
 // that follows each platform's Alerts heading.
@@ -130,7 +130,7 @@ func parseSection3Rules(md []byte) (map[string][]string, error) {
 	}
 	for _, osName := range []string{osMacOS, osLinux, osWindows} {
 		if len(rules[osName]) == 0 {
-			return nil, fmt.Errorf("no %s rules found under \"**%s** (requested, Alerts):\" in §3", osName, osName)
+			return nil, fmt.Errorf("no %s rules found under \"**%s** (applied, Alerts):\" in §3", osName, osName)
 		}
 	}
 	return rules, nil

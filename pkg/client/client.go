@@ -908,7 +908,7 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}
 
 	// Log client status
-	slog.Info(fmt.Sprintf("[Client] Establised lease. Connecting tunnels to %s...", serverURL))
+	slog.Info(fmt.Sprintf("[Client] Established lease. Connecting tunnels to %s...", serverURL))
 	for _, remote := range remotes {
 		slog.Info(fmt.Sprintf("[Client] Forwarding remote port: %s", remote))
 	}

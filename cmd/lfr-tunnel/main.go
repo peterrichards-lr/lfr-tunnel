@@ -631,19 +631,23 @@ func main() {
 	publicURLs := printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
 	engine.PublicURLs = publicURLs
 
+	// subHost is "" for a custom domain because it builds URLs, where the domain stands alone.
+	// The state file needs a name `-status-json -subdomain` can find, so it has its own (#2595).
+	stateName := tunnelStateName(sub, cfg.CustomDomain, regResp.SubdomainPrefix)
+
 	// Write dynamic client state to file
 	state := &client.ClientState{
 		PID:           os.Getpid(),
 		InspectorPort: *inspectorPort,
 		InspectorURL:  fmt.Sprintf("http://127.0.0.1:%d", *inspectorPort),
-		Subdomain:     subHost,
+		Subdomain:     stateName,
 		PublicURLs:    publicURLs,
 		Ports:         originalPorts,
 		StartTime:     time.Now().Format(time.RFC3339),
 		Region:        cfg.Region,
 		ServerURL:     cfg.ServerURL,
 	}
-	if err := client.WriteState(subHost, state); err != nil {
+	if err := client.WriteState(stateName, state); err != nil {
 		slog.Info(fmt.Sprintf("[Warning] Failed to write state file: %v\n", err))
 	}
 
@@ -747,7 +751,7 @@ func main() {
 		state.Region = cfg.Region
 		state.ServerURL = cfg.ServerURL
 		state.PublicURLs = publicURLs
-		if werr := client.WriteState(subHost, state); werr != nil {
+		if werr := client.WriteState(stateName, state); werr != nil {
 			slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
 		}
 		cooldowns.clear(cfg.ServerURL)
@@ -1145,7 +1149,7 @@ func main() {
 	if cleanupTUI != nil {
 		cleanupTUI()
 	}
-	client.DeleteState(subHost)
+	client.DeleteState(stateName)
 	if err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
@@ -3406,4 +3410,17 @@ func subdomainOrNone(s string) string {
 		return "(auto-assigned)"
 	}
 	return s
+}
+
+// tunnelStateName is the name a running tunnel's state file is keyed on, and the name it reports
+// as its subdomain: the one `-status-json -subdomain`, `-stop` and the MCP server look it up by.
+// A custom domain keeps the requested subdomain, because the domain is not a subdomain and an
+// empty name wrote `lfr-tunnel-.state`, which no lookup could find, so LDM's health check saw a
+// connected tunnel as not running and stopped it (#2595). Otherwise the gateway's assigned prefix
+// wins when it sent one, as before.
+func tunnelStateName(requested, customDomain, assignedPrefix string) string {
+	if customDomain == "" && assignedPrefix != "" {
+		return assignedPrefix
+	}
+	return requested
 }
